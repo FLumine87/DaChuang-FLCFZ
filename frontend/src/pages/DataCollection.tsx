@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Mic, Image, Upload, Check, ChevronRight, Sparkles } from 'lucide-react';
+import { FileText, Mic, Image, Upload, Check, ChevronRight } from 'lucide-react';
 
 type Tab = 'text' | 'audio' | 'image';
 
@@ -31,14 +31,6 @@ export default function DataCollection() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <h3 className="text-base font-semibold text-slate-800">多模态采集工作台</h3>
-        <p className="text-sm text-slate-500 mt-2 leading-6">
-          你可以在这里提交文本日记、语音片段和图片。系统会进行动态跨模态哈希编码，与历史模式检索，再结合
-          RAG 生成个性化建议。当前为前端原型，不会上传到后端。
-        </p>
-      </div>
-
       {/* Tabs */}
       <div className="flex gap-2 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm w-fit">
         {tabs.map((tab) => {
@@ -93,7 +85,7 @@ export default function DataCollection() {
             </div>
             {selectedQ && (
               <button className="mt-4 w-full py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer">
-                开始填写并同步到筛查记录
+                开始填写
               </button>
             )}
           </div>
@@ -102,7 +94,7 @@ export default function DataCollection() {
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <h3 className="font-semibold text-slate-800 mb-4">开放式文本输入</h3>
             <p className="text-sm text-slate-400 mb-3">
-              请描述你近期的情绪状态、睡眠情况、人际关系和学习压力变化
+              请描述您近期的情绪状态、睡眠情况、人际关系等方面的感受
             </p>
             <textarea
               value={freeText}
@@ -116,7 +108,7 @@ export default function DataCollection() {
                 disabled={!freeText.trim()}
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-700 transition-colors cursor-pointer"
               >
-                提交文本到哈希检索
+                提交文本
               </button>
             </div>
           </div>
@@ -133,7 +125,7 @@ export default function DataCollection() {
                 <Mic className="w-10 h-10 text-primary-600" />
               </div>
               <p className="text-sm text-slate-500 mb-2">点击开始录音</p>
-              <p className="text-xs text-slate-400">建议录制 2-5 分钟语音，用于情感与韵律特征分析</p>
+              <p className="text-xs text-slate-400">建议录制2-5分钟的语音，用于情感分析</p>
             </div>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
@@ -147,9 +139,6 @@ export default function DataCollection() {
               <p className="text-sm text-slate-600 mb-1">拖拽文件到此处或点击上传</p>
               <p className="text-xs text-slate-400">支持 MP3、WAV、M4A 格式，最大 50MB</p>
             </div>
-            <button className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium cursor-pointer">
-              <Sparkles className="w-4 h-4" /> 送入动态哈希引擎
-            </button>
           </div>
         </div>
       )}
@@ -160,7 +149,7 @@ export default function DataCollection() {
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <h3 className="font-semibold text-slate-800 mb-4">绘画测试上传</h3>
             <p className="text-sm text-slate-400 mb-4">
-              请上传房树人测试（HTP）或情绪日记配图，用于辅助识别认知与情绪表达特征
+              请上传房树人测试（HTP）或其他绘画测试的图片
             </p>
             <div
               onDragOver={(e) => e.preventDefault()}

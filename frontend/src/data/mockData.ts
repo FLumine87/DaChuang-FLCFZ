@@ -1,46 +1,41 @@
-export type AlertLevel = 'green' | 'yellow' | 'orange' | 'red';
-
-export interface UserProfile {
+export interface ScreeningRecord {
+  id: string;
   name: string;
   age: number;
   gender: string;
-  campus: string;
-  major: string;
-  stage: string;
-  emergencyContact: string;
-}
-
-export interface QuestionnaireItem {
-  id: string;
-  name: string;
-  description: string;
-  questions: number;
-  minutes: number;
-  target: string;
-}
-
-export interface PersonalScreeningRecord {
-  id: string;
   questionnaire: string;
   score: number;
   maxScore: number;
-  level: AlertLevel;
-  status: 'completed' | 'pending';
-  moodTag: string;
+  status: 'completed' | 'in_progress' | 'pending';
+  alertLevel: 'green' | 'yellow' | 'orange' | 'red';
   date: string;
+  counselor: string;
 }
 
-export type ScreeningRecord = PersonalScreeningRecord;
-
-export interface WarningEvent {
+export interface AlertRecord {
   id: string;
-  level: AlertLevel;
-  title: string;
-  reason: string;
-  suggestion: string;
-  status: 'new' | 'tracking' | 'resolved';
+  screeningId: string;
+  name: string;
+  level: 'green' | 'yellow' | 'orange' | 'red';
+  trigger: string;
+  description: string;
+  status: 'pending' | 'processing' | 'resolved' | 'closed';
+  assignee: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CaseRecord {
+  id: string;
+  name: string;
+  age: number;
+  gender: string;
+  department: string;
+  tags: string[];
+  screeningCount: number;
+  lastScreening: string;
+  alertLevel: 'green' | 'yellow' | 'orange' | 'red';
+  status: 'active' | 'monitoring' | 'closed';
 }
 
 export interface RetrievalResult {
@@ -49,183 +44,96 @@ export interface RetrievalResult {
   modality: 'text' | 'audio' | 'image' | 'multimodal';
   summary: string;
   tags: string[];
-  alertLevel: AlertLevel;
+  alertLevel: 'green' | 'yellow' | 'orange' | 'red';
   date: string;
 }
 
-export interface MoodTrendPoint {
-  date: string;
-  mood: number;
-  stress: number;
-  sleep: number;
-}
-
-export interface PersonalTimelineEvent {
-  date: string;
-  type: 'screening' | 'warning' | 'collection' | 'plan';
-  title: string;
-  detail: string;
-}
-
-export const userProfile: UserProfile = {
-  name: '林晓',
-  age: 21,
-  gender: '女',
-  campus: '南校区',
-  major: '软件工程',
-  stage: '大三',
-  emergencyContact: '室友-陈悦',
-};
-
-export const questionnaireCatalog: QuestionnaireItem[] = [
-  { id: 'PHQ-9', name: 'PHQ-9 抑郁筛查', description: '评估过去两周抑郁症状程度', questions: 9, minutes: 3, target: '情绪低落、兴趣下降' },
-  { id: 'GAD-7', name: 'GAD-7 焦虑筛查', description: '评估焦虑水平与紧张程度', questions: 7, minutes: 2, target: '紧张、担忧、躯体焦虑' },
-  { id: 'ISI', name: 'ISI 失眠评估', description: '评估入睡、维持睡眠和早醒问题', questions: 7, minutes: 3, target: '睡眠质量下降' },
-  { id: 'PSS-10', name: 'PSS-10 压力量表', description: '评估近期主观压力感知', questions: 10, minutes: 4, target: '学习和生活压力' },
+export const screeningRecords: ScreeningRecord[] = [
+  { id: 'SCR-001', name: '张三', age: 20, gender: '男', questionnaire: 'PHQ-9', score: 18, maxScore: 27, status: 'completed', alertLevel: 'red', date: '2026-03-12', counselor: '李老师' },
+  { id: 'SCR-002', name: '李四', age: 22, gender: '女', questionnaire: 'GAD-7', score: 12, maxScore: 21, status: 'completed', alertLevel: 'orange', date: '2026-03-11', counselor: '王老师' },
+  { id: 'SCR-003', name: '王五', age: 19, gender: '男', questionnaire: 'SCL-90', score: 180, maxScore: 450, status: 'completed', alertLevel: 'yellow', date: '2026-03-11', counselor: '李老师' },
+  { id: 'SCR-004', name: '赵六', age: 21, gender: '女', questionnaire: 'PHQ-9', score: 4, maxScore: 27, status: 'completed', alertLevel: 'green', date: '2026-03-10', counselor: '王老师' },
+  { id: 'SCR-005', name: '孙七', age: 23, gender: '男', questionnaire: 'GAD-7', score: 15, maxScore: 21, status: 'completed', alertLevel: 'red', date: '2026-03-10', counselor: '李老师' },
+  { id: 'SCR-006', name: '周八', age: 20, gender: '女', questionnaire: 'PHQ-9', score: 8, maxScore: 27, status: 'in_progress', alertLevel: 'yellow', date: '2026-03-09', counselor: '张老师' },
+  { id: 'SCR-007', name: '吴九', age: 21, gender: '男', questionnaire: 'SCL-90', score: 120, maxScore: 450, status: 'completed', alertLevel: 'green', date: '2026-03-09', counselor: '王老师' },
+  { id: 'SCR-008', name: '郑十', age: 22, gender: '女', questionnaire: 'GAD-7', score: 10, maxScore: 21, status: 'pending', alertLevel: 'orange', date: '2026-03-08', counselor: '李老师' },
 ];
 
-export const screeningRecords: PersonalScreeningRecord[] = [
-  { id: 'ME-SCR-0318', questionnaire: 'PHQ-9', score: 15, maxScore: 27, level: 'orange', status: 'completed', moodTag: '情绪低落', date: '2026-03-18' },
-  { id: 'ME-SCR-0316', questionnaire: 'GAD-7', score: 13, maxScore: 21, level: 'orange', status: 'completed', moodTag: '焦虑反复', date: '2026-03-16' },
-  { id: 'ME-SCR-0312', questionnaire: 'ISI', score: 17, maxScore: 28, level: 'yellow', status: 'completed', moodTag: '睡眠不稳', date: '2026-03-12' },
-  { id: 'ME-SCR-0308', questionnaire: 'PSS-10', score: 21, maxScore: 40, level: 'yellow', status: 'completed', moodTag: '课程压力', date: '2026-03-08' },
-  { id: 'ME-SCR-0304', questionnaire: 'PHQ-9', score: 9, maxScore: 27, level: 'yellow', status: 'completed', moodTag: '波动期', date: '2026-03-04' },
-  { id: 'ME-SCR-0320', questionnaire: 'GAD-7', score: 0, maxScore: 21, level: 'green', status: 'pending', moodTag: '待完成', date: '2026-03-20' },
+export const alertRecords: AlertRecord[] = [
+  { id: 'ALT-001', screeningId: 'SCR-001', name: '张三', level: 'red', trigger: 'PHQ-9 得分 18 (≥15)', description: '重度抑郁倾向，存在自伤风险条目阳性', status: 'processing', assignee: '李老师', createdAt: '2026-03-12 09:30', updatedAt: '2026-03-12 10:15' },
+  { id: 'ALT-002', screeningId: 'SCR-005', name: '孙七', level: 'red', trigger: 'GAD-7 得分 15 (≥15)', description: '重度焦虑，伴有躯体化症状', status: 'pending', assignee: '李老师', createdAt: '2026-03-10 14:20', updatedAt: '2026-03-10 14:20' },
+  { id: 'ALT-003', screeningId: 'SCR-002', name: '李四', level: 'orange', trigger: 'GAD-7 得分 12 (≥10)', description: '中度焦虑，建议进一步评估', status: 'processing', assignee: '王老师', createdAt: '2026-03-11 11:00', updatedAt: '2026-03-11 15:30' },
+  { id: 'ALT-004', screeningId: 'SCR-003', name: '王五', level: 'yellow', trigger: 'SCL-90 总分 180 (≥160)', description: '轻度心理问题，建议关注', status: 'resolved', assignee: '李老师', createdAt: '2026-03-11 10:00', updatedAt: '2026-03-12 09:00' },
+  { id: 'ALT-005', screeningId: 'SCR-008', name: '郑十', level: 'orange', trigger: 'GAD-7 得分 10 (≥10)', description: '中度焦虑倾向', status: 'pending', assignee: '李老师', createdAt: '2026-03-08 16:00', updatedAt: '2026-03-08 16:00' },
 ];
 
-export const warningEvents: WarningEvent[] = [
-  {
-    id: 'WARN-0318-A',
-    level: 'red',
-    title: '连续负性情绪 + 睡眠下降',
-    reason: '过去 7 天文本与语音信号均出现高风险特征，且 PHQ-9 上升到 15 分。',
-    suggestion: '建议今天完成一次危机自评，并联系可信赖同伴进行陪伴。',
-    status: 'tracking',
-    createdAt: '2026-03-18 08:40',
-    updatedAt: '2026-03-19 21:00',
-  },
-  {
-    id: 'WARN-0316-B',
-    level: 'orange',
-    title: '焦虑水平持续偏高',
-    reason: 'GAD-7 连续两次 >= 10，跨模态哈希检索命中高相似焦虑案例。',
-    suggestion: '进行 10 分钟呼吸训练，并将学习任务拆分为 25 分钟番茄钟。',
-    status: 'new',
-    createdAt: '2026-03-16 22:10',
-    updatedAt: '2026-03-16 22:10',
-  },
-  {
-    id: 'WARN-0312-C',
-    level: 'yellow',
-    title: '睡眠中断风险',
-    reason: 'ISI 评分处于中度风险区间，夜间醒来次数增加。',
-    suggestion: '晚间 23:30 前停止使用电子屏幕，固定起床时间。',
-    status: 'resolved',
-    createdAt: '2026-03-12 07:30',
-    updatedAt: '2026-03-15 09:00',
-  },
+export const caseRecords: CaseRecord[] = [
+  { id: 'CASE-001', name: '张三', age: 20, gender: '男', department: '计算机学院', tags: ['抑郁', '自伤风险'], screeningCount: 3, lastScreening: '2026-03-12', alertLevel: 'red', status: 'active' },
+  { id: 'CASE-002', name: '李四', age: 22, gender: '女', department: '文学院', tags: ['焦虑'], screeningCount: 2, lastScreening: '2026-03-11', alertLevel: 'orange', status: 'active' },
+  { id: 'CASE-003', name: '王五', age: 19, gender: '男', department: '理学院', tags: ['压力', '睡眠问题'], screeningCount: 4, lastScreening: '2026-03-11', alertLevel: 'yellow', status: 'monitoring' },
+  { id: 'CASE-004', name: '赵六', age: 21, gender: '女', department: '艺术学院', tags: ['适应性'], screeningCount: 1, lastScreening: '2026-03-10', alertLevel: 'green', status: 'closed' },
+  { id: 'CASE-005', name: '孙七', age: 23, gender: '男', department: '工学院', tags: ['焦虑', '躯体化'], screeningCount: 2, lastScreening: '2026-03-10', alertLevel: 'red', status: 'active' },
+  { id: 'CASE-006', name: '周八', age: 20, gender: '女', department: '经管学院', tags: ['抑郁倾向'], screeningCount: 1, lastScreening: '2026-03-09', alertLevel: 'yellow', status: 'monitoring' },
 ];
 
 export const retrievalResults: RetrievalResult[] = [
-  {
-    id: 'RET-ME-001',
-    similarity: 0.93,
-    modality: 'multimodal',
-    summary: '与历史案例中“期中周压力-睡眠下降-情绪低落”模式高度一致，需提前干预。',
-    tags: ['课程压力', '睡眠下降', '情绪耗竭'],
-    alertLevel: 'red',
-    date: '2026-03-18',
-  },
-  {
-    id: 'RET-ME-002',
-    similarity: 0.86,
-    modality: 'audio',
-    summary: '语音特征显示语速偏慢、停顿增多，和焦虑-疲惫共存模式相似。',
-    tags: ['语音平坦', '精神疲劳'],
-    alertLevel: 'orange',
-    date: '2026-03-16',
-  },
-  {
-    id: 'RET-ME-003',
-    similarity: 0.8,
-    modality: 'text',
-    summary: '日记文本出现“没有动力”“逃避任务”等关键词，匹配中风险抑郁样本。',
-    tags: ['回避行为', '动力不足'],
-    alertLevel: 'orange',
-    date: '2026-03-15',
-  },
-  {
-    id: 'RET-ME-004',
-    similarity: 0.74,
-    modality: 'image',
-    summary: '绘画与情绪色彩分析提示精力感偏低，但社会连接意愿仍存在。',
-    tags: ['低唤醒', '社交意愿保留'],
-    alertLevel: 'yellow',
-    date: '2026-03-11',
-  },
+  { id: 'RET-001', similarity: 0.94, modality: 'text', summary: '男性，20岁，PHQ-9得分17，存在明显的兴趣缺失和睡眠障碍，历史上有类似波动', tags: ['抑郁', '睡眠障碍'], alertLevel: 'red', date: '2025-12-15' },
+  { id: 'RET-002', similarity: 0.89, modality: 'multimodal', summary: '男性，21岁，语音分析显示情绪低落特征，文本中多次出现消极词汇', tags: ['情绪低落', '消极认知'], alertLevel: 'red', date: '2025-11-20' },
+  { id: 'RET-003', similarity: 0.85, modality: 'text', summary: '女性，19岁，GAD-7得分14，伴有躯体化焦虑症状', tags: ['焦虑', '躯体化'], alertLevel: 'orange', date: '2026-01-08' },
+  { id: 'RET-004', similarity: 0.78, modality: 'image', summary: '绘画测试分析：房树人测试显示自我认知偏低，社会支持感薄弱', tags: ['自我认知', '社会支持'], alertLevel: 'yellow', date: '2026-02-03' },
+  { id: 'RET-005', similarity: 0.72, modality: 'audio', summary: '语音情感分析：语速偏慢，音调平坦，情感表达抑制', tags: ['情感抑制', '语音特征'], alertLevel: 'orange', date: '2026-01-25' },
 ];
 
-export const moodTrend: MoodTrendPoint[] = [
-  { date: '03-10', mood: 62, stress: 71, sleep: 6.8 },
-  { date: '03-11', mood: 58, stress: 74, sleep: 6.5 },
-  { date: '03-12', mood: 55, stress: 76, sleep: 6.1 },
-  { date: '03-13', mood: 53, stress: 79, sleep: 5.9 },
-  { date: '03-14', mood: 49, stress: 83, sleep: 5.5 },
-  { date: '03-15', mood: 52, stress: 78, sleep: 6.2 },
-  { date: '03-16', mood: 51, stress: 81, sleep: 5.8 },
-  { date: '03-17', mood: 47, stress: 85, sleep: 5.3 },
-  { date: '03-18', mood: 45, stress: 87, sleep: 5.1 },
-  { date: '03-19', mood: 50, stress: 80, sleep: 6.0 },
+export const trendData = [
+  { date: '03-01', count: 12, alerts: 2 },
+  { date: '03-02', count: 8, alerts: 1 },
+  { date: '03-03', count: 15, alerts: 3 },
+  { date: '03-04', count: 10, alerts: 2 },
+  { date: '03-05', count: 18, alerts: 4 },
+  { date: '03-06', count: 14, alerts: 2 },
+  { date: '03-07', count: 20, alerts: 5 },
+  { date: '03-08', count: 16, alerts: 3 },
+  { date: '03-09', count: 22, alerts: 4 },
+  { date: '03-10', count: 19, alerts: 3 },
+  { date: '03-11', count: 25, alerts: 6 },
+  { date: '03-12', count: 15, alerts: 2 },
 ];
 
-export const warningDistribution = [
-  { name: '稳定', value: 42, color: '#22c55e' },
-  { name: '关注', value: 31, color: '#f59e0b' },
-  { name: '警告', value: 18, color: '#f97316' },
-  { name: '高危', value: 9, color: '#ef4444' },
-];
-
-export const personalTimeline: PersonalTimelineEvent[] = [
-  { date: '2026-03-19', type: 'plan', title: '执行今日行动计划', detail: '完成 12 分钟呼吸放松 + 15 分钟轻运动。' },
-  { date: '2026-03-18', type: 'warning', title: '触发高风险预警', detail: '模型判断为红色预警，建议启动危机应对流程。' },
-  { date: '2026-03-18', type: 'screening', title: '完成 PHQ-9 筛查', detail: '总分 15/27，较上次上升 6 分。' },
-  { date: '2026-03-16', type: 'collection', title: '提交语音样本', detail: '录音 3 分 40 秒，用于情感特征分析。' },
-  { date: '2026-03-12', type: 'screening', title: '完成 ISI 失眠评估', detail: '总分 17/28，睡眠问题处于中度。' },
-];
-
-export const actionPlan = [
-  { id: 'PLAN-1', title: '5-4-3-2-1 地面化练习', duration: '8 分钟', status: 'new' as const },
-  { id: 'PLAN-2', title: '与朋友进行一次 15 分钟通话', duration: '15 分钟', status: 'tracking' as const },
-  { id: 'PLAN-3', title: '睡前情绪日记（3条）', duration: '10 分钟', status: 'resolved' as const },
+export const alertDistribution = [
+  { name: '正常(绿)', value: 45, color: '#22c55e' },
+  { name: '关注(黄)', value: 28, color: '#f59e0b' },
+  { name: '警告(橙)', value: 18, color: '#f97316' },
+  { name: '危险(红)', value: 9, color: '#ef4444' },
 ];
 
 export const ragReport = {
-  subject: '林晓',
-  date: '2026-03-19',
-  summary:
-    '基于动态跨模态哈希检索与 RAG 结果，你当前处于“中高风险波动期”，风险主要来自持续学习压力、睡眠剥夺和负性自动思维叠加。通过短周期行为干预与同伴支持，风险有较高概率在 1-2 周内下降。',
+  subject: '张三',
+  date: '2026-03-12',
+  summary: '综合多模态数据分析，该被试呈现明显的抑郁症状特征，需要高度关注和及时干预。',
   riskLevel: 'high' as const,
   sections: [
     {
-      title: '量表变化趋势',
-      content:
-        'PHQ-9 从 9 分上升到 15 分，GAD-7 从 8 分上升到 13 分，提示抑郁和焦虑并行波动。近 10 天情绪评分持续低于 55，属于需重点关注区间。',
+      title: '量表分析',
+      content: 'PHQ-9得分18分（重度抑郁），其中"对事物缺乏兴趣"和"感到疲倦或没有精力"两项得分最高。与上次筛查（得分12分）相比，症状有明显加重趋势。GAD-7得分8分（轻度焦虑），存在焦虑共病可能。',
     },
     {
-      title: '动态跨模态哈希匹配',
-      content:
-        '文本、语音、图像三类信号在哈希空间中与高相似案例的平均相似度达到 0.83，且语音与文本的一致性较高。模型提示“压力-睡眠-情绪”链式反应明显。',
+      title: '跨模态特征匹配',
+      content: '通过动态跨模态哈希检索，匹配到5例高相似度历史案例（相似度>0.7）。其中2例最终确诊为重度抑郁障碍，1例伴有自伤行为。检索结果提示当前案例具有较高的风险特征。哈希编码在文本和语音模态上的一致性为0.91，表明多模态信号高度一致。',
     },
     {
-      title: 'RAG 生成建议',
-      content:
-        '结合检索到的相似个体恢复路径，最有效策略是：先稳定睡眠，再降低即时压力峰值，最后逐步恢复社交和学习掌控感。建议按行动计划进行 7 天追踪。',
+      title: '语音情感分析',
+      content: '语音样本分析显示：语速较正常偏慢（-23%），音调变化幅度减小（平坦化），停顿频率增加。情感分类结果为"悲伤"（置信度0.82），这些特征与抑郁症状的语音表现一致。',
+    },
+    {
+      title: '综合评估结论',
+      content: '基于RAG分析引擎综合以上多维度信息，结合知识库中的临床指南和循证数据，评估该被试当前处于重度抑郁状态，存在进一步恶化的风险。建议立即安排专业心理咨询师进行面谈评估，必要时转介精神科。',
     },
   ],
   recommendations: [
-    '未来 3 天优先保证睡眠时长 >= 6.5 小时',
-    '每天固定 1 次 8-12 分钟呼吸或正念练习',
-    '将高压任务拆解为 25 分钟可执行清单',
-    '若出现持续绝望/自伤想法，立即联系校园心理中心或紧急支持资源',
+    '立即安排专业心理咨询师一对一面谈',
+    '评估自伤/自杀风险，必要时启动危机干预流程',
+    '通知辅导员和院系相关负责人',
+    '建议每周至少一次跟踪评估',
+    '考虑转介至专业精神卫生机构',
   ],
 };

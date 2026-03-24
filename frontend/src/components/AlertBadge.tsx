@@ -4,7 +4,7 @@ interface AlertBadgeProps {
 }
 
 const levelConfig = {
-  green: { label: '稳定', bg: 'bg-success-50', text: 'text-success-600', dot: 'bg-success-500' },
+  green: { label: '正常', bg: 'bg-success-50', text: 'text-success-600', dot: 'bg-success-500' },
   yellow: { label: '关注', bg: 'bg-warning-50', text: 'text-warning-600', dot: 'bg-warning-500' },
   orange: { label: '警告', bg: 'bg-orange-50', text: 'text-orange-600', dot: 'bg-orange-500' },
   red: { label: '危险', bg: 'bg-danger-50', text: 'text-danger-600', dot: 'bg-danger-500' },

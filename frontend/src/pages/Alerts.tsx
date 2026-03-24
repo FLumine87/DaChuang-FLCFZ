@@ -1,38 +1,52 @@
-import { useState } from 'react';
-import { Filter, ChevronDown, Clock, AlertTriangle, ShieldAlert } from 'lucide-react';
-import { warningEvents } from '../data/mockData';
+import { useState, useEffect } from 'react';
+import { Filter, ChevronDown, Clock, User, AlertTriangle } from 'lucide-react';
+import { alertRecords } from '../data/mockData';
+import { getAlertList } from '../services/api';
 import AlertBadge from '../components/AlertBadge';
 import StatusBadge from '../components/StatusBadge';
 
 export default function Alerts() {
-  const [filterLevel, setFilterLevel] = useState<'all' | 'red' | 'orange' | 'yellow' | 'green'>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'new' | 'tracking' | 'resolved'>('all');
+  const [filterLevel, setFilterLevel] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
+  const [alerts, setAlerts] = useState(alertRecords);
+  const [loading, setLoading] = useState(false);
 
-  const filtered = warningEvents.filter((a) => {
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        setLoading(true);
+        const data = await getAlertList();
+        setAlerts(data);
+      } catch (error) {
+        console.error('Failed to fetch alerts:', error);
+        // 使用 mock 数据作为 fallback
+        setAlerts(alertRecords);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAlerts();
+  }, []);
+
+  const filtered = alerts.filter((a) => {
     const matchLevel = filterLevel === 'all' || a.level === filterLevel;
     const matchStatus = filterStatus === 'all' || a.status === filterStatus;
     return matchLevel && matchStatus;
   });
 
-  const selected = warningEvents.find((a) => a.id === selectedAlert);
+  const selected = alerts.find((a) => a.id === selectedAlert);
 
   return (
-    <div className="space-y-5">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <h3 className="text-base font-semibold text-slate-800">个人预警中心</h3>
-        <p className="text-sm text-slate-500 mt-2">
-          当模型检测到“情绪持续下行、压力过载或睡眠显著下降”时，将在这里推送分级预警与可执行建议。
-        </p>
-      </div>
-
+    <div className="space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: '新触发', count: warningEvents.filter((a) => a.status === 'new').length, color: 'text-danger-600 bg-danger-50' },
-          { label: '跟踪中', count: warningEvents.filter((a) => a.status === 'tracking').length, color: 'text-blue-600 bg-blue-50' },
-          { label: '已缓解', count: warningEvents.filter((a) => a.status === 'resolved').length, color: 'text-success-600 bg-success-50' },
-          { label: '高风险', count: warningEvents.filter((a) => a.level === 'red').length, color: 'text-orange-600 bg-orange-50' },
+          { label: '待处理', count: alerts.filter((a) => a.status === 'pending').length, color: 'text-danger-600 bg-danger-50' },
+          { label: '处理中', count: alerts.filter((a) => a.status === 'processing').length, color: 'text-blue-600 bg-blue-50' },
+          { label: '已解决', count: alerts.filter((a) => a.status === 'resolved').length, color: 'text-success-600 bg-success-50' },
+          { label: '已关闭', count: alerts.filter((a) => a.status === 'closed').length, color: 'text-slate-500 bg-slate-100' },
         ].map((item) => (
           <div key={item.label} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <p className="text-sm text-slate-500">{item.label}</p>
@@ -47,27 +61,26 @@ export default function Alerts() {
           <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <select
             value={filterLevel}
-            onChange={(e) => setFilterLevel(e.target.value as 'all' | 'red' | 'orange' | 'yellow' | 'green')}
+            onChange={(e) => setFilterLevel(e.target.value)}
             className="pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
           >
             <option value="all">全部等级</option>
             <option value="red">危险</option>
             <option value="orange">警告</option>
             <option value="yellow">关注</option>
-            <option value="green">稳定</option>
           </select>
           <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
         </div>
         <div className="relative">
           <select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as 'all' | 'new' | 'tracking' | 'resolved')}
+            onChange={(e) => setFilterStatus(e.target.value)}
             className="px-4 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
           >
             <option value="all">全部状态</option>
-            <option value="new">新触发</option>
-            <option value="tracking">跟踪中</option>
-            <option value="resolved">已缓解</option>
+            <option value="pending">待处理</option>
+            <option value="processing">处理中</option>
+            <option value="resolved">已解决</option>
           </select>
           <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
         </div>
@@ -76,41 +89,48 @@ export default function Alerts() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Alert List */}
         <div className="lg:col-span-2 space-y-3">
-          {filtered.map((alert) => (
-            <div
-              key={alert.id}
-              onClick={() => setSelectedAlert(alert.id)}
-              className={`bg-white rounded-xl border p-4 shadow-sm cursor-pointer transition-colors ${
-                selectedAlert === alert.id
-                  ? 'border-primary-500 ring-1 ring-primary-200'
-                  : 'border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <AlertBadge level={alert.level} />
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">{alert.title}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{alert.id}</p>
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <p className="text-slate-500">加载中...</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex items-center justify-center py-10">
+              <p className="text-slate-500">暂无预警数据</p>
+            </div>
+          ) : (
+            filtered.map((alert) => (
+              <div
+                key={alert.id}
+                onClick={() => setSelectedAlert(alert.id)}
+                className={`bg-white rounded-xl border p-4 shadow-sm cursor-pointer transition-colors ${
+                  selectedAlert === alert.id
+                    ? 'border-primary-500 ring-1 ring-primary-200'
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <AlertBadge level={alert.level} />
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">{alert.name}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{alert.alert_id}</p>
+                    </div>
                   </div>
+                  <StatusBadge status={alert.status} />
                 </div>
-                <StatusBadge status={alert.status} />
+                <div className="flex items-center gap-4 text-xs text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" /> {alert.trigger}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> {alert.created_at}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <User className="w-3 h-3" /> {alert.assignee_name || '未分配'}
+                  </span>
+                </div>
               </div>
-              <p className="text-sm text-slate-600 mb-2">{alert.reason}</p>
-              <div className="flex items-center gap-4 text-xs text-slate-400">
-                <span className="flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" /> 风险提示：{alert.title}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> {alert.createdAt}
-                </span>
-              </div>
-            </div>
-          ))}
-          {filtered.length === 0 && (
-            <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-xl border border-slate-200">
-              暂无匹配的预警记录
-            </div>
+            ))
           )}
         </div>
 
@@ -124,8 +144,10 @@ export default function Alerts() {
               </div>
               <div className="space-y-3">
                 {[
-                  ['预警标题', selected.title],
-                  ['触发原因', selected.reason],
+                  ['被筛查者', selected.name],
+                  ['触发条件', selected.trigger],
+                  ['关联筛查', selected.screeningId],
+                  ['处理人', selected.assignee],
                   ['创建时间', selected.createdAt],
                   ['更新时间', selected.updatedAt],
                 ].map(([label, value]) => (
@@ -140,25 +162,25 @@ export default function Alerts() {
                 </div>
               </div>
               <div className="pt-3 border-t border-slate-100">
-                <p className="text-sm text-slate-400 mb-1">建议动作</p>
-                <p className="text-sm text-slate-700">{selected.suggestion}</p>
+                <p className="text-sm text-slate-400 mb-1">描述</p>
+                <p className="text-sm text-slate-700">{selected.description}</p>
               </div>
               <div className="flex gap-2 pt-2">
-                {selected.status === 'new' && (
+                {selected.status === 'pending' && (
                   <button className="flex-1 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 cursor-pointer">
-                    标记为跟踪中
+                    开始处理
                   </button>
                 )}
-                {selected.status === 'tracking' && (
+                {selected.status === 'processing' && (
                   <button className="flex-1 py-2 bg-success-600 text-white rounded-lg text-sm font-medium hover:bg-success-500 cursor-pointer">
-                    标记为已缓解
+                    标记解决
                   </button>
                 )}
               </div>
             </div>
           ) : (
             <div className="text-center py-8 text-slate-400 text-sm">
-              <ShieldAlert className="w-8 h-8 mx-auto mb-2 text-slate-200" />
+              <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-slate-200" />
               选择一条预警查看详情
             </div>
           )}
