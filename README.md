@@ -150,7 +150,7 @@ npm run dev
 docker-compose up -d
 ```
 
-详细部署说明请参考 [DEPLOYMENT.md](./DEPLOYMENT.md)
+详细部署说明请参考 [DEPLOYMENT.md](./docs/DEPLOYMENT.md)
 
 ## API文档
 
