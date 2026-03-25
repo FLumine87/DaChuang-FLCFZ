@@ -8,6 +8,7 @@ services:
     volumes:
       - ./backend:/app
       - uploads_data:/app/uploads
+      - ./backend/data/dev.db:/app/mental_screening.db
     environment:
       - DATABASE_URL=sqlite:///./mental_screening.db
       - SECRET_KEY=your-secret-key-change-in-production

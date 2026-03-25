@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.venv/
+
+# 数据库文件 - 忽略工作数据库
+mental_screening.db
+*.db-journal
+
+# 但保留 data 目录下的数据库模板
+!data/
+!data/*.db
+
+# 上传文件
+uploads/
+*.wav
+*.mp3
+*.jpg
+*.jpeg
+*.png
+*.pdf
+
+# 环境变量
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 日志
+*.log
+logs/
+
+# 备份文件
+*.bak
+backup_*.db

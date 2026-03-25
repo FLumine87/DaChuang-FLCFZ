@@ -365,7 +365,6 @@ def init_sample_data():
                 screening_count=1,
                 last_screening_date=datetime.now() - timedelta(days=4),
                 created_at=datetime.now() - timedelta(days=15),
-                closed_at=datetime.now() - timedelta(days=2),
             ),
             Case(
                 case_id="CASE-005",
