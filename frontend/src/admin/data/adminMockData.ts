@@ -106,6 +106,140 @@ export const alertDistribution = [
   { name: '危险(红)', value: 9, color: '#ef4444' },
 ];
 
+// ─── 多模态采集数据 ───────────────────────────────────────────────────────────
+
+export type AnalysisStatus = 'pending' | 'processing' | 'done' | 'flagged';
+
+export interface TextSubmission {
+  id: string;
+  username: string;
+  submitAt: string;
+  wordCount: number;
+  preview: string;
+  sentiment: string;
+  keywords: string[];
+  analysisStatus: AnalysisStatus;
+  riskLevel: 'green' | 'yellow' | 'orange' | 'red';
+}
+
+export interface AudioSubmission {
+  id: string;
+  username: string;
+  submitAt: string;
+  duration: string;
+  source: '录制' | '上传';
+  filename: string;
+  emotion: string;
+  speechRate: string;
+  analysisStatus: AnalysisStatus;
+  riskLevel: 'green' | 'yellow' | 'orange' | 'red';
+}
+
+export interface ImageSubmission {
+  id: string;
+  username: string;
+  submitAt: string;
+  filename: string;
+  type: '房树人' | '情绪配图' | '其他';
+  analysisStatus: AnalysisStatus;
+  annotation: string;
+  riskLevel: 'green' | 'yellow' | 'orange' | 'red';
+}
+
+export const textSubmissions: TextSubmission[] = [
+  {
+    id: 'TXT-001', username: '张三', submitAt: '2026-03-18 22:14',
+    wordCount: 312, preview: '最近课程压力很大，感觉什么都提不起劲，睡觉也睡不好，室友说我最近话变少了...',
+    sentiment: '消极', keywords: ['压力', '睡眠差', '兴趣缺失'], analysisStatus: 'flagged', riskLevel: 'red',
+  },
+  {
+    id: 'TXT-002', username: '李四', submitAt: '2026-03-18 20:05',
+    wordCount: 198, preview: '今天考试没考好，心里有点难受，但感觉还能调整过来，打算明天和同学去爬山...',
+    sentiment: '轻度消极', keywords: ['考试', '低落', '社交'], analysisStatus: 'done', riskLevel: 'yellow',
+  },
+  {
+    id: 'TXT-003', username: '王五', submitAt: '2026-03-17 21:30',
+    wordCount: 85, preview: '今天还行，和朋友吃了顿火锅，心情不错，最近睡眠也改善了一些...',
+    sentiment: '积极', keywords: ['社交', '睡眠改善'], analysisStatus: 'done', riskLevel: 'green',
+  },
+  {
+    id: 'TXT-004', username: '孙七', submitAt: '2026-03-17 23:50',
+    wordCount: 456, preview: '感觉自己什么都做不好，这学期已经挂了两门，父母肯定会失望，有时候真的不想动...',
+    sentiment: '消极', keywords: ['自我否定', '学业失败', '无力感'], analysisStatus: 'flagged', riskLevel: 'red',
+  },
+  {
+    id: 'TXT-005', username: '赵六', submitAt: '2026-03-16 19:22',
+    wordCount: 143, preview: '最近加入了一个读书会，感觉收获挺大，和大家聊了很多，情绪比上周好多了...',
+    sentiment: '积极', keywords: ['社群', '读书', '情绪好转'], analysisStatus: 'done', riskLevel: 'green',
+  },
+  {
+    id: 'TXT-006', username: '周八', submitAt: '2026-03-16 08:10',
+    wordCount: 221, preview: '又失眠了，躺了两个小时还是睡不着，脑子一直在转，担心毕业找不到工作...',
+    sentiment: '焦虑', keywords: ['失眠', '焦虑', '就业压力'], analysisStatus: 'processing', riskLevel: 'orange',
+  },
+];
+
+export const audioSubmissions: AudioSubmission[] = [
+  {
+    id: 'AUD-001', username: '张三', submitAt: '2026-03-18 22:20', duration: '03:42', source: '录制',
+    filename: '录音_221938.webm', emotion: '悲伤', speechRate: '偏慢（-23%）',
+    analysisStatus: 'flagged', riskLevel: 'red',
+  },
+  {
+    id: 'AUD-002', username: '孙七', submitAt: '2026-03-17 23:55', duration: '02:15', source: '录制',
+    filename: '录音_235512.webm', emotion: '低落', speechRate: '偏慢（-18%）',
+    analysisStatus: 'done', riskLevel: 'orange',
+  },
+  {
+    id: 'AUD-003', username: '李四', submitAt: '2026-03-18 20:10', duration: '01:58', source: '上传',
+    filename: 'voice_20260318.mp3', emotion: '平静', speechRate: '正常',
+    analysisStatus: 'done', riskLevel: 'yellow',
+  },
+  {
+    id: 'AUD-004', username: '周八', submitAt: '2026-03-16 08:15', duration: '04:30', source: '录制',
+    filename: '录音_081531.webm', emotion: '焦虑', speechRate: '偏快（+12%）',
+    analysisStatus: 'processing', riskLevel: 'orange',
+  },
+  {
+    id: 'AUD-005', username: '王五', submitAt: '2026-03-17 21:35', duration: '02:05', source: '上传',
+    filename: 'daily_check.m4a', emotion: '愉快', speechRate: '正常',
+    analysisStatus: 'done', riskLevel: 'green',
+  },
+];
+
+export const imageSubmissions: ImageSubmission[] = [
+  {
+    id: 'IMG-001', username: '张三', submitAt: '2026-03-18 22:25', filename: 'htp_zhangsan.jpg',
+    type: '房树人', analysisStatus: 'flagged',
+    annotation: '树冠极小、根系缺失，自我感知弱；人物无表情，社交退缩倾向明显。',
+    riskLevel: 'red',
+  },
+  {
+    id: 'IMG-002', username: '孙七', submitAt: '2026-03-17 23:58', filename: 'drawing_sunqi.png',
+    type: '房树人', analysisStatus: 'done',
+    annotation: '画面较暗，房屋无窗，提示孤独感与封闭性；树倾斜，压力感较重。',
+    riskLevel: 'orange',
+  },
+  {
+    id: 'IMG-003', username: '李四', submitAt: '2026-03-18 20:08', filename: 'mood_lisi.jpg',
+    type: '情绪配图', analysisStatus: 'done',
+    annotation: '图像色彩柔和，内容为户外场景，情绪状态稳定偏中性。',
+    riskLevel: 'yellow',
+  },
+  {
+    id: 'IMG-004', username: '王五', submitAt: '2026-03-17 21:32', filename: 'happy_wangwu.png',
+    type: '情绪配图', analysisStatus: 'done',
+    annotation: '图像明亮，选取聚餐场景，情绪积极，社交意愿良好。',
+    riskLevel: 'green',
+  },
+  {
+    id: 'IMG-005', username: '周八', submitAt: '2026-03-16 08:12', filename: 'htp_zhouba.jpg',
+    type: '房树人', analysisStatus: 'processing',
+    annotation: '分析中，待完成。',
+    riskLevel: 'orange',
+  },
+];
+
 export const ragReport = {
   subject: '张三',
   date: '2026-03-12',

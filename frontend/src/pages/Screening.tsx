@@ -1,19 +1,61 @@
 import { useState } from 'react';
-import { Search, Filter, ChevronDown, PlayCircle, ClipboardCheck, ArrowUpRight } from 'lucide-react';
+import { Search, Filter, ChevronDown, PlayCircle, ClipboardCheck } from 'lucide-react';
 import { screeningRecords, questionnaireCatalog } from '../data/mockData';
+import type { PersonalScreeningRecord } from '../data/mockData';
 import AlertBadge from '../components/AlertBadge';
 import StatusBadge from '../components/StatusBadge';
+import QuestionnaireForm from '../components/QuestionnaireForm';
+
+type AlertLevel = 'green' | 'yellow' | 'orange' | 'red';
 
 export default function Screening() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterLevel, setFilterLevel] = useState<'all' | 'red' | 'orange' | 'yellow' | 'green'>('all');
+  const [filterLevel, setFilterLevel] = useState<'all' | AlertLevel>('all');
   const [activeQuestionnaire, setActiveQuestionnaire] = useState<string | null>(null);
+  const [localRecords, setLocalRecords] = useState<PersonalScreeningRecord[]>(screeningRecords);
 
-  const filtered = screeningRecords.filter(
+  const filtered = localRecords.filter(
     (record) =>
       (record.id.includes(searchTerm) || record.questionnaire.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (filterLevel === 'all' || record.level === filterLevel)
   );
+
+  const levelToMoodTag: Record<AlertLevel, string> = {
+    green: '状态稳定',
+    yellow: '轻度波动',
+    orange: '情绪波动',
+    red: '高风险',
+  };
+
+  const handleComplete = (score: number, maxScore: number, level: AlertLevel) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const id = `ME-SCR-${Date.now().toString().slice(-6)}`;
+    const newRecord: PersonalScreeningRecord = {
+      id,
+      questionnaire: activeQuestionnaire!,
+      score,
+      maxScore,
+      level,
+      status: 'completed',
+      moodTag: levelToMoodTag[level],
+      date: today,
+    };
+    setLocalRecords((prev) => [newRecord, ...prev]);
+  };
+
+  if (activeQuestionnaire) {
+    return (
+      <div className="space-y-4">
+        <QuestionnaireForm
+          questionnaireId={activeQuestionnaire}
+          onClose={() => setActiveQuestionnaire(null)}
+          onComplete={(score, maxScore, level) => {
+            handleComplete(score, maxScore, level);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -21,59 +63,39 @@ export default function Screening() {
         <h3 className="text-base font-semibold text-slate-800">筛查说明</h3>
         <p className="text-sm text-slate-500 mt-2 leading-6">
           这里提供个人自助心理筛查。系统会结合你的量表结果、文本/语音/图像采集结果，进行动态跨模态哈希检索和
-          RAG 风险解释，用于“早发现、早干预”。所有数据为原型演示数据。
+          RAG 风险解释，用于"早发现、早干预"。结果仅作参考，不构成诊断。
         </p>
       </div>
 
+      {/* Questionnaire Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {questionnaireCatalog.map((item) => {
-          const active = activeQuestionnaire === item.id;
-          return (
-            <div
-              key={item.id}
-              className={`rounded-xl border p-5 shadow-sm transition-colors ${
-                active ? 'border-primary-400 bg-primary-50/40' : 'border-slate-200 bg-white'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm text-slate-400">{item.id}</p>
-                  <h4 className="text-base font-semibold text-slate-800 mt-1">{item.name}</h4>
-                  <p className="text-sm text-slate-500 mt-2">{item.description}</p>
-                </div>
-                <ClipboardCheck className="w-5 h-5 text-primary-600 shrink-0 mt-1" />
+        {questionnaireCatalog.map((item) => (
+          <div
+            key={item.id}
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-slate-400">{item.id}</p>
+                <h4 className="text-base font-semibold text-slate-800 mt-1">{item.name}</h4>
+                <p className="text-sm text-slate-500 mt-2">{item.description}</p>
               </div>
-              <div className="flex items-center gap-4 mt-4 text-xs text-slate-500">
-                <span>{item.questions} 题</span>
-                <span>约 {item.minutes} 分钟</span>
-                <span>关注：{item.target}</span>
-              </div>
-              <button
-                onClick={() => setActiveQuestionnaire(item.id)}
-                className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium cursor-pointer"
-              >
-                <PlayCircle className="w-4 h-4" /> 开始 {item.id}
-              </button>
+              <ClipboardCheck className="w-5 h-5 text-primary-600 shrink-0 mt-1" />
             </div>
-          );
-        })}
-      </div>
-
-      {activeQuestionnaire && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <h4 className="font-semibold text-slate-800">当前进行中：{activeQuestionnaire}</h4>
-              <p className="text-sm text-slate-500 mt-1">这是前端原型交互，点击下方按钮模拟提交并查看历史记录变化。</p>
+            <div className="flex items-center gap-4 mt-4 text-xs text-slate-500">
+              <span>{item.questions} 题</span>
+              <span>约 {item.minutes} 分钟</span>
+              <span>关注：{item.target}</span>
             </div>
             <button
-              className="inline-flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium cursor-pointer"
+              onClick={() => setActiveQuestionnaire(item.id)}
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium cursor-pointer"
             >
-              提交本次筛查 <ArrowUpRight className="w-4 h-4" />
+              <PlayCircle className="w-4 h-4" /> 开始 {item.id}
             </button>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -82,7 +104,7 @@ export default function Screening() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="搜索姓名或编号..."
+              placeholder="搜索编号或量表..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent w-64"
@@ -92,14 +114,14 @@ export default function Screening() {
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <select
               value={filterLevel}
-              onChange={(e) => setFilterLevel(e.target.value as 'all' | 'red' | 'orange' | 'yellow' | 'green')}
+              onChange={(e) => setFilterLevel(e.target.value as 'all' | AlertLevel)}
               className="pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
             >
               <option value="all">全部等级</option>
               <option value="red">危险</option>
               <option value="orange">警告</option>
               <option value="yellow">关注</option>
-              <option value="green">正常</option>
+              <option value="green">稳定</option>
             </select>
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           </div>
