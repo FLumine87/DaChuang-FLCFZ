@@ -12,12 +12,21 @@ from app.config import settings
 router = APIRouter()
 
 
+from pydantic import BaseModel
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 @router.post("/login")
 async def login(
-    username: str,
-    password: str,
+    data: LoginRequest,
     db: Session = Depends(get_db)
 ):
+    username = data.username
+    password = data.password
     user = db.query(User).filter(User.username == username).first()
     if not user or not verify_password(password, user.password_hash):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
