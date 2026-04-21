@@ -40,7 +40,7 @@ export default function ScreeningDetail({ record, onBack }: Props) {
         </button>
         <div>
           <h2 className="text-xl font-bold text-slate-800">筛查详情 - {record.id}</h2>
-          <p className="text-sm text-slate-400 mt-0.5">{record.date} · {record.counselor}</p>
+          <p className="text-sm text-slate-400 mt-0.5">{record.date} · 个人用户视图</p>
         </div>
         <div className="ml-auto flex gap-2">
           <button className="inline-flex items-center gap-2 px-3 py-2 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 text-sm cursor-pointer">
@@ -58,11 +58,9 @@ export default function ScreeningDetail({ record, onBack }: Props) {
           <h3 className="font-semibold text-slate-800 mb-4">基本信息</h3>
           <div className="space-y-3">
             {[
-              ['姓名', record.name],
-              ['性别', record.gender],
-              ['年龄', `${record.age}岁`],
               ['问卷类型', record.questionnaire],
-              ['咨询师', record.counselor],
+              ['情绪标签', record.moodTag],
+              ['状态', record.status],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between">
                 <span className="text-sm text-slate-400">{label}</span>
@@ -71,7 +69,7 @@ export default function ScreeningDetail({ record, onBack }: Props) {
             ))}
             <div className="flex justify-between items-center">
               <span className="text-sm text-slate-400">预警等级</span>
-              <AlertBadge level={record.alertLevel} size="sm" />
+              <AlertBadge level={record.level} size="sm" />
             </div>
           </div>
         </div>
@@ -89,9 +87,9 @@ export default function ScreeningDetail({ record, onBack }: Props) {
                   r="56"
                   fill="none"
                   stroke={
-                    record.alertLevel === 'red' ? '#ef4444' :
-                    record.alertLevel === 'orange' ? '#f97316' :
-                    record.alertLevel === 'yellow' ? '#f59e0b' : '#22c55e'
+                    record.level === 'red' ? '#ef4444' :
+                    record.level === 'orange' ? '#f97316' :
+                    record.level === 'yellow' ? '#f59e0b' : '#22c55e'
                   }
                   strokeWidth="12"
                   strokeLinecap="round"
@@ -125,7 +123,7 @@ export default function ScreeningDetail({ record, onBack }: Props) {
 
       {/* Answer Details */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <h3 className="font-semibold text-slate-800 mb-4">作答详情 (PHQ-9 示例)</h3>
+        <h3 className="font-semibold text-slate-800 mb-4">作答详情（示例）</h3>
         <div className="space-y-3">
           {[
             { q: '1. 做事时提不起劲或没有兴趣', a: 3, desc: '几乎每天' },

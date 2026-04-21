@@ -41,15 +41,27 @@ def init_sample_data():
         questionnaires = [
             Questionnaire(
                 code="PHQ-9",
-                name="患者健康问卷抑郁量表",
-                description="用于筛查抑郁症状的9项问卷",
+                name="PHQ-9 抑郁筛查",
+                description="评估过去两周抑郁症状程度",
                 max_score=27,
             ),
             Questionnaire(
                 code="GAD-7",
-                name="广泛性焦虑量表",
-                description="用于筛查焦虑症状的7项问卷",
+                name="GAD-7 焦虑筛查",
+                description="评估焦虑水平与紧张程度",
                 max_score=21,
+            ),
+            Questionnaire(
+                code="ISI",
+                name="ISI 失眠评估",
+                description="评估入睡、维持睡眠和早醒问题",
+                max_score=28,
+            ),
+            Questionnaire(
+                code="PSS-10",
+                name="PSS-10 压力量表",
+                description="评估近期主观压力感知",
+                max_score=40,
             ),
             Questionnaire(
                 code="SCL-90",
