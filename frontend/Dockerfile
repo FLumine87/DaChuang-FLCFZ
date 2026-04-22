@@ -1,10 +1,10 @@
-FROM node:18-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
 # 安装依赖
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install
 
 # 复制源代码
 COPY . .
