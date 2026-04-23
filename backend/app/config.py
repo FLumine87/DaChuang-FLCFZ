@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
     
-    DATABASE_URL: str = "sqlite:///./mental_screening.db"
+    DATABASE_URL: str = "sqlite:///./data/dev.db"
     
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ALGORITHM: str = "HS256"

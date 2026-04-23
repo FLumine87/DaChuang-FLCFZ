@@ -1,10 +1,10 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
 # 安装依赖
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN rm -rf node_modules && npm install --force
 
 # 复制源代码
 COPY . .
@@ -18,4 +18,4 @@ RUN npm install -g serve
 EXPOSE 5173
 
 # 使用 vite 开发服务器
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "dev", "--", "--host"]

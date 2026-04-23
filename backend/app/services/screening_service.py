@@ -35,7 +35,12 @@ class ScreeningService(BaseService[Screening]):
         questionnaire_id: Optional[int] = None,
         keyword: Optional[str] = None,
     ) -> dict:
-        query = self.db.query(Screening)
+        from sqlalchemy.orm import joinedload
+        
+        query = self.db.query(Screening).options(
+            joinedload(Screening.questionnaire_info),
+            joinedload(Screening.counselor)
+        )
         
         if status:
             query = query.filter(Screening.status == status)
@@ -66,7 +71,7 @@ class ScreeningService(BaseService[Screening]):
                 "created_at": item.created_at,
                 "counselor_name": item.counselor.name if item.counselor else None,
             }
-            result_items.append(type("ScreeningListItem", (), item_dict))
+            result_items.append(item_dict)
         
         return {"items": result_items, "total": total}
 

@@ -60,7 +60,7 @@ class CaseService(BaseService[Case]):
                 "last_screening": item.last_screening_date.strftime("%Y-%m-%d") if item.last_screening_date else None,
                 "tags": tags,
             }
-            result_items.append(type("CaseListItem", (), item_dict))
+            result_items.append(item_dict)
         
         return {"items": result_items, "total": total}
 

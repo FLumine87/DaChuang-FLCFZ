@@ -115,9 +115,9 @@ export default function Dashboard() {
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-base font-semibold text-slate-800">欢迎回来，{userProfile.name}</h3>
+            <h3 className="text-base font-semibold text-slate-800">欢迎回来，{userProfile?.name || '同学'}</h3>
             <p className="text-sm text-slate-500 mt-1">
-              {userProfile.stage} · {userProfile.major} · {userProfile.campus}
+              {userProfile?.stage || ''} · {userProfile?.major || ''} · {userProfile?.campus || ''}
             </p>
             <p className="text-xs text-slate-400 mt-2">
               当前重点：先稳定睡眠，再降低学习压力峰值，最后恢复社交节奏。

@@ -12,6 +12,7 @@ export default function AuthPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -47,7 +48,10 @@ export default function AuthPage() {
       }
       saveSessionToken(result.token, rememberMe);
       setMessage('登录成功，正在跳转...');
-      navigate(result.role === 'admin' ? '/admin/dashboard' : '/personal/dashboard', { replace: true });
+      // 后端返回的role可能是'admin'或'counselor'，前端统一处理
+      setTimeout(() => {
+        navigate(result.role === 'admin' ? '/admin/dashboard' : '/personal/dashboard', { replace: true });
+      }, 500);
     } finally {
       setLoading(false);
     }
@@ -59,9 +63,13 @@ export default function AuthPage() {
       setError('两次输入的密码不一致');
       return;
     }
+    if (!name) {
+      setError('请输入姓名');
+      return;
+    }
     setLoading(true);
     try {
-      const result = await apiRegister(username, password);
+      const result = await apiRegister(username, password, name);
       if (!result.ok) {
         setError(result.message || '注册失败');
         return;
@@ -70,6 +78,7 @@ export default function AuthPage() {
       setTab('login');
       setPassword('');
       setConfirmPassword('');
+      setName('');
     } finally {
       setLoading(false);
     }
@@ -139,6 +148,18 @@ export default function AuthPage() {
                 className="mt-1 w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
+
+            {tab === 'register' && (
+              <div>
+                <label className="text-sm text-slate-600">姓名</label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="请输入姓名"
+                  className="mt-1 w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            )}
 
             <div>
               <label className="text-sm text-slate-600">密码</label>

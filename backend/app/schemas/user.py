@@ -7,7 +7,7 @@ from app.schemas import BaseSchema
 class UserBase(BaseModel):
     username: str
     name: str
-    role: str = "counselor"
+    role: str = "user"
     department: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[EmailStr] = None

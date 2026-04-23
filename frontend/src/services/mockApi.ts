@@ -139,11 +139,16 @@ export async function apiLogin(
   }
 
   try {
-    const data = await request.post<{ token: string; role: 'admin' | 'user'; name: string }>(
+    const data = await request.post<{ token: string; role: string; name: string }>(
       '/api/auth/login',
       { username, password }
     );
-    return { ok: true, ...data };
+    // 后端返回的role可能是'admin'或'counselor'，前端统一处理
+    return { 
+      ok: true, 
+      ...data, 
+      role: data.role === 'admin' ? 'admin' : 'user' as 'admin' | 'user' 
+    };
   } catch (err) {
     return { ok: false, message: (err as Error).message };
   }
@@ -151,14 +156,15 @@ export async function apiLogin(
 
 export async function apiRegister(
   username: string,
-  password: string
+  password: string,
+  name: string
 ): Promise<RegisterResult> {
   if (USE_MOCK) {
     await delay();
     return mockAuthRegister(username, password);
   }
   try {
-    await request.post('/api/auth/register', { username, password });
+    await request.post('/api/auth/register', { username, password, name, role: "user" });
     return { ok: true };
   } catch (err) {
     return { ok: false, message: (err as Error).message };
@@ -268,9 +274,14 @@ export async function uploadFile(file: File): Promise<{ url: string; filename: s
   }
   const form = new FormData();
   form.append('file', file);
-  return request.post('/api/personal/upload', form, {
+  const data = await request.post<{ file_path: string; file_name: string; file_id: string }>('/api/upload', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
+  return {
+    url: data.file_path,
+    filename: data.file_name,
+    analysis: `文件上传成功，文件ID: ${data.file_id}`
+  };
 }
 
 // ─── 管理端 ──────────────────────────────────────────────────────────────────

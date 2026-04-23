@@ -36,7 +36,7 @@ export function getCurrentSession(): Session | null {
     const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const payload = JSON.parse(atob(base64)) as Session;
 
-    if (payload.exp && Date.now() > payload.exp) {
+    if (payload.exp && Date.now() > payload.exp * 1000) {
       clearToken();
       return null;
     }

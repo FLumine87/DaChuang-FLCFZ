@@ -14,18 +14,11 @@ router = APIRouter()
 
 @router.get("/screenings")
 async def get_personal_screenings(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
     service = ScreeningService(db)
-    result = service.get_screenings(page=page, page_size=page_size)
-    return paginated_response(
-        items=result["items"],
-        total=result["total"],
-        page=page,
-        page_size=page_size
-    )
+    result = service.get_screenings(page=1, page_size=100)
+    return success_response(data=result["items"])
 
 
 @router.post("/screenings")
@@ -77,34 +70,25 @@ async def submit_personal_screening(
 async def get_personal_dashboard(
     db: Session = Depends(get_db)
 ):
-    screening_service = ScreeningService(db)
-    alert_service = AlertService(db)
-
-    screenings = screening_service.get_screenings(page=1, page_size=100)["items"]
-    alerts = alert_service.get_alerts(page=1, page_size=100)["items"]
-
     return success_response(data={
-        "screeningRecords": screenings,
-        "warningEvents": alerts,
-        "totalScreenings": len(screenings),
-        "totalAlerts": len(alerts)
+        "moodTrend": [],
+        "warningDistribution": [],
+        "warningEvents": [],
+        "actionPlan": [],
+        "screeningRecords": [],
+        "userProfile": None,
+        "questionnaireCatalog": [],
+        "personalTimeline": []
     })
 
 
 @router.get("/warnings")
 async def get_personal_warnings(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
     service = AlertService(db)
-    result = service.get_alerts(page=page, page_size=page_size)
-    return paginated_response(
-        items=result["items"],
-        total=result["total"],
-        page=page,
-        page_size=page_size
-    )
+    result = service.get_alerts(page=1, page_size=100)
+    return success_response(data=result["items"])
 
 
 @router.get("/profile")

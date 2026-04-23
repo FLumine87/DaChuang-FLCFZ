@@ -83,12 +83,9 @@ async def upload_file(
     db.refresh(media)
     
     return success_response(data={
-        "file_id": media.file_id,
-        "file_type": media.file_type,
-        "file_name": media.file_name,
-        "file_path": f"/uploads/{file_type}/{safe_filename}",
-        "file_size": media.file_size,
-        "created_at": media.created_at.isoformat() if media.created_at else None
+        "url": f"/uploads/{file_type}/{safe_filename}",
+        "filename": media.file_name,
+        "analysis": f"文件上传成功，文件ID: {media.file_id}"
     })
 
 

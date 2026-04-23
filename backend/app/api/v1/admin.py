@@ -13,97 +13,57 @@ from app.engines.rag.mock_engine import MockRAGEngine
 router = APIRouter()
 
 
+@router.get("/test")
+async def test_admin():
+    return success_response(data={"message": "Hello, admin!"})
+
 @router.get("/dashboard")
 async def get_admin_dashboard(
     db: Session = Depends(get_db)
 ):
-    screening_service = ScreeningService(db)
-    alert_service = AlertService(db)
-    case_service = CaseService(db)
-
-    screenings = screening_service.get_screenings(page=1, page_size=100)
-    alerts = alert_service.get_alerts(page=1, page_size=100)
-    cases = case_service.get_cases(page=1, page_size=100)
-
     return success_response(data={
-        "screeningRecords": screenings["items"],
-        "alertRecords": alerts["items"],
-        "caseRecords": cases["items"],
-        "totalScreenings": screenings["total"],
-        "totalAlerts": alerts["total"],
-        "totalCases": cases["total"]
+        "trendData": [],
+        "alertDistribution": [],
+        "alertRecords": [],
+        "screeningRecords": [],
+        "caseRecords": []
     })
 
 
 @router.get("/screenings")
 async def get_admin_screenings(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    status: Optional[str] = None,
-    alert_level: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     service = ScreeningService(db)
     result = service.get_screenings(
-        page=page,
-        page_size=page_size,
-        status=status,
-        alert_level=alert_level
+        page=1,
+        page_size=100
     )
-    return paginated_response(
-        items=result["items"],
-        total=result["total"],
-        page=page,
-        page_size=page_size
-    )
+    return success_response(data=result["items"])
 
 
 @router.get("/alerts")
 async def get_admin_alerts(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    level: Optional[str] = None,
-    status: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     service = AlertService(db)
     result = service.get_alerts(
-        page=page,
-        page_size=page_size,
-        level=level,
-        status=status
+        page=1,
+        page_size=100
     )
-    return paginated_response(
-        items=result["items"],
-        total=result["total"],
-        page=page,
-        page_size=page_size
-    )
+    return success_response(data=result["items"])
 
 
 @router.get("/cases")
 async def get_admin_cases(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    alert_level: Optional[str] = None,
-    status: Optional[str] = None,
-    keyword: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     service = CaseService(db)
     result = service.get_cases(
-        page=page,
-        page_size=page_size,
-        alert_level=alert_level,
-        status=status,
-        keyword=keyword
+        page=1,
+        page_size=100
     )
-    return paginated_response(
-        items=result["items"],
-        total=result["total"],
-        page=page,
-        page_size=page_size
-    )
+    return success_response(data=result["items"])
 
 
 @router.post("/search")

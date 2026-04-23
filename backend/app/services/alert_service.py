@@ -103,7 +103,7 @@ class AlertService(BaseService[Alert]):
                 "assignee_name": item.assignee_user.name if item.assignee_user else None,
                 "created_at": item.created_at,
             }
-            result_items.append(type("AlertListItem", (), item_dict))
+            result_items.append(item_dict)
         
         return {"items": result_items, "total": total}
 
