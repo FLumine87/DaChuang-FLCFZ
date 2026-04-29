@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     
     ENABLE_MOCK_ENGINES: bool = True
     
+    ZHIPUAI_API_KEY: str = "f3b23945f51043a498ce05499ef623fb.Qi9S3ifxUNQY76FZ"
+    ZHIPUAI_MODEL: str = "glm-4.7"
+    ZHIPUAI_MAX_TOKENS: int = 65536
+    ZHIPUAI_TEMPERATURE: float = 1.0
+    ZHIPUAI_ENABLE_THINKING: bool = True
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

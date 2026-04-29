@@ -8,8 +8,7 @@ from app.schemas.retrieval import (
     RetrievalQuery,
     AnalysisRequest,
 )
-from app.engines.hashing.mock_engine import MockHashingEngine
-from app.engines.rag.mock_engine import MockRAGEngine
+from app.engines import get_hashing_engine, get_rag_engine
 
 router = APIRouter()
 
@@ -19,7 +18,7 @@ async def search_similar_cases(
     data: RetrievalQuery,
     db: Session = Depends(get_db)
 ):
-    engine = MockHashingEngine()
+    engine = get_hashing_engine()
     results = await engine.search(
         query=data.query,
         modality=data.modality,
@@ -48,7 +47,7 @@ async def analyze_screening(
     
     retrieval_results = None
     if data.include_retrieval:
-        hashing_engine = MockHashingEngine()
+        hashing_engine = get_hashing_engine()
         results = await hashing_engine.search(
             query=f"{screening.name} {screening.questionnaire_info.name if screening.questionnaire_info else ''}",
             modality="text",
@@ -60,7 +59,8 @@ async def analyze_screening(
             "total": len(results)
         }
     
-    rag_engine = MockRAGEngine()
+    rag_engine = get_rag_engine()
+    await rag_engine.initialize()
     report = await rag_engine.generate_report({
         "id": screening.id,
         "name": screening.name,
@@ -90,7 +90,8 @@ async def get_analysis_report(
     if not screening:
         return success_response(data=None, message="筛查记录不存在")
     
-    rag_engine = MockRAGEngine()
+    rag_engine = get_rag_engine()
+    await rag_engine.initialize()
     report = await rag_engine.generate_report({
         "id": screening.id,
         "name": screening.name,
