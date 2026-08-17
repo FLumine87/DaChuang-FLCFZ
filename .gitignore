@@ -1,0 +1,50 @@
+# ============================================================
+# 根 .gitignore —— 覆盖整个项目，防止误传密钥与大文件
+# 子目录（backend/.gitignore, frontend/.gitignore）继续生效，
+# 本文件用于兜底环境变量、数据库、运行时缓存等。
+# ============================================================
+
+# 环境变量（含真实 API Key / 数据库密码，严禁上传）
+**/.env
+**/.env.local
+**/.env.*
+!.env.example
+
+# 数据库（工作库含真实生成数据，不上传）
+**/*.db
+**/*.db-journal
+**/data/
+**/hashing_state.json
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/venv/
+**/.venv/
+**/ENV/
+
+# Node / 前端构建产物（各子目录 .gitignore 已覆盖，这里兜底）
+**/node_modules/
+**/dist/
+**/dist-ssr/
+
+# 上传文件（运行时产生，含用户隐私资料）
+**/uploads/
+
+# IDE / 编辑器
+**/.idea/
+**/.vscode/
+*.swp
+*.swo
+
+# 日志
+**/*.log
+**/logs/
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# macOS / 归档元数据
+._*
+PaxHeader/

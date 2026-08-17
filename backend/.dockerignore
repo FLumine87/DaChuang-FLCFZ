@@ -1,0 +1,34 @@
+# Python 缓存与虚拟环境
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv
+env
+
+# 密钥与环境：绝不进镜像层
+.env
+.env.*
+!.env.example
+
+# 版本控制与编辑器
+.git
+.gitignore
+.vscode
+.idea
+*.swp
+
+# 运行时数据与上传目录（运行时由 compose 挂载/创建）
+data
+uploads
+*.db
+*.sqlite3
+
+# 构建无关文件
+Dockerfile
+.dockerignore
+README.md
+*.md
+tests
+pytest.ini

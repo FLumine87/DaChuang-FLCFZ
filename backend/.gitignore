@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.venv/
+
+# 数据库文件 - 全部忽略（工作库含真实生成数据，不上传）
+*.db
+*.db-journal
+data/
+
+# 上传文件
+uploads/
+*.wav
+*.mp3
+*.jpg
+*.jpeg
+*.png
+*.pdf
+
+# 环境变量
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 日志
+*.log
+logs/
+
+# 备份文件
+*.bak
+backup_*.db
