@@ -231,8 +231,12 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         finally:
             db.close()
 
-    def _collect_db_rows(self) -> List[Dict]:
-        """读取四张业务表，构造可被索引的行（含预计算特征与主题标签）。"""
+    def _collect_db_rows(self, db=None) -> List[Dict]:
+        """读取四张业务表，构造可被索引的行（含预计算特征与主题标签）。
+
+        若传入 db 会话则复用它（用于从独立的种子库文件读取），否则新建主库会话。
+        """
+        own_session = db is None
         try:
             from app.db.session import SessionLocal
             from app.db.models.screening import Screening
@@ -241,7 +245,8 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             from app.db.models.media import MediaFile
         except Exception:
             return []
-        db = SessionLocal()
+        if own_session:
+            db = SessionLocal()
         rows: List[Dict] = []
         try:
             for s in db.query(Screening).all():
@@ -286,8 +291,25 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                     date=(m.created_at.date().isoformat() if m.created_at else ""),
                 ))
         finally:
-            db.close()
+            if own_session:
+                db.close()
         return rows
+
+    def _collect_rows_from_file(self, path: str) -> List[Dict]:
+        """从独立的 SQLite 文件（检索种子库）读取四张检索表，复用同一套行构造逻辑。"""
+        try:
+            from sqlalchemy import create_engine
+            from sqlalchemy.orm import sessionmaker
+            eng = create_engine(f"sqlite:///{path}")
+            S = sessionmaker(bind=eng, expire_on_commit=False)
+            db = S()
+            try:
+                return self._collect_db_rows(db=db)
+            finally:
+                db.close()
+                eng.dispose()
+        except Exception:
+            return []
 
     def _make_row(self, cid, summary, tags, alert_level, modality, date) -> Dict:
         feats = self._extract_features(summary, "text")
@@ -312,8 +334,14 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
 
     def _seed_from_db(self):
         """从数据库播种：在小样本上训练 CMFH（学投影矩阵 W），再把全部记录
-        按样本外方式编码入索引。数据库为空时回退到 demo_data 兜底。"""
+        按样本外方式编码入索引。
+
+        优先级：主库检索表 -> 随项目发布的检索种子库(retrieval_seed.db) -> demo_data 兜底。
+        这样 clone 后即使未运行数据脚本，也能直接检索到约 500 条语料。
+        """
         rows = self._collect_db_rows()
+        if not rows and os.path.exists(settings.RETRIEVAL_SEED_DB):
+            rows = self._collect_rows_from_file(settings.RETRIEVAL_SEED_DB)
         if not rows:
             self._build_demo()
             self._seeded_from_db = False

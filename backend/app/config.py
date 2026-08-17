@@ -31,6 +31,13 @@ class Settings(BaseSettings):
                                            # （纯 Python 特征值分解为 O(n^2)，故训练只在小样本上做；
                                            #  全部记录仍按样本外方式编码入索引，语料规模不受训练开销限制）
 
+    # 随项目发布的「检索语料种子库」：仅含 screenings/cases/alerts/media_files
+    # 四张检索表的固定快照（约 500 条合成语料，不含 users/admin 等账号数据）。
+    # 当主库检索表为空时，引擎从这里加载，保证 clone 后开箱即可检索。
+    RETRIEVAL_SEED_DB: str = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "data", "retrieval_seed.db"
+    )
+
     # 智谱 AI 密钥：仅从环境变量 ZHIPUAI_API_KEY 读取（建议写入 .env）。
     # 不在此处写死任何密钥。若未设置，真实引擎会在调用时自动降级为 Mock 报告，
     # 因此本项目开箱即用、无需任何外部 API 即可运行。

@@ -14,6 +14,7 @@
     python scripts/generate_seed_data.py --force    # 再追加一批
 """
 import argparse
+import os
 import random
 import sys
 from datetime import datetime, timedelta
@@ -26,6 +27,10 @@ from app.db.models.screening import Screening, Questionnaire
 from app.db.models.case import Case, CaseTagMaster
 from app.db.models.alert import Alert
 from app.db.models.media import MediaFile
+from app.db.base import Base
+from app.config import settings
+from sqlalchemy import create_engine, inspect as sa_inspect
+from sqlalchemy.orm import sessionmaker
 
 # ---------------------------------------------------------------------------
 # 主题内容池（句子里必须包含 features.THEME_KEYWORDS 中的关键词，否则抽不到标签）
@@ -323,6 +328,39 @@ def clear_business_tables(db):
     db.commit()
 
 
+def export_retrieval_seed(db):
+    """把当前库中 SEED-* 开头的检索记录导出到随项目发布的检索种子库
+    （data/retrieval_seed.db），仅含 screenings/cases/alerts/media_files 四张表，
+    不含 users/admin 等账号数据。该文件随仓库上传，保证 clone 后即可检索。"""
+    seed_path = settings.RETRIEVAL_SEED_DB
+    os.makedirs(os.path.dirname(seed_path), exist_ok=True)
+    if os.path.exists(seed_path):
+        os.remove(seed_path)
+    eng = create_engine(f"sqlite:///{seed_path}")
+    Base.metadata.create_all(eng)
+    S = sessionmaker(bind=eng, expire_on_commit=False)
+    sdb = S()
+    try:
+        tables = [
+            (Screening, "screening_id"),
+            (Case, "case_id"),
+            (Alert, "alert_id"),
+            (MediaFile, "file_id"),
+        ]
+        total = 0
+        for Model, bk in tables:
+            cols = [c.key for c in sa_inspect(Model).columns]
+            for inst in db.query(Model).filter(getattr(Model, bk).like("SEED-%")).all():
+                vals = {c: getattr(inst, c) for c in cols}
+                sdb.add(Model(**vals))
+                total += 1
+        sdb.commit()
+        print(f"已导出检索种子库 {seed_path}（{total} 条 SEED 记录，仅含检索四表）。")
+    finally:
+        sdb.close()
+        eng.dispose()
+
+
 def main():
     parser = argparse.ArgumentParser(description="生成心理筛查种子数据")
     parser.add_argument("--reset", action="store_true",
@@ -341,6 +379,7 @@ def main():
         if n_screen > 30 and not args.reset and not args.force:
             print(f"已存在 {n_screen} 条筛查记录，疑似已生成过种子数据。")
             print("如需重生成请加 --reset；如需再追加请加 --force。")
+            export_retrieval_seed(db)  # 仍导出当前已有的 SEED 记录
             return
 
         if args.reset:
@@ -360,6 +399,7 @@ def main():
               f"预警 {n_alerts} / 媒体 {n_media}（合计 {sum([n_screenings, n_cases, n_alerts, n_media])} 条）...")
         generate(db, rnd, n_screenings, n_cases, n_alerts, n_media)
         print("种子数据生成完成。")
+        export_retrieval_seed(db)
     finally:
         db.close()
 

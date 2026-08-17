@@ -10,10 +10,10 @@
 **/.env.*
 !.env.example
 
-# 数据库（工作库含真实生成数据，不上传）
+# 数据库（工作库含真实生成数据，不上传；但放行随项目发布的检索种子库）
 **/*.db
 **/*.db-journal
-**/data/
+!backend/data/retrieval_seed.db
 **/hashing_state.json
 
 # Python
