@@ -1,0 +1,19 @@
+[project]
+name = "mental-screening-worker"
+version = "1.0.0"
+description = "心理筛查预警系统 - Cloudflare Python Worker（轻量，纯标准库）"
+requires-python = ">=3.12"
+# 运行时无第三方依赖：后端已轻量化为纯标准库实现（无 FastAPI/pydantic/SQLAlchemy），
+# 数据库直连 D1（env.DB.prepare），体积远低于免费计划 3 MB 限制。
+# backend 的 app 包以本地构建的 wheel 引用（pywrangler 的 uv pip compile 不解析 path 源）：
+# 更新方式：在 backend/ 下执行 `uv build --wheel` 重新构建后同步版本/路径。
+dependencies = [
+    "mental-screening-backend @ file:///C:/ETO/CBP/web/DaChuang-FLCFZ/backend/dist/mental_screening_backend-1.0.0-py3-none-any.whl",
+]
+
+# 开发工具（不随 Worker 打包）：pywrangler 负责 Python Worker 的打包/部署/本地调试。
+[dependency-groups]
+dev = [
+    "workers-py>=1.0",
+    "workers-runtime-sdk",
+]

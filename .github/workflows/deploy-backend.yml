@@ -1,0 +1,43 @@
+# 后端部署：Cloudflare Python Worker（免费计划）
+# 触发：main 分支 backend/ 目录变更
+# 前置（仓库 Settings → Secrets and variables → Actions）：
+#   - Secrets: CLOUDFLARE_API_TOKEN、CLOUDFLARE_ACCOUNT_ID
+# 说明：使用 pywrangler（官方 Python Worker 打包工具）部署，
+#       不使用裸 wrangler（后者不会打包 Python 依赖）。
+name: Deploy Backend to Cloudflare Workers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build backend wheel
+        working-directory: backend
+        run: uv build --wheel
+
+      - name: Fix wheel path for CI
+        # 本地 pyproject 引用的是 Windows 绝对路径，CI 中替换为 GitHub Workspace 路径
+        working-directory: backend/worker
+        run: |
+          sed -i "s|file:///C:/ETO/CBP/web/DaChuang-FLCFZ/backend/dist|file://${GITHUB_WORKSPACE}/backend/dist|g" pyproject.toml
+
+      - name: Deploy Worker
+        working-directory: backend/worker
+        run: uv run pywrangler deploy
+        env:
+          PYTHONUTF8: '1'
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'

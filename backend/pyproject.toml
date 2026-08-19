@@ -1,0 +1,19 @@
+[project]
+name = "mental-screening-backend"
+version = "1.0.0"
+description = "心理筛查预警系统后端（被 Cloudflare Worker 子项目以 path 依赖引用，打包 app 包）"
+requires-python = ">=3.12"
+
+# 本地开发依赖见 requirements.txt（Dockerfile / start 脚本使用）；
+# Cloudflare Worker 运行依赖见 worker/pyproject.toml（本文件仅为打包 app 包提供 build 配置）。
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+exclude = [
+    "app/**/__pycache__/**",
+    "app/**/*.pyc",
+]
