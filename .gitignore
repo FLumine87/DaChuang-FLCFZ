@@ -1,0 +1,67 @@
+# ============================================================
+# 项目根 .gitignore（全局兜底）
+# backend/ 与 frontend/ 下另有各自的 .gitignore（优先级更高），
+# 此处覆盖全仓库通用的忽略项。
+# ============================================================
+
+# ---- Node / 前端 ----
+node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Python / 后端 ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.venv/
+
+# ---- 数据库（默认忽略；检索种子库例外，见 backend/.gitignore）----
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+backup_*.db
+
+# ---- 上传文件 ----
+uploads/
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+
+# ---- 环境变量（保留 .env.example / .env.production 示例）----
+.env
+.env.local
+.env.*.local
+
+# ---- Cloudflare Wrangler ----
+.wrangler/
+
+# ---- 日志 ----
+*.log
+logs/
+
+# ---- IDE / 编辑器 ----
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ---- 操作系统 ----
+.DS_Store
+Thumbs.db
+Desktop.ini

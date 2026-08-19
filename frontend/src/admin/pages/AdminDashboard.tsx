@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   Users,
   ClipboardCheck,
@@ -6,6 +7,7 @@ import {
   Plus,
   FileText,
   ArrowRight,
+  Loader2,
 } from 'lucide-react';
 import {
   LineChart,
@@ -21,8 +23,30 @@ import {
   Legend,
 } from 'recharts';
 import { Link } from 'react-router-dom';
-import { trendData, alertDistribution, alertRecords } from '../data/adminMockData';
+import { getAdminDashboardData } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
+import type { AlertRecord } from '../data/adminMockData';
+
+interface AdminDashboardData {
+  trendData: { date: string; count: number; alerts: number }[];
+  alertDistribution: { name: string; value: number; color: string }[];
+  alertRecords: AlertRecord[];
+}
+
+function SkeletonCard() {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm animate-pulse">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="h-3 w-24 bg-slate-200 rounded" />
+          <div className="h-7 w-16 bg-slate-200 rounded" />
+        </div>
+        <div className="w-12 h-12 bg-slate-200 rounded-xl" />
+      </div>
+      <div className="h-3 w-32 bg-slate-100 rounded mt-3" />
+    </div>
+  );
+}
 
 const stats = [
   { label: '总筛查人数', value: '1,247', icon: Users, color: 'bg-primary-50 text-primary-600', trend: '+12%' },
@@ -32,6 +56,32 @@ const stats = [
 ];
 
 export default function AdminDashboard() {
+  const [data, setData] = useState<AdminDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getAdminDashboardData().then((res) => {
+      setData(res as AdminDashboardData);
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading || !data) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[0, 1, 2, 3].map((i) => <SkeletonCard key={i} />)}
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm flex items-center justify-center gap-3 text-slate-400">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm">正在加载仪表盘数据...</span>
+        </div>
+      </div>
+    );
+  }
+
+  const { trendData, alertDistribution, alertRecords } = data;
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

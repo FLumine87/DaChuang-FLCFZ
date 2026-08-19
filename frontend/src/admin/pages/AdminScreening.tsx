@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Filter, Eye, ChevronDown } from 'lucide-react';
-import { screeningRecords } from '../data/adminMockData';
+import { type ScreeningRecord } from '../data/adminMockData';
+import { getAdminScreeningRecords } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import AdminStatusBadge from '../components/AdminStatusBadge';
 import AdminScreeningDetail from './AdminScreeningDetail';
@@ -9,6 +10,22 @@ export default function AdminScreening() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [screeningRecords, setScreeningRecords] = useState<ScreeningRecord[]>([]);
+  const [, setLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await getAdminScreeningRecords();
+        setScreeningRecords(data);
+      } catch (e) {
+        console.error('加载筛查记录失败', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   const filtered = screeningRecords.filter((r) => {
     const matchesSearch = r.name.includes(searchTerm) || r.id.includes(searchTerm);

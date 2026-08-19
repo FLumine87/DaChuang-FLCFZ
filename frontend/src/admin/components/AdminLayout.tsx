@@ -14,7 +14,7 @@ import {
   User,
   LogOut,
 } from 'lucide-react';
-import { getCurrentSession, logout } from '../../auth/mockAuth';
+import { getCurrentSession, logout } from '../../auth/session';
 
 const navItems = [
   { path: '/admin/dashboard', label: '仪表盘', icon: LayoutDashboard },
