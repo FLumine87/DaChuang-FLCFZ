@@ -82,6 +82,19 @@ class CaseService(BaseService[Case]):
         self.db.add(case)
         self.db.commit()
         self.db.refresh(case)
+        # 方案 1：新建案例后增量写入哈希索引，使语料随业务增长
+        try:
+            from app.engines import get_hashing_engine
+            get_hashing_engine().index_case_sync({
+                "id": f"case-{case.id}",
+                "summary": f"{case.name}。{case.notes or ''}",
+                "tags": [t.name for t in case.tags],
+                "alert_level": case.alert_level,
+                "modality": "text",
+                "date": case.created_at.date().isoformat() if case.created_at else "",
+            })
+        except Exception:
+            pass
         return case
 
     def update_case(self, case_id: int, data: CaseUpdate) -> Optional[Case]:

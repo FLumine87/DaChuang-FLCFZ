@@ -32,6 +32,7 @@ export default function Retrieval() {
   const [results, setResults] = useState<RetrievalResult[] | null>(null);
   const [report, setReport] = useState<RagReport | null>(null);
   const [showReport, setShowReport] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -39,10 +40,13 @@ export default function Retrieval() {
     setResults(null);
     setReport(null);
     setShowReport(false);
+    setError(null);
     try {
       const res = await search(query);
-      setResults(res.results as RetrievalResult[]);
-      setReport(res.report as RagReport);
+      setResults((res.results ?? []) as RetrievalResult[]);
+      setReport((res.report ?? null) as RagReport | null);
+    } catch (err) {
+      setError((err as Error).message || '检索失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -113,7 +117,8 @@ export default function Retrieval() {
             </div>
             <div className="divide-y divide-slate-100">
               {results.map((result) => {
-                const Icon = modalityIcons[result.modality];
+                const Icon = modalityIcons[result.modality] ?? FileText;
+                const modalityLabel = modalityLabels[result.modality] ?? (result.modality || '文本');
                 return (
                   <div key={result.id} className="p-5 hover:bg-slate-50 transition-colors">
                     <div className="flex items-start justify-between mb-2">
@@ -125,7 +130,7 @@ export default function Retrieval() {
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-slate-800">{result.id}</span>
                             <span className="text-xs px-2 py-0.5 bg-slate-100 rounded text-slate-500">
-                              {modalityLabels[result.modality]}
+                              {modalityLabel}
                             </span>
                           </div>
                           <p className="text-xs text-slate-400 mt-0.5">{result.date}</p>
@@ -143,7 +148,7 @@ export default function Retrieval() {
                     </div>
                     <p className="text-sm text-slate-600 mt-2">{result.summary}</p>
                     <div className="flex gap-2 mt-2">
-                      {result.tags.map((tag) => (
+                      {(result.tags ?? []).map((tag) => (
                         <span key={tag} className="text-xs px-2 py-0.5 bg-primary-50 text-primary-600 rounded-full">
                           {tag}
                         </span>
@@ -186,7 +191,7 @@ export default function Retrieval() {
                   <p className="text-sm text-slate-700 leading-relaxed">{report.summary}</p>
                 </div>
 
-                {report.sections.map((section, i) => (
+                {(report.sections ?? []).map((section, i) => (
                   <div key={i}>
                     <h4 className="font-medium text-slate-800 mb-2 flex items-center gap-2">
                       <ArrowRight className="w-4 h-4 text-primary-500" />
@@ -199,7 +204,7 @@ export default function Retrieval() {
                 <div className="mt-4">
                   <h4 className="font-medium text-slate-800 mb-3">个性化建议措施</h4>
                   <div className="space-y-2">
-                    {report.recommendations.map((rec, i) => (
+                    {(report.recommendations ?? []).map((rec, i) => (
                       <div key={i} className="flex items-start gap-3 p-3 bg-warning-50 rounded-lg">
                         <span className="w-5 h-5 rounded-full bg-warning-500 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">
                           {i + 1}
@@ -215,7 +220,14 @@ export default function Retrieval() {
         </>
       )}
 
-      {!loading && !results && (
+      {!loading && error && (
+        <div className="bg-danger-50 border border-danger-200 rounded-xl p-5 text-danger-700 text-sm">
+          <p className="font-medium">检索失败</p>
+          <p className="mt-1">{error}</p>
+        </div>
+      )}
+
+      {!loading && !error && !results && (
         <div className="text-center py-20">
           <Search className="w-16 h-16 text-slate-200 mx-auto mb-4" />
           <p className="text-slate-400 text-sm">输入你的状态描述，开始动态跨模态哈希检索</p>

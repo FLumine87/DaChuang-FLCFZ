@@ -274,13 +274,13 @@ export async function uploadFile(file: File): Promise<{ url: string; filename: s
   }
   const form = new FormData();
   form.append('file', file);
-  const data = await request.post<{ file_path: string; file_name: string; file_id: string }>('/api/upload', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  // 注意：不要手动设置 Content-Type，浏览器/axios 会在发送 FormData 时
+  // 自动加上带 boundary 的 multipart/form-data，否则 FastAPI 无法解析。
+  const data = await request.post<{ file_path: string; file_name: string; file_id: string; analysis?: string }>('/api/upload', form);
   return {
     url: data.file_path,
     filename: data.file_name,
-    analysis: `文件上传成功，文件ID: ${data.file_id}`
+    analysis: data.analysis || `文件上传成功，文件ID: ${data.file_id}`,
   };
 }
 

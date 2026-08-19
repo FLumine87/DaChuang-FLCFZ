@@ -5,9 +5,7 @@ from typing import Optional
 from app.db.session import get_db
 from app.core.responses import success_response, paginated_response
 from app.services.screening_service import ScreeningService
-from app.services.alert_service import AlertService
-from app.engines.hashing.mock_engine import MockHashingEngine
-from app.engines.rag.mock_engine import MockRAGEngine
+from app.engines import get_hashing_engine, get_rag_engine
 
 router = APIRouter()
 
@@ -16,9 +14,25 @@ router = APIRouter()
 async def get_personal_screenings(
     db: Session = Depends(get_db)
 ):
-    service = ScreeningService(db)
-    result = service.get_screenings(page=1, page_size=100)
-    return success_response(data=result["items"])
+    from app.db.models.screening import Screening, Questionnaire
+    screenings = db.query(Screening).order_by(Screening.screening_date.desc()).limit(100).all()
+    items = []
+    for s in screenings:
+        questionnaire_name = (
+            db.query(Questionnaire).filter(Questionnaire.id == s.questionnaire_id).first().name
+            if s.questionnaire_id else "未知"
+        )
+        items.append({
+            "id": s.screening_id,
+            "questionnaire": questionnaire_name,
+            "score": s.score,
+            "maxScore": s.max_score,
+            "level": s.alert_level,
+            "status": s.status,
+            "moodTag": s.notes or "已完成",
+            "date": (s.screening_date or s.created_at).strftime("%Y-%m-%d") if (s.screening_date or s.created_at) else "",
+        })
+    return success_response(data=items)
 
 
 @router.post("/screenings")
@@ -187,20 +201,86 @@ async def get_personal_dashboard(
 async def get_personal_warnings(
     db: Session = Depends(get_db)
 ):
-    service = AlertService(db)
-    result = service.get_alerts(page=1, page_size=100)
-    return success_response(data=result["items"])
+    from app.db.models.alert import Alert
+    alerts = db.query(Alert).order_by(Alert.created_at.desc()).limit(100).all()
+    items = []
+    for a in alerts:
+        items.append({
+            "id": a.alert_id,
+            "level": a.level,
+            "title": a.trigger or "预警提醒",
+            "reason": a.description or "",
+            "suggestion": "建议及时关注并处理",
+            "status": a.status if a.status in ["new", "tracking", "resolved"] else "new",
+            "createdAt": a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else "",
+            "updatedAt": a.updated_at.strftime("%Y-%m-%d %H:%M") if a.updated_at else "",
+        })
+    return success_response(data=items)
 
 
 @router.get("/profile")
 async def get_personal_profile(
     db: Session = Depends(get_db)
 ):
+    from app.db.models.screening import Screening, Questionnaire
+    from app.db.models.alert import Alert
+
+    # 筛查记录（含问卷名映射）
+    screenings = db.query(Screening).order_by(Screening.screening_date.desc()).limit(10).all()
+    screening_records = []
+    for s in screenings:
+        qn = db.query(Questionnaire).filter(Questionnaire.id == s.questionnaire_id).first()
+        screening_records.append({
+            "id": s.screening_id,
+            "questionnaire": qn.name if qn else "未知",
+            "score": s.score,
+            "maxScore": s.max_score,
+            "level": s.alert_level,
+            "status": s.status,
+            "moodTag": s.notes or "已完成",
+            "date": (s.screening_date or s.created_at).strftime("%Y-%m-%d") if (s.screening_date or s.created_at) else "",
+        })
+
+    # 预警事件
+    alerts = db.query(Alert).order_by(Alert.created_at.desc()).limit(10).all()
+    warning_events = []
+    for a in alerts:
+        warning_events.append({
+            "id": a.alert_id,
+            "level": a.level,
+            "title": a.trigger or "预警提醒",
+            "reason": a.description or "",
+            "suggestion": "建议及时关注并处理",
+            "status": a.status if a.status in ["new", "tracking", "resolved"] else "new",
+            "createdAt": a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else "",
+            "updatedAt": a.updated_at.strftime("%Y-%m-%d %H:%M") if a.updated_at else "",
+        })
+
+    # 用户档案（取最近一条筛查的姓名/性别）
+    user_profile = {
+        "name": "用户", "age": 0, "gender": "", "campus": "",
+        "major": "", "stage": "", "emergencyContact": ""
+    }
+    if screenings:
+        user_profile["name"] = screenings[0].name or "用户"
+        user_profile["gender"] = screenings[0].gender or ""
+
+    # 时间线
+    personal_timeline = []
+    for s in screenings[:5]:
+        qn = db.query(Questionnaire).filter(Questionnaire.id == s.questionnaire_id).first()
+        personal_timeline.append({
+            "date": (s.screening_date or s.created_at).strftime("%Y-%m-%d") if (s.screening_date or s.created_at) else "",
+            "type": "screening",
+            "title": f"完成{(qn.name if qn else '筛查')}筛查",
+            "detail": f"得分{s.score}分，风险等级:{s.alert_level}",
+        })
+
     return success_response(data={
-        "screeningRecords": [],
-        "warningEvents": [],
-        "userProfile": None,
-        "personalTimeline": []
+        "screeningRecords": screening_records,
+        "warningEvents": warning_events,
+        "userProfile": user_profile,
+        "personalTimeline": personal_timeline,
     })
 
 
@@ -210,10 +290,12 @@ async def personal_search(
     db: Session = Depends(get_db)
 ):
     query = data.get("query", "")
-    engine = MockHashingEngine()
-    results = await engine.search(query=query, modality="text", top_k=5)
+    engine = get_hashing_engine()
+    raw_results = await engine.search(query=query, modality="text", top_k=5)
+    # 字段对齐前端 RetrievalResult：alert_level(snake) -> alertLevel(camel)
+    results = [{**r, "alertLevel": r.get("alert_level", "green")} for r in raw_results]
 
-    rag_engine = MockRAGEngine()
+    rag_engine = get_rag_engine()
     report = await rag_engine.generate_report({
         "id": 0,
         "name": "检索报告",
@@ -222,21 +304,12 @@ async def personal_search(
         "max_score": 100,
         "alert_level": "green"
     })
+    # 字段对齐前端 SearchResponse.report：risk_level(snake) -> riskLevel(camel)
+    if isinstance(report, dict) and "risk_level" in report:
+        report["riskLevel"] = report.pop("risk_level")
 
     return success_response(data={
         "results": results,
         "report": report,
         "query": query
-    })
-
-
-@router.post("/upload")
-async def personal_upload(
-    file_data: dict,
-    db: Session = Depends(get_db)
-):
-    return success_response(data={
-        "url": "/uploads/temp/file",
-        "filename": file_data.get("filename", "unknown"),
-        "analysis": "文件分析完成"
     })

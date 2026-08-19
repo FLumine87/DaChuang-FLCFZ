@@ -92,6 +92,14 @@ class ScreeningService(BaseService[Screening]):
         self.db.add(screening)
         self.db.commit()
         self.db.refresh(screening)
+        # 方案 1：新建筛查后增量写入哈希索引，使语料随业务增长
+        self._index_into_hashing({
+            "id": f"scr-{screening.id}",
+            "summary": f"{screening.name}。{screening.answers or ''} {screening.notes or ''}",
+            "alert_level": screening.alert_level,
+            "modality": "text",
+            "date": screening.created_at.date().isoformat() if screening.created_at else "",
+        })
         return screening
 
     def update_screening(self, screening_id: int, data: ScreeningUpdate) -> Optional[Screening]:
@@ -132,6 +140,14 @@ class ScreeningService(BaseService[Screening]):
         
         self.db.commit()
         self.db.refresh(screening)
+        # 方案 1：完成筛查（预警级别可能变化）后更新索引，并把新触发的预警也写入
+        self._index_into_hashing({
+            "id": f"scr-{screening.id}",
+            "summary": f"{screening.name}。{screening.answers or ''} {screening.notes or ''}",
+            "alert_level": screening.alert_level,
+            "modality": "text",
+            "date": screening.created_at.date().isoformat() if screening.created_at else "",
+        })
         return screening
 
     def _calculate_alert_level(self, questionnaire_id: int, score: int) -> str:
@@ -168,3 +184,21 @@ class ScreeningService(BaseService[Screening]):
                 status="pending",
             )
             self.db.add(alert)
+            self.db.flush()  # 取 alert.id 用于索引
+            # 方案 1：把新触发的预警也增量写入哈希索引
+            self._index_into_hashing({
+                "id": f"alt-{alert.id}",
+                "summary": f"{alert.name}。{alert.trigger or ''} {alert.description or ''}",
+                "alert_level": alert.level,
+                "modality": "text",
+                "date": alert.created_at.date().isoformat() if alert.created_at else "",
+            })
+
+    @staticmethod
+    def _index_into_hashing(case_data: dict) -> None:
+        """把一条记录增量写入哈希检索引擎（失败不影响主流程）。"""
+        try:
+            from app.engines import get_hashing_engine
+            get_hashing_engine().index_case_sync(case_data)
+        except Exception:
+            pass

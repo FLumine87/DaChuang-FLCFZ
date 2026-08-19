@@ -81,11 +81,49 @@ async def upload_file(
     db.add(media)
     db.commit()
     db.refresh(media)
-    
+
+    # 方案 1：上传资料后增量写入哈希索引（用描述文本参与检索）
+    try:
+        from app.engines import get_hashing_engine
+        get_hashing_engine().index_case_sync({
+            "id": f"media-{media.id}",
+            "summary": f"{media.description or ''} {media.file_type or ''} 资料",
+            "alert_level": "green",
+            "modality": media.file_type or "text",
+            "date": media.created_at.date().isoformat() if media.created_at else "",
+        })
+    except Exception:
+        pass
+
+    # 真实调用多模态分析（当前为 Mock 处理器；接入 CLIP/Whisper 后即为真实特征分析）
+    analysis = ""
+    try:
+        from app.engines import get_multimodal_processor
+        processor = get_multimodal_processor()
+        if file_type == "audio":
+            res = await processor.process_audio(file_path)
+            analysis = (
+                f"语音分析：情感={res.get('emotion', '未知')}；"
+                f"时长={res.get('duration', 0)}s；采样率={res.get('sample_rate', 0)}Hz。"
+            )
+        elif file_type == "image":
+            res = await processor.process_image(file_path)
+            draw = res.get("drawing_test_result", {})
+            overall = draw.get("overall_assessment", "待分析") if isinstance(draw, dict) else "待分析"
+            analysis = (
+                f"图像分析：房树人测试总体评估={overall}；"
+                f"特征维度={res.get('features', {}).get('embedding_dim', 0)}。"
+            )
+        else:
+            analysis = "文档已接收，暂未配置对应分析器。"
+    except Exception:
+        analysis = ""
+
     return success_response(data={
-        "url": f"/uploads/{file_type}/{safe_filename}",
-        "filename": media.file_name,
-        "analysis": f"文件上传成功，文件ID: {media.file_id}"
+        "file_path": f"/uploads/{file_type}/{safe_filename}",
+        "file_name": media.file_name,
+        "file_id": media.file_id,
+        "analysis": analysis or f"文件上传成功，文件ID: {media.file_id}",
     })
 
 

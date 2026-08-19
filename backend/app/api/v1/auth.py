@@ -35,7 +35,7 @@ async def login(
         raise HTTPException(status_code=403, detail="用户已被禁用")
 
     access_token = create_access_token(
-        data={"sub": user.id, "username": user.username, "role": user.role},
+        data={"sub": str(user.id), "username": user.username, "role": user.role},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 

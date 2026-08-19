@@ -9,13 +9,11 @@ ENV/
 env/
 .venv/
 
-# 数据库文件 - 忽略工作数据库
-mental_screening.db
+# 数据库文件 - 默认全部忽略（工作库含真实生成数据，不上传）
+# 但放行随项目发布的检索种子库（仅含 500 条合成检索语料，无账号/敏感数据）
+*.db
 *.db-journal
-
-# 但保留 data 目录下的数据库模板
-!data/
-!data/*.db
+!data/retrieval_seed.db
 
 # 上传文件
 uploads/

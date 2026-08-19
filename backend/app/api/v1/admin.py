@@ -4,11 +4,7 @@ from typing import Optional
 
 from app.db.session import get_db
 from app.core.responses import success_response, paginated_response
-from app.services.screening_service import ScreeningService
-from app.services.alert_service import AlertService
-from app.services.case_service import CaseService
-from app.engines.hashing.mock_engine import MockHashingEngine
-from app.engines.rag.mock_engine import MockRAGEngine
+from app.engines import get_hashing_engine, get_rag_engine
 
 router = APIRouter()
 
@@ -129,36 +125,75 @@ async def get_admin_dashboard(
 async def get_admin_screenings(
     db: Session = Depends(get_db)
 ):
-    service = ScreeningService(db)
-    result = service.get_screenings(
-        page=1,
-        page_size=100
-    )
-    return success_response(data=result["items"])
+    from app.db.models.screening import Screening, Questionnaire
+    screenings = db.query(Screening).order_by(Screening.screening_date.desc()).limit(100).all()
+    items = []
+    for s in screenings:
+        questionnaire = db.query(Questionnaire).filter(Questionnaire.id == s.questionnaire_id).first()
+        counselor_name = s.counselor.name if s.counselor else "未分配"
+        items.append({
+            "id": s.screening_id,
+            "name": s.name,
+            "age": s.age or 0,
+            "gender": s.gender or "",
+            "questionnaire": questionnaire.name if questionnaire else "未知",
+            "score": s.score,
+            "maxScore": s.max_score,
+            "status": s.status,
+            "alertLevel": s.alert_level,
+            "date": (s.screening_date or s.created_at).strftime("%Y-%m-%d") if (s.screening_date or s.created_at) else "",
+            "counselor": counselor_name,
+        })
+    return success_response(data=items)
 
 
 @router.get("/alerts")
 async def get_admin_alerts(
     db: Session = Depends(get_db)
 ):
-    service = AlertService(db)
-    result = service.get_alerts(
-        page=1,
-        page_size=100
-    )
-    return success_response(data=result["items"])
+    from app.db.models.screening import Screening
+    from app.db.models.alert import Alert
+    alerts = db.query(Alert).order_by(Alert.created_at.desc()).limit(100).all()
+    items = []
+    for a in alerts:
+        screening = db.query(Screening).filter(Screening.id == a.screening_id).first()
+        counselor_name = screening.counselor.name if screening and screening.counselor else "未分配"
+        items.append({
+            "id": a.alert_id,
+            "screeningId": screening.screening_id if screening else "",
+            "name": a.name,
+            "level": a.level,
+            "trigger": a.trigger or "",
+            "description": a.description or "",
+            "status": a.status,
+            "assignee": counselor_name,
+            "createdAt": a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else "",
+            "updatedAt": a.updated_at.strftime("%Y-%m-%d %H:%M") if a.updated_at else "",
+        })
+    return success_response(data=items)
 
 
 @router.get("/cases")
 async def get_admin_cases(
     db: Session = Depends(get_db)
 ):
-    service = CaseService(db)
-    result = service.get_cases(
-        page=1,
-        page_size=100
-    )
-    return success_response(data=result["items"])
+    from app.db.models.case import Case
+    cases = db.query(Case).order_by(Case.created_at.desc()).limit(100).all()
+    items = []
+    for c in cases:
+        items.append({
+            "id": c.case_id,
+            "name": c.name,
+            "age": c.age or 0,
+            "gender": c.gender or "",
+            "department": c.department or "",
+            "tags": [],
+            "screeningCount": c.screening_count or 0,
+            "lastScreening": c.last_screening_date.strftime("%Y-%m-%d") if c.last_screening_date else "",
+            "alertLevel": c.alert_level,
+            "status": c.status,
+        })
+    return success_response(data=items)
 
 
 @router.post("/search")
@@ -167,10 +202,12 @@ async def admin_search(
     db: Session = Depends(get_db)
 ):
     query = data.get("query", "")
-    engine = MockHashingEngine()
-    results = await engine.search(query=query, modality="text", top_k=10)
+    engine = get_hashing_engine()
+    raw_results = await engine.search(query=query, modality="text", top_k=10)
+    # 字段对齐前端 RetrievalResult：alert_level(snake) -> alertLevel(camel)
+    results = [{**r, "alertLevel": r.get("alert_level", "green")} for r in raw_results]
 
-    rag_engine = MockRAGEngine()
+    rag_engine = get_rag_engine()
     report = await rag_engine.generate_report({
         "id": 0,
         "name": "综合检索报告",
@@ -179,6 +216,9 @@ async def admin_search(
         "max_score": 100,
         "alert_level": "green"
     })
+    # 字段对齐前端 SearchResponse.report：risk_level(snake) -> riskLevel(camel)
+    if isinstance(report, dict) and "risk_level" in report:
+        report["riskLevel"] = report.pop("risk_level")
 
     return success_response(data={
         "results": results,

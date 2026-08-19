@@ -16,6 +16,12 @@ async def lifespan(app: FastAPI):
     os.makedirs(f"{settings.UPLOAD_DIR}/audio", exist_ok=True)
     os.makedirs(f"{settings.UPLOAD_DIR}/image", exist_ok=True)
     os.makedirs(f"{settings.UPLOAD_DIR}/document", exist_ok=True)
+    # 预热哈希检索引擎（训练/加载；失败不阻断启动，工厂已含 mock 回退）
+    try:
+        from app.engines import get_hashing_engine
+        await get_hashing_engine().initialize()
+    except Exception:
+        pass
     yield
 
 

@@ -6,7 +6,7 @@ from app.engines.rag.interface import RAGEngineInterface
 from app.config import settings
 
 try:
-    from zai import ZhipuAiClient
+    from zhipuai import ZhipuAI
     ZHIPU_AVAILABLE = True
 except ImportError:
     ZHIPU_AVAILABLE = False
@@ -44,7 +44,7 @@ class ZhipuRAGEngine(RAGEngineInterface):
     
     async def initialize(self) -> None:
         if ZHIPU_AVAILABLE and settings.ZHIPUAI_API_KEY:
-            self._client = ZhipuAiClient(api_key=settings.ZHIPUAI_API_KEY)
+            self._client = ZhipuAI(api_key=settings.ZHIPUAI_API_KEY)
         self._initialized = True
     
     async def health_check(self) -> bool:
@@ -73,7 +73,7 @@ class ZhipuRAGEngine(RAGEngineInterface):
         使用智谱AI生成智能分析报告
         """
         if not ZHIPU_AVAILABLE or not self._client:
-            return self._fallback_report(screening_data)
+            return await self._fallback_report(screening_data)
         
         score = screening_data.get("score", 0)
         max_score = screening_data.get("max_score", 100)
@@ -116,14 +116,16 @@ class ZhipuRAGEngine(RAGEngineInterface):
 请直接返回JSON，不要包含其他文字。"""
         
         try:
-            response = self._client.chat.completions.create(
+            call_kwargs = dict(
                 model=settings.ZHIPUAI_MODEL,
                 messages=[{"role": "user", "content": prompt}],
-                thinking={"type": "enabled"} if settings.ZHIPUAI_ENABLE_THINKING else None,
                 max_tokens=settings.ZHIPUAI_MAX_TOKENS,
-                temperature=settings.ZHIPUAI_TEMPERATURE
+                temperature=settings.ZHIPUAI_TEMPERATURE,
             )
-            
+            if settings.ZHIPUAI_ENABLE_THINKING:
+                call_kwargs["thinking"] = {"type": "enabled"}
+            response = self._client.chat.completions.create(**call_kwargs)
+
             content = response.choices[0].message.content
             report = self._parse_json_response(content)
             
@@ -135,7 +137,7 @@ class ZhipuRAGEngine(RAGEngineInterface):
         except Exception as e:
             print(f"智谱AI调用失败: {e}")
         
-        return self._fallback_report(screening_data)
+        return await self._fallback_report(screening_data)
     
     async def add_to_knowledge_base(self, documents: List[Dict]) -> bool:
         """
@@ -145,13 +147,13 @@ class ZhipuRAGEngine(RAGEngineInterface):
             self.KNOWLEDGE_BASE.append(doc)
         return True
     
-    def _fallback_report(self, screening_data: Dict) -> Dict:
+    async def _fallback_report(self, screening_data: Dict) -> Dict:
         """
         当AI调用失败时的降级报告
         """
         from app.engines.rag.mock_engine import MockRAGEngine
         mock = MockRAGEngine()
-        return mock.generate_report(screening_data)
+        return await mock.generate_report(screening_data)
     
     def _parse_json_response(self, content: str) -> Dict:
         """

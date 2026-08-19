@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search, Filter, ChevronDown, PlayCircle, ClipboardCheck } from 'lucide-react';
-import { screeningRecords, questionnaireCatalog } from '../data/mockData';
-import type { PersonalScreeningRecord } from '../data/mockData';
+import { questionnaireCatalog, type PersonalScreeningRecord } from '../data/mockData';
+import { getScreeningRecords, submitScreening } from '../services/mockApi';
 import AlertBadge from '../components/AlertBadge';
 import StatusBadge from '../components/StatusBadge';
 import QuestionnaireForm from '../components/QuestionnaireForm';
@@ -12,7 +12,24 @@ export default function Screening() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLevel, setFilterLevel] = useState<'all' | AlertLevel>('all');
   const [activeQuestionnaire, setActiveQuestionnaire] = useState<string | null>(null);
-  const [localRecords, setLocalRecords] = useState<PersonalScreeningRecord[]>(screeningRecords);
+  const [localRecords, setLocalRecords] = useState<PersonalScreeningRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchRecords = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await getScreeningRecords();
+      setLocalRecords(data);
+    } catch (e) {
+      console.error('加载筛查记录失败', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRecords();
+  }, [fetchRecords]);
 
   const filtered = localRecords.filter(
     (record) =>
@@ -20,27 +37,20 @@ export default function Screening() {
       (filterLevel === 'all' || record.level === filterLevel)
   );
 
-  const levelToMoodTag: Record<AlertLevel, string> = {
-    green: '状态稳定',
-    yellow: '轻度波动',
-    orange: '情绪波动',
-    red: '高风险',
-  };
-
-  const handleComplete = (score: number, maxScore: number, level: AlertLevel) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const id = `ME-SCR-${Date.now().toString().slice(-6)}`;
-    const newRecord: PersonalScreeningRecord = {
-      id,
-      questionnaire: activeQuestionnaire!,
-      score,
-      maxScore,
-      level,
-      status: 'completed',
-      moodTag: levelToMoodTag[level],
-      date: today,
-    };
-    setLocalRecords((prev) => [newRecord, ...prev]);
+  const handleComplete = async (score: number, maxScore: number, level: AlertLevel) => {
+    try {
+      await submitScreening({
+        questionnaire: activeQuestionnaire!,
+        score,
+        maxScore,
+        level,
+      });
+    } catch (e) {
+      console.error('提交筛查失败', e);
+    }
+    setActiveQuestionnaire(null);
+    // 重新从后端拉取（真实模式下后端会生成筛查记录与分级预警）
+    await fetchRecords();
   };
 
   if (activeQuestionnaire) {
@@ -126,7 +136,9 @@ export default function Screening() {
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           </div>
         </div>
-        <p className="text-sm text-slate-500">共 {filtered.length} 条记录</p>
+        <p className="text-sm text-slate-500">
+          {loading ? '加载中…' : `共 ${filtered.length} 条记录`}
+        </p>
       </div>
 
       {/* Table */}
@@ -173,7 +185,9 @@ export default function Screening() {
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-slate-400 text-sm">暂无匹配的筛查记录</div>
+          <div className="text-center py-12 text-slate-400 text-sm">
+            {loading ? '加载中…' : '暂无匹配的筛查记录'}
+          </div>
         )}
       </div>
     </div>

@@ -5,7 +5,12 @@ from app.db.models.alert import AlertRule, Alert
 from app.db.models.case import CaseTagMaster, Case
 from app.db.models.media import MediaFile
 from app.core.security import get_password_hash
+from app.config import settings
+from app.db.base import Base
+from sqlalchemy import create_engine, inspect as sa_inspect, text
+from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timedelta
+import os
 
 
 def init_sample_data():
@@ -415,5 +420,57 @@ def init_sample_data():
         db.close()
 
 
+def import_retrieval_seed():
+    """若主库缺少检索语料，从随项目发布的 retrieval_seed.db 导入约 500 条
+    SEED-* 合成记录（screenings/cases/alerts/media_files）。
+
+    这样 clone 后只需 `python init_data.py` 一条命令，即可拥有完整的检索语料，
+    无需手动运行生成脚本。已存在的业务主键会被跳过（幂等）。
+    """
+    seed_path = settings.RETRIEVAL_SEED_DB
+    if not os.path.exists(seed_path):
+        print(f"未找到检索种子库 {seed_path}，跳过导入（引擎将回退到演示集）。")
+        return
+    src = create_engine(f"sqlite:///{seed_path}")
+    S = sessionmaker(bind=src, expire_on_commit=False)
+    sdb = S()
+    tdb = SessionLocal()
+    try:
+        tdb.execute(text("PRAGMA foreign_keys=OFF"))
+        # 已存在的业务主键，避免重复导入
+        skip = {
+            "screening_id": {r[0] for r in tdb.query(Screening.screening_id).all()},
+            "case_id": {r[0] for r in tdb.query(Case.case_id).all()},
+            "alert_id": {r[0] for r in tdb.query(Alert.alert_id).all()},
+            "file_id": {r[0] for r in tdb.query(MediaFile.file_id).all()},
+        }
+        tables = [
+            (Screening, "screening_id"),
+            (Case, "case_id"),
+            (Alert, "alert_id"),
+            (MediaFile, "file_id"),
+        ]
+        imported = 0
+        for Model, bk in tables:
+            cols = [c.key for c in sa_inspect(Model).columns]
+            for inst in sdb.query(Model).all():
+                vals = {c: getattr(inst, c) for c in cols}
+                key = vals.get(bk)
+                if key is not None and key in skip.get(bk, set()):
+                    continue
+                tdb.add(Model(**vals))
+                imported += 1
+        tdb.commit()
+        print(f"已从检索种子库导入 {imported} 条检索语料到主库。")
+    except Exception as e:
+        print(f"导入检索种子库失败: {e}")
+        tdb.rollback()
+    finally:
+        tdb.close()
+        sdb.close()
+        src.dispose()
+
+
 if __name__ == "__main__":
     init_sample_data()
+    import_retrieval_seed()

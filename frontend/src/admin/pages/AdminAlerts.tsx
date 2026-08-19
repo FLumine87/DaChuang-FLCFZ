@@ -1,10 +1,28 @@
-import { useState } from 'react';
-import { alertRecords } from '../data/adminMockData';
+import { useState, useEffect } from 'react';
+import { type AlertRecord } from '../data/adminMockData';
+import { getAdminAlerts } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import AdminStatusBadge from '../components/AdminStatusBadge';
 
 export default function AdminAlerts() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [alertRecords, setAlertRecords] = useState<AlertRecord[]>([]);
+  const [, setLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await getAdminAlerts();
+        setAlertRecords(data);
+      } catch (e) {
+        console.error('加载预警失败', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   const selected = alertRecords.find((a) => a.id === selectedId);
 
   return (
