@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, ShieldCheck, UserRound, UserPlus } from 'lucide-react';
-import { login, register } from '../auth/mockAuth';
+import { Lock, ShieldCheck, UserRound, UserPlus, Loader2 } from 'lucide-react';
+import { apiLogin, apiRegister } from '../services/mockApi';
+import { saveSessionToken } from '../auth/session';
 
 type AuthTab = 'login' | 'register';
 
@@ -11,9 +12,11 @@ export default function AuthPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const getPasswordStrength = (value: string): { label: '弱' | '中' | '强'; color: string; score: number } => {
     let score = 0;
@@ -34,35 +37,51 @@ export default function AuthPage() {
     setError('');
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     resetTips();
-    const result = login(username, password, rememberMe);
-    if (!result.ok) {
-      setError(result.message || '登录失败');
-      return;
+    setLoading(true);
+    try {
+      const result = await apiLogin(username, password, rememberMe);
+      if (!result.ok || !result.token) {
+        setError(result.message || '登录失败');
+        return;
+      }
+      saveSessionToken(result.token, rememberMe);
+      setMessage('登录成功，正在跳转...');
+      // 后端返回的role可能是'admin'或'counselor'，前端统一处理
+      setTimeout(() => {
+        navigate(result.role === 'admin' ? '/admin/dashboard' : '/personal/dashboard', { replace: true });
+      }, 500);
+    } finally {
+      setLoading(false);
     }
-
-    setMessage('登录成功，正在跳转...');
-    navigate(result.role === 'admin' ? '/admin/dashboard' : '/personal/dashboard', { replace: true });
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     resetTips();
     if (password !== confirmPassword) {
       setError('两次输入的密码不一致');
       return;
     }
-
-    const result = register(username, password);
-    if (!result.ok) {
-      setError(result.message || '注册失败');
+    if (!name) {
+      setError('请输入姓名');
       return;
     }
-
-    setMessage('注册成功，请使用新账号登录（新账号默认进入个人端）');
-    setTab('login');
-    setPassword('');
-    setConfirmPassword('');
+    setLoading(true);
+    try {
+      const result = await apiRegister(username, password, name);
+      if (!result.ok) {
+        setError(result.message || '注册失败');
+        return;
+      }
+      setMessage('注册成功，请使用新账号登录（新账号默认进入个人端）');
+      setTab('login');
+      setPassword('');
+      setConfirmPassword('');
+      setName('');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -130,6 +149,18 @@ export default function AuthPage() {
               />
             </div>
 
+            {tab === 'register' && (
+              <div>
+                <label className="text-sm text-slate-600">姓名</label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="请输入姓名"
+                  className="mt-1 w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            )}
+
             <div>
               <label className="text-sm text-slate-600">密码</label>
               <input
@@ -195,18 +226,20 @@ export default function AuthPage() {
             {tab === 'login' ? (
               <button
                 onClick={handleLogin}
-                className="w-full inline-flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer"
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Lock className="w-4 h-4" />
-                登录
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                {loading ? '验证中...' : '登录'}
               </button>
             ) : (
               <button
                 onClick={handleRegister}
-                className="w-full inline-flex items-center justify-center gap-2 py-2.5 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm font-medium transition-colors cursor-pointer"
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center gap-2 py-2.5 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <UserPlus className="w-4 h-4" />
-                注册账号
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                {loading ? '处理中...' : '注册账号'}
               </button>
             )}
           </div>

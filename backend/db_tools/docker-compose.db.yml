@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  db-tools:
+    build:
+      context: ../
+      dockerfile: db_tools/Dockerfile
+    container_name: mental-screening-db-tools
+    volumes:
+      - ../:/app
+      - db_data:/app/data
+    working_dir: /app
+    environment:
+      - DATABASE_URL=sqlite:///./mental_screening.db
+      - PYTHONPATH=/app
+    stdin_open: true
+    tty: true
+
+volumes:
+  db_data:

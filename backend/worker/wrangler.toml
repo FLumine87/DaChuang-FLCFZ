@@ -1,0 +1,40 @@
+# Cloudflare Python Worker 配置（部署：在 backend/worker 下执行
+#   uv run pywrangler deploy
+# 前置：创建 D1/R2 资源并替换下方 database_id，见 DEVELOP.md「四、迁移实施计划」）
+name = "mental-screening-api"
+main = "src/entry.py"
+compatibility_date = "2026-08-19"
+# python_dedicated_snapshot：官方 FastAPI 示例同款——依赖以内存快照加载，
+# 规避免费计划 3 MiB 代码体积限制并显著降低冷启动（pydantic-core 等不再计入脚本体积）。
+compatibility_flags = ["python_workers", "python_dedicated_snapshot"]
+
+# vars：明文配置（可被 app.config.Settings.apply_worker_overrides 读取）
+[vars]
+ENABLE_MOCK_ENGINES = "true"
+RAG_PROVIDER = "deepseek"
+
+# secrets：敏感配置（SECRET_KEY / DEEPSEEK_API_KEY 等）请用
+#   npx wrangler secret put SECRET_KEY
+#   npx wrangler secret put DEEPSEEK_API_KEY
+# 设置；Worker 运行时与 vars 一样可通过 env.<NAME> 访问。
+
+# D1 数据库（SQLite 兼容，免费 5GB）
+[[d1_databases]]
+binding = "DB"
+database_name = "mental-screening-db"
+database_id = "3323979e-4a7d-4246-80ef-458a3ce356d0"
+
+# R2 对象存储（上传文件，免费 10GB）
+# ⚠️ 尚未在 Cloudflare Dashboard 激活 R2（code 10042），暂注释：
+#   - 影响范围：仅「文件上传」接口（语音/图像/文档采集），其余功能不受影响；
+#   - 恢复方式：Dashboard → R2 激活后，取消注释并执行
+#     npx wrangler r2 bucket create mental-screening-uploads
+#     详见 DEVELOP.md「八、待办」。
+# [[r2_buckets]]
+# binding = "UPLOADS"
+# bucket_name = "mental-screening-uploads"
+
+# 预留改进方向（本期不启用）：Vectorize 语义检索
+# [[vectorize]]
+# binding = "VECTORIZE"
+# index_name = "screening-semantic"

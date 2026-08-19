@@ -16,7 +16,7 @@ import AdminRetrieval from './admin/pages/AdminRetrieval';
 import AdminAlerts from './admin/pages/AdminAlerts';
 import AdminCases from './admin/pages/AdminCases';
 import AuthPage from './pages/AuthPage';
-import { getCurrentSession } from './auth/mockAuth';
+import { getCurrentSession } from './auth/session';
 
 function RedirectBySession() {
   const session = getCurrentSession();

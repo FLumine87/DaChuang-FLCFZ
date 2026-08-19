@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Filter, ChevronDown, Clock, AlertTriangle, ShieldAlert } from 'lucide-react';
-import { warningEvents } from '../data/mockData';
+import { type WarningEvent } from '../data/mockData';
+import { getWarnings } from '../services/mockApi';
 import AlertBadge from '../components/AlertBadge';
 import StatusBadge from '../components/StatusBadge';
 
@@ -8,6 +9,22 @@ export default function Alerts() {
   const [filterLevel, setFilterLevel] = useState<'all' | 'red' | 'orange' | 'yellow' | 'green'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'new' | 'tracking' | 'resolved'>('all');
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
+  const [warningEvents, setWarningEvents] = useState<WarningEvent[]>([]);
+  const [, setLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await getWarnings();
+        setWarningEvents(data);
+      } catch (e) {
+        console.error('加载预警失败', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   const filtered = warningEvents.filter((a) => {
     const matchLevel = filterLevel === 'all' || a.level === filterLevel;

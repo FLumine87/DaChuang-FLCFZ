@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.venv/
+
+# 数据库文件 - 默认全部忽略（工作库含真实生成数据，不上传）
+# 但放行随项目发布的检索种子库（仅含 500 条合成检索语料，无账号/敏感数据）
+*.db
+*.db-journal
+!data/retrieval_seed.db
+
+# 上传文件
+uploads/
+*.wav
+*.mp3
+*.jpg
+*.jpeg
+*.png
+*.pdf
+
+# 环境变量
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 日志
+*.log
+logs/
+
+# Cloudflare Wrangler 本地状态
+.wrangler/
+
+# D1 种子数据导出（含用户数据与密码哈希，由 export_d1_seed.py 按需生成，不入库）
+worker/seed/d1_seed.sql
+
+# 备份文件
+*.bak
+backup_*.db

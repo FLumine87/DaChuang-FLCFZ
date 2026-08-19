@@ -14,7 +14,7 @@ import {
   User,
   LogOut,
 } from 'lucide-react';
-import { getCurrentSession, logout } from '../auth/mockAuth';
+import { getCurrentSession, logout } from '../auth/session';
 
 const navItems = [
   { path: '/personal/dashboard', label: '个人首页', icon: LayoutDashboard },

@@ -3,6 +3,7 @@ import {
   FileText, Mic, ImageIcon, Upload, Check, ChevronRight, Sparkles,
   Square, Play, Pause, Trash2, CheckCircle2, X,
 } from 'lucide-react';
+import { uploadFile } from '../services/mockApi';
 
 type Tab = 'text' | 'audio' | 'image';
 type RecordState = 'idle' | 'requesting' | 'recording' | 'stopped';
@@ -13,6 +14,7 @@ interface AudioEntry {
   url: string;
   duration: number;
   source: 'recorded' | 'uploaded';
+  file?: File;
 }
 
 interface ImageEntry {
@@ -20,6 +22,7 @@ interface ImageEntry {
   name: string;
   url: string;
   size: string;
+  file?: File;
 }
 
 const questionnaires = [
@@ -80,6 +83,7 @@ function AudioTab() {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         const url = URL.createObjectURL(blob);
         const id = Date.now().toString();
+        const recFile = new File([blob], `recording_${id}.webm`, { type: 'audio/webm' });
         setAudioList((prev) => [
           ...prev,
           {
@@ -88,6 +92,7 @@ function AudioTab() {
             url,
             duration: elapsed,
             source: 'recorded',
+            file: recFile,
           },
         ]);
         stream.getTracks().forEach((t) => t.stop());
@@ -115,7 +120,7 @@ function AudioTab() {
       const url = URL.createObjectURL(file);
       setAudioList((prev) => [
         ...prev,
-        { id: Date.now().toString() + Math.random(), name: file.name, url, duration: 0, source: 'uploaded' },
+        { id: Date.now().toString() + Math.random(), name: file.name, url, duration: 0, source: 'uploaded', file },
       ]);
     });
   };
@@ -241,7 +246,14 @@ function AudioTab() {
 
         {audioList.length > 0 && !submitted && (
           <button
-            onClick={() => setSubmitted(true)}
+            onClick={async () => {
+              for (const entry of audioList) {
+                if (entry.file) {
+                  try { await uploadFile(entry.file); } catch (e) { console.error('上传音频失败', e); }
+                }
+              }
+              setSubmitted(true);
+            }}
             className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer"
           >
             <Sparkles className="w-4 h-4" /> 送入动态哈希引擎
@@ -272,7 +284,7 @@ function ImageTab() {
       const url = URL.createObjectURL(file);
       setImages((prev) => [
         ...prev,
-        { id: Date.now().toString() + Math.random(), name: file.name, url, size: formatBytes(file.size) },
+        { id: Date.now().toString() + Math.random(), name: file.name, url, size: formatBytes(file.size), file },
       ]);
     });
     setSubmitted(false);
@@ -337,7 +349,14 @@ function ImageTab() {
 
         {images.length > 0 && !submitted && (
           <button
-            onClick={() => setSubmitted(true)}
+            onClick={async () => {
+              for (const img of images) {
+                if (img.file) {
+                  try { await uploadFile(img.file); } catch (e) { console.error('上传图像失败', e); }
+                }
+              }
+              setSubmitted(true);
+            }}
             className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer"
           >
             <Sparkles className="w-4 h-4" /> 送入动态哈希引擎
@@ -454,7 +473,7 @@ export default function DataCollection() {
         <h3 className="text-base font-semibold text-slate-800">多模态采集工作台</h3>
         <p className="text-sm text-slate-500 mt-2 leading-6">
           你可以在这里提交文本日记、语音片段和图片。系统会进行动态跨模态哈希编码，与历史模式检索，再结合
-          RAG 生成个性化建议。当前为前端原型，不会上传到后端。
+          RAG 生成个性化建议。在真实模式下，音频与图像会被上传至后端进行多模态分析。
         </p>
       </div>
 

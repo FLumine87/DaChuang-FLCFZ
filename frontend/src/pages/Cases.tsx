@@ -1,8 +1,35 @@
+import { useState, useEffect } from 'react';
 import { ClipboardList, Clock, Sparkles, FileText, AlertTriangle } from 'lucide-react';
-import { personalTimeline, screeningRecords, warningEvents, userProfile } from '../data/mockData';
+import { type PersonalScreeningRecord, type WarningEvent, type PersonalTimelineEvent, type UserProfile } from '../data/mockData';
+import { getCases } from '../services/mockApi';
 import AlertBadge from '../components/AlertBadge';
 
 export default function Cases() {
+  const [screeningRecords, setScreeningRecords] = useState<PersonalScreeningRecord[]>([]);
+  const [warningEvents, setWarningEvents] = useState<WarningEvent[]>([]);
+  const [personalTimeline, setPersonalTimeline] = useState<PersonalTimelineEvent[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    name: '—', age: 0, gender: '', campus: '', major: '', stage: '', emergencyContact: '',
+  });
+  const [, setLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await getCases();
+        setScreeningRecords(data.screeningRecords ?? []);
+        setWarningEvents(data.warningEvents ?? []);
+        setPersonalTimeline(data.personalTimeline ?? []);
+        if (data.userProfile) setUserProfile(data.userProfile);
+      } catch (e) {
+        console.error('加载档案失败', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">

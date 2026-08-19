@@ -1,0 +1,5 @@
+Metadata-Version: 2.5
+Name: mental-screening-backend
+Version: 1.0.0
+Summary: 心理筛查预警系统后端（被 Cloudflare Worker 子项目以 path 依赖引用，打包 app 包）
+Requires-Python: >=3.12

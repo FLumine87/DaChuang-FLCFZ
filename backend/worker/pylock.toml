@@ -1,0 +1,13 @@
+lock-version = "1.0"
+created-by = "uv"
+requires-python = ">=3.13.2"
+
+[[packages]]
+name = "mental-screening-backend"
+version = "1.0.0"
+archive = { path = "C:/ETO/CBP/web/DaChuang-FLCFZ/backend/dist/mental_screening_backend-1.0.0-py3-none-any.whl", hashes = { sha256 = "92b333a80aca07a8c1377944af4b220b8c30b9799692139a7578ee49c1e9fc25" } }
+
+[[packages]]
+name = "workers-runtime-sdk"
+version = "1.6.13"
+wheels = [{ url = "https://files.pythonhosted.org/packages/49/bc/2f676f7f4b0ffadc3737098f12ae3ad02b47003b17d2bc3657c9e8c526bc/workers_runtime_sdk-1.6.13-py3-none-any.whl", upload-time = 2026-08-12T03:35:57Z, size = 34448, hashes = { sha256 = "bc76862651bea761ed14bce80afce104e2d8e73cae8b1069e76c789c38a8308d" } }]

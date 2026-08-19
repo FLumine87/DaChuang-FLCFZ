@@ -1,0 +1,23 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+sqlalchemy==2.0.36
+alembic==1.14.0
+pydantic==2.10.0
+pydantic-settings==2.6.1
+python-multipart==0.0.18
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+aiofiles==24.1.0
+python-dotenv==1.0.1
+email-validator==2.1.0.post1
+# zhipuai>=2.0.0  # 仅 RAG_PROVIDER=zhipu 且 ENABLE_MOCK_ENGINES=False 时需要；不装则真实引擎优雅降级到 Mock 报告。
+# DeepSeek RAG 模式（RAG_PROVIDER=deepseek，默认）仅需标准库 urllib，无需安装任何新依赖。
+#   启用真实报告：在 .env 设 ENABLE_MOCK_ENGINES=False 并填 DEEPSEEK_API_KEY；留空则自动降级 Mock。
+
+# ===== 动态跨模态哈希引擎：可选依赖（非必需，缺失时自动走纯 Python 实现）=====
+# numpy        # 可选：加速特征值分解；不装则用内置幂迭代实现
+# pillow       # 可选：抽取真实图像低层特征（否则由文本确定性派生）
+# librosa      # 可选：抽取真实音频 MFCC 特征（否则由文本确定性派生）
+# jieba        # 可选：中文分词（提升文本特征质量；不装则按字/词哈希）
+

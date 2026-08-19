@@ -11,7 +11,8 @@ const levelConfig = {
 };
 
 export default function AlertBadge({ level, size = 'md' }: AlertBadgeProps) {
-  const config = levelConfig[level];
+  const safeLevel = level && level in levelConfig ? level : 'green';
+  const config = levelConfig[safeLevel];
   const sizeClass = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-sm';
 
   return (
