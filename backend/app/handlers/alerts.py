@@ -1,40 +1,40 @@
-"""预警管理接口 handler。"""
+"""预警管理接口 handler（async）。"""
 from app.core.responses import success_response, paginated_response
 from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
 from app.services import alert_service
 
 
-def list_rules(ctx: RequestContext):
-    return success_response(data=alert_service.get_all_rules())
+async def list_rules(ctx: RequestContext):
+    return success_response(data=await alert_service.get_all_rules())
 
 
-def create_rule(ctx: RequestContext):
-    return success_response(data=alert_service.create_rule(ctx.body))
+async def create_rule(ctx: RequestContext):
+    return success_response(data=await alert_service.create_rule(ctx.body))
 
 
-def update_rule(ctx: RequestContext, rule_id: int):
-    rule = alert_service.update_rule(rule_id, ctx.body)
+async def update_rule(ctx: RequestContext, rule_id: int):
+    rule = await alert_service.update_rule(rule_id, ctx.body)
     if not rule:
         raise HttpError(404, "预警规则不存在")
     return success_response(data=rule)
 
 
-def delete_rule(ctx: RequestContext, rule_id: int):
-    if not alert_service.delete_rule(rule_id):
+async def delete_rule(ctx: RequestContext, rule_id: int):
+    if not await alert_service.delete_rule(rule_id):
         raise HttpError(404, "预警规则不存在")
     return success_response(message="删除成功")
 
 
-def get_stats(ctx: RequestContext):
-    return success_response(data=alert_service.get_stats())
+async def get_stats(ctx: RequestContext):
+    return success_response(data=await alert_service.get_stats())
 
 
-def list_alerts(ctx: RequestContext):
+async def list_alerts(ctx: RequestContext):
     q = ctx.query_params
     page = max(1, int(q.get("page", 1) or 1))
     page_size = min(max(1, int(q.get("page_size", 10) or 10)), 100)
-    result = alert_service.get_alerts(
+    result = await alert_service.get_alerts(
         page=page, page_size=page_size,
         level=q.get("level") or None,
         status=q.get("status") or None,
@@ -43,27 +43,27 @@ def list_alerts(ctx: RequestContext):
                               page=page, page_size=page_size)
 
 
-def create_alert(ctx: RequestContext):
-    return success_response(data=alert_service.create_alert(ctx.body))
+async def create_alert(ctx: RequestContext):
+    return success_response(data=await alert_service.create_alert(ctx.body))
 
 
-def get_alert(ctx: RequestContext, alert_id: int):
-    alert = alert_service.get_alert_by_id(alert_id)
+async def get_alert(ctx: RequestContext, alert_id: int):
+    alert = await alert_service.get_alert_by_id(alert_id)
     if not alert:
         raise HttpError(404, "预警记录不存在")
     return success_response(data=alert)
 
 
-def update_alert(ctx: RequestContext, alert_id: int):
-    alert = alert_service.update_alert(alert_id, ctx.body)
+async def update_alert(ctx: RequestContext, alert_id: int):
+    alert = await alert_service.update_alert(alert_id, ctx.body)
     if not alert:
         raise HttpError(404, "预警记录不存在")
     return success_response(data=alert)
 
 
-def resolve_alert(ctx: RequestContext, alert_id: int):
+async def resolve_alert(ctx: RequestContext, alert_id: int):
     notes = ctx.query_params.get("notes", "") or ""
-    alert = alert_service.resolve_alert(alert_id, notes)
+    alert = await alert_service.resolve_alert(alert_id, notes)
     if not alert:
         raise HttpError(404, "预警记录不存在")
     return success_response(data=alert)

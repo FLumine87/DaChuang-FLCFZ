@@ -1,13 +1,11 @@
-"""轻量数据访问层（纯标准库）：本地 sqlite3 / Cloudflare D1 双模式。
+"""轻量数据访问层（标准库 sqlite3 / Cloudflare D1 双模式）。
 
-统一 API：
-  - query(sql, params) -> list[dict]     （SELECT）
-  - query_one(sql, params) -> dict|None
-  - execute(sql, params) -> last_rowid  （INSERT/UPDATE/DELETE）
-  - init_db()                            （幂等建表）
-
-本地用标准库 sqlite3（连接懒初始化、线程安全锁）；
-Worker 用 env.DB binding（D1）。业务层不再依赖 SQLAlchemy。
+两套 API：
+  - async（业务链使用，Worker 下必须 await D1 binding）：
+      query_a / query_one_a / execute_a / init_db
+  - sync（仅本地：sqlite3 引擎播种、本地脚本）：
+      query / query_one / execute / init_db_sync
+    注意：sync 版在 Worker 下不可用（D1 为异步 API）。
 """
 import sqlite3
 import threading
@@ -167,7 +165,6 @@ def _get_local_conn() -> sqlite3.Connection:
     global _local_conn
     if _local_conn is None:
         path = settings.DATABASE_URL.replace("sqlite:///", "", 1)
-        # 确保目录存在
         import os
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         _local_conn = sqlite3.connect(path, check_same_thread=False)
@@ -175,28 +172,36 @@ def _get_local_conn() -> sqlite3.Connection:
     return _local_conn
 
 
-def init_db() -> None:
-    """幂等建表：本地执行 sqlite3；Worker 由入口在请求上下文内调用 D1 exec。"""
-    if runtime.is_worker():
-        env = runtime.get_worker_env()
-        if env is None:
-            return
-        env.DB.exec(SCHEMA_SQL)
-    else:
-        with _local_lock:
-            conn = _get_local_conn()
-            conn.executescript(SCHEMA_SQL)
-            conn.commit()
+def _norm_params(params):
+    """参数规范化：datetime/date → 字符串（'YYYY-MM-DD HH:MM:SS'）。
+
+    D1 的 bind() 不接受 Python datetime 对象，必须转字符串；
+    sqlite3 本地路径统一处理保持一致。
+    """
+    out = []
+    for p in params:
+        if hasattr(p, "isoformat"):  # datetime / date
+            out.append(str(p))
+        else:
+            out.append(p)
+    return out
+
+
+# ---------------- sync（仅本地 sqlite3） ----------------
+
+def init_db_sync() -> None:
+    with _local_lock:
+        conn = _get_local_conn()
+        conn.executescript(SCHEMA_SQL)
+        conn.commit()
 
 
 def query(sql: str, params=()) -> list:
-    """SELECT 查询，返回 dict 列表。"""
+    """SELECT（本地同步）。Worker 下请使用 query_a。"""
     if runtime.is_worker():
-        env = runtime.get_worker_env()
-        res = env.DB.prepare(sql).bind(*params).all()
-        return [dict(r) for r in res.get("results", [])]
+        raise RuntimeError("sync query 不可在 Worker 使用，请改用 query_a")
     with _local_lock:
-        cur = _get_local_conn().execute(sql, list(params))
+        cur = _get_local_conn().execute(sql, list(_norm_params(params)))
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -206,14 +211,48 @@ def query_one(sql: str, params=()):
 
 
 def execute(sql: str, params=()) -> int:
-    """执行 INSERT/UPDATE/DELETE；返回 last_rowid（INSERT）或 rowcount。"""
+    """INSERT/UPDATE/DELETE（本地同步）。Worker 下请使用 execute_a。"""
     if runtime.is_worker():
-        env = runtime.get_worker_env()
-        res = env.DB.prepare(sql).bind(*params).run()
-        meta = res.get("meta", {}) or {}
-        return meta.get("last_row_id", 0)
+        raise RuntimeError("sync execute 不可在 Worker 使用，请改用 execute_a")
     with _local_lock:
         conn = _get_local_conn()
-        cur = conn.execute(sql, list(params))
+        cur = conn.execute(sql, list(_norm_params(params)))
         conn.commit()
         return cur.lastrowid
+
+
+# ---------------- async（Worker D1 / 本地 sqlite3） ----------------
+
+async def init_db() -> None:
+    """幂等建表。Worker 走 D1（await exec）；本地执行 sqlite3。"""
+    if runtime.is_worker():
+        env = runtime.get_worker_env()
+        if env is None:
+            return
+        await env.DB.exec(SCHEMA_SQL)
+    else:
+        init_db_sync()
+
+
+async def query_a(sql: str, params=()) -> list:
+    """SELECT，返回 dict 列表。Worker 下 await D1；本地复用 sync。"""
+    if runtime.is_worker():
+        env = runtime.get_worker_env()
+        res = await env.DB.prepare(sql).bind(*_norm_params(params)).all()
+        return [dict(r) for r in res.get("results", [])]
+    return query(sql, params)
+
+
+async def query_one_a(sql: str, params=()):
+    rows = await query_a(sql, params)
+    return rows[0] if rows else None
+
+
+async def execute_a(sql: str, params=()) -> int:
+    """INSERT/UPDATE/DELETE，返回 last_rowid（INSERT）或 rowcount。"""
+    if runtime.is_worker():
+        env = runtime.get_worker_env()
+        res = await env.DB.prepare(sql).bind(*_norm_params(params)).run()
+        meta = res.get("meta", {}) or {}
+        return meta.get("last_row_id", 0)
+    return execute(sql, params)

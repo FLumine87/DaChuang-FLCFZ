@@ -20,7 +20,7 @@ async def upload_file(ctx: RequestContext):
 
 async def get_file_info(ctx: RequestContext, file_id: str):
     from app.db import database as db
-    media = db.query_one("SELECT * FROM media_files WHERE file_id = ?", (file_id,))
+    media = await db.query_one_a("SELECT * FROM media_files WHERE file_id = ?", (file_id,))
     if not media:
         raise HttpError(404, "文件不存在")
     file_type = media.get("file_type") or "document"
@@ -38,8 +38,8 @@ async def get_file_info(ctx: RequestContext, file_id: str):
 
 async def delete_file(ctx: RequestContext, file_id: str):
     from app.db import database as db
-    media = db.query_one("SELECT * FROM media_files WHERE file_id = ?", (file_id,))
+    media = await db.query_one_a("SELECT * FROM media_files WHERE file_id = ?", (file_id,))
     if not media:
         raise HttpError(404, "文件不存在")
-    db.execute("DELETE FROM media_files WHERE file_id = ?", (file_id,))
+    await db.execute_a("DELETE FROM media_files WHERE file_id = ?", (file_id,))
     return success_response(message="文件删除成功")

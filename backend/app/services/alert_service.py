@@ -6,27 +6,27 @@ import uuid
 from app.db import database as db
 
 
-def generate_alert_id() -> str:
+async def generate_alert_id() -> str:
     return f"ALT-{uuid.uuid4().hex[:6].upper()}"
 
 
-def get_all_rules() -> list:
-    return db.query("SELECT * FROM alert_rules ORDER BY priority DESC")
+async def get_all_rules() -> list:
+    return await db.query_a("SELECT * FROM alert_rules ORDER BY priority DESC")
 
 
-def create_rule(data: dict) -> dict:
-    row_id = db.execute(
+async def create_rule(data: dict) -> dict:
+    row_id = await db.execute_a(
         "INSERT INTO alert_rules (name, questionnaire_id, min_score, max_score, alert_level, "
         "description, is_active, priority) VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
         (data.get("name"), data.get("questionnaire_id"), data.get("min_score"),
          data.get("max_score"), data.get("alert_level"), data.get("description"),
          data.get("priority", 0)),
     )
-    return db.query_one("SELECT * FROM alert_rules WHERE id = ?", (row_id,))
+    return await db.query_one_a("SELECT * FROM alert_rules WHERE id = ?", (row_id,))
 
 
-def update_rule(rule_id: int, data: dict) -> Optional[dict]:
-    row = db.query_one("SELECT * FROM alert_rules WHERE id = ?", (rule_id,))
+async def update_rule(rule_id: int, data: dict) -> Optional[dict]:
+    row = await db.query_one_a("SELECT * FROM alert_rules WHERE id = ?", (rule_id,))
     if not row:
         return None
     allowed = ("name", "questionnaire_id", "min_score", "max_score",
@@ -38,43 +38,44 @@ def update_rule(rule_id: int, data: dict) -> Optional[dict]:
             params.append(data[k])
     if sets:
         params.append(rule_id)
-        db.execute(
+        await db.execute_a(
             "UPDATE alert_rules SET " + ", ".join(sets) + ", updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             params,
         )
-    return db.query_one("SELECT * FROM alert_rules WHERE id = ?", (rule_id,))
+    return await db.query_one_a("SELECT * FROM alert_rules WHERE id = ?", (rule_id,))
 
 
-def delete_rule(rule_id: int) -> bool:
-    row = db.query_one("SELECT * FROM alert_rules WHERE id = ?", (rule_id,))
+async def delete_rule(rule_id: int) -> bool:
+    row = await db.query_one_a("SELECT * FROM alert_rules WHERE id = ?", (rule_id,))
     if not row:
         return False
-    db.execute("DELETE FROM alert_rules WHERE id = ?", (rule_id,))
+    await db.execute_a("DELETE FROM alert_rules WHERE id = ?", (rule_id,))
     return True
 
 
-def get_stats() -> dict:
-    def count(where="", params=()):
-        return db.query_one(
+async def get_stats() -> dict:
+    async def count(where="", params=()):
+        row = await db.query_one_a(
             "SELECT COUNT(*) AS c FROM alerts" + (" WHERE " + where if where else ""), params
-        )["c"]
+        )
+        return row["c"] if row else 0
 
     return {
-        "total": count(),
-        "pending": count("status = 'pending'"),
-        "processing": count("status = 'processing'"),
-        "resolved": count("status = 'resolved'"),
-        "closed": count("status = 'closed'"),
+        "total": await count(),
+        "pending": await count("status = 'pending'"),
+        "processing": await count("status = 'processing'"),
+        "resolved": await count("status = 'resolved'"),
+        "closed": await count("status = 'closed'"),
         "by_level": {
-            "green": count("level = 'green'"),
-            "yellow": count("level = 'yellow'"),
-            "orange": count("level = 'orange'"),
-            "red": count("level = 'red'"),
+            "green": await count("level = 'green'"),
+            "yellow": await count("level = 'yellow'"),
+            "orange": await count("level = 'orange'"),
+            "red": await count("level = 'red'"),
         },
     }
 
 
-def get_alerts(page: int = 1, page_size: int = 10, level: Optional[str] = None,
+async def get_alerts(page: int = 1, page_size: int = 10, level: Optional[str] = None,
                status: Optional[str] = None) -> dict:
     where, params = [], []
     if level:
@@ -85,12 +86,12 @@ def get_alerts(page: int = 1, page_size: int = 10, level: Optional[str] = None,
         params.append(status)
 
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
-    total = db.query_one(
+    total = await db.query_one_a(
         "SELECT COUNT(*) AS c FROM alerts a" + where_sql, params
     )["c"]
 
     offset = (page - 1) * page_size
-    rows = db.query(
+    rows = await db.query_a(
         "SELECT a.*, u.name AS assignee_name FROM alerts a "
         "LEFT JOIN users u ON a.assignee_id = u.id"
         + where_sql + " ORDER BY a.created_at DESC LIMIT ? OFFSET ?",
@@ -112,17 +113,17 @@ def get_alerts(page: int = 1, page_size: int = 10, level: Optional[str] = None,
     return {"items": items, "total": total}
 
 
-def get_alert_by_id(alert_id: int) -> Optional[dict]:
-    return db.query_one(
+async def get_alert_by_id(alert_id: int) -> Optional[dict]:
+    return await db.query_one_a(
         "SELECT a.*, u.name AS assignee_name FROM alerts a "
         "LEFT JOIN users u ON a.assignee_id = u.id WHERE a.id = ?",
         (alert_id,),
     )
 
 
-def create_alert(data: dict) -> dict:
+async def create_alert(data: dict) -> dict:
     alert_id = generate_alert_id()
-    row_id = db.execute(
+    row_id = await db.execute_a(
         "INSERT INTO alerts (alert_id, screening_id, name, level, trigger, description, "
         "status, assignee_id, follow_up_notes, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, CURRENT_TIMESTAMP)",
@@ -132,10 +133,10 @@ def create_alert(data: dict) -> dict:
             data.get("follow_up_notes"),
         ),
     )
-    return db.query_one("SELECT * FROM alerts WHERE id = ?", (row_id,))
+    return await db.query_one_a("SELECT * FROM alerts WHERE id = ?", (row_id,))
 
 
-def update_alert(alert_id: int, data: dict) -> Optional[dict]:
+async def update_alert(alert_id: int, data: dict) -> Optional[dict]:
     row = get_alert_by_id(alert_id)
     if not row:
         return None
@@ -148,18 +149,18 @@ def update_alert(alert_id: int, data: dict) -> Optional[dict]:
             params.append(data[k])
     if sets:
         params.append(alert_id)
-        db.execute(
+        await db.execute_a(
             "UPDATE alerts SET " + ", ".join(sets) + ", updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             params,
         )
     return get_alert_by_id(alert_id)
 
 
-def resolve_alert(alert_id: int, notes: str = "") -> Optional[dict]:
+async def resolve_alert(alert_id: int, notes: str = "") -> Optional[dict]:
     row = get_alert_by_id(alert_id)
     if not row:
         return None
-    db.execute(
+    await db.execute_a(
         "UPDATE alerts SET status = 'resolved', follow_up_notes = ?, resolved_at = ?, "
         "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (notes, datetime.now(), alert_id),

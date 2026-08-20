@@ -1,6 +1,6 @@
 [project]
 name = "mental-screening-backend"
-version = "1.0.0"
+version = "1.0.1"
 description = "心理筛查预警系统后端（被 Cloudflare Worker 子项目以 path 依赖引用，打包 app 包）"
 requires-python = ">=3.12"
 

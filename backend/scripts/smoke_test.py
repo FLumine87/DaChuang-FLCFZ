@@ -42,6 +42,12 @@ async def main() -> None:
     status, payload = await dispatch("GET", "/api/personal/screenings", "", b"", auth)
     print("personal-screenings:", status, "count:", len(payload.get("data") or []))
 
+    # 6. 管理端 dashboard（含日期统计，覆盖 datetime 参数路径）
+    status, payload = await dispatch("GET", "/api/admin/dashboard", "", b"", auth)
+    data = payload.get("data") or {}
+    print("admin-dashboard:", status, "trend:", len(data.get("trendData") or []),
+          "alerts:", len(data.get("alertRecords") or []))
+
 
 if __name__ == "__main__":
     asyncio.run(main())

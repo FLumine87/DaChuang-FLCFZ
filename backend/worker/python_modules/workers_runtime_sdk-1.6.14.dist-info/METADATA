@@ -1,6 +1,6 @@
 Metadata-Version: 2.5
 Name: workers-runtime-sdk
-Version: 1.6.13
+Version: 1.6.14
 Summary: Python SDK for Cloudflare Workers
 Project-URL: Homepage, https://github.com/cloudflare/workers-py
 Project-URL: Bug Tracker, https://github.com/cloudflare/workers-py/issues
