@@ -18,12 +18,13 @@
 |------|------|
 | 项目现状调研 | ✅ 已完成 |
 | Cloudflare 适配可行性调研 | ✅ 已完成 |
-| 方案讨论与决策 | ✅ 已确定（2026-08-19；含 FastAPI → 轻量 Python Worker 方向调整） |
-| 后端代码适配 | ✅ 完成（轻量化改造：去 FastAPI/Pydantic/SQLAlchemy） |
-| 前端代码适配 | 🔄 进行中（源码改造已完成，待 GitHub Pages 部署） |
-| 后端部署（Cloudflare Worker） | ✅ 已部署 https://mental-screening-api.787249795.workers.dev（gzip 73.63 KiB，免费额度） |
-| 上线验证 | 🔄 待浏览器验证 |
-| GitHub Pages 部署 | ⏳ 待配置 |
+| 方案讨论与决策 | ✅ 已确定（2026-08-19；FastAPI → 轻量 Python Worker 方向调整） |
+| 后端代码适配 | ✅ 完成（轻量化：去 FastAPI/Pydantic/SQLAlchemy，纯标准库） |
+| 后端部署（Cloudflare Worker） | ✅ 已部署 https://mental-screening-api.787249795.workers.dev（gzip ~75 KiB，免费额度；版本 v1.0.1） |
+| 后端功能验证 | ✅ 登录/注册/仪表盘/检索/个人端均正常（曾踩 D1 async、datetime 绑定、wheel 版本缓存坑，均已修复） |
+| 前端 GitHub Pages 部署 | ✅ 已部署 https://flumine87.github.io/DaChuang-FLCFZ/（HashRouter，深层路由不再 404） |
+| 前端功能验证 | ✅ 页面/登录/功能正常 |
+| 国内裸连（workers.dev 被墙） | ⏳ 待解决（方案：EdgeOne 免费版 / 自定义域名，需域名） |
 
 ---
 
@@ -73,7 +74,7 @@ DaChuang-FLCFZ/
 
 - [http.ts](../frontend/src/services/http.ts) 已支持 `VITE_API_BASE_URL`（生产后端地址注入）、`VITE_USE_MOCK`（Mock 开关）、`VITE_DEV_PROXY_TARGET`（开发代理）。
 - 存在完整 Mock 数据层（`mockApi.ts` + `mockData.ts` + `mockAuth.ts`），可脱离后端纯静态演示。
-- 路由使用 `BrowserRouter`（非 HashRouter），GitHub Pages 子路径部署需处理 base + 404 兜底。
+- 路由原使用 `BrowserRouter`，GitHub Pages 子路径部署会刷新 404 → 已切换 `HashRouter`（见「五、开发日志」2026-08-20）。
 
 ---
 
@@ -85,11 +86,12 @@ DaChuang-FLCFZ/
 - **后端** → Cloudflare Workers（serverless，免运维）
 - **原则**：只做适配、**零功能新增**；已实现功能全量搬上云，未实现功能保持占位。
 
-### 3.2 决策记录（2026-08-19 确定）
+### 3.2 决策记录（2026-08-19 确定，当晚方向调整一次）
 
 | # | 决策点 | 结论 | 理由 |
 |---|--------|------|------|
-| 1 | 后端计算层 | **A. Python Workers（FastAPI 保留）** | 免费额度（10万请求/天）；FastAPI 代码可保留；无需 TS 重写 |
+| 1 | 后端计算层 | **A. Python Workers（FastAPI 保留）**（初始方案） | 免费额度（10万请求/天）；FastAPI 代码可保留；无需 TS 重写 |
+| 1' | 后端计算层 | **A'. 轻量 Python Worker（去 FastAPI，纯标准库手写 API/数据层）**（最终方案） | 免费计划 3MB(gzip) 体积限制放不下 FastAPI+SQLAlchemy（pydantic-core 单文件 4MB）；保留 Python 引擎/业务，API+数据层标准库手写，gzip 仅 ~75 KiB（详见「五、开发日志」2026-08-19 方向调整条目） |
 | 2 | 向量检索 | **本期不做 Vectorize（纯适配）** | 用户明确：当前不做任何功能新增；仅预留改进方向 |
 | 3 | 前端部署位置 | **GitHub Pages，前后端分开** | 符合用户最初设想 |
 | 4 | 功能范围 | **纯适配，零新增** | 已实现全量改造，未实现保持占位（Mock） |
@@ -147,11 +149,13 @@ DaChuang-FLCFZ/
 
 ### 4.4 里程碑
 
-- [ ] M1：Worker 最小骨架 + FastAPI 跑通（验证 pydantic-core/Pyodide 兼容）
-- [ ] M2：D1 数据层适配 + 种子数据迁移
-- [ ] M3：R2 上传适配 + 检索/RAG 适配
-- [ ] M4：前端 GitHub Pages 适配 + Actions
-- [ ] M5：联调 + 上线验证
+> 全部完成（2026-08-20）。实际落地按「方向调整」走轻量 Python Worker（去 FastAPI，见「五、开发日志」2026-08-19/20 记录），原 M1 的 asgi 桥接与 M3 的 R2 上传适配已被取代（上传为 503 占位，待 R2 激活）。
+
+- [x] M1：Worker 最小骨架跑通（轻量路由 + D1 binding，替代 asgi/FastAPI 验证）
+- [x] M2：D1 数据层适配（database.py 双模式）+ 建表 SQL 执行（wrangler d1 execute）
+- [x] M3：检索/RAG 适配（TF-IDF 保留；上传 503 占位，R2 激活后恢复）
+- [x] M4：前端 GitHub Pages 适配（HashRouter + VITE_BASE_PATH）+ Actions
+- [x] M5：联调 + 上线验证（云端全功能通过，v1.0.1）
 
 ---
 
@@ -184,6 +188,10 @@ DaChuang-FLCFZ/
 | 2026-08-19 | **部署成功（免费额度）**：Worker 打包仅 backend wheel（纯标准库），Total Upload 271.77 KiB / gzip 73.63 KiB，远低于 3MB 限制；部署至 https://mental-screening-api.787249795.workers.dev | backend/worker/（entry.py 手动路由、pyproject 仅 wheel 依赖） | 本地冒烟测试通过（登录/鉴权/401/检索/个人端）；云端接口待浏览器验证 |
 | 2026-08-19 | **云端登录/注册超时修复**：Python Worker 的 D1 binding 是异步 API（官方示例 `await env.DB.prepare(...).run()`），原实现未 await 导致请求挂起。数据层新增 async 版（query_a/query_one_a/execute_a/init_db），services 与 handlers 全链路 async 化 | app/db/database.py、app/services/*、app/handlers/*、worker/src/entry.py | 本地 sqlite3 同步路径保留（引擎播种/脚本用）；重新部署 Version b1fffce5 |
 | 2026-08-19 | 前端修复：VITE_API_BASE_URL 写死 worker 地址 + workflow 默认值回退（避免空变量覆盖）；VITE_BASE_PATH=/DaChuang-FLCFZ/ 固定（子路径部署资源加载） | frontend/.env.production、.github/workflows/deploy-frontend.yml | 登录/注册请求已正确发往 workers.dev |
+| 2026-08-20 | **仪表盘 500 修复**：D1 bind 不接受 Python datetime 对象 → database.py 新增 `_norm_params` 统一转字符串；admin/dashboard 统计改 GROUP BY + JOIN 一次查询（D1 调用 ~35 次降到 7 次）；backend wheel 版本 bump 1.0.1 强制重新打包（uv/pywrangler 按版本跳过缓存，不 bump 则云端一直跑旧代码） | backend/app/db/database.py、backend/app/handlers/admin.py、backend/app/handlers/dashboard.py、backend/pyproject.toml | 云端 dashboard 恢复；本地 smoke_test 全绿 |
+| 2026-08-20 | **前端深层路由 404 修复**：BrowserRouter → HashRouter（GitHub Pages 子路径部署无服务器端 SPA 兜底，/auth 等刷新必 404） | frontend/src/main.tsx | 访问 `.../DaChuang-FLCFZ/#/auth` 不再 404；URL 带 # 前缀 |
+| 2026-08-20 | **全量功能验证通过**：登录/注册/仪表盘/检索/个人端/管理端云端+本地均正常；前端已上线 GitHub Pages，后端 v1.0.1（gzip ~75 KiB，免费额度） | - | 部署迁移专项完成 |
+| 2026-08-20 | **国内裸连遗留（用户明确先不解决）**：workers.dev 域名在国内被墙，需梯子才能访问后端；备选方案 EdgeOne 免费版（含大陆节点，需已备案域名 + 腾讯云注册/兑换码）或前后端绑自定义域名 | - | 不影响已上线功能；解决时需用户提供域名 |
 
 ---
 
