@@ -1,26 +1,24 @@
-"""筛查管理接口 handler。"""
+"""筛查管理接口 handler（async）。"""
 from app.core.responses import success_response, paginated_response
 from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
 from app.services import screening_service
 
 
-def list_questionnaires(ctx: RequestContext):
-    return success_response(data=screening_service.get_all_questionnaires())
+async def list_questionnaires(ctx: RequestContext):
+    return success_response(data=await screening_service.get_all_questionnaires())
 
 
-def create_questionnaire(ctx: RequestContext):
-    q = screening_service.create_questionnaire(ctx.body)
+async def create_questionnaire(ctx: RequestContext):
+    q = await screening_service.create_questionnaire(ctx.body)
     return success_response(data=q)
 
 
-def list_screenings(ctx: RequestContext):
+async def list_screenings(ctx: RequestContext):
     q = ctx.query_params
-    page = int(q.get("page", 1) or 1)
-    page_size = int(q.get("page_size", 10) or 10)
-    page = max(1, page)
-    page_size = min(max(1, page_size), 100)
-    result = screening_service.get_screenings(
+    page = max(1, int(q.get("page", 1) or 1))
+    page_size = min(max(1, int(q.get("page_size", 10) or 10)), 100)
+    result = await screening_service.get_screenings(
         page=page,
         page_size=page_size,
         status=q.get("status") or None,
@@ -32,34 +30,34 @@ def list_screenings(ctx: RequestContext):
                               page=page, page_size=page_size)
 
 
-def create_screening(ctx: RequestContext):
-    row = screening_service.create_screening(ctx.body)
+async def create_screening(ctx: RequestContext):
+    row = await screening_service.create_screening(ctx.body)
     return success_response(data=row)
 
 
-def get_screening(ctx: RequestContext, screening_id: int):
-    row = screening_service.get_screening_by_id(screening_id)
+async def get_screening(ctx: RequestContext, screening_id: int):
+    row = await screening_service.get_screening_by_id(screening_id)
     if not row:
         raise HttpError(404, "筛查记录不存在")
     return success_response(data=row)
 
 
-def update_screening(ctx: RequestContext, screening_id: int):
-    row = screening_service.update_screening(screening_id, ctx.body)
+async def update_screening(ctx: RequestContext, screening_id: int):
+    row = await screening_service.update_screening(screening_id, ctx.body)
     if not row:
         raise HttpError(404, "筛查记录不存在")
     return success_response(data=row)
 
 
-def delete_screening(ctx: RequestContext, screening_id: int):
-    if not screening_service.delete_screening(screening_id):
+async def delete_screening(ctx: RequestContext, screening_id: int):
+    if not await screening_service.delete_screening(screening_id):
         raise HttpError(404, "筛查记录不存在")
     return success_response(message="删除成功")
 
 
-def complete_screening(ctx: RequestContext, screening_id: int):
+async def complete_screening(ctx: RequestContext, screening_id: int):
     score = int(ctx.query_params.get("score", 0) or 0)
-    row = screening_service.complete_screening(screening_id, score)
+    row = await screening_service.complete_screening(screening_id, score)
     if not row:
         raise HttpError(404, "筛查记录不存在")
     return success_response(data=row)

@@ -61,12 +61,11 @@ class ApiHandler(BaseHTTPRequestHandler):
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8000) -> None:
-    # 启动前初始化数据库（幂等）
-    from app.db import database as db
-    from app.db.database import init_db
+    # 启动前初始化数据库（幂等，本地同步建表）
+    from app.db.database import init_db_sync
     import os
     os.makedirs("uploads", exist_ok=True)
-    init_db()
+    init_db_sync()
     httpd = ThreadingHTTPServer((host, port), ApiHandler)
     print(f"轻量后端已启动: http://{host}:{port}")
     try:

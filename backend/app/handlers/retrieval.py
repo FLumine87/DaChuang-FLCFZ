@@ -45,7 +45,7 @@ async def analyze(ctx: RequestContext):
 
 
 async def get_report(ctx: RequestContext, screening_id: int):
-    screening = screening_service.get_screening_by_id(screening_id)
+    screening = await screening_service.get_screening_by_id(screening_id)
     if not screening:
         return success_response(data=None, message="筛查记录不存在")
     rag_engine = get_rag_engine()

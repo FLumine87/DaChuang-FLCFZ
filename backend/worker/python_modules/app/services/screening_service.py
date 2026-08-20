@@ -1,34 +1,28 @@
-"""筛查业务服务（原生 SQL，替代 SQLAlchemy ORM）。"""
-from datetime import datetime, timedelta
+"""筛查业务服务（原生 SQL，async；Worker 下 await D1，本地走 sqlite3）。"""
+from datetime import datetime
 from typing import Optional
 import uuid
 
 from app.db import database as db
 
 
-def generate_screening_id() -> str:
-    return f"SCR-{uuid.uuid4().hex[:6].upper()}"
+async def get_all_questionnaires() -> list:
+    return await db.query_a("SELECT * FROM questionnaires WHERE is_active = 1 ORDER BY id")
 
 
-def get_all_questionnaires() -> list:
-    return db.query(
-        "SELECT * FROM questionnaires WHERE is_active = 1 ORDER BY id"
-    )
-
-
-def create_questionnaire(data: dict) -> dict:
-    row_id = db.execute(
+async def create_questionnaire(data: dict) -> dict:
+    row_id = await db.execute_a(
         "INSERT INTO questionnaires (code, name, description, max_score, questions, scoring_rules, is_active) "
         "VALUES (?, ?, ?, ?, ?, ?, 1)",
         (data.get("code"), data.get("name"), data.get("description"),
          data.get("max_score", 0), data.get("questions"), data.get("scoring_rules")),
     )
-    return db.query_one("SELECT * FROM questionnaires WHERE id = ?", (row_id,))
+    return await db.query_one_a("SELECT * FROM questionnaires WHERE id = ?", (row_id,))
 
 
-def get_screenings(page: int = 1, page_size: int = 10, status: Optional[str] = None,
-                   alert_level: Optional[str] = None, questionnaire_id: Optional[int] = None,
-                   keyword: Optional[str] = None) -> dict:
+async def get_screenings(page: int = 1, page_size: int = 10, status: Optional[str] = None,
+                         alert_level: Optional[str] = None, questionnaire_id: Optional[int] = None,
+                         keyword: Optional[str] = None) -> dict:
     where, params = [], []
     if status:
         where.append("s.status = ?")
@@ -50,24 +44,18 @@ def get_screenings(page: int = 1, page_size: int = 10, status: Optional[str] = N
         "LEFT JOIN questionnaires q ON s.questionnaire_id = q.id "
         "LEFT JOIN users u ON s.counselor_id = u.id"
     )
-    total = db.query_one(
-        "SELECT COUNT(*) AS c FROM screenings s" + where_sql, params
-    )["c"]
+    total = (await db.query_one_a(
+        "SELECT COUNT(*) AS c FROM screenings s" + where_sql, params))["c"]
 
     offset = (page - 1) * page_size
-    rows = db.query(
+    rows = await db.query_a(
         base + where_sql + " ORDER BY s.created_at DESC LIMIT ? OFFSET ?",
         params + [page_size, offset],
     )
-    items = []
-    for r in rows:
-        items.append(_screening_to_dict(r))
-    return {"items": items, "total": total}
+    return {"items": [_screening_to_dict(r) for r in rows], "total": total}
 
 
 def _screening_to_dict(r: dict) -> dict:
-    def fmt(v):
-        return v.strftime("%Y-%m-%d") if hasattr(v, "strftime") and v else (v or None)
     return {
         "id": r.get("id"),
         "screening_id": r.get("screening_id"),
@@ -79,25 +67,25 @@ def _screening_to_dict(r: dict) -> dict:
         "max_score": r.get("max_score"),
         "status": r.get("status"),
         "alert_level": r.get("alert_level"),
-        "screening_date": fmt(r.get("screening_date")),
+        "screening_date": r.get("screening_date"),
         "created_at": r.get("created_at"),
         "counselor_name": r.get("counselor_name"),
     }
 
 
-def get_screening_by_id(screening_id: int) -> Optional[dict]:
-    return db.query_one(
+async def get_screening_by_id(screening_id: int) -> Optional[dict]:
+    return await db.query_one_a(
         "SELECT s.*, q.name AS questionnaire_name FROM screenings s "
         "LEFT JOIN questionnaires q ON s.questionnaire_id = q.id WHERE s.id = ?",
         (screening_id,),
     )
 
 
-def create_screening(data: dict) -> dict:
-    screening_id = generate_screening_id()
-    q = db.query_one("SELECT * FROM questionnaires WHERE id = ?", (data.get("questionnaire_id"),))
+async def create_screening(data: dict) -> dict:
+    screening_id = f"SCR-{uuid.uuid4().hex[:6].upper()}"
+    q = await db.query_one_a("SELECT * FROM questionnaires WHERE id = ?", (data.get("questionnaire_id"),))
     max_score = q["max_score"] if q else data.get("max_score", 100)
-    row_id = db.execute(
+    row_id = await db.execute_a(
         "INSERT INTO screenings (screening_id, name, age, gender, department, phone, "
         "questionnaire_id, score, max_score, answers, status, alert_level, counselor_id, notes, screening_date) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -110,20 +98,20 @@ def create_screening(data: dict) -> dict:
             data.get("screening_date") or datetime.now(),
         ),
     )
-    row = db.query_one("SELECT * FROM screenings WHERE id = ?", (row_id,))
+    row = await db.query_one_a("SELECT * FROM screenings WHERE id = ?", (row_id,))
     # 方案 1：新建筛查后增量写入哈希索引（Worker 下引擎为 Mock，幂等无副作用）
-    _index_into_hashing({
+    await _index_into_hashing({
         "id": f"scr-{row['id']}",
         "summary": f"{row['name']}。{row['answers'] or ''} {row['notes'] or ''}",
         "alert_level": row["alert_level"],
         "modality": "text",
-        "date": row["created_at"].date().isoformat() if row["created_at"] else "",
+        "date": str(row["created_at"])[:10] if row["created_at"] else "",
     })
     return row
 
 
-def update_screening(screening_id: int, data: dict) -> Optional[dict]:
-    row = get_screening_by_id(screening_id)
+async def update_screening(screening_id: int, data: dict) -> Optional[dict]:
+    row = await get_screening_by_id(screening_id)
     if not row:
         return None
     allowed = ("name", "age", "gender", "department", "phone", "score", "max_score",
@@ -135,46 +123,45 @@ def update_screening(screening_id: int, data: dict) -> Optional[dict]:
             params.append(data[k])
     if sets:
         params.append(screening_id)
-        db.execute(
+        await db.execute_a(
             "UPDATE screenings SET " + ", ".join(sets) + ", updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             params,
         )
-    return get_screening_by_id(screening_id)
+    return await get_screening_by_id(screening_id)
 
 
-def delete_screening(screening_id: int) -> bool:
-    row = get_screening_by_id(screening_id)
+async def delete_screening(screening_id: int) -> bool:
+    row = await get_screening_by_id(screening_id)
     if not row:
         return False
-    db.execute("DELETE FROM screenings WHERE id = ?", (screening_id,))
+    await db.execute_a("DELETE FROM screenings WHERE id = ?", (screening_id,))
     return True
 
 
-def complete_screening(screening_id: int, score: int) -> Optional[dict]:
-    row = get_screening_by_id(screening_id)
+async def complete_screening(screening_id: int, score: int) -> Optional[dict]:
+    row = await get_screening_by_id(screening_id)
     if not row:
         return None
-    alert_level = _calculate_alert_level(row["questionnaire_id"], score)
-    db.execute(
+    alert_level = await _calculate_alert_level(row["questionnaire_id"], score)
+    await db.execute_a(
         "UPDATE screenings SET score = ?, status = 'completed', alert_level = ?, "
         "screening_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (score, alert_level, datetime.now(), screening_id),
     )
-    row = get_screening_by_id(screening_id)
-    _create_alert_if_needed(row)
-    # 方案 1：完成筛查（预警级别可能变化）后更新索引
-    _index_into_hashing({
+    row = await get_screening_by_id(screening_id)
+    await _create_alert_if_needed(row)
+    await _index_into_hashing({
         "id": f"scr-{row['id']}",
         "summary": f"{row['name']}。{row['answers'] or ''} {row['notes'] or ''}",
         "alert_level": row["alert_level"],
         "modality": "text",
-        "date": row["created_at"].date().isoformat() if row["created_at"] else "",
+        "date": str(row["created_at"])[:10] if row["created_at"] else "",
     })
     return row
 
 
-def _calculate_alert_level(questionnaire_id: int, score: int) -> str:
-    rules = db.query(
+async def _calculate_alert_level(questionnaire_id: int, score: int) -> str:
+    rules = await db.query_a(
         "SELECT * FROM alert_rules WHERE questionnaire_id = ? AND is_active = 1 "
         "ORDER BY priority DESC",
         (questionnaire_id,),
@@ -193,14 +180,12 @@ def _calculate_alert_level(questionnaire_id: int, score: int) -> str:
     return "green"
 
 
-def _create_alert_if_needed(screening: dict) -> None:
+async def _create_alert_if_needed(screening: dict) -> None:
     if screening.get("alert_level") not in ("orange", "red"):
         return
     alert_id = f"ALT-{uuid.uuid4().hex[:6].upper()}"
-    trigger = (
-        f"{screening.get('questionnaire_name') or '量表'} 得分 {screening.get('score')}"
-    )
-    alert_row_id = db.execute(
+    trigger = f"{screening.get('questionnaire_name') or '量表'} 得分 {screening.get('score')}"
+    alert_row_id = await db.execute_a(
         "INSERT INTO alerts (alert_id, screening_id, name, level, trigger, description, status, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)",
         (
@@ -208,19 +193,18 @@ def _create_alert_if_needed(screening: dict) -> None:
             trigger, f"筛查得分触发{screening['alert_level']}级预警",
         ),
     )
-    # 方案 1：把新触发的预警也增量写入哈希索引
-    alert = db.query_one("SELECT * FROM alerts WHERE id = ?", (alert_row_id,))
+    alert = await db.query_one_a("SELECT * FROM alerts WHERE id = ?", (alert_row_id,))
     if alert:
-        _index_into_hashing({
+        await _index_into_hashing({
             "id": f"alt-{alert['id']}",
             "summary": f"{alert['name']}。{alert['trigger'] or ''} {alert['description'] or ''}",
             "alert_level": alert["level"],
             "modality": "text",
-            "date": alert["created_at"].date().isoformat() if alert["created_at"] else "",
+            "date": str(alert["created_at"])[:10] if alert["created_at"] else "",
         })
 
 
-def _index_into_hashing(case_data: dict) -> None:
+async def _index_into_hashing(case_data: dict) -> None:
     """把一条记录增量写入哈希检索引擎（失败不影响主流程；Worker 下引擎为 Mock）。"""
     try:
         from app.engines import get_hashing_engine

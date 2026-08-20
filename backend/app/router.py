@@ -57,9 +57,9 @@ async def dispatch(method: str, path: str, query_string: str = "",
         return 200, payload
     except HttpError as e:
         return e.status_code, error_response(e.detail, code=e.code)
-    except Exception as e:  # 兜底：避免把堆栈暴露给客户端
-        print(f"[dispatch] {method} {path} error: {e}")
-        return 500, error_response("服务器内部错误", code=500)
+    except Exception as e:  # 兜底：暴露错误信息便于排查（上线后可收紧）
+        print(f"[dispatch] {method} {path} error: {type(e).__name__}: {e}")
+        return 500, error_response(f"服务器内部错误: {type(e).__name__}: {e}", code=500)
 
 
 def _match(ctx: RequestContext):

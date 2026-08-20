@@ -1,4 +1,4 @@
-"""个人端接口 handler（保留前端响应字段结构）。"""
+"""个人端接口 handler（保留前端响应字段结构，async）。"""
 from datetime import datetime, timedelta
 
 from app.core.responses import success_response
@@ -39,22 +39,27 @@ def _screening_item(s: dict, qn: str) -> dict:
     }
 
 
-def get_personal_screenings(ctx: RequestContext):
-    rows = db.query("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 100")
+async def _qn_name(questionnaire_id):
+    q = await db.query_one_a("SELECT name FROM questionnaires WHERE id = ?", (questionnaire_id,))
+    return q["name"] if q else "未知"
+
+
+async def get_personal_screenings(ctx: RequestContext):
+    rows = await db.query_a("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 100")
     items = []
     for s in rows:
-        qn = db.query_one("SELECT name FROM questionnaires WHERE id = ?", (s["questionnaire_id"],))
-        items.append(_screening_item(s, qn["name"] if qn else "未知"))
+        qn = await _qn_name(s["questionnaire_id"])
+        items.append(_screening_item(s, qn))
     return success_response(data=items)
 
 
-def submit_personal_screening(ctx: RequestContext):
+async def submit_personal_screening(ctx: RequestContext):
     data = ctx.body
-    q = db.query_one("SELECT * FROM questionnaires WHERE code = ?", (data.get("questionnaire", ""),))
+    q = await db.query_one_a("SELECT * FROM questionnaires WHERE code = ?", (data.get("questionnaire", ""),))
     if not q:
         return success_response(data={"id": "unknown", "status": "error"}, message="问卷不存在")
     alert_level = data.get("level", "green")
-    row = screening_service.create_screening({
+    row = await screening_service.create_screening({
         "name": data.get("name", "匿名用户"),
         "age": data.get("age"),
         "gender": data.get("gender"),
@@ -73,8 +78,8 @@ def submit_personal_screening(ctx: RequestContext):
     })
 
 
-def get_personal_dashboard(ctx: RequestContext):
-    questionnaires = db.query("SELECT * FROM questionnaires WHERE is_active = 1")
+async def get_personal_dashboard(ctx: RequestContext):
+    questionnaires = await db.query_a("SELECT * FROM questionnaires WHERE is_active = 1")
     questionnaire_catalog = [
         {
             "id": q["code"], "name": q["name"], "description": q["description"] or "",
@@ -84,13 +89,13 @@ def get_personal_dashboard(ctx: RequestContext):
         for q in questionnaires
     ]
 
-    screenings = db.query("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 10")
+    screenings = await db.query_a("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 10")
     screening_records = []
     for s in screenings:
-        qn = db.query_one("SELECT name FROM questionnaires WHERE id = ?", (s["questionnaire_id"],))
-        screening_records.append(_screening_item(s, qn["name"] if qn else "未知"))
+        qn = await _qn_name(s["questionnaire_id"])
+        screening_records.append(_screening_item(s, qn))
 
-    alerts = db.query("SELECT * FROM alerts ORDER BY created_at DESC, id DESC LIMIT 5")
+    alerts = await db.query_a("SELECT * FROM alerts ORDER BY created_at DESC, id DESC LIMIT 5")
     warning_events = [_warning_dict(a) for a in alerts]
 
     mood_trend = []
@@ -105,8 +110,8 @@ def get_personal_dashboard(ctx: RequestContext):
 
     dist = {}
     for level in ("green", "yellow", "orange", "red"):
-        dist[level] = db.query_one(
-            "SELECT COUNT(*) AS c FROM alerts WHERE level = ?", (level,))["c"]
+        row = await db.query_one_a("SELECT COUNT(*) AS c FROM alerts WHERE level = ?", (level,))
+        dist[level] = row["c"] if row else 0
     warning_distribution = [
         {"name": "稳定", "value": dist.get("green", 0), "color": "#22c55e"},
         {"name": "关注", "value": dist.get("yellow", 0), "color": "#f59e0b"},
@@ -120,14 +125,14 @@ def get_personal_dashboard(ctx: RequestContext):
         {"id": "PLAN-3", "title": "情绪记录", "duration": "每日", "status": "resolved"},
     ]
 
-    timeline_query = db.query("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 5")
+    timeline_query = await db.query_a("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 5")
     personal_timeline = []
     for s in timeline_query:
-        qn = db.query_one("SELECT name FROM questionnaires WHERE id = ?", (s["questionnaire_id"],))
+        qn = await _qn_name(s["questionnaire_id"])
         personal_timeline.append({
             "date": _fmt(s.get("screening_date") or s.get("created_at")),
             "type": "screening",
-            "title": f"完成{(qn['name'] if qn else '筛查')}筛查",
+            "title": f"完成{qn}筛查",
             "detail": f"得分{s.get('score')}分，风险等级:{s.get('alert_level')}",
         })
 
@@ -149,19 +154,19 @@ def get_personal_dashboard(ctx: RequestContext):
     })
 
 
-def get_personal_warnings(ctx: RequestContext):
-    alerts = db.query("SELECT * FROM alerts ORDER BY created_at DESC, id DESC LIMIT 100")
+async def get_personal_warnings(ctx: RequestContext):
+    alerts = await db.query_a("SELECT * FROM alerts ORDER BY created_at DESC, id DESC LIMIT 100")
     return success_response(data=[_warning_dict(a) for a in alerts])
 
 
-def get_personal_profile(ctx: RequestContext):
-    screenings = db.query("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 10")
+async def get_personal_profile(ctx: RequestContext):
+    screenings = await db.query_a("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 10")
     screening_records = []
     for s in screenings:
-        qn = db.query_one("SELECT name FROM questionnaires WHERE id = ?", (s["questionnaire_id"],))
-        screening_records.append(_screening_item(s, qn["name"] if qn else "未知"))
+        qn = await _qn_name(s["questionnaire_id"])
+        screening_records.append(_screening_item(s, qn))
 
-    alerts = db.query("SELECT * FROM alerts ORDER BY created_at DESC, id DESC LIMIT 10")
+    alerts = await db.query_a("SELECT * FROM alerts ORDER BY created_at DESC, id DESC LIMIT 10")
     warning_events = [_warning_dict(a) for a in alerts]
 
     user_profile = {"name": "用户", "age": 0, "gender": "", "campus": "",
@@ -172,11 +177,11 @@ def get_personal_profile(ctx: RequestContext):
 
     personal_timeline = []
     for s in screenings[:5]:
-        qn = db.query_one("SELECT name FROM questionnaires WHERE id = ?", (s["questionnaire_id"],))
+        qn = await _qn_name(s["questionnaire_id"])
         personal_timeline.append({
             "date": _fmt(s.get("screening_date") or s.get("created_at")),
             "type": "screening",
-            "title": f"完成{(qn['name'] if qn else '筛查')}筛查",
+            "title": f"完成{qn}筛查",
             "detail": f"得分{s.get('score')}分，风险等级:{s.get('alert_level')}",
         })
 

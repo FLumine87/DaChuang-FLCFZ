@@ -4,8 +4,9 @@ _workers_sdk_entropy_import_context.py,sha256=HbbF-yVEOnC0Wn8aS7pXrvnyf2dxCWAX5k
 _workers_sdk_package_patches.py,sha256=Xbsukr-l2_SBWRJ1aErQ7eoGo4sqDFFDfHWSbWE2WX4,1868
 _workers_sdk_patch_loader.pth,sha256=lTY3O3PXGtu03qdoLPGlqtSp0RIChHJCnbmceloDmLY,33
 _workers_sdk_patch_loader.py,sha256=TygDci5ljg_MAKdVliDikOv0xMWG4DdWeEnjn2gX3CQ,683
-asgi.py,sha256=9uAIf9pwGcUN4OIApCMH9visPBvlKJymTNrcgWiSHss,14584
+asgi.py,sha256=kau0kFV0ZD-PXsf8TNJXXG1cCSkLhD8o1ljjgvei9bQ,148
 workers/__init__.py,sha256=fDxbzDwspZQji5bJoKqU7y5F51i92bYIw8dHsRyPbiU,1446
+workers/asgi.py,sha256=swik_c6nUqTqk4ixgJLZJsN4HYgu5clHqgEOQY8YKu0,14875
 workers/blob.py,sha256=pggk_3X3fAZhrsP1HcSg-IepuicNPYQdSHgOMfRgSi4,4767
 workers/entrypoints.py,sha256=KAv5r0taXrqk0u1ZJ2JwoQJCqMf21bzNJZ2ZGP0uKEI,11975
 workers/fetch.py,sha256=HwLSL5O4R_Xh0NPelslju1nRgK3hCM_CdbjOGMMB33Q,1416
@@ -18,8 +19,8 @@ workers/types.py,sha256=EnqP7x-QyRz0SdinTbKWzO37SOVPfKioo2tVHmQDNJw,1468
 workers/utils.py,sha256=qeHKqjFhfKlieNa1eoqXglRJ2wNywfrkb25_Oj-lTKw,7432
 workers/workflows.py,sha256=k3n99BbaVtJAA2kWWlG3Lag_ckrqiTrHhShWMdCYA78,270
 workers/wsgi.py,sha256=r9iMp6JZE72oP6tS2Z-yWoGXAHTdcy7GyVuozhPg4EU,13041
-workers_runtime_sdk-1.6.13.dist-info/INSTALLER,sha256=5hhM4Q4mYTT9z6QB6PGpUAW81PGNFrYrdXMj4oM_6ak,2
-workers_runtime_sdk-1.6.13.dist-info/METADATA,sha256=TxBKwqvzJQIFjrU_dEGBoBbw3LqAuUxMjHNS5bGziWI,522
-workers_runtime_sdk-1.6.13.dist-info/RECORD,,
-workers_runtime_sdk-1.6.13.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
-workers_runtime_sdk-1.6.13.dist-info/WHEEL,sha256=zOwg4jB6zX2kU910N-cMawjivD6tO8NEWvE12je1bVk,87
+workers_runtime_sdk-1.6.14.dist-info/INSTALLER,sha256=5hhM4Q4mYTT9z6QB6PGpUAW81PGNFrYrdXMj4oM_6ak,2
+workers_runtime_sdk-1.6.14.dist-info/METADATA,sha256=C2NwzH439Ja4Yjgc0VdMFoxBA9eXe8MiRhji2wwxtc8,522
+workers_runtime_sdk-1.6.14.dist-info/RECORD,,
+workers_runtime_sdk-1.6.14.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+workers_runtime_sdk-1.6.14.dist-info/WHEEL,sha256=zOwg4jB6zX2kU910N-cMawjivD6tO8NEWvE12je1bVk,87

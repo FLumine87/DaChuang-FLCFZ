@@ -182,6 +182,8 @@ DaChuang-FLCFZ/
 | 2026-08-19 | **后端轻量化改造**：config 去 pydantic-settings；JWT 自实现 HS256（去 jose）；数据层 `app/db/database.py`（sqlite3 本地 / D1 Worker 双模式，内嵌建表 SQL）；services 原生 SQL；`app/handlers/` 手写路由 handler（替代 FastAPI 装饰器）；`app/router.py` 路由分发；`app/server.py` 本地标准库 HTTP 服务器 | app/config.py、app/core/*、app/db/database.py、app/services/*、app/handlers/*、app/router.py、app/server.py | 引擎（哈希/RAG/多模态）全保留；上传暂 503 占位（multipart 解析待 R2 激活后实现） |
 | 2026-08-19 | 删除旧 FastAPI 模块：app/api/、app/db/models/、app/schemas/、app/db/session.py、alembic/、旧 init_data.py 与 scripts | - | 由 handlers/database.py 替代；本地初始化改 `scripts/init_local_db.py` + `scripts/smoke_test.py` |
 | 2026-08-19 | **部署成功（免费额度）**：Worker 打包仅 backend wheel（纯标准库），Total Upload 271.77 KiB / gzip 73.63 KiB，远低于 3MB 限制；部署至 https://mental-screening-api.787249795.workers.dev | backend/worker/（entry.py 手动路由、pyproject 仅 wheel 依赖） | 本地冒烟测试通过（登录/鉴权/401/检索/个人端）；云端接口待浏览器验证 |
+| 2026-08-19 | **云端登录/注册超时修复**：Python Worker 的 D1 binding 是异步 API（官方示例 `await env.DB.prepare(...).run()`），原实现未 await 导致请求挂起。数据层新增 async 版（query_a/query_one_a/execute_a/init_db），services 与 handlers 全链路 async 化 | app/db/database.py、app/services/*、app/handlers/*、worker/src/entry.py | 本地 sqlite3 同步路径保留（引擎播种/脚本用）；重新部署 Version b1fffce5 |
+| 2026-08-19 | 前端修复：VITE_API_BASE_URL 写死 worker 地址 + workflow 默认值回退（避免空变量覆盖）；VITE_BASE_PATH=/DaChuang-FLCFZ/ 固定（子路径部署资源加载） | frontend/.env.production、.github/workflows/deploy-frontend.yml | 登录/注册请求已正确发往 workers.dev |
 
 ---
 
