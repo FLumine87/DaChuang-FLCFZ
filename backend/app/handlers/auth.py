@@ -38,8 +38,8 @@ async def register(ctx: RequestContext):
     if await db.query_one_a("SELECT id FROM users WHERE username = ?", (username,)):
         raise HttpError(400, "用户名已存在")
     row_id = await db.execute_a(
-        "INSERT INTO users (username, password_hash, name, role, department, phone, email) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO users (username, password_hash, name, role, department, phone, email, is_active) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
         (
             username, get_password_hash(password), data.get("name") or username,
             data.get("role", "user"), data.get("department"), data.get("phone"),

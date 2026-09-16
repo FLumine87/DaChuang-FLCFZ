@@ -17,7 +17,7 @@ async def search(ctx: RequestContext):
 
 async def analyze(ctx: RequestContext):
     data = ctx.body
-    screening = screening_service.get_screening_by_id(data.get("screening_id"))
+    screening = await screening_service.get_screening_by_id(data.get("screening_id"))
     if not screening:
         return success_response(data=None, message="筛查记录不存在")
 
