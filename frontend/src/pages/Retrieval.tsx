@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Search, FileText, Mic, Image, Sparkles, ArrowRight, Hash, Loader2 } from 'lucide-react';
 import { search } from '../services/mockApi';
 import { userProfile } from '../data/mockData';
-import type { RetrievalResult } from '../data/mockData';
+import type { RetrievalResult, RetrievalIndexInfo } from '../data/mockData';
 import AlertBadge from '../components/AlertBadge';
 
 const modalityIcons = {
@@ -28,11 +28,13 @@ interface RagReport {
 
 export default function Retrieval() {
   const [query, setQuery] = useState('');
+  const [scope, setScope] = useState<'all' | 'text' | 'audio' | 'image'>('all');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<RetrievalResult[] | null>(null);
   const [report, setReport] = useState<RagReport | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [indexInfo, setIndexInfo] = useState<RetrievalIndexInfo | null>(null);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -41,10 +43,12 @@ export default function Retrieval() {
     setReport(null);
     setShowReport(false);
     setError(null);
+    setIndexInfo(null);
     try {
-      const res = await search(query);
+      const res = await search(query, scope === 'all' ? undefined : scope);
       setResults((res.results ?? []) as RetrievalResult[]);
       setReport((res.report ?? null) as RagReport | null);
+      setIndexInfo((res.index ?? null) as RetrievalIndexInfo | null);
     } catch (err) {
       setError((err as Error).message || '检索失败，请稍后重试');
     } finally {
@@ -74,10 +78,18 @@ export default function Retrieval() {
               className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
-          <button className="px-3 py-2.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 cursor-pointer" title="上传语音">
+          <button
+            disabled
+            title="语音检索待接入真实音频特征（当前语料为文本形态）"
+            className="px-3 py-2.5 border border-slate-200 rounded-lg text-slate-300 cursor-not-allowed"
+          >
             <Mic className="w-4 h-4" />
           </button>
-          <button className="px-3 py-2.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 cursor-pointer" title="上传图像">
+          <button
+            disabled
+            title="图像检索待接入真实图像特征（当前语料为文本形态）"
+            className="px-3 py-2.5 border border-slate-200 rounded-lg text-slate-300 cursor-not-allowed"
+          >
             <Image className="w-4 h-4" />
           </button>
           <button
@@ -88,6 +100,31 @@ export default function Retrieval() {
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             {loading ? '检索中...' : '开始检索'}
           </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-slate-100">
+          <span className="text-xs text-slate-400">检索范围</span>
+          {([
+            ['all', '全部模态'],
+            ['text', '仅文本'],
+            ['audio', '仅语音线索'],
+            ['image', '仅图像线索'],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setScope(value)}
+              className={`px-3 py-1 rounded-full text-xs border transition-colors cursor-pointer ${
+                scope === value
+                  ? 'bg-primary-50 border-primary-200 text-primary-600 font-medium'
+                  : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="text-xs text-slate-400 ml-auto">
+            选择「仅图像线索」可用一段文字描述去检索表情 / 绘画线索（跨模态检索）
+          </span>
         </div>
       </div>
 
@@ -105,9 +142,20 @@ export default function Retrieval() {
         <>
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-800">
-                检索结果 <span className="text-sm font-normal text-slate-400">（找到 {results.length} 个高相似模式）</span>
-              </h3>
+              <div>
+                <h3 className="font-semibold text-slate-800">
+                  检索结果 <span className="text-sm font-normal text-slate-400">（找到 {results.length} 个高相似模式）</span>
+                </h3>
+                {indexInfo && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    查询码 <span className="font-mono">{indexInfo.query_code_hex?.slice(0, 8)}…</span>
+                    {' · '}命中主题 {indexInfo.query_themes?.join('、') || '—'}
+                    {' · '}候选 {indexInfo.candidates}/{indexInfo.index_size}
+                    {' · '}探测桶 {indexInfo.keys_probed}
+                    {' · '}{indexInfo.scoring === 'asymmetric' ? '非对称距离' : '汉明距离'}排序
+                  </p>
+                )}
+              </div>
               <button
                 onClick={() => setShowReport((v) => !v)}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer"
@@ -128,10 +176,15 @@ export default function Retrieval() {
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-slate-800">{result.id}</span>
+                            <span className="text-sm font-medium text-slate-800">{result.recordId ?? result.id}</span>
                             <span className="text-xs px-2 py-0.5 bg-slate-100 rounded text-slate-500">
-                              {modalityLabel}
+                              {result.modalityLabel ?? modalityLabel}
                             </span>
+                            {result.crossModal && (
+                              <span className="text-xs px-2 py-0.5 bg-primary-50 text-primary-600 rounded">
+                                跨模态命中
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-slate-400 mt-0.5">{result.date}</p>
                         </div>
@@ -154,14 +207,44 @@ export default function Retrieval() {
                         </span>
                       ))}
                     </div>
-                    <div className="mt-3 flex items-center gap-2">
-                      <span className="text-xs text-slate-400">哈希距离:</span>
-                      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-primary-500 to-primary-300 rounded-full"
-                          style={{ width: `${result.similarity * 100}%` }}
-                        />
-                      </div>
+                    <div className="mt-3 space-y-2">
+                      {(result.explain?.shared_themes?.length ?? 0) > 0 && (
+                        <p className="text-xs text-slate-500">
+                          为什么相似：共同命中主题{' '}
+                          <span className="font-medium text-primary-600">
+                            {result.explain!.shared_themes!.join('、')}
+                          </span>
+                        </p>
+                      )}
+                      {result.explain && (
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                          <span>
+                            汉明距离{' '}
+                            <span className="font-mono text-slate-500">
+                              {result.explain.hamming_distance}/{64}
+                            </span>
+                          </span>
+                          {typeof result.explain.asymmetric_score === 'number' && (
+                            <span>
+                              非对称得分{' '}
+                              <span className="font-mono text-slate-500">
+                                {result.explain.asymmetric_score.toFixed(3)}
+                              </span>
+                            </span>
+                          )}
+                          {result.explain.code_hex && (
+                            <span>
+                              哈希码{' '}
+                              <span className="font-mono text-slate-500">
+                                {result.explain.code_hex.slice(0, 8)}…
+                              </span>
+                            </span>
+                          )}
+                          {typeof result.explain.window === 'number' && (
+                            <span>时间窗 {result.explain.window}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

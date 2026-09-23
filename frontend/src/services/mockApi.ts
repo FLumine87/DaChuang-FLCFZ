@@ -24,6 +24,7 @@ import {
   type PersonalScreeningRecord,
   type AlertLevel,
   type RetrievalResult as PersonalRetrievalResult,
+  type RetrievalIndexInfo,
   type WarningEvent,
   type UserProfile,
   type PersonalTimelineEvent,
@@ -87,6 +88,8 @@ export interface SearchResponse<T> {
     recommendations?: string[];
   };
   query: string;
+  /** 检索过程信息：候选数、探测桶数、查询哈希码等（真实后端返回） */
+  index?: RetrievalIndexInfo;
 }
 
 export interface DashboardResponse {
@@ -252,14 +255,20 @@ export async function getCases() {
   }>('/api/personal/profile');
 }
 
-export async function search(query: string): Promise<SearchResponse<PersonalRetrievalResult>> {
+export async function search(
+  query: string,
+  modalityFilter?: 'text' | 'image' | 'audio',
+): Promise<SearchResponse<PersonalRetrievalResult>> {
   if (USE_MOCK) {
     await delay(400 + Math.random() * 400);
-    return { results: retrievalResults, report: ragReport, query };
+    const filtered = modalityFilter
+      ? retrievalResults.filter((r) => r.modality === modalityFilter)
+      : retrievalResults;
+    return { results: filtered, report: ragReport, query };
   }
   return request.post<SearchResponse<PersonalRetrievalResult>>(
     '/api/personal/search',
-    { query }
+    { query, modality_filter: modalityFilter ?? 'all' }
   );
 }
 

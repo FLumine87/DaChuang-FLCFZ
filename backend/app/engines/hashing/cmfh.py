@@ -30,7 +30,8 @@ class OnlineSupervisedCMFH:
         self.lambda_s = lambda_s
         self.modalities = []
         self.W = {}          # modality -> (d_m × K) 投影矩阵
-        self.B = None        # 训练样本二值码 (n×K)
+        self.B = None        # 训练样本符号码 (n×K)，取值 ±1
+        self.continuous = None   # 训练样本符号化之前的连续码 (n×K)
         self.trained = False
 
     def fit(self, features, similarity):
@@ -59,11 +60,14 @@ class OnlineSupervisedCMFH:
             for j in range(n):
                 G[i][j] = G[i][j] / g_mean * s_mean + self.lambda_s * similarity[i][j]
 
-        # 前 K 大特征向量 -> 连续公共表示 -> 二值化
+        # 前 K 大特征向量 -> 连续公共表示 -> 符号码（±1 约定）
+        # 注意：这里用 ±1 而非 {0,1}，与非对称距离打分 u·s 的符号约定保持一致；
+        # 写入索引时再映射成 0/1 位串（bit=1 对应 +1），两者完全等价。
         eig, vecs = linalg.symmetric_eig_largest(G, self.K)
         Uraw = [[vecs[k][i] for k in range(self.K)] for i in range(n)]   # n×K
-        B = [[1 if Uraw[i][k] >= 0 else 0 for k in range(self.K)]
+        B = [[1 if Uraw[i][k] >= 0 else -1 for k in range(self.K)]
              for i in range(n)]
+        self.continuous = Uraw     # 训练样本的连续码（诊断/非对称检索可复用）
 
         # 闭式求各模态投影 W_m
         BtB = linalg.matmul(linalg.transpose(B), B)
@@ -85,8 +89,17 @@ class OnlineSupervisedCMFH:
         样本外编码。feature_by_modality: dict[modality] -> vector(已/未归一化均可)
         返回长度 K 的 0/1 二值码。
         """
+        return [1 if v >= 0 else 0 for v in self.encode_continuous(feature_by_modality)]
+
+    def encode_continuous(self, feature_by_modality):
+        """样本外编码的**连续形式**（符号化之前的实数向量），长度 K。
+
+        用于非对称距离检索：查询端保留这个连续向量，库端用 ±1 二值码，
+        得分 = u · s（s = 1-2b）。相比"两边都二值化再比汉明"，
+        非对称距离保留了投影幅值信息，在低位长/噪声位较多时明显更准。
+        """
         if not self.trained:
-            return [0] * self.K
+            return [0.0] * self.K
         acc = [0.0] * self.K
         cnt = 0
         for m, vec in feature_by_modality.items():
@@ -98,5 +111,5 @@ class OnlineSupervisedCMFH:
                 acc[k] += s[k]
             cnt += 1
         if cnt == 0:
-            return [0] * self.K
-        return [1 if acc[k] >= 0 else 0 for k in range(self.K)]
+            return [0.0] * self.K
+        return acc

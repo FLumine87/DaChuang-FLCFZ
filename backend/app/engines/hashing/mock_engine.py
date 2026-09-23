@@ -83,22 +83,27 @@ class MockHashingEngine(HashingEngineInterface):
         self, 
         query: str, 
         modality: str = "text",
-        top_k: int = 5
+        top_k: int = 5,
+        modality_filter: str = None,
+        exclude_ids: list = None,
     ) -> List[Dict]:
         random.seed(hash(query) % (2**32))
-        
+
         cases = self.MOCK_CASES.copy()
         random.shuffle(cases)
-        
+        if modality_filter:
+            filtered = [c for c in cases if self._mock_modality(c) == modality_filter]
+            cases = filtered or cases
+
         results = []
         for i, case in enumerate(cases[:top_k]):
             base_similarity = 0.95 - (i * 0.05)
             similarity = base_similarity + random.uniform(-0.03, 0.03)
             similarity = max(0.5, min(0.99, similarity))
-            
+
             days_ago = random.randint(30, 180)
             date = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
-            
+
             results.append({
                 "id": case["id"],
                 "similarity": round(similarity, 2),
@@ -110,6 +115,52 @@ class MockHashingEngine(HashingEngineInterface):
             })
         
         return results
-    
+
+    @staticmethod
+    def _mock_modality(case: Dict) -> str:
+        """按案例序号轮转分配模态，使 Mock 结果也覆盖文本/语音/图像三类。"""
+        idx = int(str(case["id"]).split("-")[-1]) if str(case["id"]).split("-")[-1].isdigit() else 0
+        return ("text", "image", "audio")[idx % 3]
+
+    async def search_with_info(self, query: str, modality: str = "text", top_k: int = 5,
+                               modality_filter: str = None, exclude_ids: list = None):
+        """与真实引擎保持同一签名：返回 (结果列表, 检索过程信息)。"""
+        results = await self.search(query, modality=modality, top_k=top_k,
+                                   modality_filter=modality_filter, exclude_ids=exclude_ids)
+        info = {
+            "candidates": len(self.MOCK_CASES),
+            "index_size": len(self.MOCK_CASES),
+            "keys_probed": 0,
+            "scanned_all": True,
+            "scoring": "mock",
+            "query_code_hex": self.encode_sync(query),
+            "query_themes": [],
+            "query_modality": modality,
+            "modality_filter": modality_filter,
+            "mode": "mock",
+        }
+        return results, info
+
+    def encode_sync(self, data) -> str:
+        random.seed(hash(str(data)) % (2**32))
+        bits = "".join(str(random.randint(0, 1)) for _ in range(64))
+        return format(int(bits, 2), "016x")
+
+    def stats(self) -> Dict:
+        return {
+            "source": "mock",
+            "units": len(self.MOCK_CASES),
+            "records": len(self.MOCK_CASES),
+            "code_length": 64,
+            "trained": False,
+            "modalities": {"text": 3, "image": 3, "audio": 3},
+            "windows": {0: len(self.MOCK_CASES)},
+            "tables": [{"window": 0, "size": len(self.MOCK_CASES), "sigma": 0.0,
+                        "rho": 0.0, "active": True, "trust": 0.0}],
+            "num_bands": 8,
+            "guaranteed_radius": 16,
+            "trained_modalities": [],
+        }
+
     async def index_case(self, case_data: Dict) -> bool:
         return True
