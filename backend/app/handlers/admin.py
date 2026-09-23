@@ -5,6 +5,7 @@ from app.core.responses import success_response
 from app.core.auth import RequestContext
 from app.db import database as db
 from app.engines import get_hashing_engine, get_rag_engine
+from app.handlers.retrieval import to_frontend_hit
 
 
 def _fmt(v, fmt="%Y-%m-%d"):
@@ -184,10 +185,20 @@ async def get_admin_cases(ctx: RequestContext):
 
 
 async def admin_search(ctx: RequestContext):
-    query = ctx.body.get("query", "")
+    data = ctx.body or {}
+    query = data.get("query", "")
+    mf = data.get("modality_filter")
+    if mf not in ("text", "image", "audio"):
+        mf = None
+    try:
+        top_k = int(data.get("top_k") or 10)
+    except (TypeError, ValueError):
+        top_k = 10
     engine = get_hashing_engine()
-    raw_results = await engine.search(query=query, modality="text", top_k=10)
-    results = [{**r, "alertLevel": r.get("alert_level", "green")} for r in raw_results]
+    raw_results, info = await engine.search_with_info(
+        query=query, modality="text", top_k=max(1, min(50, top_k)), modality_filter=mf,
+    )
+    results = [to_frontend_hit(r) for r in raw_results]
 
     rag_engine = get_rag_engine()
     report = await rag_engine.generate_report({
@@ -197,7 +208,9 @@ async def admin_search(ctx: RequestContext):
     if isinstance(report, dict) and "risk_level" in report:
         report["riskLevel"] = report.pop("risk_level")
 
-    return success_response(data={"results": results, "report": report, "query": query})
+    return success_response(data={
+        "results": results, "report": report, "query": query, "index": info,
+    })
 
 
 async def get_admin_data_collection(ctx: RequestContext):

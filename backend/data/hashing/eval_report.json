@@ -1,0 +1,36 @@
+{
+  "settings": {
+    "lambda_s": 0.6,
+    "code_length": 64,
+    "band_bits": 8
+  },
+  "note": "合成语料上的工程链路验证，非临床/论文性能结论",
+  "result": {
+    "queries": 80,
+    "corpus_records": 300,
+    "T1_cross_modal_same_record": {
+      "hit@1": 0.0,
+      "recall@5": 0.0,
+      "mrr": 0.0168
+    },
+    "T2_theme_similar_records": {
+      "mAP@10": 0.8435,
+      "P@5": 0.9275,
+      "Recall@50": 0.4669,
+      "nDCG@10": 0.8421,
+      "mAP@10_by_target_modality": {
+        "text": 0.833,
+        "image": 0.5028,
+        "audio": 0.5192
+      }
+    },
+    "efficiency": {
+      "latency_mean_ms": 4.52,
+      "latency_p95_ms": 4.56,
+      "candidate_ratio": 0.7337,
+      "fallback_rate": 0.0
+    },
+    "random_baseline_mAP@10": 0.1964,
+    "lift_vs_random": 4.29
+  }
+}

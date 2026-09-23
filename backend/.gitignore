@@ -9,11 +9,18 @@ ENV/
 env/
 .venv/
 
+# 后端 wheel 构建产物（由 uv build --wheel 生成，不入库）
+dist/
+
 # 数据库文件 - 默认全部忽略（工作库含真实生成数据，不上传）
-# 但放行随项目发布的检索种子库（仅含 500 条合成检索语料，无账号/敏感数据）
+# 但放行随项目发布的检索语料（仅含合成数据，无账号/敏感数据）
 *.db
 *.db-journal
 !data/retrieval_seed.db
+!data/hashing/corpus.db
+
+# 哈希引擎运行状态：可由 corpus.db 重建，且体积较大，不入库
+data/hashing/hashing_state.json
 
 # 上传文件
 uploads/

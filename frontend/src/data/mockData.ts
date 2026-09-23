@@ -43,6 +43,18 @@ export interface WarningEvent {
   updatedAt: string;
 }
 
+// 检索结果的可解释信息（来自后端「动态跨模态哈希检索」引擎）
+export interface RetrievalExplain {
+  hamming_distance?: number;      // 汉明距离（64 位码）
+  hamming_similarity?: number;    // 对称汉明相似度
+  asymmetric_score?: number | null; // 非对称距离得分（查询端连续向量 · ±1 码）
+  code_hex?: string;              // 该记录的哈希码
+  query_code_hex?: string;        // 查询的哈希码
+  window?: number;                // 所属时间窗（动态多表）
+  shared_themes?: string[];       // 与查询共同命中的主题 = "为什么相似"
+  source?: string;                // 索引数据来源：corpus / db / demo
+}
+
 export interface RetrievalResult {
   id: string;
   similarity: number;
@@ -51,6 +63,24 @@ export interface RetrievalResult {
   tags: string[];
   alertLevel: AlertLevel;
   date: string;
+  recordId?: string;
+  modalityLabel?: string;
+  crossModal?: boolean;
+  explain?: RetrievalExplain;
+}
+
+// 检索过程信息（候选数 / 探测桶数 / 查询码），用于展示哈希命中情况
+export interface RetrievalIndexInfo {
+  candidates?: number;
+  index_size?: number;
+  keys_probed?: number;
+  scanned_all?: boolean;
+  scoring?: string;
+  query_code_hex?: string;
+  query_themes?: string[];
+  probed_windows?: number[];
+  modality_filter?: string | null;
+  mode?: string;
 }
 
 export interface MoodTrendPoint {

@@ -48,11 +48,23 @@ class Settings:
     # 动态跨模态哈希引擎配置
     HASHING_USE_MOCK: bool = False
     HASHING_DATA_DIR: str = "./data/hashing"
-    HASHING_CODE_LENGTH: int = 32
-    HASHING_LAMBDA_S: float = 0.6
-    HASHING_NUM_TABLES: int = 4
-    HASHING_PROBE_RADIUS: int = 2
-    HASHING_TRAIN_MAX: int = 150
+    HASHING_CODE_LENGTH: int = 64          # 哈希码位长
+    HASHING_LAMBDA_S: float = 0.6          # 语义监督项权重
+    HASHING_BAND_BITS: int = 8             # 位带宽度（K=64 → 8 张位带表）
+    HASHING_PROBE_BITS: int = 2            # 位带内可翻转比特数：保证半径 = 8×2 = 16 位内不漏召回
+    HASHING_TABLE_RHO_MIN: float = 0.10    # 时间窗表"语义一致性"下限，低于则不再参与探测
+    HASHING_TABLE_SIGMA_MIN: float = 0.02  # 时间窗表"编码信息量"下限
+    HASHING_WINDOW_DAYS: int = 122         # 时间窗长度（约 4 个月）
+    HASHING_EPOCH: str = "2025-08-01"      # 时间窗起算日
+    HASHING_TRAIN_MAX: int = 300           # 训练抽样上限（配对记录数）
+
+    # 模拟多模态语料（scripts/generate_retrieval_corpus.py 生成）
+    # 存在时优先作为检索库；缺失则回退主库业务表 / retrieval_seed.db / demo
+    HASHING_USE_CORPUS: bool = True
+    HASHING_CORPUS_DB: str = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "data", "hashing", "corpus.db",
+    )
 
     # 随项目发布的检索语料种子库（本地开发用；Worker 下检索走 Mock 降级）
     RETRIEVAL_SEED_DB: str = os.path.join(

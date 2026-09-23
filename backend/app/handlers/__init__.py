@@ -63,6 +63,7 @@ ROUTES = [
 
     # ---- 检索分析 ----
     ("POST", "/api/retrieval/search", retrieval.search, "user"),
+    ("GET", "/api/retrieval/index-stats", retrieval.index_stats, "user"),
     ("POST", "/api/retrieval/analyze", retrieval.analyze, "user"),
     ("GET", "/api/retrieval/report/{screening_id}", retrieval.get_report, "user"),
 

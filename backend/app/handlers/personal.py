@@ -6,6 +6,7 @@ from app.core.auth import RequestContext
 from app.db import database as db
 from app.services import screening_service
 from app.engines import get_hashing_engine, get_rag_engine
+from app.handlers.retrieval import to_frontend_hit
 
 
 def _fmt(v, fmt="%Y-%m-%d"):
@@ -194,10 +195,15 @@ async def get_personal_profile(ctx: RequestContext):
 
 
 async def personal_search(ctx: RequestContext):
-    query = ctx.body.get("query", "")
+    data = ctx.body or {}
+    mf = data.get("modality_filter")
+    if mf not in ("text", "image", "audio"):
+        mf = None
     engine = get_hashing_engine()
-    raw_results = await engine.search(query=query, modality="text", top_k=5)
-    results = [{**r, "alertLevel": r.get("alert_level", "green")} for r in raw_results]
+    raw_results, info = await engine.search_with_info(
+        query=data.get("query", ""), modality="text", top_k=5, modality_filter=mf,
+    )
+    results = [to_frontend_hit(r) for r in raw_results]
 
     rag_engine = get_rag_engine()
     report = await rag_engine.generate_report({
@@ -207,4 +213,6 @@ async def personal_search(ctx: RequestContext):
     if isinstance(report, dict) and "risk_level" in report:
         report["riskLevel"] = report.pop("risk_level")
 
-    return success_response(data={"results": results, "report": report, "query": query})
+    return success_response(data={
+        "results": results, "report": report, "query": data.get("query"), "index": info,
+    })
