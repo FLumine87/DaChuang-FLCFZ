@@ -212,6 +212,35 @@ def extract_themes(text):
     return found
 
 
+def theme_vector(text):
+    """主题语义向量（长度 THEME_DIM，L2 归一化），跨模态共享语义桥。
+
+    文本/图像线索/语音线索三类非重叠词汇通过 THEME_KEYWORDS 映射到同一
+    主题空间，使不同模态视图在该空间中可比较。
+    """
+    vec = [0.0] * THEME_DIM
+    if not text:
+        return vec
+    t = str(text)
+    for i, theme in enumerate(THEME_ORDER):
+        hits = sum(1 for kw in THEME_KEYWORDS[theme] if kw in t)
+        if hits:
+            vec[i] = float(hits)
+    return _normalize(vec)
+
+
+def semantic_feature(text, dim=TEXT_DIM):
+    """文本 -> TF(哈希桶) ⊕ w·主题语义向量 的复合特征，整体 L2 归一化。
+
+    输出维度 = dim + THEME_DIM（默认 256 + 14 = 270）。
+    训练 / 入库编码 / 查询三条路径必须统一走本函数，维度与语义口径才一致。
+    """
+    tv = theme_vector(text)
+    if THEME_WEIGHT != 1.0:
+        tv = [x * THEME_WEIGHT for x in tv]
+    return _normalize(text_feature(text, dim) + tv)
+
+
 def audio_feature_from_file(path):
     """真实音频特征（MFCC 均值）；失败返回 None。"""
     try:
