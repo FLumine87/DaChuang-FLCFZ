@@ -24,6 +24,8 @@ def transpose(A):
 
 def matmul(A, B):
     """矩阵乘法 A(m×k) · B(k×n) -> (m×n)。"""
+    if _NP:
+        return (np.asarray(A, dtype=np.float64) @ np.asarray(B, dtype=np.float64)).tolist()
     n = len(B[0])
     k = len(B)
     return [[sum(A[i][p] * B[p][j] for p in range(k)) for j in range(n)]
@@ -32,11 +34,17 @@ def matmul(A, B):
 
 def matvec(A, x):
     """矩阵乘向量 A(m×d) · x(d) -> (m)。"""
+    if _NP:
+        return (np.asarray(A, dtype=np.float64) @ np.asarray(x, dtype=np.float64)).tolist()
     return [sum(A[i][j] * x[j] for j in range(len(x))) for i in range(len(A))]
 
 
 def normalize_row(v):
     """L2 归一化（零向量返回零向量）。"""
+    if _NP:
+        a = np.asarray(v, dtype=np.float64)
+        s = float(np.linalg.norm(a))
+        return (a / s).tolist() if s > 0 else [0.0] * len(v)
     s = math.sqrt(sum(x * x for x in v))
     if s <= 0:
         return [0.0] * len(v)
@@ -44,7 +52,14 @@ def normalize_row(v):
 
 
 def gram(A):
-    """A(n×d) -> A A^T (n×n)，用于构造余弦相似度矩阵。"""
+    """A(n×d) -> A A^T (n×n)，用于构造余弦相似度矩阵。
+
+    n=300 配对记录时纯 Python 版需 ~2500 万次乘加（数十秒），
+    numpy 存在时走 BLAS，训练耗时从数十秒降到毫秒级。
+    """
+    if _NP and A:
+        X = np.asarray(A, dtype=np.float64)
+        return (X @ X.T).tolist()
     n = len(A)
     d = len(A[0]) if n else 0
     return [[sum(A[i][p] * A[j][p] for p in range(d)) for j in range(n)]
@@ -55,6 +70,8 @@ def mean_abs(M):
     """矩阵绝对值均值（用于平衡多模态 Gram 与监督矩阵的尺度）。"""
     if not M or not M[0]:
         return 0.0
+    if _NP:
+        return float(np.abs(np.asarray(M, dtype=np.float64)).mean())
     tot = cnt = 0
     for row in M:
         for x in row:
@@ -66,7 +83,12 @@ def mean_abs(M):
 # ------------------------- 求逆（Gauss-Jordan） -------------------------
 
 def inverse(A):
-    """K×K 矩阵求逆，部分主元 Gauss-Jordan。"""
+    """K×K 矩阵求逆，部分主元 Gauss-Jordan（numpy 存在时走 LAPACK）。"""
+    if _NP:
+        try:
+            return np.linalg.inv(np.asarray(A, dtype=np.float64)).tolist()
+        except Exception:
+            pass
     n = len(A)
     M = [list(row) + [1.0 if i == j else 0.0 for j in range(n)]
          for i, row in enumerate(A)]

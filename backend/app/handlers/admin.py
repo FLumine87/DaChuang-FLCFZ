@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 from app.core.responses import success_response
 from app.core.auth import RequestContext
 from app.db import database as db
-from app.engines import get_hashing_engine, get_rag_engine
-from app.handlers.retrieval import to_frontend_hit
+from app.engines import get_rag_engine
+from app.handlers.retrieval import perform_search, to_frontend_hit
 
 
 def _fmt(v, fmt="%Y-%m-%d"):
@@ -185,19 +185,10 @@ async def get_admin_cases(ctx: RequestContext):
 
 
 async def admin_search(ctx: RequestContext):
+    """管理端检索：与个人端共用跨模态检索链路（文本 / 图像 / 语音查询）。"""
     data = ctx.body or {}
     query = data.get("query", "")
-    mf = data.get("modality_filter")
-    if mf not in ("text", "image", "audio"):
-        mf = None
-    try:
-        top_k = int(data.get("top_k") or 10)
-    except (TypeError, ValueError):
-        top_k = 10
-    engine = get_hashing_engine()
-    raw_results, info = await engine.search_with_info(
-        query=query, modality="text", top_k=max(1, min(50, top_k)), modality_filter=mf,
-    )
+    raw_results, info, modality, mf = await perform_search(data, default_top_k=10)
     results = [to_frontend_hit(r) for r in raw_results]
 
     rag_engine = get_rag_engine()
@@ -209,7 +200,8 @@ async def admin_search(ctx: RequestContext):
         report["riskLevel"] = report.pop("risk_level")
 
     return success_response(data={
-        "results": results, "report": report, "query": query, "index": info,
+        "results": results, "report": report, "query": query,
+        "modality": modality, "modality_filter": mf, "index": info,
     })
 
 

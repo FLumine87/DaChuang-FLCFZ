@@ -255,20 +255,58 @@ export async function getCases() {
   }>('/api/personal/profile');
 }
 
+/** 检索请求参数（文本 / 图像 / 语音三种查询方式共用） */
+export interface RetrievalQuery {
+  /** 查询模态：text（默认）/ image / audio */
+  modality?: 'text' | 'image' | 'audio';
+  /** 结果范围过滤：只返回该模态的命中单元 */
+  modalityFilter?: 'text' | 'image' | 'audio';
+  /** 图像 / 语音查询的媒体内容（base64，不含 data URL 前缀） */
+  mediaBase64?: string | null;
+  /** 媒体原始文件名（仅用于推断扩展名，决定落盘格式） */
+  mediaName?: string;
+}
+
 export async function search(
   query: string,
-  modalityFilter?: 'text' | 'image' | 'audio',
+  opts: RetrievalQuery = {},
 ): Promise<SearchResponse<PersonalRetrievalResult>> {
   if (USE_MOCK) {
     await delay(400 + Math.random() * 400);
-    const filtered = modalityFilter
-      ? retrievalResults.filter((r) => r.modality === modalityFilter)
+    const filtered = opts.modalityFilter
+      ? retrievalResults.filter((r) => r.modality === opts.modalityFilter)
       : retrievalResults;
     return { results: filtered, report: ragReport, query };
   }
   return request.post<SearchResponse<PersonalRetrievalResult>>(
     '/api/personal/search',
-    { query, modality_filter: modalityFilter ?? 'all' }
+    {
+      query,
+      modality: opts.modality ?? 'text',
+      modality_filter: opts.modalityFilter ?? 'all',
+      media_base64: opts.mediaBase64 ?? null,
+      media_name: opts.mediaName ?? '',
+    }
+  );
+}
+
+/** 单元的真实媒体文件（语音可播放 / 图像原图），按需单独取用 */
+export interface RetrievalMediaPayload {
+  unit_id: string;
+  modality: 'image' | 'audio';
+  media_kind?: string | null;
+  /** data URL：语音为可直接播放的 wav，图像为原图 */
+  media: string;
+  media_meta?: Record<string, unknown> | null;
+}
+
+export async function fetchRetrievalMedia(unitId: string): Promise<RetrievalMediaPayload> {
+  if (USE_MOCK) {
+    await delay(150);
+    throw new Error('演示语料没有真实媒体文件，请连接后端（VITE_USE_MOCK=false）');
+  }
+  return request.get<RetrievalMediaPayload>(
+    `/api/retrieval/media/${encodeURIComponent(unitId)}`
   );
 }
 

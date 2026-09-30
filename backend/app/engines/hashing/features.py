@@ -103,68 +103,125 @@ THEME_KEYWORDS = {
              "眉头紧锁", "嘴角下垂", "目光下垂", "色调偏暗", "画得很小", "肩膀下垂",
              "反复涂抹", "涂抹加重",
              # 语音线索
-             "语速缓慢", "基频偏低", "句尾下沉", "较长的沉默", "语调单调", "叹气声"],
+             "语速缓慢", "基频偏低", "句尾下沉", "较长的沉默", "语调单调", "叹气声",
+             # 英文线索（真实数据集 depression_dataset.csv 的自述文本）
+             "sad", "hopeless", "depress", "no joy", "bring me joy", "unmotivated",
+             "struggle to focus", "empty", "worthless", "low mood", "feel low"],
     "焦虑": ["焦虑", "紧张", "担心", "心慌", "坐立不安", "灾难化", "担心会出事",
              "手心出汗", "不安", "烦躁", "惶恐", "心里发慌", "坐都坐不住",
              "最坏的结果", "一有动静", "心跳很快",
              "眉心上挑", "眼睑张大", "眨眼频繁", "搓动", "线条抖动", "姿势紧绷",
              "下颌用力",
-             "抢话", "音高起伏", "气息不稳", "停顿短促", "句尾上扬"],
+             "抢话", "音高起伏", "气息不稳", "停顿短促", "句尾上扬",
+             # 英文线索
+             "stress", "anxious", "anxiety", "worried", "worry", "panic",
+             "nervous", "overwhelmed", "tense", "on edge"],
     "睡眠障碍": ["失眠", "早醒", "入睡困难", "睡眠浅", "多梦", "熬夜",
                  "没精神", "嗜睡", "睡眠质量差", "彻夜难眠", "躺很久都睡不着",
                  "半夜老醒", "天没亮就醒", "睡不踏实", "一直犯困", "作息完全乱",
                  "眼下发青", "眼睑浮肿", "打哈欠", "眼神涣散", "头部低垂", "蜷缩姿态",
-                 "断续", "哈欠声", "咬字含糊", "长呼气"],
+                 "断续", "哈欠声", "咬字含糊", "长呼气",
+                 # 英文线索（刻意避开裸 "sleep"，防止命中 "good sleep" 等正向表达）
+                 "insomnia", "trouble sleeping", "trouble sleep", "cannot sleep",
+                 "can't sleep", "sleepless", "not sleep", "sleep problem",
+                 "sleep poorly", "tired all the time", "exhausted", "fatigue"],
     "社交回避": ["回避", "孤独", "不愿见人", "社恐", "疏离", "沉默",
                  "退缩", "人际交往", "怕生", "社交回避", "不想见人",
                  "在人群里不自在", "没什么话", "怕别人评价", "都推掉了",
                  "没人能理解我",
                  "回避眼神接触", "视线偏低", "身体后撤", "双臂交叉", "背对观者",
                  "几乎不笑",
-                 "单字回应", "句尾迅速收住", "不主动展开话题", "缺少互动"],
+                 "单字回应", "句尾迅速收住", "不主动展开话题", "缺少互动",
+                 # 英文线索
+                 "alone", "lonely", "loneliness", "withdraw", "isolat", "avoid people",
+                 "no one understands", "by myself"],
     "学业压力": ["挂科", "论文", "导师", "毕设", "考试", "压力大",
                  "赶due", "学业", "课业", "学业受挫", "保研", "堆着做不完",
                  "跟不上别人", "熬夜赶进度", "脑子一片空白", "催进度",
                  "紧张纹路", "看时间", "手部动作急促", "翻动纸张", "咬笔",
-                 "逻辑跳跃", "自我更正", "抢着把话说完"],
+                 "逻辑跳跃", "自我更正", "抢着把话说完",
+                 # 英文线索
+                 "exam", "deadline", "homework", "thesis", "assignment", "grade",
+                 "coursework", "study"],
     "应激创伤": ["创伤", "惊吓", "闪回", "噩梦", "受欺负", "突发事件",
                  "应激", "急性应激", "惊吓过度", "总做噩梦", "容易被吓到",
                  "还会再发生", "不敢再去", "就会害怕",
                  "惊跳", "瞳孔放大", "表情瞬间僵住", "身体僵直", "动作突然中断",
                  "揉黑", "表情木然", "护住身体",
-                 "声音发紧", "气息很浅", "突然停住", "忽快忽慢", "句子常中断"],
+                 "声音发紧", "气息很浅", "突然停住", "忽快忽慢", "句子常中断",
+                 # 英文线索
+                 "trauma", "flashback", "nightmare", "startled", "shocked", "terrified"],
     "自我认同": ["自我怀疑", "自卑", "价值感", "迷茫", "找不到自己",
                  "身份认同", "自我否定", "低自尊", "不知道自己想要什么",
                  "不如别人", "没有价值感", "否定自己", "找不到自己的位置",
                  "表情平淡", "视线发散", "肩部内收", "缺少五官", "线条很淡",
                  "占画面很小",
-                 "停在半途", "缺少重音", "较长的犹豫", "句尾含糊", "不确定的说法"],
+                 "停在半途", "缺少重音", "较长的犹豫", "句尾含糊", "不确定的说法",
+                 # 英文线索
+                 "self-doubt", "self doubt", "confidence", "identity", "purpose",
+                 "not good enough", "lost myself"],
     "家庭冲突": ["父母", "家庭", "亲子", "争吵", "离异", "家暴",
                  "父母期望", "家庭矛盾", "原生家庭", "一说话就吵",
                  "替我做决定", "喘不过气", "不想回家", "期待太重", "不欢而散",
                  "下颌收紧", "表情僵硬", "视线偏向一侧", "双手紧握", "粗重线条",
                  "肩颈僵硬",
-                 "音量抬高", "对抗语气", "控制不住"],
+                 "音量抬高", "对抗语气", "控制不住",
+                 # 英文线索
+                 "parents", "argument at home", "family conflict", "family fight",
+                 "family pressure"],
     "情感": ["失恋", "分手", "暗恋", "亲密关系", "情感困扰",
-             "单相思", "情感创伤"],
+             "单相思", "情感创伤",
+             # 英文线索
+             "breakup", "break up", "romantic", "relationship problem", "crush"],
     "人际": ["同学", "室友", "冲突", "被排挤", "孤立", "人际关系",
-             "合不来", "人际紧张", "被孤立"],
+             "合不来", "人际紧张", "被孤立",
+             # 英文线索
+             "roommate", "classmate", "interpersonal", "left out", "bullied by"],
     "适应": ["适应", "新环境", "转学", "入伍", "异地", "难以适应",
-             "环境变化", "适应不良"],
+             "环境变化", "适应不良",
+             # 英文线索
+             "adapt", "new environment", "relocat", "transition", "adjust to"],
     "网络成瘾": ["手机", "游戏", "刷视频", "网络", "沉迷", "停不下来",
                  "熬夜上网", "网瘾", "游戏成瘾", "放不下", "偷偷看手机",
                  "浑身难受", "逃避现实",
                  "视线频繁下移", "滑动屏幕", "表情单一", "颈部前倾",
                  "反应迟钝", "光斑",
-                 "语气敷衍", "内容零散", "关注手机", "句子常被打断"],
+                 "语气敷衍", "内容零散", "关注手机", "句子常被打断",
+                 # 英文线索
+                 "gaming", "screen time", "scrolling", "internet", "phone"],
     "进食困扰": ["暴食", "厌食", "体重", "身材", "进食", "催吐",
                  "暴饮暴食", "进食障碍", "吃很多东西", "特别后悔",
                  "体重掉得厉害", "很抗拒", "想办法吐掉",
                  "面部浮肿", "皮肤状态差", "磨损痕迹", "进食动作急促",
                  "体重秤", "镜子",
-                 "谈到饮食时语速突然加快", "像在掩饰", "迟疑", "迅速转移"],
+                 "谈到饮食时语速突然加快", "像在掩饰", "迟疑", "迅速转移",
+                 # 英文线索
+                 "appetite", "eating", "binge", "diet", "weight"],
     "创伤": ["童年期", "被忽视", "家暴", "霸凌", "性骚扰", "心理阴影",
-             "童年创伤", "被欺凌"],
+             "童年创伤", "被欺凌",
+             # 英文线索
+             "childhood", "abuse", "neglect", "harassment"],
+    # ---- 以下为真实数据集引入的正向 / 行为主题 ----
+    # 合成语料只有负向主题，导致 Normal 类样本主题集合为空、彼此无法互相召回；
+    # 真实数据集含 Depression_Label=Normal 的大量样本，必须有对应的正向主题。
+    "情绪稳定": ["情绪稳定", "状态平稳", "心态平和", "还好", "正常", "没什么问题",
+                 "stable", "calm", "relax", "relaxing", "fine", "okay",
+                 "balanced", "steady", "enjoying my day", "enjoy"],
+    "精力良好": ["精力充沛", "有活力", "开心", "愉快", "有动力", "精神很好",
+                 "energetic", "happy", "motivated", "cheerful", "positive",
+                 "feel good", "feel great", "productive", "refreshed",
+                 # "I completed my tasks efficiently." 是正向表达，
+                 # 不可归到"学业压力"（早期版本误放在那里，会污染 Normal 类语义）
+                 "tasks efficiently", "completed my tasks"],
+    "睡眠充足": ["睡得很好", "睡眠充足", "休息充分", "睡得香",
+                 "slept well", "well rested", "good sleep", "sleep well",
+                 "rested", "sleep quality good"],
+    "社交活跃": ["朋友", "社交活跃", "聚会", "热闹", "和家人",
+                 "with friends", "with family", "crowd", "social gathering",
+                 "party", "together with"],
+    "积极活动": ["运动", "锻炼", "散步", "户外活动", "健身",
+                 "exercise", "walking", "workout", "running", "sport",
+                 "active", "outdoor"],
 }
 
 THEME_ORDER = list(THEME_KEYWORDS.keys())
@@ -201,13 +258,17 @@ def extract_themes(text):
 
     用于：① 数据库播种时构造监督相似度；② 写路径（新建筛查/案例等）
     接线 index_case 时自动打标签；③ 检索结果里展示"为什么相似"。返回可能为空列表。
+
+    匹配**不区分大小写**：真实数据集的文本与情境字段是英文
+    （"I feel sad and hopeless." / "Alone" / "Exercise"），
+    而词表统一用小写英文关键词；中文不受 lower() 影响，行为向后兼容。
     """
     if not text:
         return []
-    text = str(text)
+    t = str(text).lower()
     found = []
     for theme, kws in THEME_KEYWORDS.items():
-        if any(kw in text for kw in kws):
+        if any(kw in t for kw in kws):
             found.append(theme)
     return found
 
@@ -221,7 +282,7 @@ def theme_vector(text):
     vec = [0.0] * THEME_DIM
     if not text:
         return vec
-    t = str(text)
+    t = str(text).lower()
     for i, theme in enumerate(THEME_ORDER):
         hits = sum(1 for kw in THEME_KEYWORDS[theme] if kw in t)
         if hits:

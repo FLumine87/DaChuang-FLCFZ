@@ -66,6 +66,24 @@ export interface RetrievalResult {
   recordId?: string;
   modalityLabel?: string;
   crossModal?: boolean;
+  /** 命中单元的真实媒体缩略图（内联 data URL：图像→灰度图，语音→梅尔频谱） */
+  media?: string | null;
+  /** 媒体形态标识：face48（面部图像）/ speech_pcm16（语音）/ self_report（文本） */
+  mediaKind?: string | null;
+  /** 媒体真实元数据：文件名 / 来源目录 / 语音的情绪·说话人·发音·时长（非生成文本） */
+  mediaMeta?: {
+    file?: string;
+    dir?: string;
+    speaker?: string;
+    word?: string;
+    emotion?: string;
+    duration_sec?: number | null;
+    sample_rate?: number | null;
+  } | null;
+  /** 索引数据来源：corpus-real（真实数据集）/ corpus / db / demo */
+  dataSource?: string;
+  /** 语料所属数据集名称（真实数据来源标注） */
+  dataset?: string;
   explain?: RetrievalExplain;
 }
 
@@ -81,6 +99,14 @@ export interface RetrievalIndexInfo {
   probed_windows?: number[];
   modality_filter?: string | null;
   mode?: string;
+  /** 本次查询模态：text / image / audio */
+  query_modality?: string;
+  /** 本次查询是否携带媒体文件（图像/语音上传） */
+  query_media?: boolean;
+  /** 索引数据来源：corpus-real / corpus / db / demo */
+  data_source?: string;
+  /** 语料所属数据集名称 */
+  dataset?: string;
 }
 
 export interface MoodTrendPoint {

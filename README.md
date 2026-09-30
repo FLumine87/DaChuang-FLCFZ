@@ -26,10 +26,67 @@
 - 数据预览与确认
 
 ### 跨模态哈希检索与RAG分析
-- 跨模态相似案例检索（基于哈希编码的快速匹配）
-- 检索结果展示（相似度、模态来源、关键特征）
+- 跨模态相似案例检索（基于哈希编码的快速匹配）：文本 / 图像 / 语音三种查询都可以发起
+- 检索结果展示（相似度、模态来源、跨模态标识、内联媒体缩略图、哈希过程信息）
 - RAG智能分析报告生成
 - 分析报告结构化展示
+
+## 动态跨模态哈希检索（真实数据集）
+
+检索模块把文本 / 图像 / 语音映射到同一套二进制哈希码空间，用「时间窗 × 位带」多哈希表
+做快速匹配，支持**任意模态查询、任意模态结果**（跨模态检索），并保留可解释信息
+（命中主题、查询码、候选数、探测桶数）。
+
+### 数据来源与三档体验
+
+| 档位 | 数据源 | 适用场景 | 如何获得 |
+|------|--------|----------|----------|
+| 档 0 · 开箱即用 | 合成语料 `backend/data/hashing/corpus.db`（随仓库发布） | clone 即跑通链路、演示前端交互 | 无需操作，真实语料缺失时自动回退到它 |
+| 档 1 · 真实语料 | `backend/data/hashing/real_corpus.db`（离线构建，不入库） | 基于真实面部图像 / 语音 / 自述文本的跨模态检索 | 见下方「构建真实语料」 |
+| 档 2 · 指标复现 | 同上，跑评测脚本 | 复现检索质量指标（mAP / 跨模态类别一致率） | 见下方「复现指标」 |
+
+> 真实数据集 **Context-Aware Multimodal Depression Dataset** 体积大且带使用条款，
+> **不随仓库分发**：原始数据放在仓库外（如 `<仓库>/offline/datasets/`），仓库内只保留
+> 构建脚本与派生产物。引擎启动时优先读真实语料，缺失则自动回退合成语料，因此
+> **没有数据集也能完整跑通演示**。
+
+### 构建真实语料
+
+数据集三模态之间**没有被试级身份配对**，只有风险类别（Depressed / Normal）一级对齐，
+因此构建脚本按「同类别配对」组织记录：一条记录 = 1 条文本自述 + 1 张面部图像 + 1 段语音
+（风险类别一致）。跨模态检索在「风险类别 / 文本主题」层面成立；「同一被试」层面受数据集
+限制不可辨识，评测中的 T1 指标会如实体现。
+
+```bash
+cd backend
+# 方式一：数据集放在 <仓库>/offline/datasets/Context-Aware Multimodal Depression Dataset/
+python scripts/build_real_corpus.py
+# 方式二：显式指定数据集根目录（或设环境变量 DACHUANG_ASSETS_ROOT）
+python scripts/build_real_corpus.py --dataset-root "D:\path\to\dataset"
+```
+
+产物为 `backend/data/hashing/real_corpus.db`，包含记录级 / 单元级 / 评测查询三类数据，
+并**离线预抽取**图像（192 维：强度 + HOG）与语音（64 维：MFCC + 韵律）特征，避免检索时重复解码。
+
+### 复现指标
+
+```bash
+cd backend
+python scripts/demo_hashing.py     # 一键演示：索引概览 + 三模态查询 + 动态增量
+python scripts/eval_retrieval.py   # 评测：mAP / 跨模态类别一致率 / 效率，写入 data/hashing/eval_report.json
+```
+
+评测口径（`data/hashing/eval_report.json`）：T2 主题相似 mAP@10 与随机基线对比，
+T3 跨模态类别一致率 vs 先验（衡量跨模态检索是否真的比随机更准）。
+由于数据集只有类别级对齐，**T1（同一被试命中）不可辨识属数据集限制**，报告只作链路验证与相对比较。
+
+### 索引与检索行为
+
+- **多哈希表索引**：64 位码切 8 张位带表，位带内探测 2 比特 → 汉明半径 16（相似度 ≥ 0.75）内不漏召回。
+- **时间窗表质量淘汰**：每个时间窗独立评估 σ（编码信息量）与 ρ（语义一致性），弱表不再参与探测。
+- **混合视图模态轮转**：未指定结果模态时，各模态各取 top-k 再轮转交错，保证跨模态命中进入结果页
+  （真实语料下同模态码天然更相近，纯全局排序会让结果页被查询模态占满）。
+- **动态增量**：新记录写入后立即可检索，无需全量重训。
 
 ### 预警管理
 - 预警规则配置（阈值和等级设定）
@@ -67,10 +124,10 @@
 | SQLite | - | 默认数据库 |
 | Uvicorn | 0.32.x | ASGI服务器 |
 
-### 核心引擎（规划中）
-- **哈希检索引擎**: 动态跨模态哈希模型
-- **RAG分析引擎**: LangChain + LLM API
-- **多模态处理引擎**: 语音/图像分析模型
+### 核心引擎
+- **动态跨模态哈希检索引擎**: CMFH（协同矩阵分解哈希）+ 「时间窗 × 位带」多哈希表，已落地
+- **多模态特征**: 图像（强度 + HOG，192 维）/ 语音（MFCC + 韵律，64 维）手工特征，仅依赖 numpy + Pillow
+- **RAG分析引擎**: DeepSeek / 智谱 API，无密钥时自动降级 Mock 报告
 
 ## 项目结构
 
@@ -179,6 +236,13 @@ ENABLE_MOCK_ENGINES=True
 | SECRET_KEY | JWT密钥 | - |
 | DEBUG | 调试模式 | True |
 | ENABLE_MOCK_ENGINES | 启用Mock引擎 | True |
+| HASHING_USE_MOCK | 哈希引擎走 Mock（False = 真实 CMFH + 多哈希表） | False |
+| HASHING_USE_CORPUS | 使用预构建语料库作为检索数据源 | True |
+| HASHING_CORPUS_DB | 真实语料库路径（缺失时自动回退合成语料） | backend/data/hashing/real_corpus.db |
+| HASHING_FALLBACK_CORPUS_DB | 合成语料库路径（随仓库发布，兜底） | backend/data/hashing/corpus.db |
+| HASHING_BALANCE_MODALITIES | 混合视图按模态轮转交错，保证跨模态命中可见 | True |
+
+> 完整哈希参数（码长、位带、时间窗、质量阈值等）见 [backend/.env.example](./backend/.env.example)。
 
 ### 前端配置
 

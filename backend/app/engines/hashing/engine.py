@@ -2,31 +2,36 @@
 
 对接 HashingEngineInterface，整合三个部分：
 
-  * features          : 多模态特征提取（可插拔；当前图像/语音为文本占位，
-                        接入真实 CLIP / Whisper 后上层无需改动）
+  * features          : 文本特征（TF 哈希桶 ⊕ 主题语义桥）
+  * real_features     : 真实图像 / 语音特征（48×48 面部图像描述子、MFCC+韵律）
   * cmfh              : 在线监督集体矩阵分解跨模态哈希（共享二值码 + 各模态投影）
   * multi_table_index : 时间窗 × 位带 的多哈希表索引（可证明召回 + 表质量评估）
 
-核心设计（与旧版相比的三处关键修正）
+核心设计（与旧版相比的四处关键修正）
 ------------------------------------
 1. **单元级索引**：索引对象是「某条记录在某个模态下的视图」，而不是整条记录。
-   一条记录 = 一个文本自述单元 + 一个非言语线索单元 + 一个语音韵律单元，
-   三者共享同一二值码。因此用文本查询可以直接命中该记录的图像/语音单元
-   （即真正的跨模态检索），而不是只能命中自己的文本副本。
+   一条记录 = 一个文本自述单元 + 一个图像单元 + 一个语音单元，三者共享同一二值码。
+   因此用文本查询可以直接命中该记录的图像/语音单元（即真正的跨模态检索）。
 
-2. **配对训练**：三个模态视图按记录行对齐组成 X_text / X_image / X_audio，
+2. **真实模态特征**：图像走 `real_features.image_feature`（强度分块 ⊕ HOG，192 维），
+   语音走 `real_features.audio_feature`（MFCC ⊕ 韵律，64 维），
+   文本走 `features.semantic_feature`（256 桶 ⊕ 主题语义，275 维）。
+   三个模态维度不同，各自由 CMFH 学一个投影矩阵 W_m。
+   旧实现里图像/语音特征是由文本派生的占位，所谓"跨模态"其实是自证。
+
+3. **配对训练**：三个模态视图按记录行对齐组成 X_text / X_image / X_audio，
    共同重建同一码矩阵 B —— 跨模态对齐来自共享的 B 与重构项，
-   语义监督 S 来自记录级主题 Jaccard。
+   语义监督 S 来自记录级主题 Jaccard（含风险类别主题）。
 
-3. **查询只走本模态编码器**：文本查询只用 W_text 编码，再与所有模态的码比汉明距离。
-   旧实现把查询文本派生出图像/语音特征，使"跨模态"退化为自证（查文本必然命中
-   由同一段文本派生的图像码）；现在跨模态是靠训练学出来的，不是造出来的。
+4. **查询只走本模态编码器**：文本查询只用 W_text，图像查询只用 W_image，
+   再与所有模态的码比汉明距离 / 非对称距离。跨模态是靠训练学出来的，不是造出来的。
+
+数据来源优先级（`_corpus_paths` 依次尝试）：
+    real_corpus.db（真实数据集语料）→ corpus.db（合成语料）
+    → 主库业务表 → retrieval_seed.db → demo_data 兜底
 
 状态（模型 W + 单元码 + 元数据）持久化为本地 JSON，重启后直接复用；
 新数据走 index_case 增量插入，无需全量重训。
-
-数据来源优先级：
-    corpus.db（模拟多模态语料）→ 主库业务表 → retrieval_seed.db → demo_data 兜底
 """
 import asyncio
 import datetime
@@ -35,6 +40,7 @@ import os
 import random
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.engines.hashing import real_features as RF
 from app.engines.hashing.cmfh import OnlineSupervisedCMFH
 from app.engines.hashing.demo_data import build_demo_dataset
 from app.engines.hashing.interface import HashingEngineInterface
@@ -53,16 +59,23 @@ except Exception:  # 依赖未安装时（如独立跑算法脚本）使用兜�
         HASHING_WINDOW_DAYS = 122
         HASHING_EPOCH = "2025-08-01"
         HASHING_DATA_DIR = "./data/hashing"
-        HASHING_CORPUS_DB = "./data/hashing/corpus.db"
+        HASHING_CORPUS_DB = "./data/hashing/real_corpus.db"
+        HASHING_FALLBACK_CORPUS_DB = "./data/hashing/corpus.db"
         HASHING_USE_CORPUS = True
         HASHING_TRAIN_MAX = 300
+        HASHING_BALANCE_MODALITIES = True
         RETRIEVAL_SEED_DB = "./data/retrieval_seed.db"
     settings = _DefaultSettings()
 
 # 状态文件版本：结构不兼容时自动重建（旧版本文件不会被误用）
-STATE_VERSION = 3
+# v4：单元新增 media_path / media_kind / dataset，且图像/语音改用真实特征
+# v5：状态新增 corpus_meta（数据集来源标注需重启后仍可展示）
+# v6：单元新增 media_meta（图像/语音命中展示真实文件名与数据集自带标注）
+STATE_VERSION = 6
 TRAIN_MODALITIES = ("text", "image", "audio")
 MODALITY_LABEL = {"text": "文本", "image": "图像", "audio": "语音"}
+# 媒体缩略图缓存上限（条）；超出后整体清空，避免长期运行内存膨胀
+_MEDIA_CACHE_MAX = 600
 
 
 def _date_iso(v) -> str:
@@ -109,9 +122,12 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         self.state_path = os.path.join(settings.HASHING_DATA_DIR, "hashing_state.json")
         self._init_lock = asyncio.Lock()
         self._train_cap = int(getattr(settings, "HASHING_TRAIN_MAX", 300))
-        self._source = ""          # corpus | db | seedfile | demo
+        self._source = ""          # corpus-real | corpus | db | seedfile | demo
         self._source_count = 0
         self._seeded_from_db = False
+        self._corpus_path = ""     # 当前生效的语料库路径
+        self._corpus_meta: Dict[str, str] = {}
+        self._media_cache: Dict[str, Optional[str]] = {}
         self.last_search_info: Dict = {}
 
     def _new_index(self) -> MultiTableHashIndex:
@@ -166,8 +182,27 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
 
     # ------------------------- 来源判定与播种 -------------------------
 
+    def _corpus_paths(self) -> List[str]:
+        """按优先级返回候选语料库路径。
+
+        real_corpus.db 由 scripts/build_real_corpus.py 依据真实数据集生成
+        （仓库外数据，本地构建，不入库）；corpus.db 是随仓库发布的合成语料。
+        真实语料存在时优先使用，缺失时自动退回合成语料，保证开箱可用。
+        """
+        cands = [getattr(settings, "HASHING_CORPUS_DB", ""),
+                 getattr(settings, "HASHING_FALLBACK_CORPUS_DB", "")]
+        out, seen = [], set()
+        for p in cands:
+            if not p:
+                continue
+            ap = os.path.abspath(p)
+            if ap not in seen:
+                seen.add(ap)
+                out.append(ap)
+        return out
+
     def _rebuild(self):
-        """按来源优先级重建索引：语料 -> 主库 -> 种子库 -> 演示集。"""
+        """按来源优先级重建索引：真实语料 -> 合成语料 -> 主库 -> 种子库 -> 演示集。"""
         self.model = OnlineSupervisedCMFH(
             code_length=self.code_length, lambda_s=settings.HASHING_LAMBDA_S
         )
@@ -175,14 +210,19 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         self.records = {}
         self.units = {}
         self._seeded_from_db = False
+        self._media_cache = {}
 
-        corpus = getattr(settings, "HASHING_CORPUS_DB", "")
-        if getattr(settings, "HASHING_USE_CORPUS", True) and corpus and os.path.exists(corpus):
-            if self._seed_from_corpus(corpus):
-                self._source = "corpus"
-                self._source_count = self._count_corpus_units()
-                self._save_state()
-                return
+        if getattr(settings, "HASHING_USE_CORPUS", True):
+            for corpus in self._corpus_paths():
+                if not os.path.exists(corpus):
+                    continue
+                if self._seed_from_corpus(corpus):
+                    self._corpus_path = corpus
+                    self._source = ("corpus-real"
+                                    if self._corpus_meta.get("kind") == "real" else "corpus")
+                    self._source_count = self._count_corpus_units()
+                    self._save_state()
+                    return
 
         rows = self._collect_db_rows()
         if rows and self._seed_from_rows(rows):
@@ -212,6 +252,8 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         self.index = self._new_index()
         self.records = {}
         self.units = {}
+        self._corpus_path = ""
+        self._corpus_meta = {}
         ds = build_demo_dataset()
         cases = ds["cases"]
         self._train([{"record_id": c["id"], "views": {"text": c["summary"]},
@@ -228,14 +270,15 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
 
     def _source_grew(self) -> bool:
         """判断数据源在停机期间是否增长（增长则重建）。"""
-        if self._source == "corpus":
+        if self._source in ("corpus", "corpus-real"):
             return self._count_corpus_units() > self._source_count
         if self._source in ("db", "seedfile"):
             return self._count_db_rows() > self._source_count
         return False
 
     def _count_corpus_units(self) -> int:
-        path = getattr(settings, "HASHING_CORPUS_DB", "")
+        path = self._corpus_path or next(
+            (p for p in self._corpus_paths() if os.path.exists(p)), "")
         if not path or not os.path.exists(path):
             return 0
         try:
@@ -260,13 +303,51 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         except Exception:
             return 0
 
+    # ------------------------- 特征 -------------------------
+
+    def _feature_of(self, modality: str, text: str, media_path: Optional[str] = None) -> Dict[str, List[float]]:
+        """按模态取特征，返回 {modality: vector}。
+
+        * 文本：TF 哈希桶 ⊕ 主题语义桥（`features.semantic_feature`）
+        * 图像：`real_features.image_feature`（192 维手工描述子）
+        * 语音：`real_features.audio_feature`（64 维 MFCC ⊕ 韵律）
+
+        媒体特征抽取失败（文件损坏 / 缺 Pillow）时退回文本编码器，
+        保证编码永远能产出有效码，不会退化成全零码。
+        """
+        if modality == "image" and media_path:
+            f = RF.image_feature(media_path)
+            if f:
+                return {"image": f}
+        if modality == "audio" and media_path:
+            f = RF.audio_feature(media_path)
+            if f:
+                return {"audio": f}
+        return {"text": F.semantic_feature(text)}
+
+    def _feature_vec(self, modality: str, text: str,
+                     media_path: Optional[str] = None) -> List[float]:
+        """取单模态特征向量（训练时按模态列对齐用）。"""
+        return list(self._feature_of(modality, text, media_path).values())[0]
+
+    def _view_text(self, view: Any) -> str:
+        """视图兼容取值：新结构是 {text, path}，旧结构是纯字符串。"""
+        if isinstance(view, dict):
+            return view.get("text") or ""
+        return view if isinstance(view, str) else str(view or "")
+
+    def _view_path(self, view: Any) -> Optional[str]:
+        return view.get("path") if isinstance(view, dict) else None
+
     # ------------------------- 训练 -------------------------
 
     def _train(self, records: List[Dict]) -> bool:
         """在「配对记录」上训练 CMFH。
 
-        records: [{record_id, views: {modality: text}, tags: [...]}]
+        records: [{record_id, views: {modality: text | {text, path}}, tags: [...]}]
         三个模态视图按记录行对齐，共享同一码矩阵 B —— 这是跨模态对齐的来源。
+        每个模态独立特征维度（文本 275 / 图像 192 / 语音 64），
+        CMFH 为每个模态学一个 W_m，因此维度不同不影响配对训练。
         """
         recs = [r for r in records if r.get("views")]
         if not recs:
@@ -275,9 +356,23 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         if not mods:
             mods = ["text"]
             recs = [{"record_id": r["record_id"],
-                     "views": {"text": list(r["views"].values())[0]},
+                     "views": {"text": self._view_text(list(r["views"].values())[0])},
                      "tags": r.get("tags")} for r in recs]
-        feats = {m: [F.semantic_feature(r["views"][m]) for r in recs] for m in mods}
+
+        feats: Dict[str, List[List[float]]] = {}
+        for m in mods:
+            vecs = [self._feature_vec(m, self._view_text(r["views"][m]),
+                                      self._view_path(r["views"][m])) for r in recs]
+            # 同一模态内维度必须一致，否则 Gram 矩阵无法构造。
+            # 个别媒体抽取失败会退回文本特征（维度不同）→ 该模态整体不参与配对训练，
+            # 而不是静默算出错误结果。语料由 build_real_corpus.py 预抽取并校验，
+            # 正常情况不会触发这条分支。
+            if len({len(v) for v in vecs}) != 1:
+                continue
+            feats[m] = vecs
+        if not feats:
+            return False
+
         sim = [[_jaccard(recs[i].get("tags"), recs[j].get("tags")) for j in range(len(recs))]
                for i in range(len(recs))]
         for i in range(len(recs)):
@@ -285,20 +380,20 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         self.model.fit(feats, sim)
         return True
 
-    def _feature_for(self, text: str, modality: str) -> Dict[str, List[float]]:
-        """按模态取特征。当前图像/语音为文本占位（走各自的投影矩阵 W_m），
-        接入真实特征后只需在此处替换为 CLIP / Whisper 输出。"""
-        if modality not in self.model.W and modality != "text":
-            modality = "text"   # 该模态尚无投影矩阵时退回文本编码器，保证可用
-        return {modality: F.semantic_feature(text)}
-
     def _add_unit(self, unit_id: str, meta: Dict) -> None:
         """编码并入索引（单元 = 记录在某模态下的视图），同时登记记录级信息。"""
         modality = meta.get("modality", "text")
         content = meta.get("content") or meta.get("summary") or ""
-        code = self.model.encode(self._feature_for(content, modality))
+        feature = meta.get("feature")
+        if feature and self.model.W.get(modality) and len(feature) == len(self.model.W[modality][0]):
+            # 语料预抽取的离线特征：直接用，省去重复解码媒体
+            feat = {modality: feature}
+        else:
+            feat = self._feature_of(modality, content, meta.get("media_path"))
+        code = self.model.encode(feat)
         meta = dict(meta)
         meta["code"] = list(code)
+        meta.pop("feature", None)      # 特征可由媒体/文本重算，不必进状态文件
         self.units[unit_id] = meta
         rid = meta.get("record_id")
         if rid and rid not in self.records:
@@ -309,9 +404,16 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             }
         self.index.insert(unit_id, code, meta, window=meta.get("window"))
 
-    # ------------------------- 语料播种（模拟多模态数据）-------------------------
+    # ------------------------- 语料播种（真实 / 合成多模态数据）-------------------------
 
     def _seed_from_corpus(self, path: str) -> bool:
+        """从语料库播种索引。
+
+        语料 schema 见 scripts/generate_retrieval_corpus.py（合成）与
+        scripts/build_real_corpus.py（真实，额外含 media_path / feature / dataset）。
+        两种语料共用同一段播种逻辑：真实语料多了媒体路径与离线特征，
+        合成语料的图像/语音视图是文本派生文本，因此走文本特征即可。
+        """
         try:
             import sqlite3
             conn = sqlite3.connect(path)
@@ -319,12 +421,19 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             try:
                 rows = [dict(r) for r in conn.execute(
                     "SELECT * FROM units ORDER BY record_id, modality")]
+                meta = {}
+                try:
+                    meta = {r["key"]: r["value"] for r in conn.execute("SELECT * FROM meta")}
+                except Exception:
+                    meta = {}
             finally:
                 conn.close()
         except Exception:
             return False
         if not rows:
             return False
+
+        self._corpus_meta = meta
 
         by_rec: Dict[str, Dict[str, Dict]] = {}
         for u in rows:
@@ -334,8 +443,11 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                       else random.sample(rec_ids, self._train_cap))
         train_records = []
         for rid in sample_ids:
-            views = {m: v["content"] for m, v in by_rec[rid].items()
-                     if m in TRAIN_MODALITIES}
+            views = {}
+            for m, v in by_rec[rid].items():
+                if m in TRAIN_MODALITIES:
+                    views[m] = {"text": v.get("content") or "",
+                                "path": v.get("media_path")}
             if not views:
                 continue
             any_unit = next(iter(by_rec[rid].values()))
@@ -354,6 +466,11 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 "date": (u.get("created_at") or "")[:10],
                 "window": u.get("window"),
                 "content": content,
+                "media_path": u.get("media_path"),
+                "media_kind": u.get("media_kind"),
+                "feature": _loads(u.get("feature"), None),
+                "media_meta": _loads(u.get("meta"), None),
+                "dataset": u.get("dataset"),
             })
         return True
 
@@ -511,24 +628,33 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
 
     # ------------------------- 接口实现 -------------------------
 
-    def _extract_query_features(self, data: Any, modality: str) -> Dict[str, List[float]]:
-        """查询编码：只使用查询模态自己的编码器（跨模态靠训练学出的共享码空间）。"""
+    def _extract_query_features(self, data: Any, modality: str,
+                                media_path: Optional[str] = None) -> Dict[str, List[float]]:
+        """查询编码：只使用查询模态自己的编码器（跨模态靠训练学出的共享码空间）。
+
+        data        : 文本内容（也可以是媒体文件路径，兼容旧调用）
+        media_path  : 媒体查询的本地文件路径（图像/语音上传后落盘的位置）
+        """
+        src = media_path
+        text = ""
         if isinstance(data, (bytes, bytearray)):
             text = data.decode("utf-8", "ignore") or str(len(data))
-            return self._feature_for(text, modality)
-        if isinstance(data, str):
-            if not os.path.exists(data):
-                return self._feature_for(data, modality)
-            if modality == "image":
-                f = F.image_feature_from_file(data)
-                if f:
-                    return {"image": f}
-            elif modality == "audio":
-                f = F.audio_feature_from_file(data)
-                if f:
-                    return {"audio": f}
-            return self._feature_for(data, modality)
-        return self._feature_for(str(data), modality)
+        elif isinstance(data, str):
+            if os.path.exists(data) and not src:
+                src = data            # 旧调用：直接把文件路径当查询
+            else:
+                text = data
+        else:
+            text = str(data)
+
+        # 该模态没有投影矩阵时（例如演示语料只训练了文本），退回文本编码器，
+        # 否则 encode_continuous 会因维度不匹配返回全零码 → 所有相似度相等。
+        if modality in ("image", "audio") and modality in (self.model.W or {}):
+            f = (RF.image_feature(src) if modality == "image" and src
+                 else RF.audio_feature(src) if modality == "audio" and src else None)
+            if f:
+                return {modality: f}
+        return {"text": F.semantic_feature(text or (src or ""))}
 
     async def encode(self, data: Any, modality: str) -> List[int]:
         await self._ensure_initialized()
@@ -537,16 +663,55 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
     async def search_with_info(
         self, query: str, modality: str = "text", top_k: int = 5,
         modality_filter: Optional[str] = None, exclude_ids: Optional[List[str]] = None,
+        media_path: Optional[str] = None,
     ) -> Tuple[List[Dict], Dict]:
-        """检索并返回 (结果列表, 检索过程信息)。"""
+        """检索并返回 (结果列表, 检索过程信息)。
+
+        media_path 供图像/语音查询使用：特征取自媒体文件，
+        `query` 仍是该次查询的文字描述（用于抽取主题、展示"为什么相似"）。
+        """
         await self._ensure_initialized()
-        feat = self._extract_query_features(query, modality)
+        feat = self._extract_query_features(query, modality, media_path)
         code = self.model.encode(feat)
         qvec = self.model.encode_continuous(feat)
-        ids, sims, info = self.index.search(
-            code, top_k=top_k, modality_filter=modality_filter,
-            exclude_ids=exclude_ids, query_vec=qvec,
-        )
+        # 混合视图（未指定结果模态）默认按模态轮转交错：
+        # 真实语料下同模态码更相近，全局排序的前若干名会被查询模态占满
+        # （实测文本查询 top-24 全为文本单元），跨模态命中根本进不了结果页。
+        # 因此这里对每个模态各取 top_k 再轮转合并，保证跨模态结果可见。
+        balance = (bool(getattr(settings, "HASHING_BALANCE_MODALITIES", True))
+                   and not modality_filter and len(self.units) > top_k)
+        if balance:
+            info = None
+            pool_ids: List[str] = []
+            pool_sims: List[float] = []
+            cand_total = 0
+            probed_total = 0
+            present = self.index.modality_distribution()
+            for m in TRAIN_MODALITIES:
+                if present.get(m, 0) == 0:
+                    continue
+                mids, msims, minfo = self.index.search(
+                    code, top_k=top_k, modality_filter=m,
+                    exclude_ids=exclude_ids, query_vec=qvec,
+                )
+                if info is None:
+                    info = minfo
+                # 候选 / 探测桶按各模态检索累加，否则展示的是单模态的局部统计
+                cand_total += minfo["candidates"]
+                probed_total += minfo["keys_probed"]
+                pool_ids.extend(mids)
+                pool_sims.extend(msims)
+            ids, sims = self._interleave_by_modality(pool_ids, pool_sims, top_k)
+            info["candidates"] = cand_total
+            info["keys_probed"] = probed_total
+            info["balanced"] = True
+            info["modalities_present"] = sorted(
+                {(self.units.get(u) or {}).get("modality", "text") for u in pool_ids})
+        else:
+            ids, sims, info = self.index.search(
+                code, top_k=top_k, modality_filter=modality_filter,
+                exclude_ids=exclude_ids, query_vec=qvec,
+            )
         q_themes = F.extract_themes(query) if isinstance(query, str) else []
         hits = [self._to_hit(uid, sim, code, q_themes, modality, qvec)
                 for uid, sim in zip(ids, sims)]
@@ -554,19 +719,109 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             "query_code_hex": _bits_to_hex(code),
             "query_themes": q_themes,
             "query_modality": modality,
+            "query_media": bool(media_path),
             "modality_filter": modality_filter,
+            "data_source": self._source,
+            "dataset": self._corpus_meta.get("dataset_name") or "",
         })
         self.last_search_info = info
         return hits, info
 
     async def search(self, query: str, modality: str = "text", top_k: int = 5,
                      modality_filter: Optional[str] = None,
-                     exclude_ids: Optional[List[str]] = None) -> List[Dict]:
+                     exclude_ids: Optional[List[str]] = None,
+                     media_path: Optional[str] = None) -> List[Dict]:
         hits, _ = await self.search_with_info(
             query, modality=modality, top_k=top_k,
             modality_filter=modality_filter, exclude_ids=exclude_ids,
+            media_path=media_path,
         )
         return hits
+
+    def _interleave_by_modality(self, ids: List[str], sims: List[float],
+                                top_k: int) -> Tuple[List[str], List[float]]:
+        """混合视图按模态轮转交错取结果（各模态内部仍按相似度降序）。
+
+        动机：真实语料下同一模态的码天然更接近同模态查询，纯全局排序会让
+        top-k 被查询模态自身占满（实测文本查询 top5 全为文本单元），
+        跨模态命中的单元被挤到很后面，前端看不到"跨模态检索"的效果。
+        轮转交错保证每个模态都有代表进入结果页，是跨模态检索的可解释呈现方式；
+        需要纯相似度排序时把 HASHING_BALANCE_MODALITIES 置 False（或指定
+        modality_filter）即可回到全局排序。
+        """
+        buckets: Dict[str, List[Tuple[float, str]]] = {}
+        for uid, sim in zip(ids, sims):
+            m = (self.units.get(uid) or {}).get("modality", "text")
+            buckets.setdefault(m, []).append((float(sim), uid))
+        if len(buckets) < 2:
+            return ids[:top_k], sims[:top_k]
+        for m in buckets:
+            buckets[m].sort(key=lambda x: -x[0])
+        # 首个模态按"该模态最高分"排序，保证最相关的模态先出场
+        order = sorted(buckets, key=lambda m: -buckets[m][0][0])
+        cursor = {m: 0 for m in buckets}
+        out_ids, out_sims = [], []
+        while len(out_ids) < top_k:
+            progressed = False
+            for m in order:
+                if len(out_ids) >= top_k:
+                    break
+                i = cursor[m]
+                if i < len(buckets[m]):
+                    sim, uid = buckets[m][i]
+                    cursor[m] = i + 1
+                    out_ids.append(uid)
+                    out_sims.append(sim)
+                    progressed = True
+            if not progressed:
+                break
+        return out_ids, out_sims
+
+    def _media_url(self, path: Optional[str], modality: str) -> Optional[str]:
+        """媒体缩略图（内联 data URL）。数据集在仓库外，前端无法直接访问文件路径。
+
+        生成一次后缓存：单张图像 ~5ms / 频谱 ~12ms，若每次检索都重算，
+        top-50 的结果页会多花 300ms+。
+        """
+        if not path or modality not in ("image", "audio"):
+            return None
+        key = f"{modality}|{path}"
+        if key in self._media_cache:
+            return self._media_cache[key]
+        if len(self._media_cache) >= _MEDIA_CACHE_MAX:
+            self._media_cache.clear()
+        url = RF.media_data_url(path, modality)
+        self._media_cache[key] = url
+        return url
+
+    def media_payload(self, unit_id: str) -> Optional[dict]:
+        """单元的真实媒体文件（非缩略图），按需取用。
+
+        检索响应只带缩略图：语音平均 124KB，若随结果内联下发，
+        每次检索的响应体会膨胀数百 KB。前端在用户点击播放/查看时再单独取。
+        """
+        meta = self.units.get(unit_id)
+        if not meta:
+            return None
+        path, modality = meta.get("media_path"), meta.get("modality")
+        if not path or modality not in ("image", "audio"):
+            return None
+        key = f"full|{modality}|{path}"
+        url = self._media_cache.get(key)
+        if url is None:
+            url = RF.media_file_data_url(path, modality)
+            if url is None:
+                return None
+            if len(self._media_cache) >= _MEDIA_CACHE_MAX:
+                self._media_cache.clear()
+            self._media_cache[key] = url
+        return {
+            "unit_id": unit_id,
+            "modality": modality,
+            "media_kind": meta.get("media_kind"),
+            "media": url,
+            "media_meta": meta.get("media_meta"),
+        }
 
     def _to_hit(self, unit_id: str, sim: float, query_code: List[int],
                 query_themes: List[str], query_modality: str,
@@ -578,20 +833,28 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         asym = None
         if query_vec is not None and code:
             asym = round(self.index.asym_score(query_vec, code), 4)
+        modality = meta.get("modality", "text")
         # 展示摘要在此处脱敏（索引内部保留原文用于编码，返回前端时去掉姓名/手机号）
         excerpt = meta.get("excerpt") or F.deidentify(
             meta.get("content") or meta.get("summary") or "", meta.get("deid_terms"))
         return {
             "id": unit_id,
             "record_id": meta.get("record_id") or unit_id,
-            "modality": meta.get("modality", "text"),
-            "modality_label": MODALITY_LABEL.get(meta.get("modality", "text"), "文本"),
+            "modality": modality,
+            "modality_label": MODALITY_LABEL.get(modality, "文本"),
             "similarity": round(float(sim), 4),
             "summary": excerpt,
             "tags": meta.get("tags") or [],
             "alert_level": meta.get("alert_level", "green"),
             "date": meta.get("date", ""),
-            "cross_modal": meta.get("modality", "text") != query_modality,
+            "cross_modal": modality != query_modality,
+            # 真实媒体缩略图（图像 -> 灰度图；语音 -> 梅尔频谱），供前端直接展示
+            "media": self._media_url(meta.get("media_path"), modality),
+            "media_kind": meta.get("media_kind"),
+            # 媒体真实元数据（文件名 / 来源目录 / 语音的情绪·说话人·发音·时长）
+            "media_meta": meta.get("media_meta"),
+            "data_source": self._source,
+            "dataset": meta.get("dataset") or self._corpus_meta.get("dataset_name") or "",
             "explain": {
                 "hamming_distance": ham,
                 "hamming_similarity": round(1.0 - ham / max(1, self.code_length), 4),
@@ -696,6 +959,9 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             "source": self._source,
             "source_count": self._source_count,
             "seeded_from_db": self._seeded_from_db,
+            # 语料元信息（数据集名称 / 配对规则 / 特征规格）：前端要展示
+            # "数据来源"标注，重启后从状态文件恢复，避免显示为空
+            "corpus_meta": self._corpus_meta,
         }
         with open(self.state_path, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False)
@@ -721,6 +987,7 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         self._source = state.get("source", "")
         self._source_count = state.get("source_count", 0)
         self._seeded_from_db = state.get("seeded_from_db", False)
+        self._corpus_meta = state.get("corpus_meta") or {}
         self.index = self._new_index()
         for uid, meta in self.units.items():
             self.index.insert(uid, meta.get("code") or [], meta, window=meta.get("window"))

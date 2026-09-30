@@ -42,6 +42,15 @@ uploads/
 *.gif
 *.webp
 
+# ---- 离线资产（真实数据集 / 模型权重）：一律不入库，各自本地准备 ----
+# 真实数据集体积大且带使用条款，绝不随仓库分发；其派生产物（如 real_corpus.db）
+# 也由 scripts/build_real_corpus.py 在本地生成，且 media_path 为绝对路径，换机器即失效。
+# 仅保留目录说明文件，方便下载者知道该放什么。
+offline/*
+!offline/datasets/
+offline/datasets/*
+!offline/datasets/README.md
+
 # ---- 环境变量（保留 .env.example / .env.production 示例）----
 .env
 .env.local

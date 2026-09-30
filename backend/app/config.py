@@ -57,11 +57,22 @@ class Settings:
     HASHING_WINDOW_DAYS: int = 122         # 时间窗长度（约 4 个月）
     HASHING_EPOCH: str = "2025-08-01"      # 时间窗起算日
     HASHING_TRAIN_MAX: int = 300           # 训练抽样上限（配对记录数）
+    # 混合视图（未指定结果模态）是否按模态轮转交错排序：
+    # 真实语料下同模态码更相近，纯全局排序会让 top-k 被查询模态占满，
+    # 跨模态命中被挤出结果页；置 False 回到纯相似度排序（做对照实验用）
+    HASHING_BALANCE_MODALITIES: bool = True
 
-    # 模拟多模态语料（scripts/generate_retrieval_corpus.py 生成）
-    # 存在时优先作为检索库；缺失则回退主库业务表 / retrieval_seed.db / demo
+    # 检索语料库（存在时优先作为检索库；缺失则回退主库业务表 / retrieval_seed.db / demo）
     HASHING_USE_CORPUS: bool = True
+    # 真实语料：scripts/build_real_corpus.py 依据仓库外真实数据集离线构建（不入库）
+    # 含真实面部图像 / 语音 / 自述文本三模态，是跨模态检索的主数据源
     HASHING_CORPUS_DB: str = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "data", "hashing", "real_corpus.db",
+    )
+    # 合成语料兜底：scripts/generate_retrieval_corpus.py 生成，随仓库发布
+    # 真实语料缺失时自动回退，保证开箱即用
+    HASHING_FALLBACK_CORPUS_DB: str = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "data", "hashing", "corpus.db",
     )

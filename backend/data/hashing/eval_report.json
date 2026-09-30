@@ -2,35 +2,55 @@
   "settings": {
     "lambda_s": 0.6,
     "code_length": 64,
-    "band_bits": 8
+    "band_bits": 8,
+    "balance_modalities": false
   },
-  "note": "合成语料上的工程链路验证，非临床/论文性能结论",
+  "corpus": "D:\\DaChuang\\DaChuang-FLCFZ\\backend\\data\\hashing\\real_corpus.db",
+  "note": "真实数据集语料上的检索评测。数据集三模态仅有风险类别级对齐，T1 不可辨识属数据集限制；T2/T3 为有效结论。",
   "result": {
-    "queries": 80,
+    "queries": 120,
     "corpus_records": 300,
     "T1_cross_modal_same_record": {
-      "hit@1": 0.0,
-      "recall@5": 0.0,
-      "mrr": 0.0168
+      "hit@1": 0.2,
+      "recall@5": 0.1333,
+      "mrr": 0.2315
     },
     "T2_theme_similar_records": {
-      "mAP@10": 0.8435,
-      "P@5": 0.9275,
-      "Recall@50": 0.4669,
-      "nDCG@10": 0.8421,
+      "mAP@10": 0.9451,
+      "P@5": 0.9617,
+      "Recall@50": 0.1912,
+      "nDCG@10": 0.8567,
       "mAP@10_by_target_modality": {
-        "text": 0.833,
-        "image": 0.5028,
-        "audio": 0.5192
+        "text": 0.7562,
+        "image": 0.3228,
+        "audio": 0.3432
+      },
+      "mAP@10_by_query_modality": {
+        "text": 1.0,
+        "image": 0.6796,
+        "audio": 0.924
+      }
+    },
+    "T3_cross_modal_label_agreement": {
+      "overall": 0.6975,
+      "random_prior": 0.4983,
+      "lift_vs_prior": 1.4,
+      "by_pair": {
+        "audio->image": 0.6533,
+        "audio->text": 0.88,
+        "image->audio": 0.4,
+        "image->text": 0.4941,
+        "text->audio": 0.9159,
+        "text->image": 0.5523
       }
     },
     "efficiency": {
-      "latency_mean_ms": 4.52,
-      "latency_p95_ms": 4.56,
-      "candidate_ratio": 0.7337,
+      "latency_mean_ms": 10.62,
+      "latency_p95_ms": 52.64,
+      "candidate_ratio": 0.727,
       "fallback_rate": 0.0
     },
-    "random_baseline_mAP@10": 0.1964,
-    "lift_vs_random": 4.29
+    "random_baseline_mAP@10": 0.782,
+    "lift_vs_random": 1.21
   }
 }
