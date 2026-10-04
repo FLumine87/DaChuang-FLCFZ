@@ -21,3 +21,15 @@ email-validator==2.1.0.post1
 # librosa      # 可选：抽取真实音频 MFCC 特征（否则由文本确定性派生）
 # jieba        # 可选：中文分词（提升文本特征质量；不装则按字/词哈希）
 
+# ===== 仅当要「从原始数据集重建语料」时才需要（scripts/build_real_corpus.py）=====
+# 仓库自带 data/hashing/corpus.db 种子语料，开箱即可运行；无需下列依赖。
+#   EATD-Corpus / FER2013 适配器：无需额外依赖（numpy + pillow 即可）
+#   CSEMOTIONS 适配器：需要读 HF parquet，必须先安装
+# pyarrow      # 读 CSEMOTIONS 的 data/train-*.parquet
+# pandas       # 同上（parquet 列式读取）
+#
+# 安装方式（示例）：
+#   pip install pyarrow pandas
+# 然后：python scripts/build_real_corpus.py --dataset all
+#   数据集放置说明见 offline/datasets/README.md
+

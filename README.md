@@ -42,31 +42,47 @@
 | 档位 | 数据源 | 适用场景 | 如何获得 |
 |------|--------|----------|----------|
 | 档 0 · 开箱即用 | 合成语料 `backend/data/hashing/corpus.db`（随仓库发布） | clone 即跑通链路、演示前端交互 | 无需操作，真实语料缺失时自动回退到它 |
-| 档 1 · 真实语料 | `backend/data/hashing/real_corpus.db`（离线构建，不入库） | 基于真实面部图像 / 语音 / 自述文本的跨模态检索 | 见下方「构建真实语料」 |
+| 档 1 · 真实语料 | `backend/data/hashing/real_corpus.db`（离线构建，不入库） | 真实中文语音 / 文本 / 人脸图像的跨模态检索 | 见下方「构建真实语料」 |
 | 档 2 · 指标复现 | 同上，跑评测脚本 | 复现检索质量指标（mAP / 跨模态类别一致率） | 见下方「复现指标」 |
 
-> 真实数据集 **Context-Aware Multimodal Depression Dataset** 体积大且带使用条款，
-> **不随仓库分发**：原始数据放在仓库外（如 `<仓库>/offline/datasets/`），仓库内只保留
-> 构建脚本与派生产物。引擎启动时优先读真实语料，缺失则自动回退合成语料，因此
-> **没有数据集也能完整跑通演示**。
+> **没有数据集也能完整跑通演示**：引擎启动时优先读 `real_corpus.db`，缺失则自动回退到
+> 随仓库发布的合成语料 `corpus.db`（900 单元、三模态齐全）。三个真实数据集体积大且各带
+> 使用条款，**不随仓库分发**，需自行下载到仓库外（`offline/datasets/`）。
+
+### 三个真实数据集（均可免费下载、无需申请）
+
+| 数据集 | 模态 | 本项目取样 | 标签 | 作用 |
+|--------|------|-----------|------|------|
+| **EATD-Corpus**（ICASSP 2022，中文） | 语音 + 中文转写 | 162 名受试者 × 3 语气 = 486 条 | SDS 自评量表（≥53 判抑郁 → 30:132 真实类不平衡） | 真实抑郁主轴 |
+| **CSEMOTIONS**（Apache-2.0，中文） | 语音 + 中文文本 | 1200 条 | 7 类情绪 | 语音情绪 |
+| **FER2013** | 48×48 灰度人脸图像 | 1686 张 | 7 类表情 | 图像模态 |
+
+目录结构与下载说明见 [`offline/datasets/README.md`](offline/datasets/README.md)。
 
 ### 构建真实语料
 
-数据集三模态之间**没有被试级身份配对**，只有风险类别（Depressed / Normal）一级对齐，
-因此构建脚本按「同类别配对」组织记录：一条记录 = 1 条文本自述 + 1 张面部图像 + 1 段语音
-（风险类别一致）。跨模态检索在「风险类别 / 文本主题」层面成立；「同一被试」层面受数据集
-限制不可辨识，评测中的 T1 指标会如实体现。
-
 ```bash
 cd backend
-# 方式一：数据集放在 <仓库>/offline/datasets/Context-Aware Multimodal Depression Dataset/
-python scripts/build_real_corpus.py
-# 方式二：显式指定数据集根目录（或设环境变量 DACHUANG_ASSETS_ROOT）
-python scripts/build_real_corpus.py --dataset-root "D:\path\to\dataset"
+python scripts/build_real_corpus.py                  # 默认：三模态（EATD + CSEMOTIONS + FER2013）
+python scripts/build_real_corpus.py --dataset eatd   # 只用 EATD（文本 + 语音）
+# 其他取值：--dataset csemotions | fer | all
+# 数据不在 D:\DaChuang 时用环境变量指定根目录：
+#   set DACHUANG_ASSETS_ROOT=D:\path\to\datasets
 ```
 
-产物为 `backend/data/hashing/real_corpus.db`，包含记录级 / 单元级 / 评测查询三类数据，
-并**离线预抽取**图像（192 维：强度 + HOG）与语音（64 维：MFCC + 韵律）特征，避免检索时重复解码。
+> CSEMOTIONS 是 HuggingFace parquet 格式，构建前需 `pip install pyarrow pandas`；
+> EATD-Corpus 与 FER2013 只需 numpy + pillow。
+
+**配对关系（重要，写论文/答辩必须如实说明）**
+
+- **文本 ↔ 语音是真实的同源配对**：EATD 的 `.wav` 与同名 `.txt` 转写、CSEMOTIONS 每条音频与其文本；
+- **图像是「情绪对齐」的弱配对**：FER2013 是纯图像集，没有与之同源的文本/语音，
+  因此按情绪语义挂接到记录上（`meta.fer.attach_mode` 已标注）。跨数据集不存在真实的
+  图像同源配对，这是数据层面的客观限制，不是实现问题。
+
+产物为 `backend/data/hashing/real_corpus.db`（1686 记录 / 5058 单元，文本·语音·图像各 1686），
+包含记录级 / 单元级 / 评测查询三类数据，并**离线预抽取**图像（192 维：强度 + HOG）
+与语音（64 维：MFCC + 韵律）特征，避免检索时重复解码。
 
 ### 复现指标
 
@@ -76,9 +92,17 @@ python scripts/demo_hashing.py     # 一键演示：索引概览 + 三模态查�
 python scripts/eval_retrieval.py   # 评测：mAP / 跨模态类别一致率 / 效率，写入 data/hashing/eval_report.json
 ```
 
-评测口径（`data/hashing/eval_report.json`）：T2 主题相似 mAP@10 与随机基线对比，
-T3 跨模态类别一致率 vs 先验（衡量跨模态检索是否真的比随机更准）。
-由于数据集只有类别级对齐，**T1（同一被试命中）不可辨识属数据集限制**，报告只作链路验证与相对比较。
+三模态真实语料上的实测结果（`data/hashing/eval_report.json`）：
+
+| 指标 | 数值 | 说明 |
+|------|------|------|
+| T2 主题相似 mAP@10 | **0.364** | 随机基线 0.187 → **相对提升 1.95×** |
+| T3 跨模态类别一致率 | **0.608** | 随机基线 0.524 → 1.16×；六种模态对均有值 |
+| T1 同源跨模态召回 | 0.032 | 同一记录的另一模态单元命中率 |
+| 效率 | 平均 264 ms | 候选占比 0.70，无全量回退 |
+
+评测口径：T2 = 主题相近记录的 mAP@10（与随机基线比）；T3 = 跨模态命中的风险类别一致率
+（与类别先验比）；T1 = 同源跨模态召回（因图像为弱配对，该值反映弱配对可学性上限）。
 
 ### 索引与检索行为
 
