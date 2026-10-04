@@ -75,6 +75,11 @@ logs/
 Thumbs.db
 Desktop.ini
 
+# ---- Windows 快捷方式 ----
+# .lnk 内含绝对路径，随机器不同（同一仓库的不同克隆路径也可能不同）。
+# 不入库，避免一次 pull 把另一个克隆的快捷方式覆盖成别的目录。
+*.lnk
+
 # ---- 本地工具链二进制（uv 等，约 69MB）----
 # 不入库：CI 用 astral-sh/setup-uv 自行安装；本地开发者用 venv / npm 即可。
 .tools/
