@@ -48,12 +48,15 @@ class OnlineSupervisedCMFH:
         X = {m: [linalg.normalize_row(r) for r in features[m]] for m in mods}
 
         # 构造 G = Σ_m Gram(X_m) + λ·S，并平衡两部分的尺度
+        # 逐模态先按各自的平均幅值归一化，避免"高能量"模态（如图像 HOG 全正强度块）
+        # 在求和后主导共享码空间，把文本/语音的语义结构挤掉。
         G = [[0.0] * n for _ in range(n)]
         for m in mods:
             Gm = linalg.gram(X[m])
+            gm = linalg.mean_abs(Gm) or 1.0
             for i in range(n):
                 for j in range(n):
-                    G[i][j] += Gm[i][j]
+                    G[i][j] += Gm[i][j] / gm
         g_mean = linalg.mean_abs(G) or 1.0
         s_mean = linalg.mean_abs(similarity) or 1.0
         for i in range(n):
@@ -69,16 +72,20 @@ class OnlineSupervisedCMFH:
              for i in range(n)]
         self.continuous = Uraw     # 训练样本的连续码（诊断/非对称检索可复用）
 
-        # 闭式求各模态投影 W_m
-        BtB = linalg.matmul(linalg.transpose(B), B)
-        for k in range(self.K):
-            BtB[k][k] += 1e-6
-        BtB_inv = linalg.inverse(BtB)
+        # 闭式求各模态投影 W_m（**编码器**：岭回归 特征 → 共享码）
+        # 原实现用重构式 W_m=(BᵀB)^{-1}BᵀX_m，即把解码器的转置当编码器用；
+        # 在真实稠密特征（多样文本 / HOG 图像）上它退化成"训练样本码的相似度加权混
+        # 合"，样本自身三个模态的码都对不上（实测同源与异源汉明距离无差异、
+        # T1≈0）。这里改为直接对共享码 B 做岭回归，编码方向正确、条件数可控：
+        #     W_m = (X_mᵀX_m + εI)^{-1} X_mᵀ B          （d_m × K）
         for m in mods:
             Xm = X[m]
-            BtXm = linalg.matmul(linalg.transpose(B), Xm)   # K×d_m
-            Wt = linalg.matmul(BtB_inv, BtXm)               # K×d_m
-            self.W[m] = Wt                                  # K×d_m（编码时 x·Wm^T 即 matvec(Wm, x)）
+            XtX = linalg.matmul(linalg.transpose(Xm), Xm)   # d×d
+            for k in range(len(XtX)):
+                XtX[k][k] += 0.1
+            XtB = linalg.matmul(linalg.transpose(Xm), B)    # d×K
+            self.W[m] = linalg.transpose(
+                linalg.matmul(linalg.inverse(XtX), XtB))    # K×d（matvec 得 K 维）
 
         self.B = B
         self.trained = True

@@ -5,8 +5,8 @@ from app.core.responses import success_response
 from app.core.auth import RequestContext
 from app.db import database as db
 from app.services import screening_service
-from app.engines import get_hashing_engine, get_rag_engine
-from app.handlers.retrieval import to_frontend_hit
+from app.engines import get_rag_engine
+from app.handlers.retrieval import perform_search, to_frontend_hit
 
 
 def _fmt(v, fmt="%Y-%m-%d"):
@@ -195,14 +195,13 @@ async def get_personal_profile(ctx: RequestContext):
 
 
 async def personal_search(ctx: RequestContext):
+    """个人端检索：文本 / 图像 / 语音线索均可作为查询，返回结果 + RAG 报告。
+
+    查询模态由请求体的 `modality` 决定；图像/语音查询额外携带
+    `media_base64`（+ `media_name`），由 perform_search 统一落盘与清理。
+    """
     data = ctx.body or {}
-    mf = data.get("modality_filter")
-    if mf not in ("text", "image", "audio"):
-        mf = None
-    engine = get_hashing_engine()
-    raw_results, info = await engine.search_with_info(
-        query=data.get("query", ""), modality="text", top_k=5, modality_filter=mf,
-    )
+    raw_results, info, modality, mf = await perform_search(data)
     results = [to_frontend_hit(r) for r in raw_results]
 
     rag_engine = get_rag_engine()
@@ -214,5 +213,6 @@ async def personal_search(ctx: RequestContext):
         report["riskLevel"] = report.pop("risk_level")
 
     return success_response(data={
-        "results": results, "report": report, "query": data.get("query"), "index": info,
+        "results": results, "report": report, "query": data.get("query"),
+        "modality": modality, "modality_filter": mf, "index": info,
     })

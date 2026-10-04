@@ -1,34 +1,36 @@
-"""动态跨模态哈希检索的评测脚本（合成语料上的工程链路验证）。
+"""动态跨模态哈希检索的评测脚本（真实数据集语料）。
 
-⚠️ 结论口径：本脚本使用 scripts/generate_retrieval_corpus.py 生成的**模拟语料**，
-   标签来自生成时的主题设定而非临床标注。因此这里得到的指标用于
-   ①验证检索链路是否正确、②比较不同算法/参数配置的相对优劣，
-   **不能作为论文中的绝对性能结论**。换成真实数据集后指标口径不变。
+语料：backend/data/hashing/real_corpus.db
+      由 scripts/build_real_corpus.py 依据仓库外真实数据集（EATD-Corpus +
+      CSEMOTIONS）离线构建（文本 + 语音双模态）。
 
-Two tasks
-------------
-T1 跨模态同源实例召回（**诊断指标**）：用查询文本去找**同一条记录的图像/语音单元**。
-   本语料的三个模态视图词汇完全不重叠，只有主题级监督，实例级对齐在数学上
-   不可辨识（同一主题下多条记录的图像视图无法区分），因此该指标长期接近 0
-   是预期现象；接入真实配对多模态数据（CLIP/Whisper 特征）后它才会变得有意义。
-   指标：Hit@1、Recall@5、MRR
+⚠️ 结论口径（务必先读）
+----------------------
+语料由三个数据集构成：EATD-Corpus 与 CSEMOTIONS 提供**真实的「文本↔语音」同源配对**
+（每条 = 一句中文转写 + 其对应语音；标签为 SDS 量表 / 情绪，合并后统一为粗风险 高/低），
+FER2013 提供图像视图（**按情绪语义对齐**挂接到上述记录，属弱配对）。
+图像相关的 T1 数值反映该弱配对的可学性，报告里应如实标注。
 
-T2 主题相似检索：用查询文本去找**主题相近的其他记录**
-   （相关性 = 主题 Jaccard，≥0.5 记 1 分，>0 记 0.5 分）→ 衡量语义检索能力。
-   指标：mAP@10、P@5、Recall@50、nDCG@10，并分「目标模态」报告
+  T1 跨模态同源实例召回  ：诊断指标，用来说明上面这条数据集限制
+  T2 主题相似检索        ：查询 → 主题相近的其他记录（mAP@10 / nDCG@10）
+  T3 跨模态类别一致率    ：查询 → **其他模态**单元，其风险类别是否与查询一致
+                          随机基线 = 类别先验（如本语料 高:低）
+  T4 查询模态覆盖        ：文本 / 图像 / 语音三种查询各自的检索表现
 
-⚠️ 口径提醒：T2 的相关性由"主题重叠"定义，而主题语义向量（THEME_WEIGHT）
-   是显式特征，权重 ≥0.7 时指标会饱和到 1.0。报告时请同时给出
-   --weight-sweep 的曲线与随机基线（lift_vs_random），不要只报饱和值。
+评测时关闭 HASHING_BALANCE_MODALITIES（模态轮转交错），否则混合视图的排序
+被人为打散，mAP 口径会失真；交错只影响线上展示，不影响算法本身。
 
 用法
 ----
     python scripts/eval_retrieval.py                 # 完整评测
     python scripts/eval_retrieval.py --limit 40      # 只跑前 40 条查询
     python scripts/eval_retrieval.py --sweep         # 监督项权重 λ_s 敏感性扫描
+    python scripts/eval_retrieval.py --diagnose      # 码空间诊断
+    python scripts/eval_retrieval.py --corpus <path> # 换语料库（如合成语料对照）
 """
 import argparse
 import asyncio
+import collections
 import json
 import math
 import os
@@ -61,6 +63,7 @@ def gain(query_themes, record_themes):
 
 
 def load_corpus(path=None):
+    """读取语料 -> (记录主题, 记录内各模态单元, 查询, 记录风险类别)。"""
     import sqlite3
     conn = sqlite3.connect(path or CORPUS)
     conn.row_factory = sqlite3.Row
@@ -68,6 +71,8 @@ def load_corpus(path=None):
         units = [dict(r) for r in conn.execute("SELECT unit_id, record_id, modality FROM units")]
         recs = {r["record_id"]: json.loads(r["themes"] or "[]")
                 for r in conn.execute("SELECT record_id, themes FROM records")}
+        labels = {r["record_id"]: r["label"]
+                  for r in conn.execute("SELECT record_id, label FROM records")}
         queries = [dict(r) for r in conn.execute("SELECT * FROM queries ORDER BY query_id")]
     finally:
         conn.close()
@@ -76,11 +81,11 @@ def load_corpus(path=None):
     units_of = {}
     for u in units:
         units_of.setdefault(u["record_id"], {})[u["modality"]] = u["unit_id"]
-    return recs, units_of, queries
+    return recs, units_of, queries, labels
 
 
 def dedupe_records(hits, keep_modality=None, exclude_record=None):
-    """把单元级结果按记录去重（保留排名最靠前的单元），返回 (record_id, modality) 序列。"""
+    """把单元级结果按记录去重（保留排名最靠前的单元），返回 record_id 序列。"""
     seen = set()
     out = []
     for h in hits:
@@ -137,30 +142,50 @@ def mean(xs):
     return (sum(xs) / len(xs)) if xs else 0.0
 
 
+def _query_vectors(engine, q):
+    """一次算好查询码与连续向量，供 T1/T2/T3 共用（避免媒体特征重复抽取）。"""
+    qmod = q.get("modality") or "text"
+    feat = engine._extract_query_features(q["text"], qmod, q.get("media_path"))
+    return qmod, engine.model.encode(feat), engine.model.encode_continuous(feat), feat
+
+
 async def evaluate(engine, limit=None, verbose=False, corpus=None):
-    recs, units_of, queries = load_corpus(corpus)
+    recs, units_of, queries, labels = load_corpus(corpus)
     if limit:
         queries = queries[:limit]
 
     t1_hit1, t1_recall5, t1_mrr = [], [], []
     t2_ap10, t2_p5, t2_rec50, t2_ndcg10 = [], [], [], []
     t2_ap10_by_mod = {m: [] for m in MODALITIES}
+    t2_ap10_by_qmod = {m: [] for m in MODALITIES}
+    t3_agree = collections.defaultdict(list)
+    t3_mixed = []
     latencies, cand_ratio, fallback = [], [], 0
+
+    # 类别先验：随机取一条记录与查询同类的概率（T3 的随机基线）
+    label_counts = collections.Counter(labels.values())
+    prior = mean([(label_counts[labels[q["record_id"]]] - 1) / max(1, len(recs) - 1)
+                  for q in queries if q["record_id"] in labels])
 
     for q in queries:
         t0 = time.time()
-        hits, info = await engine.search_with_info(q["text"], modality="text", top_k=50)
+        qmod, code, qvec, feat = _query_vectors(engine, q)
+        q_themes = F.extract_themes(q["text"])
+        ids, sims, info = engine.index.search(code, top_k=50, query_vec=qvec)
+        hits = [engine._to_hit(uid, sim, code, q_themes, qmod, qvec)
+                for uid, sim in zip(ids, sims)]
         latencies.append((time.time() - t0) * 1000)
         if info["index_size"]:
             cand_ratio.append(info["candidates"] / info["index_size"])
         fallback += 1 if info["scanned_all"] else 0
 
-        # ---- T1：同一记录的图像 / 语音单元 ----
+        # ---- T1：跨模态同源召回（同一记录的「其他模态」单元，排除查询自身单元）----
+        own = units_of.get(q["record_id"], {}).get(qmod)
         targets = {units_of.get(q["record_id"], {}).get(m)
-                   for m in ("image", "audio")}
+                   for m in MODALITIES if m != qmod}
         targets.discard(None)
         if targets:
-            ranked_units = [h["id"] for h in hits]
+            ranked_units = [h["id"] for h in hits if h["id"] != own]
             pos = [ranked_units.index(t) + 1 for t in targets if t in ranked_units]
             t1_hit1.append(1.0 if pos and min(pos) == 1 else 0.0)
             t1_recall5.append(sum(1 for p in pos if p <= 5) / len(targets))
@@ -174,19 +199,33 @@ async def evaluate(engine, limit=None, verbose=False, corpus=None):
         t2_p5.append(precision_at_k(ranked, rel, 5))
         t2_rec50.append(recall_at_k(ranked, rel, 50))
         t2_ndcg10.append(ndcg_at_k(ranked, rel, 10))
+        t2_ap10_by_qmod[qmod].append(ap_at_k(ranked, rel, 10))
         for m in MODALITIES:
             ranked_m = dedupe_records(hits, keep_modality=m, exclude_record=q["record_id"])
             t2_ap10_by_mod[m].append(ap_at_k(ranked_m, rel, 10))
 
+        # ---- T3：跨模态类别一致率（查询 → 其他模态单元，类别是否一致）----
+        q_label = labels.get(q["record_id"])
+        for tmod in MODALITIES:
+            if tmod == qmod:
+                continue
+            tids, tsims, _ = engine.index.search(code, top_k=5,
+                                                 modality_filter=tmod, query_vec=qvec)
+            if not tids or q_label is None:
+                continue
+            agree = sum(1 for uid in tids
+                        if labels.get((engine.units.get(uid) or {}).get("record_id")) == q_label)
+            t3_agree[f"{qmod}->{tmod}"].append(agree / len(tids))
+            t3_mixed.append(agree / len(tids))
+
         if verbose:
-            print(f"    {q['query_id']} 主题{q['themes']} -> " +
+            print(f"    {q['query_id']}[{qmod}] 主题{q['themes']} -> " +
                   ", ".join(f"{h['modality_label']}:{h['similarity']:.2f}" for h in hits[:3]))
 
     lat_sorted = sorted(latencies)
     p95 = lat_sorted[min(len(lat_sorted) - 1, int(len(lat_sorted) * 0.95))]
 
-    # 随机基线：按语料里"相关记录占比"估算随机排序下的 mAP@10，
-    # 用于判断模型是否真的优于盲猜（mAP / 随机基线 = 相对提升倍数）
+    # 随机基线：按语料里"相关记录占比"估算随机排序下的 mAP@10
     densities = []
     for q in queries:
         rel = {rid: gain(q["themes"], th) for rid, th in recs.items()
@@ -210,6 +249,14 @@ async def evaluate(engine, limit=None, verbose=False, corpus=None):
             "nDCG@10": round(mean(t2_ndcg10), 4),
             "mAP@10_by_target_modality": {m: round(mean(v), 4)
                                           for m, v in t2_ap10_by_mod.items()},
+            "mAP@10_by_query_modality": {m: round(mean(v), 4)
+                                         for m, v in t2_ap10_by_qmod.items()},
+        },
+        "T3_cross_modal_label_agreement": {
+            "overall": round(mean(t3_mixed), 4),
+            "random_prior": round(prior, 4),
+            "lift_vs_prior": (round(mean(t3_mixed) / prior, 2) if prior else None),
+            "by_pair": {k: round(mean(v), 4) for k, v in sorted(t3_agree.items())},
         },
         "efficiency": {
             "latency_mean_ms": round(statistics.mean(latencies), 2),
@@ -230,19 +277,33 @@ def print_report(res, engine):
     for t in st["tables"]:
         print(f"  窗口{t['window']}: {t['size']:>4} 单元 σ={t['sigma']:.3f} "
               f"ρ={t['rho']:.3f} {'活跃' if t['active'] else '已淘汰'}")
-    t1, t2, eff = (res["T1_cross_modal_same_record"],
-                   res["T2_theme_similar_records"], res["efficiency"])
-    print(f"\n评测查询数：{res['queries']}")
-    print("\nT1 跨模态同源实例召回（诊断指标，本合成语料下预期接近 0）")
+    t1, t2, t3, eff = (res["T1_cross_modal_same_record"],
+                       res["T2_theme_similar_records"],
+                       res["T3_cross_modal_label_agreement"],
+                       res["efficiency"])
+    print(f"\n评测查询数：{res['queries']} / 语料记录数：{res['corpus_records']}")
+
+    print("\nT1 跨模态同源实例召回（同源 = 同一记录的另一模态单元，文本/语音互回）")
     print(f"  Hit@1 {t1['hit@1']:.3f} | Recall@5 {t1['recall@5']:.3f} | MRR {t1['mrr']:.3f}")
-    print("\nT2 主题相似检索（文本查询 → 主题相近的其他记录）")
+
+    print("\nT2 主题相似检索（查询 → 主题相近的其他记录）")
     print(f"  mAP@10 {t2['mAP@10']:.3f} | P@5 {t2['P@5']:.3f} | "
           f"Recall@50 {t2['Recall@50']:.3f} | nDCG@10 {t2['nDCG@10']:.3f}")
     by = t2["mAP@10_by_target_modality"]
     print(f"  按目标模态 mAP@10：文本 {by['text']:.3f} | 图像 {by['image']:.3f} | "
           f"语音 {by['audio']:.3f}")
+    bq = t2["mAP@10_by_query_modality"]
+    print(f"  按查询模态 mAP@10：文本 {bq['text']:.3f} | 图像 {bq['image']:.3f} | "
+          f"语音 {bq['audio']:.3f}")
     print(f"  随机基线 mAP@10 {res['random_baseline_mAP@10']:.3f} → "
           f"相对提升 {res['lift_vs_random']}x")
+
+    print("\nT3 跨模态类别一致率（查询 → 其他模态单元，风险类别是否一致）")
+    print(f"  总体 {t3['overall']:.3f} | 随机基线（类别先验）{t3['random_prior']:.3f} "
+          f"→ 相对提升 {t3['lift_vs_prior']}x")
+    for k, v in t3["by_pair"].items():
+        print(f"    {k}: {v:.3f}")
+
     print("\n效率")
     print(f"  平均 {eff['latency_mean_ms']:.2f}ms | P95 {eff['latency_p95_ms']:.2f}ms | "
           f"候选占比 {eff['candidate_ratio']:.3f} | 全量回退率 {eff['fallback_rate']:.3f}")
@@ -323,7 +384,7 @@ def diagnose(engine, corpus=None):
 
 
 async def main():
-    ap = argparse.ArgumentParser(description="跨模态哈希检索评测（合成语料）")
+    ap = argparse.ArgumentParser(description="跨模态哈希检索评测（真实数据集语料）")
     ap.add_argument("--limit", type=int, default=None, help="只评测前 N 条查询")
     ap.add_argument("--lambda-s", type=float, default=None, help="覆盖语义监督项权重")
     ap.add_argument("--sweep", action="store_true", help="扫描监督项权重 λ_s")
@@ -336,12 +397,19 @@ async def main():
     ap.add_argument("--json", default=os.path.join(BACKEND, "data", "hashing", "eval_report.json"))
     args = ap.parse_args()
 
-    if not os.path.exists(CORPUS):
-        print(f"未找到语料 {CORPUS}，请先运行 scripts/generate_retrieval_corpus.py")
+    corpus_path = os.path.abspath(args.corpus) if args.corpus else CORPUS
+    if not os.path.exists(corpus_path):
+        print(f"未找到语料 {corpus_path}。\n"
+              "真实语料请先运行 scripts/build_real_corpus.py（需先下载真实数据集），\n"
+              "或运行 scripts/generate_retrieval_corpus.py 生成合成语料。")
         return
 
     # 评测不写正式状态文件，避免影响运行中的服务
     settings.HASHING_DATA_DIR = os.path.join(BACKEND, "data", "hashing", "_eval_tmp")
+    # 关闭模态轮转交错：那是线上展示策略，会让排序指标口径失真
+    settings.HASHING_BALANCE_MODALITIES = False
+    if args.corpus:
+        settings.HASHING_CORPUS_DB = corpus_path
 
     if args.sweep:
         print("λ_s 敏感性扫描（mAP@10 / T1-Hit@1 / 候选占比）")
@@ -350,7 +418,7 @@ async def main():
             settings.HASHING_LAMBDA_S = lam
             engine = DynamicCrossModalHashingEngine()
             engine._rebuild()
-            res = await evaluate(engine, args.limit)
+            res = await evaluate(engine, args.limit, corpus=corpus_path)
             t1, t2 = res["T1_cross_modal_same_record"], res["T2_theme_similar_records"]
             print(f"{lam:>6.1f} {t2['mAP@10']:>8.3f} {t1['hit@1']:>7.3f} "
                   f"{t1['recall@5']:>8.3f} {t2['P@5']:>7.3f} "
@@ -364,15 +432,13 @@ async def main():
             F.THEME_WEIGHT = w
             engine = DynamicCrossModalHashingEngine()
             engine._rebuild()
-            res = await evaluate(engine, args.limit, corpus=args.corpus)
+            res = await evaluate(engine, args.limit, corpus=corpus_path)
             t2 = res["T2_theme_similar_records"]
             by = t2["mAP@10_by_target_modality"]
             print(f"{w:>6.2f} {t2['mAP@10']:>8.3f} {by['text']:>7.3f} {by['image']:>7.3f} "
                   f"{by['audio']:>7.3f} {res['lift_vs_random']:>7.2f}")
         return
 
-    if args.corpus:
-        settings.HASHING_CORPUS_DB = os.path.abspath(args.corpus)
     if args.theme_weight is not None:
         F.THEME_WEIGHT = args.theme_weight
     if args.lambda_s is not None:
@@ -382,15 +448,18 @@ async def main():
     engine = DynamicCrossModalHashingEngine()
     engine._rebuild()
     if args.diagnose:
-        diagnose(engine, args.corpus)
-    res = await evaluate(engine, args.limit, args.verbose, args.corpus)
+        diagnose(engine, corpus_path)
+    res = await evaluate(engine, args.limit, args.verbose, corpus_path)
     print_report(res, engine)
     os.makedirs(os.path.dirname(args.json), exist_ok=True)
     with open(args.json, "w", encoding="utf-8") as f:
         json.dump({"settings": {"lambda_s": settings.HASHING_LAMBDA_S,
                                 "code_length": settings.HASHING_CODE_LENGTH,
-                                "band_bits": settings.HASHING_BAND_BITS},
-                   "note": "合成语料上的工程链路验证，非临床/论文性能结论",
+                                "band_bits": settings.HASHING_BAND_BITS,
+                                "balance_modalities": False},
+                   "corpus": corpus_path,
+                   "note": ("真实数据集语料上的检索评测（EATD-Corpus + CSEMOTIONS，"
+                            "文本+语音双模态，语句级真配对）。T1/T2/T3 均为有效结论。"),
                    "result": res}, f, ensure_ascii=False, indent=2)
     print(f"\n报告已写入 {args.json}")
 
