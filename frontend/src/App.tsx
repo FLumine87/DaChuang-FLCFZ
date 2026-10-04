@@ -15,6 +15,7 @@ import AdminDataCollection from './admin/pages/AdminDataCollection';
 import AdminRetrieval from './admin/pages/AdminRetrieval';
 import AdminAlerts from './admin/pages/AdminAlerts';
 import AdminCases from './admin/pages/AdminCases';
+import AdminAgentWorkbench from './admin/pages/AdminAgentWorkbench';
 import AuthPage from './pages/AuthPage';
 import { getCurrentSession } from './auth/session';
 
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="retrieval" element={<AdminRetrieval />} />
         <Route path="alerts" element={<AdminAlerts />} />
         <Route path="cases" element={<AdminCases />} />
+        <Route path="agent-workbench" element={<AdminAgentWorkbench />} />
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 

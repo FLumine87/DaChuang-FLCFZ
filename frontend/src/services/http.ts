@@ -87,7 +87,9 @@ http.interceptors.response.use(
     return body;
   },
   (error: AxiosError<{ message?: string }>) => {
-    if (error.response?.status === 401) {
+    // 登录/注册接口的 401 是"凭证错误"，不是会话过期，需透传后端原因
+    const isAuthEntry = /\/api\/auth\/(login|register)$/.test(error.config?.url ?? '');
+    if (error.response?.status === 401 && !isAuthEntry) {
       clearToken();
       if (!location.pathname.startsWith('/auth')) {
         location.href = '/auth';

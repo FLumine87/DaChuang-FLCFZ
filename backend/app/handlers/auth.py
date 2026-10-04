@@ -12,7 +12,7 @@ from app.config import settings
 async def login(ctx: RequestContext):
     data = ctx.body
     username = (data.get("username") or "").strip()
-    password = data.get("password") or ""
+    password = (data.get("password") or "").strip()
     user = await db.query_one_a("SELECT * FROM users WHERE username = ?", (username,))
     if not user or not verify_password(password, user.get("password_hash") or ""):
         raise HttpError(401, "用户名或密码错误")
@@ -32,7 +32,7 @@ async def login(ctx: RequestContext):
 async def register(ctx: RequestContext):
     data = ctx.body
     username = (data.get("username") or "").strip()
-    password = data.get("password") or ""
+    password = (data.get("password") or "").strip()
     if not username or not password:
         raise HttpError(400, "用户名和密码不能为空")
     if await db.query_one_a("SELECT id FROM users WHERE username = ?", (username,)):

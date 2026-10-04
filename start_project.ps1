@@ -34,18 +34,38 @@ if (-not (Test-Path $envLocal)) {
 }
 
 # --- 2. Decide the Python interpreter ----------------------------------------
-if (-not (Test-Path $backendPy)) {
-    $backendPython = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $backendPython) {
-        Write-Host "[error] Neither backend\venv nor a system 'python' was found."
-        Write-Host "        Please create the venv first:  cd backend && start.bat"
-        exit 1
+# A venv copied from another machine keeps a hard-coded path to its base
+# interpreter in pyvenv.cfg, so venv\Scripts\python.exe can exist and still be
+# unusable. Probe the interpreter by running it instead of trusting Test-Path.
+function Test-Python {
+    param([string]$Exe)
+    if (-not $Exe -or -not (Test-Path $Exe)) { return $false }
+    try {
+        & $Exe -c "import sys" 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
     }
-    $backendPython = $backendPython.Source
-    Write-Host "[warn ] backend\venv missing; using system python: $backendPython"
-} else {
+}
+
+if (Test-Python $backendPy) {
     $backendPython = $backendPy
     Write-Host "[ok   ] backend venv found: $backendPython"
+} else {
+    if (Test-Path $backendPy) {
+        Write-Host "[warn ] backend\venv exists but is not runnable (broken base interpreter)."
+    } else {
+        Write-Host "[warn ] backend\venv missing."
+    }
+    $systemPython = Get-Command python -ErrorAction SilentlyContinue
+    if ($systemPython -and (Test-Python $systemPython.Source)) {
+        $backendPython = $systemPython.Source
+        Write-Host "[warn ] falling back to system python: $backendPython"
+    } else {
+        Write-Host "[error] No usable Python interpreter (backend\venv and system 'python' both failed)."
+        Write-Host "        Recreate the venv:  python -m venv backend\venv"
+        exit 1
+    }
 }
 
 # --- 3. Skip any component already running (avoids port conflicts) -----------
@@ -53,6 +73,9 @@ $backBusy  = Get-NetTCPConnection -LocalPort $portBack  -State Listen -ErrorActi
 $frontBusy = Get-NetTCPConnection -LocalPort $portFront -State Listen -ErrorAction SilentlyContinue
 
 # --- 4. Boot backend / frontend in their own (minimized) windows -------------
+$backendProc = $null
+$frontProc   = $null
+
 if ($backBusy) {
     Write-Host "[skip ] backend already listening on :$portBack"
 } else {
@@ -71,11 +94,16 @@ if ($frontBusy) {
 
 # --- 5. Wait until each port is listening -------------------------------------
 function Wait-Port {
-    param($Port, $Name, $Tries = 60)
+    param($Port, $Name, $Tries = 60, $Proc)
     for ($i = 0; $i -lt $Tries; $i++) {
         if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) {
             Write-Host "[ok   ] $Name is up on :$Port"
             return $true
+        }
+        if ($Proc -and $Proc.HasExited) {
+            Write-Host "[error] $Name exited before listening on :$Port (exit code $($Proc.ExitCode))."
+            Write-Host "        Check the minimized console window / logs for the traceback."
+            return $false
         }
         Start-Sleep -Milliseconds 500
     }
@@ -83,8 +111,14 @@ function Wait-Port {
     return $false
 }
 
-Wait-Port $portBack  "backend"  -Tries 120 | Out-Null
-Wait-Port $portFront "frontend" | Out-Null
+$backOk  = Wait-Port $portBack  "backend"  -Tries 120 -Proc $backendProc
+$frontOk = Wait-Port $portFront "frontend" -Proc $frontProc
+
+if (-not ($backOk -and $frontOk)) {
+    Write-Host ""
+    Write-Host "[fail ] one or more services did not start; not opening the browser."
+    exit 1
+}
 
 # --- 6. Open the browser -------------------------------------------------------
 if (-not $NoBrowser) {

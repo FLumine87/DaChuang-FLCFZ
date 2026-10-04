@@ -21,6 +21,7 @@ const navItems = [
   { path: '/admin/screening', label: '筛查管理', icon: ClipboardList },
   { path: '/admin/data-collection', label: '数据采集', icon: Database },
   { path: '/admin/retrieval', label: '检索与分析', icon: Search },
+  { path: '/admin/agent-workbench', label: 'Agent Workbench', icon: Brain },
   { path: '/admin/alerts', label: '预警管理', icon: AlertTriangle },
   { path: '/admin/cases', label: '案例管理', icon: FolderOpen },
 ];

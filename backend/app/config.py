@@ -45,6 +45,11 @@ class Settings:
 
     ENABLE_MOCK_ENGINES: bool = True
 
+    # Agent safety: an external model needs this switch and per-screening consent.
+    AGENT_ALLOW_EXTERNAL_LLM: bool = False
+    AGENT_PSEUDONYM_KEY: str = ""
+    AGENT_RULESET_VERSION: str = "1.0"
+
     # 动态跨模态哈希引擎配置
     HASHING_USE_MOCK: bool = False
     HASHING_DATA_DIR: str = "./data/hashing"
@@ -111,9 +116,10 @@ class Settings:
         vars/secrets 在 Worker env 上以同名字段暴露（纯字符串）；
         D1/R2 等非字符串绑定不经此处理（见 app.core.runtime）。
         """
-        bool_keys = {"DEBUG", "ENABLE_MOCK_ENGINES", "ZHIPUAI_ENABLE_THINKING"}
+        bool_keys = {"DEBUG", "ENABLE_MOCK_ENGINES", "ZHIPUAI_ENABLE_THINKING", "AGENT_ALLOW_EXTERNAL_LLM"}
         for key in (
-            "SECRET_KEY", "DEBUG", "ENABLE_MOCK_ENGINES",
+            "SECRET_KEY", "DEBUG", "ENABLE_MOCK_ENGINES", "AGENT_ALLOW_EXTERNAL_LLM",
+            "AGENT_PSEUDONYM_KEY", "AGENT_RULESET_VERSION",
             "DEEPSEEK_API_KEY", "DEEPSEEK_MODEL", "DEEPSEEK_BASE_URL",
             "DEEPSEEK_MAX_TOKENS", "DEEPSEEK_TEMPERATURE",
             "ZHIPUAI_API_KEY", "ZHIPUAI_MODEL", "ZHIPUAI_ENABLE_THINKING",

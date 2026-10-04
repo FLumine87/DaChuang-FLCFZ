@@ -1,8 +1,10 @@
 """检索与分析接口 handler（动态跨模态哈希检索 + RAG 报告）。"""
 from app.core.responses import success_response
 from app.core.auth import RequestContext
-from app.services import screening_service
+from app.services import screening_service, agent_graph
+from app.db import database as db
 from app.engines import get_hashing_engine, get_rag_engine
+from app.engines.agent import build_evidence_pack
 
 # 前端可选的检索范围：全部 / 文本 / 图像 / 语音
 _MODALITY_FILTERS = ("text", "image", "audio")
@@ -79,6 +81,8 @@ async def analyze(ctx: RequestContext):
     if not screening:
         return success_response(data=None, message="筛查记录不存在")
 
+    history = await _safe_history(screening)
+    initial_pack = build_evidence_pack(screening, history=history)
     retrieval_results = None
     if data.get("include_retrieval"):
         modality, modality_filter, top_k = _params(data)
@@ -88,18 +92,24 @@ async def analyze(ctx: RequestContext):
             modality=modality, top_k=top_k, modality_filter=modality_filter,
         )
         retrieval_results = {
-            "query": screening.get("name"), "results": results,
+            "query": initial_pack["local_retrieval_query"], "results": results,
             "total": len(results), "index": info,
         }
 
+    await agent_graph.ensure_seeded()
+    paths = await agent_graph.evidence_paths(initial_pack)
+    decisions = await agent_graph.evaluate(initial_pack)
+    evidence_pack = build_evidence_pack(screening, history=history, retrieval_results=retrieval_results, knowledge_paths=paths)
     rag_engine = get_rag_engine()
     await rag_engine.initialize()
-    report = await rag_engine.generate_report(_screening_report_input(screening))
+    report = await rag_engine.generate_report(evidence_pack["rag_context"])
 
     return success_response(data={
         "screening_id": data.get("screening_id"),
         "retrieval_results": retrieval_results,
         "rag_report": report,
+        "evidence_pack": evidence_pack,
+        "knowledge_graph": {"paths": paths, "rule_decisions": decisions},
     })
 
 
@@ -107,10 +117,16 @@ async def get_report(ctx: RequestContext, screening_id: int):
     screening = await screening_service.get_screening_by_id(screening_id)
     if not screening:
         return success_response(data=None, message="筛查记录不存在")
+    history = await _safe_history(screening)
+    initial_pack = build_evidence_pack(screening, history=history)
+    await agent_graph.ensure_seeded()
+    paths = await agent_graph.evidence_paths(initial_pack)
+    decisions = await agent_graph.evaluate(initial_pack)
+    evidence_pack = build_evidence_pack(screening, history=history, knowledge_paths=paths)
     rag_engine = get_rag_engine()
     await rag_engine.initialize()
-    report = await rag_engine.generate_report(_screening_report_input(screening))
-    return success_response(data=report)
+    report = await rag_engine.generate_report(evidence_pack["rag_context"])
+    return success_response(data={"rag_report": report, "evidence_pack": evidence_pack, "knowledge_graph": {"paths": paths, "rule_decisions": decisions}})
 
 
 def _screening_report_input(s: dict) -> dict:
@@ -122,3 +138,9 @@ def _screening_report_input(s: dict) -> dict:
         "max_score": s.get("max_score"),
         "alert_level": s.get("alert_level"),
     }
+
+async def _safe_history(screening: dict):
+    case_id = screening.get("case_id")
+    if not case_id:
+        return []
+    return await db.query_a("SELECT id, score, max_score, alert_level, screening_date, created_at FROM screenings WHERE case_id = ? AND id != ? ORDER BY COALESCE(screening_date, created_at) DESC LIMIT 5", (case_id, screening.get("id")))
