@@ -19,12 +19,6 @@ import AdminAgentWorkbench from './admin/pages/AdminAgentWorkbench';
 import AuthPage from './pages/AuthPage';
 import { getCurrentSession } from './auth/session';
 
-function RedirectBySession() {
-  const session = getCurrentSession();
-  if (!session) return <Navigate to="/auth" replace />;
-  return <Navigate to={session.role === 'admin' ? '/admin/dashboard' : '/personal/dashboard'} replace />;
-}
-
 function RequireRole({ role, children }: { role: 'admin' | 'user'; children: ReactElement }) {
   const session = getCurrentSession();
   if (!session) {
@@ -41,7 +35,7 @@ function RequireRole({ role, children }: { role: 'admin' | 'user'; children: Rea
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<RedirectBySession />} />
+      <Route path="/" element={<Navigate to="/auth" replace />} />
       <Route path="/auth" element={<AuthPage />} />
       <Route path="/selector" element={<SystemSelector />} />
 

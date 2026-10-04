@@ -15,11 +15,16 @@ email-validator==2.1.0.post1
 # DeepSeek RAG 模式（RAG_PROVIDER=deepseek，默认）仅需标准库 urllib，无需安装任何新依赖。
 #   启用真实报告：在 .env 设 ENABLE_MOCK_ENGINES=False 并填 DEEPSEEK_API_KEY；留空则自动降级 Mock。
 
-# ===== 动态跨模态哈希引擎：可选依赖（非必需，缺失时自动走纯 Python 实现）=====
-# numpy        # 可选：加速特征值分解；不装则用内置幂迭代实现
-# pillow       # 可选：抽取真实图像低层特征（否则由文本确定性派生）
-# librosa      # 可选：抽取真实音频 MFCC 特征（否则由文本确定性派生）
-# jieba        # 可选：中文分词（提升文本特征质量；不装则按字/词哈希）
+# ===== 动态跨模态哈希引擎：真实特征依赖（必需）=====
+# 图像 192 维描述子 / 语音 64 维 MFCC 特征与结果页缩略图都依赖 numpy + Pillow。
+# 缺失时 real_features 会静默退回文本特征，跨模态检索退化为"自证"式的假检索，
+# 因此这两个包是运行三模态检索的必需项，不再作为可选依赖。
+numpy>=2.0
+pillow>=10.0
+
+# 以下为可选增强（缺失时自动降级，不影响正确性）：
+# librosa      # 仅 Worker 版 engine 的旧音频特征路径使用；本地引擎走 real_features 的 numpy 实现
+# jieba        # 中文分词（提升文本特征质量；不装则按字/词哈希）
 
 # ===== 仅当要「从原始数据集重建语料」时才需要（scripts/build_real_corpus.py）=====
 # 仓库自带 data/hashing/corpus.db 种子语料，开箱即可运行；无需下列依赖。

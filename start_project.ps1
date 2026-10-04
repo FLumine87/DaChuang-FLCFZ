@@ -68,6 +68,28 @@ if (Test-Python $backendPy) {
     }
 }
 
+# --- 2b. Ensure backend runtime deps (numpy + Pillow) -------------------------
+# 真实三模态检索（图像 192 维 / 语音 64 维特征与结果页缩略图）依赖 numpy + Pillow。
+# 缺失时引擎会静默退回文本特征，跨模态检索名存实亡，故启动前探测并按需补齐。
+$depsOk = $false
+try {
+    & $backendPython -c "import numpy, PIL" 2>$null
+    $depsOk = ($LASTEXITCODE -eq 0)
+} catch {
+    $depsOk = $false
+}
+if (-not $depsOk) {
+    Write-Host "[setup] backend deps missing (numpy/pillow); installing ..."
+    & $backendPython -m pip install --quiet "numpy>=2.0" "pillow>=10.0"
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[ok   ] backend deps installed (numpy, pillow)"
+    } else {
+        Write-Host "[warn ] failed to install numpy/pillow; cross-modal retrieval will fall back to text features."
+    }
+} else {
+    Write-Host "[ok   ] backend deps present (numpy, pillow)"
+}
+
 # --- 3. Skip any component already running (avoids port conflicts) -----------
 $backBusy  = Get-NetTCPConnection -LocalPort $portBack  -State Listen -ErrorAction SilentlyContinue
 $frontBusy = Get-NetTCPConnection -LocalPort $portFront -State Listen -ErrorAction SilentlyContinue
