@@ -52,7 +52,7 @@ DEFAULT_OUT = os.path.join(BACKEND, "data", "hashing", "real_corpus.db")
 DATASET_DIRS = {
     "eatd": ("EATD", "EATD-Corpus"),
     "csemotions": ("CSEMOTIONS",),
-    "fer": ("archive",),          # Kaggle FER2013 解压包根目录（内含 train/ 与 test/）
+    "fer": ("FER2013", "archive"),   # Kaggle FER2013 解压包根目录（内含 train/ 与 test/）
 }
 
 # 合并语料时的粗风险映射：让 T3 跨数据集类别一致率可对齐。
