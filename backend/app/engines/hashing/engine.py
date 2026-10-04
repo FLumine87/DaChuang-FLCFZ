@@ -352,8 +352,19 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         recs = [r for r in records if r.get("views")]
         if not recs:
             return False
-        mods = [m for m in TRAIN_MODALITIES if all(m in r["views"] for r in recs)]
-        if not mods:
+        # 不同数据集的记录可能带不同的模态集合（例如纯图像记录与「文本+语音」记录混合）。
+        # 若直接取全局交集会得到空集并静默退化为「纯文本」，导致图像/语音编码器根本没被训练
+        # （表现为图像/语音检索指标全 0）。这里改为取「模态集合相同的最大分组」做配对训练：
+        # 同组内模态严格对齐，跨组不影响；只有单模态可用时才退回纯文本兜底。
+        groups: Dict[frozenset, List[Dict]] = {}
+        for r in recs:
+            sig = frozenset(m for m in r["views"] if m in TRAIN_MODALITIES)
+            groups.setdefault(sig, []).append(r)
+        best_sig = max(groups, key=lambda s: (len(s), len(groups[s])))
+        if len(best_sig) >= 2:
+            recs = groups[best_sig]
+            mods = [m for m in TRAIN_MODALITIES if m in best_sig]
+        else:
             mods = ["text"]
             recs = [{"record_id": r["record_id"],
                      "views": {"text": self._view_text(list(r["views"].values())[0])},

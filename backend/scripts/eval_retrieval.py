@@ -1,20 +1,20 @@
 """动态跨模态哈希检索的评测脚本（真实数据集语料）。
 
 语料：backend/data/hashing/real_corpus.db
-      由 scripts/build_real_corpus.py 依据仓库外真实数据集
-      「Context-Aware Multimodal Depression Dataset」离线构建。
+      由 scripts/build_real_corpus.py 依据仓库外真实数据集（EATD-Corpus +
+      CSEMOTIONS）离线构建（文本 + 语音双模态）。
 
 ⚠️ 结论口径（务必先读）
 ----------------------
-该数据集的三模态只有**风险类别级对齐**，没有被试级配对：一条记录的图像 /
-语音是从同类别媒体池中随机抽样的。因此「同一记录的图像单元」并不比同类别
-的其他图像更相似 —— T1 在数学上不可辨识，长期接近 0 是数据集限制而非算法
-缺陷。真正可验证的指标是：
+语料由三个数据集构成：EATD-Corpus 与 CSEMOTIONS 提供**真实的「文本↔语音」同源配对**
+（每条 = 一句中文转写 + 其对应语音；标签为 SDS 量表 / 情绪，合并后统一为粗风险 高/低），
+FER2013 提供图像视图（**按情绪语义对齐**挂接到上述记录，属弱配对）。
+图像相关的 T1 数值反映该弱配对的可学性，报告里应如实标注。
 
   T1 跨模态同源实例召回  ：诊断指标，用来说明上面这条数据集限制
   T2 主题相似检索        ：查询 → 主题相近的其他记录（mAP@10 / nDCG@10）
   T3 跨模态类别一致率    ：查询 → **其他模态**单元，其风险类别是否与查询一致
-                          随机基线 = 类别先验（本语料 150:150 → 0.5）
+                          随机基线 = 类别先验（如本语料 高:低）
   T4 查询模态覆盖        ：文本 / 图像 / 语音三种查询各自的检索表现
 
 评测时关闭 HASHING_BALANCE_MODALITIES（模态轮转交错），否则混合视图的排序
@@ -179,11 +179,13 @@ async def evaluate(engine, limit=None, verbose=False, corpus=None):
             cand_ratio.append(info["candidates"] / info["index_size"])
         fallback += 1 if info["scanned_all"] else 0
 
-        # ---- T1：同一记录的图像 / 语音单元（诊断指标）----
-        targets = {units_of.get(q["record_id"], {}).get(m) for m in ("image", "audio")}
+        # ---- T1：跨模态同源召回（同一记录的「其他模态」单元，排除查询自身单元）----
+        own = units_of.get(q["record_id"], {}).get(qmod)
+        targets = {units_of.get(q["record_id"], {}).get(m)
+                   for m in MODALITIES if m != qmod}
         targets.discard(None)
         if targets:
-            ranked_units = [h["id"] for h in hits]
+            ranked_units = [h["id"] for h in hits if h["id"] != own]
             pos = [ranked_units.index(t) + 1 for t in targets if t in ranked_units]
             t1_hit1.append(1.0 if pos and min(pos) == 1 else 0.0)
             t1_recall5.append(sum(1 for p in pos if p <= 5) / len(targets))
@@ -281,7 +283,7 @@ def print_report(res, engine):
                        res["efficiency"])
     print(f"\n评测查询数：{res['queries']} / 语料记录数：{res['corpus_records']}")
 
-    print("\nT1 跨模态同源实例召回（诊断指标：本数据集无被试级配对，预期接近 0）")
+    print("\nT1 跨模态同源实例召回（同源 = 同一记录的另一模态单元，文本/语音互回）")
     print(f"  Hit@1 {t1['hit@1']:.3f} | Recall@5 {t1['recall@5']:.3f} | MRR {t1['mrr']:.3f}")
 
     print("\nT2 主题相似检索（查询 → 主题相近的其他记录）")
@@ -456,8 +458,8 @@ async def main():
                                 "band_bits": settings.HASHING_BAND_BITS,
                                 "balance_modalities": False},
                    "corpus": corpus_path,
-                   "note": ("真实数据集语料上的检索评测。数据集三模态仅有风险类别级对齐，"
-                            "T1 不可辨识属数据集限制；T2/T3 为有效结论。"),
+                   "note": ("真实数据集语料上的检索评测（EATD-Corpus + CSEMOTIONS，"
+                            "文本+语音双模态，语句级真配对）。T1/T2/T3 均为有效结论。"),
                    "result": res}, f, ensure_ascii=False, indent=2)
     print(f"\n报告已写入 {args.json}")
 

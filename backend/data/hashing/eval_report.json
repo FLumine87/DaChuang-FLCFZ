@@ -6,51 +6,51 @@
     "balance_modalities": false
   },
   "corpus": "D:\\DaChuang\\DaChuang-FLCFZ\\backend\\data\\hashing\\real_corpus.db",
-  "note": "真实数据集语料上的检索评测。数据集三模态仅有风险类别级对齐，T1 不可辨识属数据集限制；T2/T3 为有效结论。",
+  "note": "真实数据集语料上的检索评测（EATD-Corpus + CSEMOTIONS，文本+语音双模态，语句级真配对）。T1/T2/T3 均为有效结论。",
   "result": {
-    "queries": 120,
-    "corpus_records": 300,
+    "queries": 280,
+    "corpus_records": 1686,
     "T1_cross_modal_same_record": {
-      "hit@1": 0.2,
-      "recall@5": 0.1333,
-      "mrr": 0.2315
+      "hit@1": 0.0321,
+      "recall@5": 0.0357,
+      "mrr": 0.0467
     },
     "T2_theme_similar_records": {
-      "mAP@10": 0.9451,
-      "P@5": 0.9617,
-      "Recall@50": 0.1912,
-      "nDCG@10": 0.8567,
+      "mAP@10": 0.3641,
+      "P@5": 0.4971,
+      "Recall@50": 0.0619,
+      "nDCG@10": 0.3906,
       "mAP@10_by_target_modality": {
-        "text": 0.7562,
-        "image": 0.3228,
-        "audio": 0.3432
+        "text": 0.2492,
+        "image": 0.078,
+        "audio": 0.3464
       },
       "mAP@10_by_query_modality": {
-        "text": 1.0,
-        "image": 0.6796,
-        "audio": 0.924
+        "text": 0.304,
+        "image": 0.0794,
+        "audio": 0.6349
       }
     },
     "T3_cross_modal_label_agreement": {
-      "overall": 0.6975,
-      "random_prior": 0.4983,
-      "lift_vs_prior": 1.4,
+      "overall": 0.6075,
+      "random_prior": 0.5237,
+      "lift_vs_prior": 1.16,
       "by_pair": {
-        "audio->image": 0.6533,
-        "audio->text": 0.88,
-        "image->audio": 0.4,
-        "image->text": 0.4941,
-        "text->audio": 0.9159,
-        "text->image": 0.5523
+        "audio->image": 0.5615,
+        "audio->text": 0.7256,
+        "image->audio": 0.51,
+        "image->text": 0.575,
+        "text->audio": 0.6272,
+        "text->image": 0.5852
       }
     },
     "efficiency": {
-      "latency_mean_ms": 10.62,
-      "latency_p95_ms": 52.64,
-      "candidate_ratio": 0.727,
+      "latency_mean_ms": 264.03,
+      "latency_p95_ms": 928.25,
+      "candidate_ratio": 0.7008,
       "fallback_rate": 0.0
     },
-    "random_baseline_mAP@10": 0.782,
-    "lift_vs_random": 1.21
+    "random_baseline_mAP@10": 0.1871,
+    "lift_vs_random": 1.95
   }
 }

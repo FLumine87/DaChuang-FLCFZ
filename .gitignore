@@ -74,3 +74,11 @@ logs/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# ---- 本地工具链二进制（uv 等，约 69MB）----
+# 不入库：CI 用 astral-sh/setup-uv 自行安装；本地开发者用 venv / npm 即可。
+.tools/
+
+# ---- 哈希引擎运行状态（构建产物，数 MB 且随机器/语料变化）----
+# real_corpus.db 已被上面的 *.db 覆盖，这里补上状态文件。
+backend/data/hashing/hashing_state.json
