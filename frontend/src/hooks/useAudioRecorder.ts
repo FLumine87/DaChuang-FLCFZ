@@ -38,10 +38,18 @@ export function useAudioRecorder(onComplete: (file: File) => void): AudioRecorde
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
-  const supported =
-    typeof window !== 'undefined' &&
-    typeof MediaRecorder !== 'undefined' &&
-    !!navigator.mediaDevices?.getUserMedia;
+  // 防御：个别 Android WebView 在非安全上下文/无麦克风权限下，访问
+  // navigator.mediaDevices 会抛异常（而不是返回 undefined）。这里包一层，
+  // 保证「能力探测」永远不会把整个页面渲染搞崩。
+  let supported = false;
+  try {
+    supported =
+      typeof window !== 'undefined' &&
+      typeof MediaRecorder !== 'undefined' &&
+      !!navigator.mediaDevices?.getUserMedia;
+  } catch {
+    supported = false;
+  }
 
   const release = useCallback(() => {
     if (timerRef.current !== null) {
