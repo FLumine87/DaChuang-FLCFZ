@@ -1,0 +1,30 @@
+node_modules/
+dist/
+.vite/
+*.local
+.env.local
+
+# Android 构建产物（不入库）
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/.idea/
+android/app/release/
+android/app/debug/
+# cap sync 生成物（每次 build 后重新生成）
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/res/xml/config.xml
+
+# 签名密钥：绝不入库（丢了就无法覆盖安装升级）
+*.keystore
+*.jks
+keystore.properties
+
+# 本地构建日志
+build-*.log
+scripts-install-android-sdk.ps1.bak
+
+# 交付用的 APK 副本（构建产物，不入库）
+dist-apk/

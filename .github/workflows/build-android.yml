@@ -1,0 +1,100 @@
+name: Build Android APK
+
+# 手动触发（不随 push 自动跑，避免每次提交都消耗构建分钟数）
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: '构建类型'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+      ref:
+        description: '构建哪个分支/tag（默认当前分支）'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ inputs.variant }} APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0 platform-tools'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets (Vite)
+        run: npm run build
+
+      - name: Sync Capacitor to Android
+        run: npx cap sync android
+
+      - name: Decode release keystore
+        if: inputs.variant == 'release'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::构建 release 需要仓库 Secret：ANDROID_KEYSTORE_BASE64（以及 ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD）"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/psychscreen-release.keystore
+
+      - name: Gradle build
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/mobile/android/app/psychscreen-release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          if [ "${{ inputs.variant }}" = "release" ]; then
+            ./gradlew assembleRelease --no-daemon
+          else
+            ./gradlew assembleDebug --no-daemon
+          fi
+
+      - name: Show outputs
+        working-directory: mobile/android
+        run: find app/build/outputs -name "*.apk" -o -name "*.aab" | sort
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: psychscreen-${{ inputs.variant }}-apk
+          path: |
+            mobile/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 30

@@ -8,7 +8,7 @@
  * 要接后端只需改环境变量 VITE_USE_MOCK=false，组件无需改动。
  */
 
-import { request, USE_MOCK } from './http';
+import { request, isMockMode } from './http';
 
 import {
   screeningRecords,
@@ -118,7 +118,7 @@ export async function apiLogin(
   password: string,
   remember: boolean
 ): Promise<LoginResult> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     const result = mockAuthLogin(username, password, remember);
     if (!result.ok) return { ok: false, message: result.message };
@@ -162,7 +162,7 @@ export async function apiRegister(
   password: string,
   name: string
 ): Promise<RegisterResult> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     return mockAuthRegister(username, password);
   }
@@ -175,7 +175,7 @@ export async function apiRegister(
 }
 
 export async function apiLogout(): Promise<void> {
-  if (USE_MOCK) return;
+  if (isMockMode()) return;
   try {
     await request.post('/api/auth/logout');
   } catch {
@@ -186,7 +186,7 @@ export async function apiLogout(): Promise<void> {
 // ─── 个人端 ──────────────────────────────────────────────────────────────────
 
 export async function getScreeningRecords(): Promise<PersonalScreeningRecord[]> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     return [...screeningRecords];
   }
@@ -200,7 +200,7 @@ export async function submitScreening(data: {
   level: AlertLevel;
   answers?: Record<string, number>;
 }): Promise<{ id: string; status: 'success'; riskLevel: string }> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     const labels: Record<AlertLevel, string> = {
       green: '低',
@@ -218,7 +218,7 @@ export async function submitScreening(data: {
 }
 
 export async function getDashboardData(): Promise<DashboardResponse> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     return {
       moodTrend,
@@ -235,7 +235,7 @@ export async function getDashboardData(): Promise<DashboardResponse> {
 }
 
 export async function getWarnings(): Promise<WarningEvent[]> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     return [...warningEvents];
   }
@@ -243,7 +243,7 @@ export async function getWarnings(): Promise<WarningEvent[]> {
 }
 
 export async function getCases() {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     return { screeningRecords, warningEvents, userProfile, personalTimeline };
   }
@@ -271,7 +271,7 @@ export async function search(
   query: string,
   opts: RetrievalQuery = {},
 ): Promise<SearchResponse<PersonalRetrievalResult>> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay(400 + Math.random() * 400);
     const filtered = opts.modalityFilter
       ? retrievalResults.filter((r) => r.modality === opts.modalityFilter)
@@ -301,7 +301,7 @@ export interface RetrievalMediaPayload {
 }
 
 export async function fetchRetrievalMedia(unitId: string): Promise<RetrievalMediaPayload> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay(150);
     throw new Error('演示语料没有真实媒体文件，请连接后端（VITE_USE_MOCK=false）');
   }
@@ -311,7 +311,7 @@ export async function fetchRetrievalMedia(unitId: string): Promise<RetrievalMedi
 }
 
 export async function uploadFile(file: File): Promise<{ url: string; filename: string; analysis: string }> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay(600 + Math.random() * 400);
     return {
       url: URL.createObjectURL(file),
@@ -334,7 +334,7 @@ export async function uploadFile(file: File): Promise<{ url: string; filename: s
 // ─── 管理端 ──────────────────────────────────────────────────────────────────
 
 export async function getAdminDashboardData(): Promise<AdminDashboardResponse> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     return {
       trendData,
@@ -348,7 +348,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardResponse> {
 }
 
 export async function getAdminScreeningRecords(): Promise<AdminScreeningRecord[]> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     return [...adminScreeningRecords];
   }
@@ -356,7 +356,7 @@ export async function getAdminScreeningRecords(): Promise<AdminScreeningRecord[]
 }
 
 export async function getAdminAlerts(): Promise<AlertRecord[]> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     return [...alertRecords];
   }
@@ -364,7 +364,7 @@ export async function getAdminAlerts(): Promise<AlertRecord[]> {
 }
 
 export async function getAdminCases(): Promise<CaseRecord[]> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     return [...caseRecords];
   }
@@ -372,7 +372,7 @@ export async function getAdminCases(): Promise<CaseRecord[]> {
 }
 
 export async function adminSearch(query: string): Promise<SearchResponse<AdminRetrievalResult>> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay(400 + Math.random() * 400);
     return { results: adminRetrievalResults, report: adminRagReport, query };
   }
@@ -387,7 +387,7 @@ export async function getAdminCollectionData(): Promise<{
   audioSubmissions: AudioSubmission[];
   imageSubmissions: ImageSubmission[];
 }> {
-  if (USE_MOCK) {
+  if (isMockMode()) {
     await delay();
     return { textSubmissions, audioSubmissions, imageSubmissions };
   }
