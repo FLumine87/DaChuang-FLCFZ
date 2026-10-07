@@ -42,7 +42,11 @@ async def register(ctx: RequestContext):
         "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
         (
             username, get_password_hash(password), data.get("name") or username,
-            data.get("role", "user"), data.get("department"), data.get("phone"),
+            # 注册是公开路由（无需登录），role 必须由服务端固定为 'user'。
+            # 旧写法 data.get("role", "user") 直接采信客户端传入值 →
+            # 任何人都能 POST {"role":"admin"} 注册出管理员账号（提权漏洞）。
+            # 注：此修复在 2026-10-04 的远端历史重写中丢失，2026-10-07 随移动端分支带回。
+            "user", data.get("department"), data.get("phone"),
             data.get("email"),
         ),
     )
