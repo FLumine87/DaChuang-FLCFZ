@@ -4,23 +4,25 @@ import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
-const sharedDir = fileURLToPath(new URL('../frontend/src', import.meta.url))
+// 2026-10-07：数据层已内置到 mobile/src/shared（原样副本），
+// 不再引用 ../frontend/src —— 分支因此自包含，可独立克隆构建。
+const sharedDir = fileURLToPath(new URL('./src/shared', import.meta.url))
 const nm = (p: string) => fileURLToPath(new URL(`./node_modules/${p}`, import.meta.url))
 
 /**
  * 移动端 Vite 配置。
  *
- * 关键点一：**不复制一份前端代码**——通过 `@shared` 别名复用
- * `../frontend/src` 的数据层（services / auth / data）与通用组件，
- * 移动端只自带一套为触屏重做的 UI。
+ * 关键点一：**工程自包含**。
+ * 数据层（services / auth / data / hooks / utils）与通用组件以**原样副本**
+ * 放在 `mobile/src/shared/`，`@shared` 别名指向它 —— 不再引用 `../frontend/src`。
+ * 因此单独克隆本分支即可构建，且相对 main 的改动只剩 `mobile/**`。
+ * 上游同步方式见 `mobile/scripts-sync-shared.mjs`。
  *
- * 关键点二（2026-10-07 修白屏）：**React 必须单实例**。
- * `../frontend/src` 位于 mobile 工程之外，其中的文件若按自身位置解析 `react`，
- * 会拿到 `frontend/node_modules/react`（19.2.4），而移动端页面用的是
- * `mobile/node_modules/react`（19.3.0）→ 两份 React 同时进包 →
- * 共享 hook（`@shared/hooks/useAudioRecorder`）抛 "Invalid hook call" →
- * React 卸载整棵树 → **采集页 / 检索页白屏**（其余页面只用了纯数据，所以正常）。
- * 解决：alias + dedupe 双保险，全部指向 mobile 自己那一份。
+ * 关键点二（2026-10-07 白屏根因）：**React 必须单实例**。
+ * 历史上 `@shared` 指向 `../frontend/src` 时，那里的文件按自身位置解析 `react`，
+ * 会拿到 `frontend/node_modules/react`(19.2.4)，与 mobile 侧 19.3.0 形成两个实例
+ * → 共享 hook 跨实例调用抛 "Invalid hook call" → 采集页/检索页白屏。
+ * 副本内置后此问题已从结构上消失；下面的 alias + dedupe 作为**双保险**保留。
  */
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')

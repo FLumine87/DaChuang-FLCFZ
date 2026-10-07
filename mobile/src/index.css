@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* 扫描共享目录：frontend/src 里的组件同样用了 Tailwind 类名 */
-@source "../frontend/src";
+@source "./src/shared";
 
 @theme {
   --color-primary-50: #eff6ff;

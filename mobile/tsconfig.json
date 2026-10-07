@@ -18,7 +18,7 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["../frontend/src/*"]
+      "@shared/*": ["./src/shared/*"]
     }
   },
   "include": ["src", "capacitor.config.ts"]
