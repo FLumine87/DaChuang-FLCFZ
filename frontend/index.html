@@ -5,6 +5,23 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#465fff" />
+    <script>
+      // 首屏渲染前应用主题，避免刷新时闪白。
+      // 默认深色：只有显式存过 "light" 才用浅色；键名与 AppShell.tsx 中的 THEME_KEY 一致。
+      (function () {
+        var stored = null;
+        try {
+          stored = localStorage.getItem("psych_theme");
+        } catch (error) {
+          /* localStorage 不可用时按默认深色处理 */
+        }
+        if (stored !== "light") {
+          document.documentElement.classList.add("dark");
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", "#0b1120");
+        }
+      })();
+    </script>
     <meta name="description" content="心理筛查与健康管理：多模态采集、案例检索与预警处置。" />
     <title>心理筛查预警 · 健康管理平台</title>
   </head>

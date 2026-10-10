@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* 深色模式采用 class 策略：由 AppShell 在 <html> 上切换 .dark，
+   用户的显式选择优先于系统偏好，刷新后保持不变。 */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* TailAdmin Free design tokens. See THIRD_PARTY_NOTICES.md. */
 @theme {
   --font-sans:
@@ -39,6 +43,56 @@
   --color-orange-500: #fb6514;
   --color-orange-600: #ec4a0a;
 }
+
+/* 深色模式调色板。只覆盖主题变量即可全站翻转——Tailwind 生成的工具类
+   （bg-white / text-slate-* / border-slate-* 等）引用的都是这些变量，
+   因此各页面 JSX 无需改动，深色与浅色共用同一套结构。 */
+.dark {
+  --color-white: #151d2c; /* 卡片、侧栏、输入框等表面色 */
+  --color-slate-50: #0b1120; /* 页面底色与浅色块 */
+  --color-slate-100: #1b2333;
+  --color-slate-200: #232d3f; /* 边框 */
+  --color-slate-300: #313c50; /* 输入框边框 */
+  --color-slate-400: #7c899b; /* 图标与占位文字 */
+  --color-slate-500: #9aa7b8; /* 次级文字 */
+  --color-slate-600: #b7c3d2; /* 导航与正文 */
+  --color-slate-700: #d4dce6;
+  --color-slate-800: #e9eef4; /* 标题 */
+  --color-slate-900: #f6f8fb;
+  --color-slate-950: #ffffff;
+  /* 浅底胶囊（导航激活项、状态标签）在深色下改为低饱和深底，避免刺眼 */
+  --color-primary-50: #1a2340;
+  --color-primary-100: #20294a;
+  --color-primary-200: #2c3a63;
+  --color-success-50: #10281f;
+  --color-warning-50: #2a2113;
+  --color-danger-50: #2b1717;
+  --color-orange-50: #2b1d12;
+  --color-orange-100: #241a12;
+  --color-orange-200: #3a2716;
+  --color-blue-50: #16233c;
+  /* 项目里还直接用了一批 Tailwind 原生色板（red / amber / emerald / indigo / blue / violet /
+     green），它们主要出现在预警等级、上传步骤等状态 UI 上——尤其"黄色预警"用的就是
+     amber-*、"红色预警"用的是 red-*。深色下必须把这些浅底一并压暗，
+     否则会在暗色界面上出现刺眼的亮黄/亮红面板。只压暗作为"底/边框"的 50/100/200，
+     实心色（bg-red-500、bg-amber-400 等）保持原样。 */
+  --color-red-50: #2b1717;
+  --color-red-100: #3a1d1c;
+  --color-red-200: #4d2725;
+  --color-amber-50: #2a2113;
+  --color-amber-100: #33280f;
+  --color-amber-200: #4a3a17;
+  --color-emerald-50: #10281f;
+  --color-emerald-100: #123027;
+  --color-emerald-200: #1b4436;
+  --color-green-50: #10281f;
+  --color-blue-100: #1b2b47;
+  --color-indigo-50: #1e1f3d;
+  --color-indigo-100: #262a4d;
+  --color-indigo-200: #333a63;
+  --color-violet-50: #241a3d;
+}
+
 @layer base {
   body {
     margin: 0;
@@ -91,7 +145,7 @@
   }
   input::placeholder,
   textarea::placeholder {
-    color: var(--color-slate-400);
+    color: var(--color-slate-500);
   }
   ::selection {
     background: var(--color-primary-100);
@@ -102,7 +156,7 @@
     min-width: 0;
     border: 1px solid var(--color-slate-200);
     border-radius: 1rem;
-    background: white;
+    background: var(--color-white);
   }
   .ui-button {
     display: inline-flex;
@@ -113,7 +167,7 @@
     padding: 0.625rem 1rem;
     border: 1px solid var(--color-slate-300);
     border-radius: 0.5rem;
-    background: white;
+    background: var(--color-white);
     color: var(--color-slate-700);
     font-size: 0.875rem;
     font-weight: 500;
@@ -143,7 +197,7 @@
     height: 42px;
     border: 1px solid var(--color-slate-200);
     border-radius: 0.75rem;
-    background: white;
+    background: var(--color-white);
     color: var(--color-slate-500);
     transition:
       background 150ms,
@@ -183,29 +237,86 @@
   .ui-table tbody tr:hover {
     background: #f9fafb99;
   }
+  /* 侧栏宽度统一由变量驱动：悬浮把手的位置要跟着一起动 */
+  .app-shell {
+    --sidebar-width: 290px;
+  }
+  .app-shell[data-collapsed="true"] {
+    --sidebar-width: 90px;
+  }
   .app-sidebar {
     position: fixed;
     inset: 0 auto 0 0;
     z-index: 40;
     display: flex;
-    width: 290px;
+    width: var(--sidebar-width);
     flex-direction: column;
     border-right: 1px solid var(--color-slate-200);
-    background: white;
+    background: var(--color-white);
     transition:
       width 200ms,
       transform 200ms;
   }
   .app-frame {
     min-width: 0;
-    margin-left: 290px;
+    margin-left: var(--sidebar-width);
     transition: margin-left 200ms;
   }
   .app-shell[data-collapsed="true"] .app-sidebar {
-    width: 90px;
+    width: var(--sidebar-width);
   }
   .app-shell[data-collapsed="true"] .app-frame {
-    margin-left: 90px;
+    margin-left: var(--sidebar-width);
+  }
+  /* 侧栏右缘的悬浮把手：收起时朝右（拉开），展开时朝左（收回）。
+     默认隐藏，鼠标靠近侧栏或聚焦到按钮时淡入。
+     注意：不能放进 .app-sidebar —— 它是 overflow-y:auto 的滚动容器，
+     横向溢出的内容会被裁掉，所以这里用 fixed 挂在侧栏边缘。 */
+  .sidebar-handle {
+    position: fixed;
+    top: 50%;
+    left: calc(var(--sidebar-width) - 16px);
+    z-index: 45;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 999px;
+    background: var(--color-white);
+    color: var(--color-slate-500);
+    box-shadow: 0 2px 10px #10182826;
+    opacity: 0;
+    transform: translateY(-50%);
+    transition:
+      opacity 150ms,
+      left 200ms,
+      background 150ms,
+      border-color 150ms,
+      color 150ms;
+  }
+  /* 视觉 32px，但命中区向外多扩 6px（实际约 44px），全屏/大屏下更好按 */
+  .sidebar-handle::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: inherit;
+  }
+  .app-shell:has(.app-sidebar:hover) .sidebar-handle,
+  .sidebar-handle:hover,
+  .sidebar-handle:focus-visible {
+    opacity: 1;
+  }
+  .sidebar-handle:hover {
+    border-color: var(--color-primary-200);
+    background: var(--color-primary-50);
+    color: var(--color-primary-500);
+  }
+  @media (min-width: 1024px) {
+    .sidebar-handle {
+      display: inline-flex;
+    }
   }
   .sidebar-label {
     overflow: hidden;
@@ -234,7 +345,53 @@
   }
   .sidebar-link[aria-current="page"] {
     background: var(--color-primary-50);
+    /* 侧栏选中项：浅色下用 primary-600，在 primary-50 底上约 5.9:1（primary-500 只有 4.34） */
+    color: var(--color-primary-600);
+  }
+  /* 侧边栏底部的操作按钮：切换主题、收起/展开侧栏。
+     刻意做成「带边框的方形按钮」，与不带底框的导航图标区分开，
+     让人一眼看出这是控制类按钮而不是跳转页面的。 */
+  .sidebar-action {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 0.625rem;
+    background: var(--color-white);
+    color: var(--color-slate-500);
+    transition:
+      background 150ms,
+      border-color 150ms,
+      color 150ms;
+  }
+  .sidebar-action:hover {
+    border-color: var(--color-primary-200);
+    background: var(--color-primary-50);
     color: var(--color-primary-500);
+  }
+  .sidebar-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1.25rem;
+    border-top: 1px solid var(--color-slate-100);
+    background: var(--color-white);
+    color: var(--color-slate-500);
+    font-size: 11px;
+  }
+  /* 收起时页脚只剩「展开侧栏」一个按钮，居中即可 */
+  .app-shell[data-collapsed="true"] .sidebar-footer {
+    justify-content: center;
+    margin-top: auto;
+    padding: 0.75rem 0;
   }
   .app-shell[data-collapsed="true"] .sidebar-link {
     justify-content: center;
@@ -320,4 +477,190 @@
       transition-duration: 0.01ms !important;
     }
   }
+}
+
+/* ==========================================================================
+   深色模式：少量无法靠变量翻转的位置。
+   以下规则刻意写在 @layer 之外（无层级），优先级高于 Tailwind 的 utilities，
+   因此各页面 JSX 不需要额外添加 dark: 类。
+   ========================================================================== */
+
+/* text-white 与 bg-white 共用 --color-white：表面色在深色下要变深，
+   但强调色按钮/徽标上的白字必须保持白色。 */
+.dark .text-white {
+  color: #ffffff;
+}
+
+/* 强调色作为"文字/图标"用时，在深底上会明显偏暗——
+   例如 danger-600 #d92d20 落在深红胶囊底上只有 3.5:1，primary-600 在卡片上只有 2.6:1。
+   这里统一提亮文字色，保证对比度 ≥ 4.5:1（图标 ≥ 3:1）。
+   实心背景（bg-danger-500 / bg-primary-500 等）不动，仍是原来的品牌色。 */
+.dark .text-primary-500,
+.dark .text-primary-600,
+.dark .text-primary-700 {
+  color: #9cb9ff;
+}
+.dark .text-danger-500,
+.dark .text-danger-600,
+.dark .text-danger-700 {
+  color: #fb9a92;
+}
+.dark .text-warning-500,
+.dark .text-warning-600 {
+  color: #fdb022;
+}
+.dark .text-success-500,
+.dark .text-success-600,
+.dark .text-success-700 {
+  color: #47cd89;
+}
+.dark .text-orange-500,
+.dark .text-orange-600,
+.dark .text-orange-700 {
+  color: #fdba74;
+}
+.dark .text-blue-600,
+.dark .text-blue-700 {
+  color: #84caff;
+}
+/* 原生色板（red / amber / emerald / indigo / violet / green）作为文字时同样提亮。
+   这些颜色主要用在预警等级徽标上，例如 red-700 的"红色预警"、amber-700 的"黄色预警"。 */
+.dark .text-red-500,
+.dark .text-red-600,
+.dark .text-red-700 {
+  color: #ff9c94;
+}
+.dark .text-amber-500,
+.dark .text-amber-600,
+.dark .text-amber-700,
+.dark .text-amber-800 {
+  color: #fbbf24;
+}
+.dark .text-emerald-500,
+.dark .text-emerald-600,
+.dark .text-emerald-700,
+.dark .text-green-600,
+.dark .text-green-700 {
+  color: #4ade80;
+}
+.dark .text-indigo-500,
+.dark .text-indigo-600,
+.dark .text-indigo-700,
+.dark .text-indigo-900 {
+  color: #a5b4fc;
+}
+.dark .text-violet-500,
+.dark .text-violet-600 {
+  color: #c4b5fd;
+}
+
+.dark .ui-table tbody tr:hover {
+  background: #1b233366;
+}
+
+.dark .auth-art {
+  background: #131a29;
+}
+
+/* 导航激活项在深底上需要更亮的前景色 */
+.dark .sidebar-link[aria-current="page"] {
+  color: var(--color-primary-300);
+}
+
+/* 图表：网格颜色在 Dashboard / AdminDashboard 中是写死的十六进制，
+   这里统一用 CSS 覆盖，避免改动这两个组件。坐标轴文字见文件末尾的"灰度字统一"。 */
+.dark .recharts-cartesian-grid line {
+  stroke: var(--color-slate-200);
+}
+.dark .recharts-default-tooltip {
+  background-color: var(--color-white) !important;
+  border-color: var(--color-slate-200) !important;
+  color: var(--color-slate-700);
+}
+
+/* ==========================================================================
+   灰度字统一：全站的次级灰字（原来的 slate-300 / 400 / 500 三档混用）
+   统一到同一档 --color-slate-500。
+   - 浅色：#667085，白底对比度 4.9:1，达到 WCAG AA 的 4.5:1
+   - 深色：自动跟随主题变量变成 #9aa7b8，在深底上约 6.4:1
+   正文与标题仍用 slate-600 / 700 / 800，保留层级。
+   规则写在 @layer 之外，才能覆盖 Tailwind 生成的同色工具类。
+   ========================================================================== */
+.text-slate-300,
+.text-slate-400,
+.text-slate-500 {
+  color: var(--color-slate-500);
+}
+
+/* 图表坐标轴文字在组件里写死为 #98a2b3，一并统一 */
+.recharts-cartesian-axis-tick-value {
+  fill: var(--color-slate-500);
+}
+
+/* ==========================================================================
+   侧栏折叠态：分组标题（"工作空间 / 智能分析 / 健康管理"）整体收起，
+   不再占高度，让下面的图标列整体上移、间距更紧凑。
+   必须写在 @layer 之外 —— 元素上有 Tailwind 的 flex 工具类，
+   层级低于 utilities 的规则压不过它。
+   ========================================================================== */
+.app-shell[data-collapsed="true"] .sidebar-group-title {
+  display: none;
+}
+
+/* 收起后不再悬浮"展开"把手（那个方向交给顶栏的 ☰ 按钮），
+   避免在全屏/高窗口下浮在中缝上显得别扭 */
+.app-shell[data-collapsed="true"] .sidebar-handle {
+  display: none;
+}
+
+/* 收起后三组图标连成一列等距：组间距与组内 space-y-1.5(6px) 一致 */
+.app-shell[data-collapsed="true"] .sidebar-group {
+  margin-bottom: 0.375rem;
+}
+
+/* 移动端侧栏是抽屉形态，分组标题照常显示 */
+@media (max-width: 1023px) {
+  .app-shell[data-collapsed="true"] .sidebar-group-title {
+    display: flex;
+  }
+  /* 抽屉形态下不需要"收起侧栏"按钮（抽屉自带关闭按钮） */
+  .sidebar-action-collapse {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   标题（黑体字）统一小幅上调一档：只放大加粗的标题，正文一律不动，
+   层级比例保持协调。同样写在 @layer 之外才能压过 Tailwind 的 text-* 工具类。
+   页面主标题 24 → 26px；卡片/分区标题 16 → 17px；其余按比例 +1~2px。
+   ========================================================================== */
+h1 {
+  font-size: 1.625rem; /* 26px ← text-2xl */
+}
+h1.text-3xl {
+  font-size: 2rem; /* 32px ← 30px（登录页/系统选择页） */
+}
+h2,
+h3,
+h4 {
+  font-size: 1.0625rem; /* 17px ← 16px */
+}
+h2.text-sm,
+h3.text-sm,
+h4.text-sm {
+  font-size: 0.9375rem; /* 15px ← 14px（弱化的小标题） */
+}
+h2.text-lg,
+h3.text-lg,
+h4.text-lg {
+  font-size: 1.1875rem; /* 19px ← 18px */
+}
+h2.text-xl,
+h3.text-xl,
+h4.text-xl {
+  font-size: 1.3125rem; /* 21px ← 20px */
+}
+h2.text-2xl,
+h3.text-2xl {
+  font-size: 1.625rem; /* 26px ← 24px */
 }
