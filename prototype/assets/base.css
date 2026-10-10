@@ -795,6 +795,20 @@ svg {
   color: var(--txt-3);
 }
 
+/* ---------- 移动端抽屉遮罩：点它就收起，替代没有交互的空白 ------------------- */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 45; /* 低于 .sidebar 的 50，高于内容 */
+  background: var(--scrim);
+  border: 0;
+}
+@media (min-width: 1024px) {
+  .scrim {
+    display: none;
+  }
+}
+
 /* ---------- 头像 ------------------------------------------------------------ */
 .avatar {
   display: grid;

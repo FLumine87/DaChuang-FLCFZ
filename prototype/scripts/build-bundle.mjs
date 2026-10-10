@@ -26,7 +26,7 @@ function safeJson(value) {
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const PAGES_DIR = path.join(ROOT, 'pages');
-const OUT = path.join(ROOT, '原型-单文件.html');
+const OUT = path.join(ROOT, process.argv.includes('--no-shots') ? '原型-轻量版.html' : '原型-单文件.html');
 
 const read = (p) => readFileSync(p, 'utf8');
 
@@ -100,7 +100,9 @@ const SHOT_Q = 74;
 const shotsDir = path.join(ROOT, 'screenshots');
 const webpDir = path.join(ROOT, '.shots-webp');
 const py = process.env.DSH_PYTHON || 'python3';
-const shotNames = readdirSync(shotsDir).filter((f) => f.endsWith('.png')).sort();
+const LIGHT = process.argv.includes('--no-shots');
+const shotNames = LIGHT ? [] : readdirSync(shotsDir).filter((f) => f.endsWith('.png')).sort();
+if (LIGHT) console.log('（轻量模式：跳过截图内联）');
 
 let shotMap = {};
 if (shotNames.length) {
@@ -180,11 +182,26 @@ ${fontInline}
 ${css}
 /* 单文件版专用：换页时给舞台一个最小高度，避免切换瞬间滚动条跳动 */
 #stage:empty { display: block; min-height: 60vh; }
-.bundlebar { position: fixed; inset-inline: 0; bottom: 0; z-index: 90; display: flex; align-items: center; gap: 10px;
-  padding: 8px 14px; background: var(--bg-card); border-top: 1px solid var(--line); font-size: var(--fs-meta); color: var(--txt-3); }
-.bundlebar__pill { padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--r-chrome); color: var(--txt-2); }
+.bundlebar { position: fixed; inset-inline: 0; bottom: 0; z-index: 90; display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px; background: var(--bg-card); border-top: 1px solid var(--line); font-size: var(--fs-meta); color: var(--txt-3);
+  flex-wrap: nowrap; }
+.bundlebar__pill { flex: none; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--r-chrome); color: var(--txt-2); }
 .bundlebar__spacer { margin-inline-start: auto; }
-.bundlebar button { font: inherit; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 2px 4px; }
+.bundlebar button { flex: none; font: inherit; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 2px 3px; white-space: nowrap; }
+/* 手机上这条工具条不该占掉两行：说明文字直接隐藏，按钮改用短标签 */
+@media (max-width: 560px) {
+  .bundlebar { padding: 6px 10px; gap: 6px; }
+  .bundlebar #bb-hint { display: none; }
+  .bundlebar button { padding: 2px; }
+}
+/* 工具条是 fixed 的，给内容留出高度，别压住最后一屏 */
+body { padding-bottom: 38px; }
+.bb-short { display: none; }
+@media (max-width: 560px) {
+  .bb-full { display: none; }
+  .bb-short { display: inline; }
+}
 .shotgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sp-7, 14px); }
 .shotgrid figure { margin: 0; border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; background: var(--bg-card); }
 .shotgrid img { display: block; width: 100%; height: auto; background: var(--bg-inset); }
@@ -197,8 +214,8 @@ ${css}
   <span class="bundlebar__pill" id="bb-page">—</span>
   <span id="bb-hint">单文件原型：所有页面与截图都已内联，断网可用</span>
   <span class="bundlebar__spacer"></span>
-  <button type="button" id="bb-home">返回目录</button>
-  <button type="button" id="bb-shots">全部截图</button>
+  <button type="button" id="bb-home"><span class="bb-full">返回目录</span><span class="bb-short">目录</span></button>
+  <button type="button" id="bb-shots"><span class="bb-full">全部截图</span><span class="bb-short">截图</span></button>
   <button type="button" id="bb-mode">切换深色</button>
 </div>
 <script>
@@ -270,11 +287,16 @@ ${appJs}
     var m = BUNDLE_PAGES[page];
     if (!m) { page = BUNDLE_HOME; m = BUNDLE_PAGES[page]; }
     applyBody(page);
+    /* 换页前先收起移动端抽屉：否则导航后抽屉仍盖住新页面，看起来像「点了没反应」 */
+    if (window.PROTO_SET_DRAWER) window.PROTO_SET_DRAWER(false);
     stage.innerHTML = BUNDLE_CONTENT[page] || '';
     try { window.PROTO.render(); } catch (e) { console.error('外壳渲染失败', e); }
     (BUNDLE_SCRIPTS[page] || []).forEach(function (code) {
       try { new Function(code)(); } catch (e) { console.error('页面脚本执行失败', e); }
     });
+    /* 换页后 .app 是新元素，必须重新绑定抽屉/折叠/分段控件，
+       否则单文件版翻到第二页起交互全失效（手机端表现为抽屉打不开） */
+    if (window.PROTO_REBIND) window.PROTO_REBIND();
     lastPage = page;
     window.scrollTo(0, 0);
     document.getElementById('bb-page').textContent = m.title.replace(/ · .*$/, '');

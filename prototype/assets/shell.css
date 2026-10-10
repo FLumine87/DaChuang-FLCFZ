@@ -145,9 +145,10 @@
 .sidebar__foot-text {
   font-size: var(--fs-meta);
   color: var(--shell-fg-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.5;
+  /* 原来是 nowrap + 省略号，手机上会截成「每一次记录，都是对自己的关…」；改为折行 */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .sidebar__foot .iconbtn {
   margin-inline-start: auto;
@@ -367,6 +368,8 @@
   .app[data-mobile-open='true'] .sidebar {
     transform: none;
     box-shadow: var(--shadow-float);
+    /* 抽屉下要能看出「下面是页面」，靠一条分隔边而不是投影堆叠 */
+    border-right: 1px solid var(--shell-line);
   }
   .topbar__menu {
     display: inline-flex;
