@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Activity,
   AlertTriangle,
   ArrowRight,
   ClipboardCheck,
@@ -31,6 +30,7 @@ import {
 } from "../components/DashboardUI";
 import AlertBadge from "../components/AlertBadge";
 import StatusBadge from "../components/StatusBadge";
+import LatestScreeningCard from "../components/LatestScreeningCard";
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -118,16 +118,7 @@ export default function Dashboard() {
           trend="+3 天"
           hint="较上周连续记录"
         />
-        <MetricCard
-          label="最近一次筛查"
-          value={lastRecord ? `${lastRecord.score} 分` : "暂无"}
-          icon={Activity}
-          hint={
-            lastRecord
-              ? `${lastRecord.questionnaire} · ${lastRecord.moodTag}`
-              : "完成一次筛查，了解当前状态"
-          }
-        />
+        <LatestScreeningCard record={lastRecord} />
         <MetricCard
           label="活跃预警"
           value={`${activeWarnings} 条`}
