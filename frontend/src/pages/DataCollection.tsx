@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  FileText, Mic, ImageIcon, Upload, Check, ChevronRight, Sparkles,
-  Square, Play, Pause, Trash2, CheckCircle2, X,
+  FileText, Mic, ImageIcon, Upload, ChevronRight, Sparkles,
+  Square, Play, Pause, Trash2, CheckCircle2, AlertCircle, X,
 } from 'lucide-react';
 import { uploadFile } from '../services/mockApi';
+import { questionnaireCatalog } from '../data/mockData';
 
 type Tab = 'text' | 'audio' | 'image';
 type RecordState = 'idle' | 'requesting' | 'recording' | 'stopped';
@@ -25,14 +27,6 @@ interface ImageEntry {
   file?: File;
 }
 
-const questionnaires = [
-  { id: 'phq9', name: 'PHQ-9 抑郁症筛查量表', questions: 9, time: '约3分钟' },
-  { id: 'gad7', name: 'GAD-7 广泛性焦虑量表', questions: 7, time: '约2分钟' },
-  { id: 'scl90', name: 'SCL-90 症状自评量表', questions: 90, time: '约15分钟' },
-  { id: 'sds', name: 'SDS 抑郁自评量表', questions: 20, time: '约5分钟' },
-  { id: 'sas', name: 'SAS 焦虑自评量表', questions: 20, time: '约5分钟' },
-];
-
 function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
   const s = (seconds % 60).toString().padStart(2, '0');
@@ -53,6 +47,7 @@ function AudioTab() {
   const [audioList, setAudioList] = useState<AudioEntry[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -247,12 +242,24 @@ function AudioTab() {
         {audioList.length > 0 && !submitted && (
           <button
             onClick={async () => {
+              setUploadError('');
+              const failed: string[] = [];
               for (const entry of audioList) {
-                if (entry.file) {
-                  try { await uploadFile(entry.file); } catch (e) { console.error('上传音频失败', e); }
+                if (!entry.file) continue;
+                try {
+                  await uploadFile(entry.file);
+                } catch (e) {
+                  console.error('上传音频失败', e);
+                  failed.push(entry.name);
                 }
               }
-              setSubmitted(true);
+              // 只有真正全部成功才报成功。之前无论成败都显示"哈希编码完成"，
+              // 而后端 /api/upload 目前固定返回 503，属于误报。
+              if (failed.length) {
+                setUploadError(`${failed.length} 个文件未能上传：${failed.join('、')}`);
+              } else {
+                setSubmitted(true);
+              }
             }}
             className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
           >
@@ -265,6 +272,17 @@ function AudioTab() {
             <p className="text-sm text-success-700">已提交 {audioList.length} 条音频，哈希编码完成</p>
           </div>
         )}
+        {uploadError && (
+          <div className="flex items-start gap-2 py-2.5 px-4 bg-danger-50 rounded-lg border border-danger-500/30">
+            <AlertCircle className="w-4 h-4 text-danger-600 mt-0.5 shrink-0" />
+            <p className="text-sm text-danger-700">
+              {uploadError}
+              <span className="text-danger-600/80">
+                （本部署的文件上传后端尚未启用，返回 503；数据未送入哈希引擎）
+              </span>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -274,6 +292,7 @@ function AudioTab() {
 function ImageTab() {
   const [images, setImages] = useState<ImageEntry[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -354,12 +373,23 @@ function ImageTab() {
         {images.length > 0 && !submitted && (
           <button
             onClick={async () => {
+              setUploadError('');
+              const failed: string[] = [];
               for (const img of images) {
-                if (img.file) {
-                  try { await uploadFile(img.file); } catch (e) { console.error('上传图像失败', e); }
+                if (!img.file) continue;
+                try {
+                  await uploadFile(img.file);
+                } catch (e) {
+                  console.error('上传图像失败', e);
+                  failed.push(img.name);
                 }
               }
-              setSubmitted(true);
+              // 同上：只有真正全部成功才报成功，避免"哈希编码完成"的误报
+              if (failed.length) {
+                setUploadError(`${failed.length} 张图像未能上传：${failed.join('、')}`);
+              } else {
+                setSubmitted(true);
+              }
             }}
             className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
           >
@@ -372,6 +402,17 @@ function ImageTab() {
             <p className="text-sm text-success-700">已提交 {images.length} 张图像，图像哈希编码完成</p>
           </div>
         )}
+        {uploadError && (
+          <div className="flex items-start gap-2 py-2.5 px-4 bg-danger-50 rounded-lg border border-danger-500/30">
+            <AlertCircle className="w-4 h-4 text-danger-600 mt-0.5 shrink-0" />
+            <p className="text-sm text-danger-700">
+              {uploadError}
+              <span className="text-danger-600/80">
+                （本部署的文件上传后端尚未启用，返回 503；数据未送入哈希引擎）
+              </span>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -379,7 +420,6 @@ function ImageTab() {
 
 // ─── Text Tab ─────────────────────────────────────────────────────────────────
 function TextTab() {
-  const [selectedQ, setSelectedQ] = useState<string | null>(null);
   const [freeText, setFreeText] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
@@ -391,40 +431,30 @@ function TextTab() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Questionnaire selector */}
+      {/* Questionnaire selector：点击直接跳转到筛查页并打开对应量表 */}
       <div className="ui-card p-5">
-        <h3 className="font-semibold text-slate-800 mb-4">选择量表（跳转至筛查页作答）</h3>
+        <h3 className="font-semibold text-slate-800 mb-4">选择量表开始作答</h3>
         <div className="space-y-2">
-          {questionnaires.map((q) => (
-            <button
+          {questionnaireCatalog.map((q) => (
+            <Link
               key={q.id}
-              onClick={() => setSelectedQ(selectedQ === q.id ? null : q.id)}
-              className={`w-full flex items-center justify-between p-3.5 rounded-lg border transition-colors text-left cursor-pointer ${
-                selectedQ === q.id
-                  ? 'border-primary-500 bg-primary-50'
-                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-              }`}
+              to={`/personal/screening?paper=${encodeURIComponent(q.id)}`}
+              title={`去作答 ${q.name}`}
+              className="w-full flex items-center justify-between p-3.5 rounded-lg border border-slate-200 hover:border-primary-400 hover:bg-primary-50 transition-colors text-left"
             >
               <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  selectedQ === q.id ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-400'
-                }`}>
-                  {selectedQ === q.id ? <Check className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-100 text-slate-400">
+                  <FileText className="w-4 h-4" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-slate-800">{q.name}</p>
-                  <p className="text-xs text-slate-400">{q.questions} 题 · {q.time}</p>
+                  <p className="text-xs text-slate-400">{q.questions} 题 · 约{q.minutes}分钟</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-300" />
-            </button>
+              <ChevronRight className="w-4 h-4 text-slate-400" />
+            </Link>
           ))}
         </div>
-        {selectedQ && (
-          <p className="mt-3 text-xs text-slate-400">
-            请前往「心理筛查」页面作答 {questionnaires.find(q => q.id === selectedQ)?.name}
-          </p>
-        )}
       </div>
 
       {/* Free text */}
@@ -444,7 +474,7 @@ function TextTab() {
           <div className="flex items-center gap-2">
             {submitted && (
               <span className="text-xs text-success-600 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> 已送入哈希检索
+                <CheckCircle2 className="w-3.5 h-3.5" /> 已记下（演示模式：暂存在本机，未上传服务端）
               </span>
             )}
             <button

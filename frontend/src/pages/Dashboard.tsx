@@ -39,6 +39,29 @@ const warningAppearance: Record<WarningEvent["level"], { label: string; valueCla
   red: { label: "红色", valueClassName: "text-danger-600", iconClassName: "bg-danger-50 text-danger-600" },
 };
 
+/** 按当前时段给一句更贴合当下的话，避免早上也在讲"先稳定睡眠" */
+function timeBasedTip(hour: number): string {
+  if (hour >= 5 && hour < 9) {
+    return "早上好，新的一天，先给自己一个平稳的开始。";
+  }
+  if (hour >= 9 && hour < 12) {
+    return "上午精神最好，先把最重要的一件事做完。";
+  }
+  if (hour >= 12 && hour < 14) {
+    return "中午先好好吃饭，再眯二十分钟——午休别省。";
+  }
+  if (hour >= 14 && hour < 16) {
+    return "刚睡醒容易发懵，先喝口水，慢慢把状态找回来。";
+  }
+  if (hour >= 16 && hour < 18) {
+    return "这个点最容易累，允许自己慢一点，别硬撑。";
+  }
+  if (hour >= 18 && hour < 23) {
+    return "先稳定睡眠，再降低学习压力，慢慢找回自己的节奏。";
+  }
+  return "夜深了，先把电子设备放远一点，睡眠是最好的修复。";
+}
+
 function calendarDaysAgo(value: string): number | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   if (!match) return null;
@@ -54,9 +77,15 @@ function calendarDaysAgo(value: string): number | null {
 export default function Dashboard() {
   const [searchParams] = useSearchParams();
   const requestedPreview = import.meta.env.DEV ? searchParams.get("alertPreview") : null;
-  const previewLevel: "red" | "orange" | null = requestedPreview === "red"
-    ? "red"
-    : requestedPreview === "orange" ? "orange" : null;
+  // 预览全部四档（原先只支持 red / orange，黄档没法预览）
+  const previewLevel: "red" | "yellow" | "orange" | null =
+    requestedPreview === "red"
+      ? "red"
+      : requestedPreview === "orange"
+        ? "orange"
+        : requestedPreview === "yellow"
+          ? "yellow"
+          : null;
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const [reload, setReload] = useState(0);
@@ -113,7 +142,25 @@ export default function Dashboard() {
         : displayedWarning.level === "orange"
           ? "及时关注这份提醒，和可信赖的人或专业人员聊聊。"
           : "请查看今天的预警详情，留意自己的状态。";
+
+  // A：红/橙预警时，把该条预警的「建议动作」直接带到卡面上，
+  //    不用点进预警中心才知道该做什么（预警记录里本来就有 suggestion 字段）。
+  const warningAdvice =
+    !previewLevel && latestWarning?.alert.suggestion ? latestWarning.alert.suggestion : null;
+
+  // B：今日行动计划按预警等级动态增补。
+  //    原先三条来自后端常量，与预警等级零联动；这里按等级在前面插入对应行动项。
+  const levelPlan =
+    displayedWarning?.level === "red"
+      ? [{ id: "PLAN-ALERT-RED", title: "预约心理辅导", duration: "本周内", status: "new" as const }]
+      : displayedWarning?.level === "orange"
+        ? [{ id: "PLAN-ALERT-ORANGE", title: "与可信赖的人聊一聊", duration: "本周内", status: "new" as const }]
+        : displayedWarning?.level === "yellow"
+          ? [{ id: "PLAN-ALERT-YELLOW", title: "继续每日情绪记录", duration: "每日", status: "new" as const }]
+          : [];
+  const planItems = [...levelPlan, ...actionPlan];
   const latestSleep = moodTrend[moodTrend.length - 1]?.sleep ?? 0;
+  const dayTip = timeBasedTip(new Date().getHours());
   const lastRecord = screeningRecords.find(
     (item) => item.status === "completed",
   );
@@ -134,6 +181,7 @@ export default function Dashboard() {
           <div className="flex flex-wrap items-center gap-3">
             <Link to="/personal/dashboard?alertPreview=red" className="text-danger-600 hover:underline">红色示例</Link>
             <Link to="/personal/dashboard?alertPreview=orange" className="text-orange-600 hover:underline">橙色示例</Link>
+            <Link to="/personal/dashboard?alertPreview=yellow" className="text-warning-600 hover:underline">黄色示例</Link>
             <Link to="/personal/dashboard" className="text-primary-600 hover:underline">退出预览</Link>
           </div>
         </div>
@@ -152,9 +200,7 @@ export default function Dashboard() {
                 .filter(Boolean)
                 .join(" · ")}
             </p>
-            <p className="mt-2 text-xs text-slate-400">
-              先稳定睡眠，再降低学习压力，慢慢找回自己的节奏。
-            </p>
+            <p className="mt-2 text-xs text-slate-400">{dayTip}</p>
           </div>
         </div>
         <Link to="/personal/screening" className="ui-button ui-button-primary">
@@ -179,7 +225,7 @@ export default function Dashboard() {
           valueClassName={warningStyle?.valueClassName}
           iconClassName={warningStyle?.iconClassName}
           icon={AlertTriangle}
-          hint={warningHint}
+          hint={warningAdvice ? `${warningHint} 建议：${warningAdvice}` : warningHint}
           action={
             <Link to="/personal/alerts" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 hover:border-primary-300 hover:text-primary-600">
               查看全部
@@ -319,7 +365,7 @@ export default function Dashboard() {
           description="从一件小事开始，为自己留一点时间"
         />
         <div className="space-y-4">
-          {actionPlan.map((plan, index) => (
+          {planItems.map((plan, index) => (
             <div
               key={plan.id}
               className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"

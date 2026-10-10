@@ -91,8 +91,11 @@ http.interceptors.response.use(
     const isAuthEntry = /\/api\/auth\/(login|register)$/.test(error.config?.url ?? '');
     if (error.response?.status === 401 && !isAuthEntry) {
       clearToken();
-      if (!location.pathname.startsWith('/auth')) {
-        location.href = '/auth';
+      // 项目用 HashRouter：登录路由在 hash 里；线上又部署在仓库子路径下，
+      // 所以必须带上 BASE_URL，否则 GitHub Pages 上会跳到不存在的 /auth 而 404。
+      if (!location.hash.startsWith('#/auth')) {
+        const base = import.meta.env.BASE_URL || '/';
+        location.href = `${base}#/auth`;
       }
       return Promise.reject(new Error('登录已过期，请重新登录'));
     }

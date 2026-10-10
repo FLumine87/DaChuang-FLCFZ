@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
-  Plus,
-  Search,
   TrendingUp,
 } from "lucide-react";
 import {
@@ -20,9 +18,13 @@ import {
 } from "recharts";
 import { Link } from "react-router-dom";
 import {
+  getAdminAlerts,
   getAdminDashboardData,
+  getDashboardStats,
   type AdminDashboardResponse,
+  type DashboardStats,
 } from "../../services/mockApi";
+import { type AlertRecord } from "../data/adminMockData";
 import {
   ChartRange,
   DashboardError,
@@ -36,6 +38,8 @@ export default function AdminDashboard() {
   const [data, setData] = useState<AdminDashboardResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const [reload, setReload] = useState(0);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [recent, setRecent] = useState(false);
   useEffect(() => {
     let active = true;
@@ -46,6 +50,18 @@ export default function AdminDashboard() {
       .catch(() => {
         if (active) setFailed(true);
       });
+    // 顶部指标改走真实聚合查询（/api/dashboard/stats）；失败时保持「—」占位，不影响页面其余部分
+    getDashboardStats()
+      .then((result) => {
+        if (active) setStats(result);
+      })
+      .catch(() => {});
+    // 预警处置概览用的原始记录（与管理端预警页同一个接口，不新增后端依赖）
+    getAdminAlerts()
+      .then((rows) => {
+        if (active) setAlerts(rows);
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -60,6 +76,21 @@ export default function AdminDashboard() {
       />
     );
   if (!data) return <DashboardLoading />;
+  // 预警处置概览：由预警记录聚合（状态分布 + 处理人分布）
+  const alertStats = {
+    pending: alerts.filter((a) => a.status === "pending").length,
+    processing: alerts.filter((a) => a.status === "processing").length,
+    resolved: alerts.filter((a) => a.status === "resolved").length,
+    // 没有任何处理人的预警：唯一一个「需要立刻认领」的信号
+    unassigned: alerts.filter((a) => !a.assignee).length,
+    byAssignee: Object.entries(
+      alerts.reduce<Record<string, number>>((acc, a) => {
+        if (!a.assignee) return acc;
+        acc[a.assignee] = (acc[a.assignee] ?? 0) + 1;
+        return acc;
+      }, {})
+    ).sort((a, b) => b[1] - a[1]),
+  };
   const trend = recent ? data.trendData.slice(-7) : data.trendData;
   const total = data.alertDistribution.reduce(
     (sum, item) => sum + item.value,
@@ -80,8 +111,33 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <section className="ui-card p-5 sm:col-span-2 xl:p-6">
+      {/* 注：顶部「待处理预警 / 本月完成率」等指标及其变化幅度目前是前端常量，
+          未接入 /api/dashboard/stats；下方趋势与分布来自真实聚合查询。 */}
+      {/* 首行按「要做的 → 风险总量 → 整体进度」排序：
+          未分配预警（需立刻认领）→ 本月预警（黄/红总量）→ 本月完成率（进展） */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <MetricCard
+          label="未分配预警"
+          value={alerts.length === 0 ? "—" : String(alertStats.unassigned)}
+          icon={AlertTriangle}
+          hint={
+            alerts.length === 0
+              ? "暂无预警记录"
+              : alertStats.unassigned === 0
+                ? "全部预警都已有处理人"
+                : "还没有人认领，建议尽快分配"
+          }
+          action={
+            <Link
+              to="/admin/alerts"
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 hover:border-primary-300 hover:text-primary-600"
+            >
+              去分配
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          }
+        />
+        <section className="ui-card p-5 xl:p-6">
           <PanelHeading
             title="本月预警"
             description="按触发时间统计黄色与红色预警"
@@ -107,18 +163,23 @@ export default function AdminDashboard() {
           </div>
         </section>
         <MetricCard
-          label="待处理预警"
-          value="9"
-          icon={AlertTriangle}
-          trend="-3%"
-          hint="较上月待处理数量"
-        />
-        <MetricCard
           label="本月完成率"
-          value="87%"
+          value={stats ? `${stats.completion_rate}%` : "—"}
           icon={TrendingUp}
-          trend="+5%"
-          hint="较上月筛查完成率"
+          hint={
+            stats
+              ? `本月已完成 ${stats.monthly_screenings} 件 · 累计 ${stats.total_screenings} 件`
+              : "统计接口暂不可用"
+          }
+          action={
+            <Link
+              to="/admin/screening"
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 hover:border-primary-300 hover:text-primary-600"
+            >
+              看明细
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          }
         />
       </div>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
@@ -197,63 +258,69 @@ export default function AdminDashboard() {
           </div>
         </section>
         <section className="ui-card overflow-hidden">
-          <div className="p-6 pb-0">
+          <div className="p-6">
+            {/* 原来是「本月筛查目标」仪表盘：把 87% / 261 件又画了一遍（与上面两块重复），
+                且底部「待处理预警 9 条」是写死的常量。这里换成真正的新信息：
+                处置状态分布 + 处理人分布，数据直接来自管理端预警接口，无需新后端。 */}
             <PanelHeading
-              title="本月筛查目标"
-              description="按计划推进，让关怀持续发生"
+              title="预警处置概览"
+              description="按处理状态与处理人分布，决定先跟谁"
             />
-            <div className="relative mx-auto max-w-[270px]">
-              <svg
-                viewBox="0 0 240 150"
-                role="img"
-                aria-label="本月筛查完成率 87%"
-              >
-                <path
-                  d="M 25 120 A 95 95 0 0 1 215 120"
-                  fill="none"
-                  stroke="#f2f4f7"
-                  strokeWidth="12"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M 25 120 A 95 95 0 0 1 215 120"
-                  fill="none"
-                  stroke="#465fff"
-                  strokeWidth="12"
-                  strokeLinecap="round"
-                  pathLength="100"
-                  strokeDasharray="87 100"
-                />
-              </svg>
-              <div className="absolute inset-x-0 bottom-7 text-center">
-                <p className="text-4xl font-semibold tracking-tight text-slate-800">
-                  87<span className="text-2xl">%</span>
-                </p>
-                <span className="mt-2 inline-block rounded-full bg-success-50 px-2.5 py-1 text-xs font-medium text-success-600">
-                  较上月 +5%
+            <div className="space-y-2">
+              {[
+                { label: "待处理", value: alertStats.pending, cls: "text-slate-800" },
+                { label: "处理中", value: alertStats.processing, cls: "text-primary-600" },
+                { label: "已解决", value: alertStats.resolved, cls: "text-success-600" },
+              ].map((s) => (
+                <div key={s.label} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600">{s.label}</span>
+                  <span className={`font-medium tabular-nums ${s.cls}`}>
+                    {alerts.length === 0 ? "—" : s.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 space-y-2">
+              <p className="text-xs font-medium text-slate-500">处理人分布</p>
+              {alertStats.byAssignee.length === 0 ? (
+                <p className="text-sm text-slate-400">暂无分配记录</p>
+              ) : (
+                alertStats.byAssignee.map(([name, count]) => (
+                  <div key={name} className="flex items-center justify-between text-sm">
+                    <span className="truncate text-slate-700">{name}</span>
+                    <span className="shrink-0 tabular-nums text-slate-500">{count} 条</span>
+                  </div>
+                ))
+              )}
+            </div>
+            {/* 收尾：处置完成度。既填掉被左侧趋势图拉高后的空档，也提供一个「率」的视角
+                （上面的计数回答“各有多少”，这里回答“整体推进到哪了”） */}
+            <div className="mt-6">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>处置完成度</span>
+                <span className="tabular-nums">
+                  {alerts.length === 0
+                    ? "—"
+                    : `${alertStats.resolved} / ${alerts.length} 条 · ${Math.round(
+                        (alertStats.resolved / alerts.length) * 100
+                      )}%`}
                 </span>
               </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-success-500 transition-all"
+                  style={{
+                    width: alerts.length === 0 ? "0%" : `${(alertStats.resolved / alerts.length) * 100}%`,
+                  }}
+                />
+              </div>
             </div>
-            <p className="mb-6 text-center text-xs leading-6 text-slate-500">
-              本月已完成 156 次筛查
-              <br />
-              及时跟进预警，持续完善健康档案。
-            </p>
-          </div>
-          <div className="grid grid-cols-2 border-t border-slate-100 bg-slate-50/60 px-6 py-5 text-center">
-            <div className="border-r border-slate-200">
-              <p className="text-xs text-slate-500">本月筛查</p>
-              <p className="mt-1.5 text-lg font-semibold text-slate-800">
-                156{" "}
-                <span className="text-xs font-normal text-slate-400">次</span>
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">待处理预警</p>
-              <p className="mt-1.5 text-lg font-semibold text-slate-800">
-                9 <span className="text-xs font-normal text-slate-400">条</span>
-              </p>
-            </div>
+            <Link
+              to="/admin/alerts"
+              className="mt-5 inline-flex items-center gap-1 text-sm text-primary-600 hover:underline"
+            >
+              查看全部预警 <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
         </section>
       </div>
@@ -376,20 +443,7 @@ export default function AdminDashboard() {
           </div>
         </section>
       </div>
-      <div className="flex flex-wrap gap-3">
-        <Link to="/admin/screening" className="ui-button ui-button-primary">
-          <Plus className="h-4 w-4" />
-          管理筛查
-        </Link>
-        <Link to="/admin/agent-workbench" className="ui-button">
-          <AlertTriangle className="h-4 w-4" />
-          预警处置工作台
-        </Link>
-        <Link to="/admin/retrieval" className="ui-button">
-          <Search className="h-4 w-4" />
-          检索与分析
-        </Link>
-      </div>
+      {/* 跳转已集成进上方两个方块（MetricCard 的 action），此处不再重复放按钮 */}
     </div>
   );
 }

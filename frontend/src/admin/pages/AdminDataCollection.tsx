@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FileText, Mic, ImageIcon, Search, ChevronDown,
   AlertTriangle, CheckCircle2, Clock, Loader2, Eye, X,
 } from 'lucide-react';
 import {
-  textSubmissions, audioSubmissions, imageSubmissions,
   type TextSubmission, type AudioSubmission, type ImageSubmission, type AnalysisStatus,
 } from '../data/adminMockData';
+import { getAdminCollectionData } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 
 type Tab = 'text' | 'audio' | 'image';
@@ -84,13 +84,13 @@ function FilterBar({
 }
 
 // ─── Text Tab ─────────────────────────────────────────────────────────────────
-function TextTab() {
+function TextTab({ rows }: { rows: TextSubmission[] }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [risk, setRisk] = useState('all');
   const [selected, setSelected] = useState<TextSubmission | null>(null);
 
-  const filtered = textSubmissions.filter(
+  const filtered = rows.filter(
     (t) =>
       t.username.includes(search) &&
       (status === 'all' || t.analysisStatus === status) &&
@@ -192,13 +192,13 @@ function TextTab() {
 }
 
 // ─── Audio Tab ─────────────────────────────────────────────────────────────────
-function AudioTab() {
+function AudioTab({ rows }: { rows: AudioSubmission[] }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [risk, setRisk] = useState('all');
   const [selected, setSelected] = useState<AudioSubmission | null>(null);
 
-  const filtered = audioSubmissions.filter(
+  const filtered = rows.filter(
     (a) =>
       a.username.includes(search) &&
       (status === 'all' || a.analysisStatus === status) &&
@@ -305,13 +305,13 @@ function AudioTab() {
 }
 
 // ─── Image Tab ─────────────────────────────────────────────────────────────────
-function ImageTab() {
+function ImageTab({ rows }: { rows: ImageSubmission[] }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [risk, setRisk] = useState('all');
   const [selected, setSelected] = useState<ImageSubmission | null>(null);
 
-  const filtered = imageSubmissions.filter(
+  const filtered = rows.filter(
     (img) =>
       img.username.includes(search) &&
       (status === 'all' || img.analysisStatus === status) &&
@@ -418,26 +418,74 @@ function ImageTab() {
 // ─── Main ──────────────────────────────────────────────────────────────────────
 export default function AdminDataCollection() {
   const [activeTab, setActiveTab] = useState<Tab>('text');
+  // 采集数据统一从服务层取：mock 模式返回样例数据，真实模式打 /api/admin/data-collection。
+  // 之前是直接 import adminMockData —— 那样件数永远是写死的，不会随真实数据变化。
+  const [data, setData] = useState<{
+    text: TextSubmission[];
+    audio: AudioSubmission[];
+    image: ImageSubmission[];
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getAdminCollectionData()
+      .then((d) => {
+        if (!active) return;
+        setData({
+          text: d.textSubmissions ?? [],
+          audio: d.audioSubmissions ?? [],
+          image: d.imageSubmissions ?? [],
+        });
+      })
+      .catch(() => {
+        if (active) setData({ text: [], audio: [], image: [] });
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // 风险提示条：本次会话里关掉就不再显示（用 sessionStorage —— 关掉浏览器即清空，
+  // 所以下次上线仍会提醒）；条数变化（又有新数据被标记）时也会重新出现。
+  const [dismissedFlagged, setDismissedFlagged] = useState<number | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('admin-collection-flagged-dismissed');
+      return saved === null ? null : Number(saved);
+    } catch {
+      return null;
+    }
+  });
+  // 空态说明（解释后端返回空列表）本次会话可关闭，关掉浏览器即重置
+  const [dismissedEmptyNote, setDismissedEmptyNote] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('admin-collection-empty-dismissed') === '1';
+    } catch {
+      return false;
+    }
+  });
 
   const tabs: { id: Tab; label: string; icon: typeof FileText; count: number }[] = [
-    { id: 'text',  label: '文本采集', icon: FileText,  count: textSubmissions.length },
-    { id: 'audio', label: '语音采集', icon: Mic,       count: audioSubmissions.length },
-    { id: 'image', label: '图像采集', icon: ImageIcon, count: imageSubmissions.length },
+    { id: 'text',  label: '文本采集', icon: FileText,  count: data?.text.length ?? 0 },
+    { id: 'audio', label: '语音采集', icon: Mic,       count: data?.audio.length ?? 0 },
+    { id: 'image', label: '图像采集', icon: ImageIcon, count: data?.image.length ?? 0 },
   ];
 
   const flaggedTotal =
-    textSubmissions.filter((t) => t.analysisStatus === 'flagged').length +
-    audioSubmissions.filter((a) => a.analysisStatus === 'flagged').length +
-    imageSubmissions.filter((i) => i.analysisStatus === 'flagged').length;
+    (data?.text ?? []).filter((t) => t.analysisStatus === 'flagged').length +
+    (data?.audio ?? []).filter((a) => a.analysisStatus === 'flagged').length +
+    (data?.image ?? []).filter((i) => i.analysisStatus === 'flagged').length;
+
+  // 0 条时整条不显示；本次已关闭且条数没变时也不显示
+  const showRiskBanner = flaggedTotal > 0 && dismissedFlagged !== flaggedTotal;
 
   return (
     <div className="space-y-5">
       {/* Header summary */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: '文本日记', count: textSubmissions.length, sub: '条用户提交', color: 'bg-indigo-50 text-indigo-600' },
-          { label: '语音条目', count: audioSubmissions.length, sub: '条音频记录', color: 'bg-violet-50 text-violet-600' },
-          { label: '图像上传', count: imageSubmissions.length, sub: '张图像', color: 'bg-amber-50 text-amber-600' },
+          { label: '文本日记', count: data?.text.length ?? 0, sub: '条用户提交', color: 'bg-indigo-50 text-indigo-600' },
+          { label: '语音条目', count: data?.audio.length ?? 0, sub: '条音频记录', color: 'bg-violet-50 text-violet-600' },
+          { label: '图像上传', count: data?.image.length ?? 0, sub: '张图像', color: 'bg-amber-50 text-amber-600' },
         ].map((item) => (
           <div key={item.label} className="ui-card p-4 flex items-center gap-4">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg ${item.color}`}>
@@ -451,12 +499,59 @@ export default function AdminDataCollection() {
         ))}
       </div>
 
-      {flaggedTotal > 0 && (
+      {showRiskBanner && (
         <div className="flex items-center gap-2 px-4 py-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-700">
           <AlertTriangle className="w-4 h-4 shrink-0" />
-          当前有 <strong>{flaggedTotal}</strong> 条多模态数据被标记为高风险，请优先核查。
+          <span className="flex-1">
+            当前有 <strong>{flaggedTotal}</strong> 条多模态数据被标记为高风险，请优先核查。
+          </span>
+          <button
+            type="button"
+            aria-label="关闭本次提示"
+            title="关闭本次提示（下次上线仍会提醒）"
+            onClick={() => {
+              setDismissedFlagged(flaggedTotal);
+              try {
+                sessionStorage.setItem('admin-collection-flagged-dismissed', String(flaggedTotal));
+              } catch {
+                /* 隐私模式下 sessionStorage 不可用，忽略即可 */
+              }
+            }}
+            className="shrink-0 cursor-pointer rounded-lg p-1 text-danger-600 transition-colors hover:bg-danger-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
+
+      {/* 空态说明：只在开发环境显示（生产构建不出现——它解释的是后端空数据，属开发期信息），
+          且本次会话可关闭（sessionStorage → 下次上线仍会提示） */}
+      {import.meta.env.DEV &&
+        !dismissedEmptyNote &&
+        data &&
+        data.text.length + data.audio.length + data.image.length === 0 && (
+          <div className="ui-card flex items-center gap-2 px-4 py-3 text-sm text-slate-500">
+            <span className="flex-1">
+              暂无采集数据：后端采集接口当前返回空列表，待文件上传与审阅链路启用后，这里的条目与件数会自动跟随真实数据变化。
+            </span>
+            <button
+              type="button"
+              aria-label="关闭本次提示"
+              title="关闭本次提示（下次上线仍会提醒）"
+              onClick={() => {
+                setDismissedEmptyNote(true);
+                try {
+                  sessionStorage.setItem('admin-collection-empty-dismissed', '1');
+                } catch {
+                  /* 隐私模式下 sessionStorage 不可用，忽略即可 */
+                }
+              }}
+              className="shrink-0 cursor-pointer rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
       {/* Tabs */}
       <div className="ui-card flex gap-2 p-1.5 w-fit">
@@ -481,9 +576,12 @@ export default function AdminDataCollection() {
         })}
       </div>
 
-      {activeTab === 'text'  && <TextTab />}
-      {activeTab === 'audio' && <AudioTab />}
-      {activeTab === 'image' && <ImageTab />}
+      {/* 注：三个页签的条目目前来自前端样例数据（adminMockData）；
+          后端采集审阅接口现在只返回空列表，等上传与审阅链路启用后再切服务层。 */}
+
+      {activeTab === 'text'  && <TextTab rows={data?.text ?? []} />}
+      {activeTab === 'audio' && <AudioTab rows={data?.audio ?? []} />}
+      {activeTab === 'image' && <ImageTab rows={data?.image ?? []} />}
     </div>
   );
 }

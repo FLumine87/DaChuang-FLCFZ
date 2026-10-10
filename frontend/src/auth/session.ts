@@ -42,7 +42,10 @@ export function getCurrentSession(): Session | null {
     }
     if (!payload.username || !payload.role) return null;
 
-    return payload;
+    // 后端 JWT 里的 role 可能是 admin / counselor / user，而登录接口统一把非 admin
+    // 映射成 user。这里做同样的归一化，避免同一账号在「登录返回值」与「会话」两处
+    // 角色不一致（counselor 账号此前会出现这种情况）。
+    return { ...payload, role: payload.role === 'admin' ? 'admin' : 'user' };
   } catch {
     return null;
   }

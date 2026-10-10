@@ -8,13 +8,16 @@ import {
   ChevronRight,
   ClipboardList,
   Database,
-  Ellipsis,
   FolderOpen,
   LayoutDashboard,
   LogOut,
   Menu,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   ShieldCheck,
+  Sun,
   TriangleAlert,
   UserRound,
   type LucideIcon,
@@ -38,6 +41,16 @@ const subscribeToViewport = (callback: () => void) => {
 };
 const getMobileSnapshot = () => window.matchMedia(mobileQuery).matches;
 
+type Theme = "light" | "dark";
+
+/** 深色模式偏好存储键；index.html 的首屏脚本读取同一个键以避免闪白。 */
+const THEME_KEY = "psych_theme";
+
+/** 默认深色：只有用户显式切到浅色（存入 "light"）时才用浅色，
+ *  这样换浏览器 / 新窗口 / 清过站点数据后进入任何界面都不会突然变亮。 */
+const readStoredTheme = (): Theme =>
+  window.localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+
 export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -55,6 +68,8 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const [theme, setTheme] = useState<Theme>(readStoredTheme);
+  const isDark = theme === "dark";
   const isAdmin = mode === "admin";
   const username =
     getCurrentSession()?.username || (isAdmin ? "管理员" : "个人用户");
@@ -135,6 +150,20 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
+  // 切换 <html> 上的 .dark：index.css 里覆盖的主题变量据此整体翻转
+  useEffect(() => {
+    const dark = theme === "dark";
+    document.documentElement.classList.toggle("dark", dark);
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", dark ? "#0b1120" : "#465fff");
+    try {
+      window.localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      /* 隐私模式下 localStorage 不可写时忽略，本次会话内仍然生效 */
+    }
+  }, [theme]);
+
   useEffect(() => {
     if (!isMobile || !mobileOpen) return;
     const previousOverflow = document.body.style.overflow;
@@ -185,6 +214,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       navigate("/auth", { replace: true });
     }
   };
+  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
   return (
     <div
@@ -232,15 +262,9 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         </div>
         <nav className="shrink-0 px-5 pb-5">
           {["工作空间", "智能分析", "健康管理"].map((group) => (
-            <div className="mb-7" key={group}>
-              <div className="mb-3 flex h-5 items-center px-3 text-[11px] font-medium tracking-widest text-slate-400">
+            <div className="sidebar-group mb-7" key={group}>
+              <div className="sidebar-group-title mb-3 flex h-5 items-center px-3 text-[11px] font-medium tracking-widest text-slate-400">
                 <span className="sidebar-label">{group}</span>
-                {collapsed && (
-                  <Ellipsis
-                    className="hidden h-4 w-4 lg:block"
-                    aria-hidden="true"
-                  />
-                )}
               </div>
               <div className="space-y-1.5">
                 {items
@@ -282,32 +306,45 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               ? "从筛查到跟进，让关怀及时抵达。"
               : "从了解自己开始，照顾好每一天。"}
           </p>
-          {isAdmin && (
-            <Link
-              to={`${root}/screening`}
-              onClick={closeNavigation}
-              className="ui-button ui-button-primary mt-4 w-full text-xs"
-            >
-              查看筛查记录
-              <ArrowUpRight className="h-4 w-4" />
-            </Link>
-          )}
         </div>
-        <div className="sidebar-label shrink-0 border-t border-slate-100 px-7 py-4 text-[11px] text-slate-400">
-          心理健康 · {isAdmin ? "管理工作空间" : "个人健康空间"}
+        <div className="sidebar-footer">
+          <span className="sidebar-label">
+            心理健康 · {isAdmin ? "管理工作空间" : "个人健康空间"}
+          </span>
+          {/* 收起/展开侧栏。特意用「面板」图标 + 带边框的方形按钮，和导航图标区分开 */}
+          <button
+            type="button"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "展开侧栏" : "折叠侧栏"}
+            aria-expanded={!collapsed}
+            title={collapsed ? "展开侧栏" : "折叠侧栏"}
+            className="sidebar-action sidebar-action-collapse"
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-5 w-5" strokeWidth={1.7} />
+            ) : (
+              <PanelLeftClose className="h-5 w-5" strokeWidth={1.7} />
+            )}
+          </button>
         </div>
       </aside>
+      <button
+        type="button"
+        className="sidebar-handle"
+        aria-label={collapsed ? "展开侧栏" : "折叠侧栏"}
+        aria-expanded={!collapsed}
+        title={collapsed ? "展开侧栏" : "折叠侧栏"}
+        onClick={() => setCollapsed(!collapsed)}
+      >
+        {collapsed ? (
+          <ChevronRight className="h-[18px] w-[18px]" strokeWidth={1.7} />
+        ) : (
+          <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
+        )}
+      </button>
       <div className="app-frame" inert={isMobile && mobileOpen}>
         <header className="sticky top-0 z-20 flex h-[82px] items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 sm:px-7">
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-5">
-            <button
-              className="ui-icon-button hidden lg:flex"
-              aria-label={collapsed ? "展开侧栏" : "折叠侧栏"}
-              aria-expanded={!collapsed}
-              onClick={() => setCollapsed(!collapsed)}
-            >
-              <Menu className="h-5 w-5" />
-            </button>
             <button
               className="ui-icon-button lg:hidden"
               aria-label="打开导航"
@@ -419,6 +456,21 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                 </div>
               )}
             </div>
+            {/* 深浅色切换：放在用户名右侧的顶栏区域 */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-pressed={isDark}
+              aria-label={isDark ? "切换为浅色模式" : "切换为深色模式"}
+              title={isDark ? "切换为浅色模式" : "切换为深色模式"}
+              className="ui-icon-button"
+            >
+              {isDark ? (
+                <Moon className="h-5 w-5" strokeWidth={1.7} />
+              ) : (
+                <Sun className="h-5 w-5" strokeWidth={1.7} />
+              )}
+            </button>
           </div>
         </header>
         <main className="app-content" id="main-content" tabIndex={-1}>

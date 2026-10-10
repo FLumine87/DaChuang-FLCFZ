@@ -234,12 +234,52 @@ export async function getDashboardData(): Promise<DashboardResponse> {
   return request.get<DashboardResponse>('/api/personal/dashboard');
 }
 
+/** 管理端顶部指标（真实聚合查询）。后端 /api/dashboard/stats 已提供
+ *  monthly_screenings / completion_rate 等字段，此前前端用的是写死的 87%、9。 */
+export interface DashboardStats {
+  total_screenings: number;
+  monthly_screenings: number;
+  pending_alerts: number;
+  completion_rate: number;
+}
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  if (USE_MOCK) {
+    await delay();
+    return {
+      total_screenings: 300,
+      monthly_screenings: 261,
+      pending_alerts: 9,
+      completion_rate: 87,
+    };
+  }
+  return request.get<DashboardStats>('/api/dashboard/stats');
+}
+
 export async function getWarnings(): Promise<WarningEvent[]> {
   if (USE_MOCK) {
     await delay();
     return [...warningEvents];
   }
   return request.get<WarningEvent[]>('/api/personal/warnings');
+}
+
+/**
+ * 更新一条预警的处理状态（标记为跟踪中 / 已缓解）。
+ *
+ * 真实模式走 PUT /api/alerts/{id}。注意后端 update_alert 需要数据库数字 id，
+ * 而个人预警列表返回的是展示编号（WARN-…），若后端未提供 dbId，该调用会被拒绝 ——
+ * 所以调用方必须处理失败并回滚界面，绝不能静默改状态。
+ */
+export async function updateWarningStatus(
+  id: string,
+  status: WarningEvent['status']
+): Promise<void> {
+  if (USE_MOCK) {
+    await delay(200);
+    return;
+  }
+  await request.put(`/api/alerts/${encodeURIComponent(id)}`, { status });
 }
 
 export async function getCases() {
