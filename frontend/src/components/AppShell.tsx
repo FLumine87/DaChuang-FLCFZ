@@ -2,11 +2,9 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
-  Bell,
   BrainCircuit,
   ChevronDown,
   ChevronRight,
-  CircleHelp,
   ClipboardList,
   Database,
   Ellipsis,
@@ -376,15 +374,15 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               title="前往心理筛查"
               aria-label="前往心理筛查"
             >
-              <CircleHelp className="h-5 w-5" strokeWidth={1.7} />
+              <ClipboardList className="h-5 w-5" strokeWidth={1.7} />
             </Link>
             <Link
-              to={`${root}/alerts`}
+              to={`${root}/data-collection`}
               className="ui-icon-button rounded-full"
-              title="查看预警"
-              aria-label="查看预警"
+              title="前往多模态采集"
+              aria-label="前往多模态采集"
             >
-              <Bell className="h-5 w-5" strokeWidth={1.7} />
+              <Database className="h-5 w-5" strokeWidth={1.7} />
             </Link>
             <div className="relative" ref={profileRef}>
               <button
