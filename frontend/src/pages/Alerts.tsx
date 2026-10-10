@@ -36,7 +36,7 @@ export default function Alerts() {
 
   return (
     <div className="space-y-5">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="text-base font-semibold text-slate-800">个人预警中心</h3>
         <p className="text-sm text-slate-500 mt-2">
           当模型检测到“情绪持续下行、压力过载或睡眠显著下降”时，将在这里推送分级预警与可执行建议。
@@ -51,7 +51,7 @@ export default function Alerts() {
           { label: '已缓解', count: warningEvents.filter((a) => a.status === 'resolved').length, color: 'text-success-600 bg-success-50' },
           { label: '高风险', count: warningEvents.filter((a) => a.level === 'red').length, color: 'text-orange-600 bg-orange-50' },
         ].map((item) => (
-          <div key={item.label} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+          <div key={item.label} className="ui-card p-4">
             <p className="text-sm text-slate-500">{item.label}</p>
             <p className={`text-2xl font-bold mt-1 ${item.color.split(' ')[0]}`}>{item.count}</p>
           </div>
@@ -59,7 +59,7 @@ export default function Alerts() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <div className="relative">
           <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <select
@@ -97,7 +97,7 @@ export default function Alerts() {
             <div
               key={alert.id}
               onClick={() => setSelectedAlert(alert.id)}
-              className={`bg-white rounded-xl border p-4 shadow-sm cursor-pointer transition-colors ${
+              className={`bg-white rounded-2xl border p-5 cursor-pointer transition-colors ${
                 selectedAlert === alert.id
                   ? 'border-primary-500 ring-1 ring-primary-200'
                   : 'border-slate-200 hover:border-slate-300'
@@ -125,14 +125,14 @@ export default function Alerts() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-xl border border-slate-200">
+            <div className="ui-card text-center py-12 text-slate-400 text-sm">
               暂无匹配的预警记录
             </div>
           )}
         </div>
 
         {/* Alert Detail Panel */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 h-fit sticky top-6">
+        <div className="ui-card p-5 h-fit sticky top-6">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -162,7 +162,7 @@ export default function Alerts() {
               </div>
               <div className="flex gap-2 pt-2">
                 {selected.status === 'new' && (
-                  <button className="flex-1 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 cursor-pointer">
+                  <button className="flex-1 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 cursor-pointer">
                     标记为跟踪中
                   </button>
                 )}

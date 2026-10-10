@@ -36,7 +36,9 @@ export function useAudioRecorder(onComplete: (file: File) => void): AudioRecorde
   const cancelledRef = useRef(false);
   // onComplete 每次渲染都是新函数；放进 ref 避免录音期间拿到过期闭包
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const supported =
     typeof window !== 'undefined' &&

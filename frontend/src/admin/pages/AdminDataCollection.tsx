@@ -102,12 +102,12 @@ function TextTab() {
       <FilterBar search={search} onSearch={setSearch} status={status} onStatus={setStatus} risk={risk} onRisk={setRisk} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="ui-card lg:col-span-2 overflow-hidden">
           <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
             <p className="text-sm font-semibold text-slate-700">文本日记列表</p>
             <p className="text-xs text-slate-400">共 {filtered.length} 条</p>
           </div>
-          <table className="w-full">
+          <div className="ui-table-scroll"><table className="ui-table">
             <thead>
               <tr className="text-xs text-slate-500 border-b border-slate-100">
                 <th className="text-left px-5 py-2.5">用户</th>
@@ -138,14 +138,14 @@ function TextTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
           {filtered.length === 0 && (
             <p className="text-center py-10 text-slate-400 text-sm">暂无匹配记录</p>
           )}
         </div>
 
         {/* Detail panel */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 h-fit sticky top-6">
+        <div className="ui-card p-5 h-fit sticky top-6">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -210,12 +210,12 @@ function AudioTab() {
       <FilterBar search={search} onSearch={setSearch} status={status} onStatus={setStatus} risk={risk} onRisk={setRisk} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="ui-card lg:col-span-2 overflow-hidden">
           <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
             <p className="text-sm font-semibold text-slate-700">语音条目列表</p>
             <p className="text-xs text-slate-400">共 {filtered.length} 条</p>
           </div>
-          <table className="w-full">
+          <div className="ui-table-scroll"><table className="ui-table">
             <thead>
               <tr className="text-xs text-slate-500 border-b border-slate-100">
                 <th className="text-left px-5 py-2.5">用户</th>
@@ -252,14 +252,14 @@ function AudioTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
           {filtered.length === 0 && (
             <p className="text-center py-10 text-slate-400 text-sm">暂无匹配记录</p>
           )}
         </div>
 
         {/* Detail panel */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 h-fit sticky top-6">
+        <div className="ui-card p-5 h-fit sticky top-6">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -333,7 +333,7 @@ function ImageTab() {
             <div
               key={row.id}
               onClick={() => setSelected(row)}
-              className={`bg-white rounded-xl border p-4 shadow-sm cursor-pointer transition-colors ${
+              className={`bg-white rounded-2xl border p-5 cursor-pointer transition-colors ${
                 selected?.id === row.id ? 'border-primary-400 ring-1 ring-primary-200' : 'border-slate-200 hover:border-slate-300'
               }`}
             >
@@ -360,14 +360,14 @@ function ImageTab() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 p-10 text-center text-slate-400 text-sm">
+            <div className="ui-card p-10 text-center text-slate-400 text-sm">
               暂无匹配记录
             </div>
           )}
         </div>
 
         {/* Detail panel */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 h-fit sticky top-6">
+        <div className="ui-card p-5 h-fit sticky top-6">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -439,7 +439,7 @@ export default function AdminDataCollection() {
           { label: '语音条目', count: audioSubmissions.length, sub: '条音频记录', color: 'bg-violet-50 text-violet-600' },
           { label: '图像上传', count: imageSubmissions.length, sub: '张图像', color: 'bg-amber-50 text-amber-600' },
         ].map((item) => (
-          <div key={item.label} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center gap-4">
+          <div key={item.label} className="ui-card p-4 flex items-center gap-4">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg ${item.color}`}>
               {item.count}
             </div>
@@ -459,7 +459,7 @@ export default function AdminDataCollection() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-2 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm w-fit">
+      <div className="ui-card flex gap-2 p-1.5 w-fit">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -468,7 +468,7 @@ export default function AdminDataCollection() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                isActive ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                isActive ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <Icon className="w-4 h-4" />

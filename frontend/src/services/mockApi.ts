@@ -115,12 +115,11 @@ export interface AdminDashboardResponse {
 
 export async function apiLogin(
   username: string,
-  password: string,
-  remember: boolean
+  password: string
 ): Promise<LoginResult> {
   if (USE_MOCK) {
     await delay();
-    const result = mockAuthLogin(username, password, remember);
+    const result = mockAuthLogin(username, password);
     if (!result.ok) return { ok: false, message: result.message };
 
     // 构造一个标准 JWT 三段式 mock token：<header>.<payload>.<sig>

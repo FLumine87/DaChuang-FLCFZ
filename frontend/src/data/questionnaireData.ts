@@ -16,6 +16,14 @@ export interface QuestionnaireDefinition {
   name: string;
   description: string;
   instructions: string;
+  introduction: {
+    summary: string;
+    measures: string[];
+    suitableFor: string;
+    recallPeriod: string;
+    scoreBands: { range: string; label: string }[];
+    notice: string;
+  };
   questions: Question[];
   scoring: (total: number) => {
     level: AlertLevel;
@@ -45,6 +53,20 @@ export const questionnaires: QuestionnaireDefinition[] = [
     name: 'PHQ-9 抑郁筛查',
     description: '评估过去两周抑郁症状程度',
     instructions: '在过去 2 周里，你有多少时候受到以下问题的困扰？',
+    introduction: {
+      summary: 'PHQ-9 是一份简短的抑郁症状自评量表，通过 9 个问题了解近期情绪和生活状态。它用于帮助发现需要进一步关注的信号，不等同于医学诊断。',
+      measures: ['兴趣或愉悦感下降', '情绪低落与绝望感', '睡眠、精力和食欲变化', '自我评价、注意力与行动状态'],
+      suitableFor: '最近持续心情低落、做事提不起兴趣，或想了解自己近期抑郁相关症状时。',
+      recallPeriod: '请按照过去 2 周的真实情况作答。',
+      scoreBands: [
+        { range: '0–4', label: '无或极轻' },
+        { range: '5–9', label: '轻度' },
+        { range: '10–14', label: '中度' },
+        { range: '15–19', label: '中重度' },
+        { range: '20–27', label: '重度' },
+      ],
+      notice: '结果仅用于初步筛查。第 9 题涉及伤害自己的想法；如果该题不是“完全不会”，无论总分多少，都建议尽快联系心理老师、心理咨询师、医疗专业人员或身边可信任的人。',
+    },
     questions: [
       { id: 1, text: '做事时提不起劲或没有兴趣', options: frequency4 },
       { id: 2, text: '感到心情低落、沮丧或绝望', options: frequency4 },
@@ -69,6 +91,19 @@ export const questionnaires: QuestionnaireDefinition[] = [
     name: 'GAD-7 焦虑筛查',
     description: '评估焦虑水平与紧张程度',
     instructions: '在过去 2 周里，你有多少时候受到以下问题的困扰？',
+    introduction: {
+      summary: 'GAD-7 用 7 个问题了解近期焦虑症状的频率，重点关注担忧是否难以控制，以及紧张感是否已经影响日常生活。',
+      measures: ['紧张、焦虑或不安', '难以停止或控制担忧', '难以放松和坐立不安', '烦躁以及对坏事发生的担心'],
+      suitableFor: '最近经常担心、容易紧张、难以放松，或者感觉脑子一直停不下来时。',
+      recallPeriod: '请按照过去 2 周的真实情况作答。',
+      scoreBands: [
+        { range: '0–4', label: '无或极轻' },
+        { range: '5–9', label: '轻度' },
+        { range: '10–14', label: '中度' },
+        { range: '15–21', label: '重度' },
+      ],
+      notice: '分数反映焦虑症状的多少和频率，不代表已经患有焦虑障碍。若症状持续、明显影响学习、工作、睡眠或人际关系，建议寻求专业评估。',
+    },
     questions: [
       { id: 1, text: '感到紧张、焦虑或处于崩溃边缘', options: frequency4 },
       { id: 2, text: '不能停止或控制担忧', options: frequency4 },
@@ -90,6 +125,19 @@ export const questionnaires: QuestionnaireDefinition[] = [
     name: 'ISI 失眠评估',
     description: '评估入睡、维持睡眠和早醒问题',
     instructions: '请评估你在过去 2 周内的睡眠问题程度：',
+    introduction: {
+      summary: 'ISI 是失眠严重程度指数，用来了解主观睡眠困难及其对白天生活的影响。它不仅关注睡了多久，也关注你对睡眠的感受。',
+      measures: ['入睡困难、夜间醒来和早醒', '对当前睡眠的满意程度', '睡眠对精力、注意力和情绪的影响', '对睡眠问题的担忧程度'],
+      suitableFor: '最近入睡时间很长、夜间容易醒、醒得过早，或睡眠已经影响白天状态时。',
+      recallPeriod: '请按照过去 2 周的睡眠情况作答。',
+      scoreBands: [
+        { range: '0–7', label: '无明显失眠' },
+        { range: '8–14', label: '轻度' },
+        { range: '15–21', label: '中度' },
+        { range: '22–28', label: '重度' },
+      ],
+      notice: '量表反映的是你感受到的睡眠困难，不能替代睡眠障碍诊断。若失眠持续存在、白天功能明显受影响，建议咨询医生或睡眠专业人员。',
+    },
     questions: [
       { id: 1, text: '入睡困难（躺下后超过 30 分钟才能入睡）', options: [{ value: 0, label: '无' }, { value: 1, label: '轻度' }, { value: 2, label: '中度' }, { value: 3, label: '重度' }, { value: 4, label: '极重度' }] },
       { id: 2, text: '难以维持睡眠（夜间频繁醒来或醒来后再入睡困难）', options: [{ value: 0, label: '无' }, { value: 1, label: '轻度' }, { value: 2, label: '中度' }, { value: 3, label: '重度' }, { value: 4, label: '极重度' }] },
@@ -111,6 +159,19 @@ export const questionnaires: QuestionnaireDefinition[] = [
     name: 'PSS-10 压力量表',
     description: '评估近期主观压力感知',
     instructions: '以下问题询问你在过去一个月里的感受和想法，请对每个问题选择出现的频率：',
+    introduction: {
+      summary: 'PSS-10 用来了解你主观感受到的压力，重点是生活是否让你觉得不可预测、难以控制或难以应付。它不针对某一种心理疾病。',
+      measures: ['意外事件带来的烦恼', '对重要事情的控制感', '紧张和压力感', '处理问题与应对变化的信心'],
+      suitableFor: '最近学习、工作或生活负担较重，想了解自己的压力感受和应对状态时。',
+      recallPeriod: '请按照过去 1 个月的总体感受作答。',
+      scoreBands: [
+        { range: '0–13', label: '系统提示：低度压力' },
+        { range: '14–26', label: '系统提示：中度压力' },
+        { range: '27–33', label: '系统提示：较高压力' },
+        { range: '34–40', label: '系统提示：高度压力' },
+      ],
+      notice: 'PSS-10 官方没有统一的临床诊断分界值。这里的等级只是系统为了便于理解所做的辅助分组，更适合用来观察自己一段时间内的变化。',
+    },
     questions: [
       { id: 1, text: '因为某些意外发生而感到烦恼？', options: frequency5 },
       { id: 2, text: '感到无法控制你生活中的重要事情？', options: frequency5 },

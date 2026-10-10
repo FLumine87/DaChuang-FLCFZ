@@ -11,7 +11,7 @@ export default function SystemSelector() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">
           <Link
             to="/admin/dashboard"
-            className="group bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all"
+            className="ui-card group p-6 hover:shadow-md transition-all"
           >
             <ShieldCheck className="w-9 h-9 text-primary-600" />
             <h2 className="text-xl font-semibold text-slate-800 mt-4">管理端系统</h2>
@@ -25,7 +25,7 @@ export default function SystemSelector() {
 
           <Link
             to="/personal/dashboard"
-            className="group bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all"
+            className="ui-card group p-6 hover:shadow-md transition-all"
           >
             <UserRound className="w-9 h-9 text-primary-600" />
             <h2 className="text-xl font-semibold text-slate-800 mt-4">个人端系统</h2>

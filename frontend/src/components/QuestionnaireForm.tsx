@@ -1,25 +1,40 @@
-import { useState } from 'react';
-import { ArrowLeft, CheckCircle2, RotateCcw } from 'lucide-react';
-import { questionnaires } from '../data/questionnaireData';
-import type { QuestionnaireDefinition } from '../data/questionnaireData';
-import AlertBadge from './AlertBadge';
+import { useState } from "react";
+import { ArrowLeft, CheckCircle2, RotateCcw } from "lucide-react";
+import { questionnaires } from "../data/questionnaireData";
+import type { QuestionnaireDefinition } from "../data/questionnaireData";
+import AlertBadge from "./AlertBadge";
 
 interface Props {
   questionnaireId: string;
   onClose: () => void;
-  onComplete: (score: number, maxScore: number, level: 'green' | 'yellow' | 'orange' | 'red') => void;
+  onComplete: (
+    score: number,
+    maxScore: number,
+    level: "green" | "yellow" | "orange" | "red",
+  ) => void;
 }
 
-export default function QuestionnaireForm({ questionnaireId, onClose, onComplete }: Props) {
-  const qDef: QuestionnaireDefinition | undefined = questionnaires.find((q) => q.id === questionnaireId);
+export default function QuestionnaireForm({
+  questionnaireId,
+  onClose,
+  onComplete,
+}: Props) {
+  const qDef: QuestionnaireDefinition | undefined = questionnaires.find(
+    (q) => q.id === questionnaireId,
+  );
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
 
   if (!qDef) {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+      <div className="ui-card p-6">
         <p className="text-slate-500">未找到量表：{questionnaireId}</p>
-        <button onClick={onClose} className="mt-3 text-sm text-primary-600 cursor-pointer">返回</button>
+        <button
+          onClick={onClose}
+          className="mt-3 text-sm text-primary-600 cursor-pointer"
+        >
+          返回
+        </button>
       </div>
     );
   }
@@ -29,7 +44,10 @@ export default function QuestionnaireForm({ questionnaireId, onClose, onComplete
   const allAnswered = answeredCount === totalQuestions;
 
   const totalScore = Object.values(answers).reduce((sum, v) => sum + v, 0);
-  const maxScore = qDef.questions.reduce((sum, q) => sum + Math.max(...q.options.map((o) => o.value)), 0);
+  const maxScore = qDef.questions.reduce(
+    (sum, q) => sum + Math.max(...q.options.map((o) => o.value)),
+    0,
+  );
   const result = qDef.scoring(totalScore);
 
   const handleSubmit = () => {
@@ -43,11 +61,12 @@ export default function QuestionnaireForm({ questionnaireId, onClose, onComplete
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="ui-card overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-slate-50">
+      <div className="flex flex-wrap items-center gap-3 px-6 py-4 border-b border-slate-100 bg-slate-50">
         <button
           onClick={onClose}
+          aria-label="返回筛查列表"
           className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 text-slate-600" />
@@ -64,7 +83,7 @@ export default function QuestionnaireForm({ questionnaireId, onClose, onComplete
       {/* Progress bar */}
       <div className="h-1.5 bg-slate-100">
         <div
-          className="h-full bg-emerald-500 transition-all"
+          className="h-full bg-success-500 transition-all"
           style={{ width: `${(answeredCount / totalQuestions) * 100}%` }}
         />
       </div>
@@ -77,12 +96,21 @@ export default function QuestionnaireForm({ questionnaireId, onClose, onComplete
       {/* Questions */}
       <div className="px-6 pb-6 space-y-6">
         {qDef.questions.map((q) => (
-          <div key={q.id} className={`rounded-xl p-4 border transition-colors ${
-            answers[q.id] !== undefined ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200 bg-slate-50/50'
-          }`}>
+          <div
+            key={q.id}
+            className={`rounded-xl p-4 border transition-colors ${
+              answers[q.id] !== undefined
+                ? "border-emerald-200 bg-emerald-50/40"
+                : "border-slate-200 bg-slate-50/50"
+            }`}
+          >
             <p className="text-sm font-medium text-slate-800 mb-3">
-              <span className="inline-block w-6 h-6 rounded-full text-center leading-6 text-xs font-bold mr-2
-                bg-primary-100 text-primary-700">{q.id}</span>
+              <span
+                className="inline-block w-6 h-6 rounded-full text-center leading-6 text-xs font-bold mr-2
+                bg-primary-100 text-primary-700"
+              >
+                {q.id}
+              </span>
               {q.text}
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -92,11 +120,14 @@ export default function QuestionnaireForm({ questionnaireId, onClose, onComplete
                   <button
                     key={opt.value}
                     disabled={submitted}
-                    onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: opt.value }))}
+                    aria-pressed={selected}
+                    onClick={() =>
+                      setAnswers((prev) => ({ ...prev, [q.id]: opt.value }))
+                    }
                     className={`py-2 px-3 rounded-lg text-sm border transition-all cursor-pointer text-center ${
                       selected
-                        ? 'bg-primary-600 text-white border-primary-600 font-medium'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-primary-400 hover:bg-primary-50'
+                        ? "bg-primary-500 text-white border-primary-600 font-medium"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-primary-400 hover:bg-primary-50"
                     } disabled:cursor-not-allowed`}
                   >
                     {opt.label}
@@ -111,17 +142,19 @@ export default function QuestionnaireForm({ questionnaireId, onClose, onComplete
       {/* Result & Submit */}
       <div className="px-6 pb-6">
         {!submitted ? (
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={handleSubmit}
               disabled={!allAnswered}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" />
               提交并查看结果
             </button>
             {!allAnswered && (
-              <p className="text-xs text-slate-400">还有 {totalQuestions - answeredCount} 题未作答</p>
+              <p className="text-xs text-slate-400">
+                还有 {totalQuestions - answeredCount} 题未作答
+              </p>
             )}
           </div>
         ) : (
@@ -131,16 +164,22 @@ export default function QuestionnaireForm({ questionnaireId, onClose, onComplete
                 <p className="text-xs text-slate-500">总得分</p>
                 <p className="text-3xl font-bold text-slate-800">
                   {totalScore}
-                  <span className="text-base font-normal text-slate-400 ml-1">/ {maxScore}</span>
+                  <span className="text-base font-normal text-slate-400 ml-1">
+                    / {maxScore}
+                  </span>
                 </p>
               </div>
               <div className="flex-1">
                 <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
-                      result.level === 'red' ? 'bg-danger-500' :
-                      result.level === 'orange' ? 'bg-orange-500' :
-                      result.level === 'yellow' ? 'bg-warning-500' : 'bg-success-500'
+                      result.level === "red"
+                        ? "bg-danger-500"
+                        : result.level === "orange"
+                          ? "bg-orange-500"
+                          : result.level === "yellow"
+                            ? "bg-warning-500"
+                            : "bg-success-500"
                     }`}
                     style={{ width: `${(totalScore / maxScore) * 100}%` }}
                   />
@@ -149,8 +188,12 @@ export default function QuestionnaireForm({ questionnaireId, onClose, onComplete
               <AlertBadge level={result.level} />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-800">{result.label}</p>
-              <p className="text-sm text-slate-600 mt-1 leading-6">{result.description}</p>
+              <p className="text-sm font-semibold text-slate-800">
+                {result.label}
+              </p>
+              <p className="text-sm text-slate-600 mt-1 leading-6">
+                {result.description}
+              </p>
             </div>
             <div className="flex gap-2 flex-wrap">
               <button
@@ -162,7 +205,7 @@ export default function QuestionnaireForm({ questionnaireId, onClose, onComplete
               </button>
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer"
+                className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
               >
                 完成，返回列表
               </button>

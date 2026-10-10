@@ -11,6 +11,7 @@ frontend/.vite/
 npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+.pnpm-store/
 
 # ---- Python / 后端 ----
 __pycache__/

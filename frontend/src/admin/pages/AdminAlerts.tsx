@@ -32,7 +32,7 @@ export default function AdminAlerts() {
           <div
             key={alert.id}
             onClick={() => setSelectedId(alert.id)}
-            className={`bg-white rounded-xl border p-4 shadow-sm cursor-pointer transition-colors ${
+            className={`bg-white rounded-2xl border p-5 cursor-pointer transition-colors ${
               selectedId === alert.id ? 'border-primary-500 ring-1 ring-primary-200' : 'border-slate-200 hover:border-slate-300'
             }`}
           >
@@ -51,7 +51,7 @@ export default function AdminAlerts() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 h-fit">
+      <div className="ui-card p-5 h-fit">
         {selected ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between">

@@ -1,4 +1,4 @@
-import { request } from './http';
+import { request, USE_MOCK } from "./http";
 
 export interface GraphNode {
   entity_key: string;
@@ -27,7 +27,7 @@ export interface ProposedTask {
   task_key: string;
   title: string;
   due_at: string;
-  status: 'proposed' | 'confirmed' | 'modified' | 'rejected';
+  status: "proposed" | "confirmed" | "modified" | "rejected";
   requires_confirmation: boolean;
 }
 
@@ -86,11 +86,24 @@ export interface GraphOverview {
 }
 
 export function getGraphOverview() {
-  return request.get<GraphOverview>('/api/knowledge-graph/overview');
+  // Mock 登录令牌不能发送到真实研判服务，否则 401 会清除演示会话。
+  if (USE_MOCK) {
+    return Promise.reject<GraphOverview>(
+      new Error(
+        "当前为演示模式。知识图谱与预警研判需连接后端，并使用真实账号登录。",
+      ),
+    );
+  }
+  return request.get<GraphOverview>("/api/knowledge-graph/overview");
 }
 
 export function assessWarning(screeningId: number) {
-  return request.post<AssessmentResponse>('/api/agents/warning-assessment', {
+  if (USE_MOCK) {
+    return Promise.reject<AssessmentResponse>(
+      new Error("预警研判需连接后端，请切换到真实 API 模式后登录使用。"),
+    );
+  }
+  return request.post<AssessmentResponse>("/api/agents/warning-assessment", {
     screening_id: screeningId,
   });
 }

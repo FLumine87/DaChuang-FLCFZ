@@ -50,8 +50,7 @@ function writeAccounts(accounts: Account[]) {
 
 export function login(
   username: string,
-  password: string,
-  _remember: boolean
+  password: string
 ): { ok: boolean; message?: string; role?: UserRole } {
   const u = username.trim();
   const p = password.trim();

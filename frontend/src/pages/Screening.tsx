@@ -1,6 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Filter, ChevronDown, PlayCircle, ClipboardCheck } from 'lucide-react';
+import {
+  Search,
+  Filter,
+  ChevronDown,
+  PlayCircle,
+  ClipboardCheck,
+  Info,
+  X,
+  Clock3,
+  Target,
+  BarChart3,
+  ShieldCheck,
+} from 'lucide-react';
 import { questionnaireCatalog, type PersonalScreeningRecord } from '../data/mockData';
+import { questionnaires } from '../data/questionnaireData';
 import { getScreeningRecords, submitScreening } from '../services/mockApi';
 import AlertBadge from '../components/AlertBadge';
 import StatusBadge from '../components/StatusBadge';
@@ -12,6 +25,7 @@ export default function Screening() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLevel, setFilterLevel] = useState<'all' | AlertLevel>('all');
   const [activeQuestionnaire, setActiveQuestionnaire] = useState<string | null>(null);
+  const [infoQuestionnaire, setInfoQuestionnaire] = useState<string | null>(null);
   const [localRecords, setLocalRecords] = useState<PersonalScreeningRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -30,6 +44,26 @@ export default function Screening() {
   useEffect(() => {
     fetchRecords();
   }, [fetchRecords]);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeQuestionnaire]);
+
+  useEffect(() => {
+    if (!infoQuestionnaire) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setInfoQuestionnaire(null);
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [infoQuestionnaire]);
+
+  const selectedInfo = questionnaires.find((item) => item.id === infoQuestionnaire);
 
   const filtered = localRecords.filter(
     (record) =>
@@ -69,7 +103,7 @@ export default function Screening() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="text-base font-semibold text-slate-800">筛查说明</h3>
         <p className="text-sm text-slate-500 mt-2 leading-6">
           这里提供个人自助心理筛查。系统会结合你的量表结果、文本/语音/图像采集结果，进行动态跨模态哈希检索和
@@ -82,7 +116,7 @@ export default function Screening() {
         {questionnaireCatalog.map((item) => (
           <div
             key={item.id}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+            className="ui-card p-5"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -97,19 +131,148 @@ export default function Screening() {
               <span>约 {item.minutes} 分钟</span>
               <span>关注：{item.target}</span>
             </div>
-            <button
-              onClick={() => setActiveQuestionnaire(item.id)}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium cursor-pointer"
-            >
-              <PlayCircle className="w-4 h-4" /> 开始 {item.id}
-            </button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                onClick={() => setActiveQuestionnaire(item.id)}
+                className="ui-button ui-button-primary"
+              >
+                <PlayCircle className="w-4 h-4" /> 开始 {item.id}
+              </button>
+              <button
+                onClick={() => setInfoQuestionnaire(item.id)}
+                className="ui-button"
+                aria-label={`了解 ${item.name}`}
+              >
+                <Info className="w-4 h-4" /> 了解量表
+              </button>
+            </div>
           </div>
         ))}
       </div>
 
+      {selectedInfo && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setInfoQuestionnaire(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="questionnaire-info-title"
+            className="app-scrollbar max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          >
+            <div className="flex items-start gap-4 border-b border-slate-100 px-5 py-5 sm:px-6">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+                <ClipboardCheck className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary-600">
+                  {selectedInfo.id} · 量表简介
+                </p>
+                <h2 id="questionnaire-info-title" className="mt-1 text-xl font-semibold text-slate-900">
+                  {selectedInfo.name}
+                </h2>
+              </div>
+              <button
+                onClick={() => setInfoQuestionnaire(null)}
+                className="ui-icon-button"
+                aria-label="关闭量表介绍"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-5 px-5 py-5 sm:px-6">
+              <p className="text-sm leading-7 text-slate-600">
+                {selectedInfo.introduction.summary}
+              </p>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                    <Target className="h-4 w-4 text-primary-600" /> 主要关注什么
+                  </div>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                    {selectedInfo.introduction.measures.map((measure) => (
+                      <li key={measure} className="flex gap-2">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-400" />
+                        <span>{measure}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                      <Info className="h-4 w-4 text-primary-600" /> 什么时候适合做
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {selectedInfo.introduction.suitableFor}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                      <Clock3 className="h-4 w-4 text-primary-600" /> 回答时间范围
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {selectedInfo.introduction.recallPeriod}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <BarChart3 className="h-4 w-4 text-primary-600" /> 结果如何理解
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {selectedInfo.introduction.scoreBands.map((band) => (
+                    <div key={band.range} className="rounded-lg bg-slate-50 px-3 py-2.5">
+                      <p className="text-sm font-semibold text-slate-800">{band.range} 分</p>
+                      <p className="mt-0.5 text-xs leading-5 text-slate-500">{band.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-primary-100 bg-primary-50/70 p-4">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">请注意</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      {selectedInfo.introduction.notice}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+              <button onClick={() => setInfoQuestionnaire(null)} className="ui-button">
+                稍后再做
+              </button>
+              <button
+                onClick={() => {
+                  setInfoQuestionnaire(null);
+                  setActiveQuestionnaire(selectedInfo.id);
+                }}
+                className="ui-button ui-button-primary"
+              >
+                <PlayCircle className="h-4 w-4" /> 开始 {selectedInfo.id}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex gap-3 items-center">
+        <div className="flex flex-wrap gap-3 items-center">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
@@ -142,8 +305,8 @@ export default function Screening() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <table className="w-full">
+      <div className="ui-card overflow-hidden">
+        <div className="ui-table-scroll"><table className="ui-table">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">编号</th>
@@ -183,7 +346,7 @@ export default function Screening() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
         {filtered.length === 0 && (
           <div className="text-center py-12 text-slate-400 text-sm">
             {loading ? '加载中…' : '暂无匹配的筛查记录'}

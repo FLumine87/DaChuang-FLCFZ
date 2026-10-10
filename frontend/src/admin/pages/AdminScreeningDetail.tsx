@@ -20,8 +20,8 @@ export default function AdminScreeningDetail({ record, onBack }: Props) {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+      <div className="ui-card p-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 text-sm">
           <div><span className="text-slate-400">姓名：</span><span className="text-slate-700">{record.name}</span></div>
           <div><span className="text-slate-400">性别：</span><span className="text-slate-700">{record.gender}</span></div>
           <div><span className="text-slate-400">年龄：</span><span className="text-slate-700">{record.age}岁</span></div>

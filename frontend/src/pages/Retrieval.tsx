@@ -193,7 +193,7 @@ export default function Retrieval() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
           <Hash className="w-5 h-5 text-primary-600" />
           动态跨模态哈希检索
@@ -223,8 +223,8 @@ export default function Retrieval() {
             if (f) void pickAudioFile(f);
           }}
         />
-        <div className="flex gap-3">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap gap-3">
+          <div className="relative min-w-40 flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
@@ -298,7 +298,7 @@ export default function Retrieval() {
           <button
             onClick={() => handleSearch()}
             disabled={loading || !canSearch}
-            className="px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            className="px-6 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             {loading ? '检索中...' : '开始检索'}
@@ -396,7 +396,7 @@ export default function Retrieval() {
       </div>
 
       {loading && (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 shadow-sm flex flex-col items-center gap-4 text-slate-400">
+        <div className="ui-card p-12 flex flex-col items-center gap-4 text-slate-400">
           <Loader2 className="w-10 h-10 animate-spin text-primary-500" />
           <div className="text-center">
             <p className="text-sm font-medium text-slate-600">动态跨模态哈希检索中</p>
@@ -407,7 +407,7 @@ export default function Retrieval() {
 
       {!loading && results && (
         <>
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+          <div className="ui-card ">
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
               <div>
                 <h3 className="font-semibold text-slate-800">
@@ -437,7 +437,7 @@ export default function Retrieval() {
               </div>
               <button
                 onClick={() => setShowReport((v) => !v)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
               >
                 <Sparkles className="w-4 h-4" /> {showReport ? '收起报告' : 'RAG智能分析'}
               </button>
@@ -610,7 +610,7 @@ export default function Retrieval() {
           </div>
 
           {showReport && report && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+            <div className="ui-card ">
               <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-primary-50 to-white rounded-t-xl">
                 <div className="flex items-center gap-3">
                   <Sparkles className="w-6 h-6 text-primary-600" />

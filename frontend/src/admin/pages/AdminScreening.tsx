@@ -42,7 +42,7 @@ export default function AdminScreening() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-3 items-center">
+      <div className="flex flex-wrap gap-3 items-center">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -70,8 +70,8 @@ export default function AdminScreening() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <table className="w-full">
+      <div className="ui-card overflow-hidden">
+        <div className="ui-table-scroll"><table className="ui-table">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">编号</th>
@@ -95,14 +95,14 @@ export default function AdminScreening() {
                 <td className="px-5 py-3.5"><AdminStatusBadge status={record.status} /></td>
                 <td className="px-5 py-3.5 text-sm text-slate-500">{record.date}</td>
                 <td className="px-5 py-3.5">
-                  <button onClick={() => setSelectedId(record.id)} className="text-primary-600 hover:text-primary-700 cursor-pointer">
+                  <button onClick={() => setSelectedId(record.id)} aria-label={`查看 ${record.name} 的筛查详情`} className="text-primary-600 hover:text-primary-700 cursor-pointer">
                     <Eye className="w-4 h-4" />
                   </button>
                 </td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );

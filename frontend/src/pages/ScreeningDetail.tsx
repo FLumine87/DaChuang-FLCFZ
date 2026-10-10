@@ -46,7 +46,7 @@ export default function ScreeningDetail({ record, onBack }: Props) {
           <button className="inline-flex items-center gap-2 px-3 py-2 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 text-sm cursor-pointer">
             <Download className="w-4 h-4" /> 导出
           </button>
-          <button className="inline-flex items-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm cursor-pointer">
+          <button className="inline-flex items-center gap-2 px-3 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm cursor-pointer">
             <FileText className="w-4 h-4" /> 生成报告
           </button>
         </div>
@@ -54,7 +54,7 @@ export default function ScreeningDetail({ record, onBack }: Props) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Basic Info */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="font-semibold text-slate-800 mb-4">基本信息</h3>
           <div className="space-y-3">
             {[
@@ -75,7 +75,7 @@ export default function ScreeningDetail({ record, onBack }: Props) {
         </div>
 
         {/* Score Overview */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="font-semibold text-slate-800 mb-4">得分概览</h3>
           <div className="flex flex-col items-center">
             <div className="relative w-32 h-32">
@@ -108,7 +108,7 @@ export default function ScreeningDetail({ record, onBack }: Props) {
         </div>
 
         {/* Dimension Radar */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="font-semibold text-slate-800 mb-4">维度分析</h3>
           <ResponsiveContainer width="100%" height={200}>
             <RadarChart data={dimensionData}>
@@ -122,7 +122,7 @@ export default function ScreeningDetail({ record, onBack }: Props) {
       </div>
 
       {/* Answer Details */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-4">作答详情（示例）</h3>
         <div className="space-y-3">
           {[

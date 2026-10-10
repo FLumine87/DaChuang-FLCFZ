@@ -31,10 +31,10 @@ export default function AdminRetrieval() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-3">跨模态哈希检索（管理端）</h3>
-        <div className="flex gap-3">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap gap-3">
+          <div className="relative min-w-40 flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
@@ -48,7 +48,7 @@ export default function AdminRetrieval() {
           <button
             onClick={handleSearch}
             disabled={loading || !query.trim()}
-            className="px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            className="px-6 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             {loading ? '检索中...' : '检索'}
@@ -57,7 +57,7 @@ export default function AdminRetrieval() {
       </div>
 
       {loading && (
-        <div className="bg-white rounded-xl border border-slate-200 p-10 shadow-sm flex items-center justify-center gap-3 text-slate-400">
+        <div className="ui-card p-10 flex items-center justify-center gap-3 text-slate-400">
           <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
           <span className="text-sm">正在执行动态跨模态哈希检索...</span>
         </div>
@@ -65,7 +65,7 @@ export default function AdminRetrieval() {
 
       {!loading && results && (
         <>
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100">
+          <div className="ui-card divide-y divide-slate-100">
             {results.map((result) => (
               <div key={result.id} className="p-5 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center justify-between">
@@ -91,7 +91,7 @@ export default function AdminRetrieval() {
           </div>
 
           {report && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <div className="ui-card p-5">
               <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-primary-600" />
                 RAG 智能报告

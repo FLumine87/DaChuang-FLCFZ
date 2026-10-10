@@ -1,251 +1,387 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from "react";
 import {
-  ClipboardCheck,
-  AlertTriangle,
   Activity,
-  Moon,
-  Sparkles,
-  Plus,
+  AlertTriangle,
   ArrowRight,
-  Loader2,
-} from 'lucide-react';
+  ClipboardCheck,
+  Moon,
+  Plus,
+  Sparkles,
+} from "lucide-react";
 import {
-  LineChart,
-  Line,
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from 'recharts';
-import { Link } from 'react-router-dom';
-import { getDashboardData } from '../services/mockApi';
-import AlertBadge from '../components/AlertBadge';
-import StatusBadge from '../components/StatusBadge';
-import type { MoodTrendPoint, WarningEvent, PersonalScreeningRecord, UserProfile } from '../data/mockData';
-
-interface DashboardData {
-  moodTrend: MoodTrendPoint[];
-  warningDistribution: { name: string; value: number; color: string }[];
-  warningEvents: WarningEvent[];
-  actionPlan: { id: string; title: string; duration: string; status: 'new' | 'tracking' | 'resolved' }[];
-  screeningRecords: PersonalScreeningRecord[];
-  userProfile: UserProfile;
-}
-
-function SkeletonCard() {
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm animate-pulse">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="h-3 w-24 bg-slate-200 rounded" />
-          <div className="h-7 w-16 bg-slate-200 rounded" />
-        </div>
-        <div className="w-12 h-12 bg-slate-200 rounded-xl" />
-      </div>
-      <div className="h-3 w-32 bg-slate-100 rounded mt-3" />
-    </div>
-  );
-}
+} from "recharts";
+import { Link } from "react-router-dom";
+import { getDashboardData, type DashboardResponse } from "../services/mockApi";
+import {
+  ChartRange,
+  DashboardError,
+  DashboardLoading,
+  MetricCard,
+  PanelHeading,
+} from "../components/DashboardUI";
+import AlertBadge from "../components/AlertBadge";
+import StatusBadge from "../components/StatusBadge";
 
 export default function Dashboard() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-
+  const [data, setData] = useState<DashboardResponse | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [recent, setRecent] = useState(false);
   useEffect(() => {
-    getDashboardData().then((res) => {
-      setData(res as DashboardData);
-      setLoading(false);
-    });
-  }, []);
-
-  if (loading || !data) {
+    let active = true;
+    getDashboardData()
+      .then((result) => {
+        if (active) setData(result);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [reload]);
+  if (failed)
     return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[0, 1, 2, 3].map((i) => <SkeletonCard key={i} />)}
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm flex items-center justify-center gap-3 text-slate-400">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          <span className="text-sm">正在加载仪表盘数据...</span>
-        </div>
-      </div>
+      <DashboardError
+        retry={() => {
+          setFailed(false);
+          setReload(reload + 1);
+        }}
+      />
     );
-  }
-
-  const { moodTrend, warningDistribution, warningEvents, actionPlan, screeningRecords, userProfile } = data;
-
-  const activeWarnings = warningEvents.filter((w) => w.status !== 'resolved').length;
+  if (!data) return <DashboardLoading />;
+  const {
+    moodTrend,
+    warningDistribution,
+    warningEvents,
+    actionPlan,
+    screeningRecords,
+    userProfile,
+  } = data;
+  const activeWarnings = warningEvents.filter(
+    (item) => item.status !== "resolved",
+  ).length;
   const latestSleep = moodTrend[moodTrend.length - 1]?.sleep ?? 0;
-  const lastRecord = screeningRecords.find((r) => r.status === 'completed');
-
-  const stats = [
-    { label: '连续打卡', value: '12 天', icon: ClipboardCheck, color: 'bg-success-50 text-success-600', hint: '较上周 +3 天' },
-    { label: '最近一次筛查', value: lastRecord ? `${lastRecord.questionnaire} ${lastRecord.score}分` : '暂无', icon: Activity, color: 'bg-warning-50 text-warning-600', hint: lastRecord ? lastRecord.moodTag : '' },
-    { label: '活跃预警', value: `${activeWarnings} 条`, icon: AlertTriangle, color: 'bg-danger-50 text-danger-600', hint: activeWarnings > 0 ? '需优先处理红色预警' : '暂无活跃预警' },
-    { label: '最近睡眠均值', value: `${latestSleep} 小时`, icon: Moon, color: 'bg-primary-50 text-primary-600', hint: '建议提升至 6.5h+' },
-  ];
+  const lastRecord = screeningRecords.find(
+    (item) => item.status === "completed",
+  );
+  const trend = recent ? moodTrend.slice(-7) : moodTrend;
+  const total = warningDistribution.reduce((sum, item) => sum + item.value, 0);
+  const tooltip = {
+    borderRadius: 12,
+    border: "1px solid #e4e7ec",
+    fontSize: 12,
+    boxShadow: "0 4px 16px #1018280a",
+  };
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div key={stat.label} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-500">{stat.label}</p>
-                  <p className="text-2xl font-bold text-slate-800 mt-1">{stat.value}</p>
-                </div>
-                <div className={`w-12 h-12 rounded-xl ${stat.color} flex items-center justify-center`}>
-                  <Icon className="w-6 h-6" />
-                </div>
-              </div>
-              <p className="text-xs text-slate-400 mt-3">{stat.hint}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
+      <section className="ui-card flex flex-wrap items-center justify-between gap-5 p-6">
+        <div className="flex items-center gap-4">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary-50 text-primary-500">
+            <Sparkles className="h-7 w-7" strokeWidth={1.5} />
+          </span>
           <div>
-            <h3 className="text-base font-semibold text-slate-800">欢迎回来，{userProfile?.name || '同学'}</h3>
-            <p className="text-sm text-slate-500 mt-1">
-              {userProfile?.stage || ''} · {userProfile?.major || ''} · {userProfile?.campus || ''}
+            <h2 className="text-lg font-semibold text-slate-800">
+              欢迎回来，{userProfile?.name || "同学"}
+            </h2>
+            <p className="mt-1.5 text-xs leading-5 text-slate-500">
+              {[userProfile?.stage, userProfile?.major, userProfile?.campus]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
-            <p className="text-xs text-slate-400 mt-2">
-              当前重点：先稳定睡眠，再降低学习压力峰值，最后恢复社交节奏。
+            <p className="mt-2 text-xs text-slate-400">
+              先稳定睡眠，再降低学习压力，慢慢找回自己的节奏。
             </p>
           </div>
-          <Link
-            to="/personal/retrieval"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
-          >
-            <Sparkles className="w-4 h-4" /> 查看最新 RAG 建议
-          </Link>
         </div>
-      </div>
-
-      <div className="flex gap-3">
-        <Link
-          to="/personal/screening"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
-        >
-          <Plus className="w-4 h-4" /> 开始今日筛查
+        <Link to="/personal/screening" className="ui-button ui-button-primary">
+          <Plus className="h-4 w-4" />
+          开始今日筛查
         </Link>
-        <Link
-          to="/personal/alerts"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium"
-        >
-          <AlertTriangle className="w-4 h-4" /> 查看我的预警
-        </Link>
-        <Link
-          to="/personal/retrieval"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium"
-        >
-          <Sparkles className="w-4 h-4" /> 生成建议报告
-        </Link>
+      </section>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="连续打卡"
+          value="12 天"
+          icon={ClipboardCheck}
+          trend="+3 天"
+          hint="较上周连续记录"
+        />
+        <MetricCard
+          label="最近一次筛查"
+          value={lastRecord ? `${lastRecord.score} 分` : "暂无"}
+          icon={Activity}
+          hint={
+            lastRecord
+              ? `${lastRecord.questionnaire} · ${lastRecord.moodTag}`
+              : "完成一次筛查，了解当前状态"
+          }
+        />
+        <MetricCard
+          label="活跃预警"
+          value={`${activeWarnings} 条`}
+          icon={AlertTriangle}
+          hint={
+            activeWarnings > 0 ? "及时查看并跟进预警提醒" : "当前没有活跃预警"
+          }
+        />
+        <MetricCard
+          label="最近睡眠时长"
+          value={`${latestSleep} 小时`}
+          icon={Moon}
+          hint="来自最近一次睡眠记录"
+        />
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <h3 className="text-base font-semibold text-slate-800 mb-4">最近 10 天情绪与压力趋势</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={moodTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#94a3b8" />
-              <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" />
-              <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
-              <Line type="monotone" dataKey="mood" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} name="情绪指数" />
-              <Line type="monotone" dataKey="stress" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} name="压力指数" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <h3 className="text-base font-semibold text-slate-800 mb-4">历史风险分布</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie data={warningDistribution} cx="50%" cy="45%" innerRadius={55} outerRadius={85} paddingAngle={4} dataKey="value">
-                {warningDistribution.map((entry, index) => (
-                  <Cell key={index} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} />
-              <Legend verticalAlign="bottom" iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '12px' }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-          <div className="p-5 border-b border-slate-100">
-            <h3 className="text-base font-semibold text-slate-800">今日行动计划</h3>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <section className="ui-card p-5 sm:p-6 xl:col-span-2">
+          <PanelHeading
+            title="情绪与压力趋势"
+            description="留意状态的变化，关注每一次积极调整"
+            action={<ChartRange recent={recent} onChange={setRecent} />}
+          />
+          <div className="mb-5 flex gap-5 text-xs text-slate-500">
+            <span className="flex items-center gap-2">
+              <i className="h-2 w-2 rounded-full bg-primary-500" />
+              情绪指数
+            </span>
+            <span className="flex items-center gap-2">
+              <i className="h-2 w-2 rounded-full bg-violet-300" />
+              压力指数
+            </span>
           </div>
-          <div className="p-5 space-y-3">
-            {actionPlan.map((plan) => (
-              <div key={plan.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
-                <div>
-                  <p className="text-sm font-medium text-slate-800">{plan.title}</p>
-                  <p className="text-xs text-slate-400 mt-1">建议时长：{plan.duration}</p>
+          <div className="h-[280px] min-w-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={trend}
+                margin={{ top: 5, right: 8, left: -25, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="mood-fill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#465fff" stopOpacity={0.2} />
+                    <stop
+                      offset="100%"
+                      stopColor="#465fff"
+                      stopOpacity={0.01}
+                    />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="#f2f4f7" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11, fill: "#98a2b3" }}
+                  axisLine={false}
+                  tickLine={false}
+                  dy={10}
+                  minTickGap={24}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "#98a2b3" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip contentStyle={tooltip} />
+                <Area
+                  type="monotone"
+                  dataKey="mood"
+                  name="情绪指数"
+                  stroke="#465fff"
+                  strokeWidth={2.5}
+                  fill="url(#mood-fill)"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="stress"
+                  name="压力指数"
+                  stroke="#b3a0f9"
+                  strokeWidth={2}
+                  fill="transparent"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+        <section className="ui-card p-6">
+          <PanelHeading
+            title="历史风险分布"
+            description="了解近期筛查结果的整体情况"
+          />
+          <div className="relative h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={warningDistribution}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={65}
+                  outerRadius={88}
+                  paddingAngle={3}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {warningDistribution.map((item) => (
+                    <Cell key={item.name} fill={item.color} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={tooltip} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-3xl font-semibold text-slate-800">
+                {total}
+              </span>
+              <span className="mt-1 text-xs text-slate-400">历史记录</span>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            {warningDistribution.map((item) => (
+              <div
+                key={item.name}
+                className="flex items-center justify-between gap-2 text-xs"
+              >
+                <span className="flex items-center gap-2 text-slate-500">
+                  <i
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: item.color }}
+                  />
+                  {item.name}
+                </span>
+                <span className="font-medium text-slate-700">{item.value}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <section className="ui-card p-6">
+          <PanelHeading
+            title="今日行动计划"
+            description="从一件小事开始，为自己留一点时间"
+          />
+          <div className="space-y-4">
+            {actionPlan.map((plan, index) => (
+              <div
+                key={plan.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-medium text-primary-500">
+                    0{index + 1}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">
+                      {plan.title}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      建议时长 · {plan.duration}
+                    </p>
+                  </div>
                 </div>
                 <StatusBadge status={plan.status} />
               </div>
             ))}
           </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-          <div className="p-5 border-b border-slate-100">
-            <h3 className="text-base font-semibold text-slate-800">最近筛查记录</h3>
-          </div>
-          <div className="p-5 space-y-3">
+        </section>
+        <section className="ui-card p-6">
+          <PanelHeading
+            title="最近筛查记录"
+            description="每一次记录，都让你更了解自己"
+            action={
+              <Link
+                to="/personal/screening"
+                className="text-xs text-primary-500 hover:text-primary-600"
+              >
+                查看全部
+                <ArrowRight className="ml-1 inline h-3.5 w-3.5" />
+              </Link>
+            }
+          />
+          <div className="space-y-4">
             {screeningRecords.slice(0, 3).map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"
+              >
                 <div>
-                  <p className="text-sm font-medium text-slate-800">
-                    {item.questionnaire}：{item.score}/{item.maxScore}
+                  <p className="text-sm font-medium text-slate-700">
+                    {item.questionnaire}
+                    <span className="ml-3 text-slate-500">
+                      {item.score}/{item.maxScore} 分
+                    </span>
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">{item.date} · {item.moodTag}</p>
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    {item.date} · {item.moodTag}
+                  </p>
                 </div>
                 <AlertBadge level={item.level} size="sm" />
               </div>
             ))}
           </div>
-        </div>
+          {!screeningRecords.length && (
+            <p className="py-6 text-sm text-slate-400">暂无筛查记录</p>
+          )}
+        </section>
       </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between p-5 border-b border-slate-100">
-          <h3 className="text-base font-semibold text-slate-800">最新预警提醒</h3>
-          <Link to="/personal/alerts" className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
-            查看全部 <ArrowRight className="w-4 h-4" />
-          </Link>
+      <section className="ui-card overflow-hidden">
+        <div className="px-6 pt-6">
+          <PanelHeading
+            title="最新预警提醒"
+            description="关注自己的状态，让每一条提醒得到回应"
+            action={
+              <Link to="/personal/alerts" className="ui-button text-xs">
+                查看全部
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            }
+          />
         </div>
         <div className="divide-y divide-slate-100">
           {warningEvents.map((alert) => (
-            <div key={alert.id} className="flex items-center justify-between px-5 py-3.5">
-              <div className="flex items-center gap-4">
-                <AlertBadge level={alert.level} />
-                <div>
-                  <p className="text-sm font-medium text-slate-800">{alert.title}</p>
-                  <p className="text-xs text-slate-400">{alert.reason}</p>
+            <div
+              key={alert.id}
+              className="flex flex-wrap items-center justify-between gap-4 px-6 py-5"
+            >
+              <div className="flex min-w-0 items-start gap-4">
+                <AlertBadge level={alert.level} size="sm" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-700">
+                    {alert.title}
+                  </p>
+                  <p className="mt-1.5 text-xs leading-5 text-slate-500">
+                    {alert.reason}
+                  </p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-slate-400">{alert.createdAt}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{alert.status}</p>
+              <div className="flex items-center gap-4 text-xs text-slate-400">
+                <span>{alert.createdAt}</span>
+                <StatusBadge status={alert.status} />
               </div>
             </div>
           ))}
         </div>
+        {!warningEvents.length && (
+          <p className="p-8 text-center text-sm text-slate-400">暂无预警提醒</p>
+        )}
+      </section>
+      <div className="flex flex-wrap gap-3">
+        <Link to="/personal/retrieval" className="ui-button">
+          <Sparkles className="h-4 w-4" />
+          查看分析建议
+        </Link>
+        <Link to="/personal/data-collection" className="ui-button">
+          <Plus className="h-4 w-4" />
+          记录今日状态
+        </Link>
       </div>
     </div>
   );

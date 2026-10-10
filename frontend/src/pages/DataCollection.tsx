@@ -153,7 +153,7 @@ function AudioTab() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Recorder */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-4">实时录音</h3>
         <div className="flex flex-col items-center py-6 gap-4">
           {/* Mic button */}
@@ -165,7 +165,7 @@ function AudioTab() {
                 ? 'bg-danger-500 hover:bg-danger-600 animate-pulse'
                 : recordState === 'requesting'
                   ? 'bg-slate-200 cursor-not-allowed'
-                  : 'bg-primary-600 hover:bg-primary-700'
+                  : 'bg-primary-500 hover:bg-primary-600'
               }`}
           >
             {recordState === 'recording'
@@ -193,7 +193,7 @@ function AudioTab() {
       </div>
 
       {/* Upload & List */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
+      <div className="ui-card p-5 flex flex-col gap-4">
         <h3 className="font-semibold text-slate-800">上传 / 已采集音频</h3>
 
         <div
@@ -221,7 +221,7 @@ function AudioTab() {
               <div key={entry.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                 <button
                   onClick={() => togglePlay(entry)}
-                  className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center shrink-0 hover:bg-primary-700 cursor-pointer"
+                  className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center shrink-0 hover:bg-primary-600 cursor-pointer"
                 >
                   {playingId === entry.id
                     ? <Pause className="w-3.5 h-3.5 text-white" />
@@ -254,7 +254,7 @@ function AudioTab() {
               }
               setSubmitted(true);
             }}
-            className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
           >
             <Sparkles className="w-4 h-4" /> 送入动态哈希引擎
           </button>
@@ -295,7 +295,7 @@ function ImageTab() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Drop zone */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-2">绘画 / 图像上传</h3>
         <p className="text-sm text-slate-400 mb-4">
           请上传房树人测试（HTP）或情绪日记配图，用于辅助识别认知与情绪表达特征
@@ -323,7 +323,7 @@ function ImageTab() {
       </div>
 
       {/* Preview */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
+      <div className="ui-card p-5 flex flex-col gap-4">
         <h3 className="font-semibold text-slate-800">已上传图像（{images.length}）</h3>
 
         {images.length === 0 ? (
@@ -357,7 +357,7 @@ function ImageTab() {
               }
               setSubmitted(true);
             }}
-            className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
           >
             <Sparkles className="w-4 h-4" /> 送入动态哈希引擎
           </button>
@@ -388,7 +388,7 @@ function TextTab() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Questionnaire selector */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-4">选择量表（跳转至筛查页作答）</h3>
         <div className="space-y-2">
           {questionnaires.map((q) => (
@@ -403,7 +403,7 @@ function TextTab() {
             >
               <div className="flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  selectedQ === q.id ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-400'
+                  selectedQ === q.id ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-400'
                 }`}>
                   {selectedQ === q.id ? <Check className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
                 </div>
@@ -424,7 +424,7 @@ function TextTab() {
       </div>
 
       {/* Free text */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-2">开放式情绪日记</h3>
         <p className="text-sm text-slate-400 mb-3">
           描述你近期的情绪状态、睡眠情况、人际关系和学习压力变化
@@ -446,7 +446,7 @@ function TextTab() {
             <button
               onClick={handleSubmit}
               disabled={!freeText.trim()}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary-700 transition-colors cursor-pointer"
+              className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary-600 transition-colors cursor-pointer"
             >
               提交文本
             </button>
@@ -469,7 +469,7 @@ export default function DataCollection() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="text-base font-semibold text-slate-800">多模态采集工作台</h3>
         <p className="text-sm text-slate-500 mt-2 leading-6">
           你可以在这里提交文本日记、语音片段和图片。系统会进行动态跨模态哈希编码，与历史模式检索，再结合
@@ -478,7 +478,7 @@ export default function DataCollection() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm w-fit">
+      <div className="ui-card flex gap-2 p-1.5 w-fit">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -487,7 +487,7 @@ export default function DataCollection() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                isActive ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                isActive ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <Icon className="w-4 h-4" />

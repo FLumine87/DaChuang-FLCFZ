@@ -32,7 +32,7 @@ export default function Cases() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h2 className="text-xl font-semibold text-slate-800">我的心理档案</h2>
         <p className="text-sm text-slate-500 mt-1">
           {userProfile.name} · {userProfile.gender} · {userProfile.age} 岁 · {userProfile.stage} · {userProfile.major}
@@ -41,7 +41,7 @@ export default function Cases() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-primary-600" />
             最近筛查
@@ -59,7 +59,7 @@ export default function Cases() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-danger-500" />
             预警记录
@@ -77,7 +77,7 @@ export default function Cases() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary-600" />
             档案摘要
@@ -90,7 +90,7 @@ export default function Cases() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <Clock className="w-5 h-5 text-primary-600" />
           关键时间线
@@ -108,7 +108,7 @@ export default function Cases() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary-600" />
           使用建议

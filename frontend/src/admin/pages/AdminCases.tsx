@@ -31,11 +31,11 @@ export default function AdminCases() {
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
         placeholder="搜索姓名或编号..."
-        className="w-72 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+        className="w-full sm:w-72 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {filtered.map((item) => (
-          <div key={item.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div key={item.id} className="ui-card p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="font-medium text-slate-800">{item.name}</p>
               <AdminAlertBadge level={item.alertLevel} size="sm" />
