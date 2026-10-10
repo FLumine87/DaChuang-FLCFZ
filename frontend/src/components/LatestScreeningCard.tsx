@@ -22,7 +22,7 @@ export default function LatestScreeningCard({ record }: { record?: PersonalScree
   const result = displayed && definition?.scoring(displayed.score);
 
   return (
-    <section className="ui-card p-5 xl:p-6" aria-label="最近一次筛查">
+    <section className="ui-card flex flex-col p-5 xl:p-6" aria-label="最近一次筛查">
       <div className="mb-5 flex items-center justify-between gap-2">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
           <Activity className="h-6 w-6" strokeWidth={1.7} />
@@ -50,14 +50,20 @@ export default function LatestScreeningCard({ record }: { record?: PersonalScree
           <p className="mt-3 text-xs leading-5 text-slate-400">完成一次筛查，了解当前状态</p>
         </>
       )}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        {isExample && <Link to="/personal/screening?example=1&record=preview-only" className="text-xs font-medium text-primary-600 hover:underline">查看示例详情</Link>}
-        {record ? (
-          <Link to={`/personal/screening?record=${encodeURIComponent(record.id)}`} className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline">查看筛查详情 <ArrowRight className="h-3.5 w-3.5" /></Link>
-        ) : (
+      <div className="mt-auto flex flex-wrap items-center gap-3 pt-4">
+        {!record && (
           <button type="button" onClick={() => setShowExample(!showExample)} aria-pressed={isExample} className="text-xs font-medium text-primary-600 hover:underline">
             {isExample ? "收起示例" : "看看有记录的样子"}
           </button>
+        )}
+        {displayed && (
+          <Link
+            to={isExample ? "/personal/screening?example=1&record=preview-only" : `/personal/screening?record=${encodeURIComponent(displayed.id)}`}
+            className="ml-auto inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
+            aria-label={isExample ? "查看示例筛查详情" : "查看最近一次筛查详情"}
+          >
+            查看详情 <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         )}
       </div>
     </section>
