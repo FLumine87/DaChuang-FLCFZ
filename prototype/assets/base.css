@@ -1305,6 +1305,105 @@ details.tech .dl {
   color: var(--txt-3);
 }
 
+/* ---------- 语义圆点：图例与序列标识（尺寸统一 8px） ------------------------ */
+.dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--txt-3);
+}
+.dot--yellow {
+  background: var(--state-yellow);
+}
+.dot--orange {
+  background: var(--state-orange);
+}
+.dot--red {
+  background: var(--state-red);
+}
+.dot--green {
+  background: var(--state-green);
+}
+
+/* ---------- 环形图：用 stroke-dasharray 画，不引图表库 ---------------------- */
+.donut {
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: var(--sp-6) 0 var(--sp-2);
+}
+.donut__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  pointer-events: none;
+}
+
+/* ---------- 报告正文：编号 + 标题 + 正文，三段用一条竖线串起来 ------------- */
+.report {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.report__item {
+  display: flex;
+  gap: var(--sp-6);
+  padding-bottom: var(--sp-8);
+}
+.report__item:last-child {
+  padding-bottom: 0;
+}
+.report__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: none;
+  width: 26px;
+}
+.report__step {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--pill-brand-text);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+}
+.report__rail::after {
+  content: '';
+  flex: 1;
+  width: 1px;
+  background: var(--line);
+}
+.report__item:last-child .report__rail::after {
+  display: none;
+}
+.report__main {
+  min-width: 0;
+  flex: 1;
+  padding-bottom: 0;
+}
+.report__title {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+.report__body {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--fs-base);
+  color: var(--txt-2);
+  line-height: var(--lh-cjk);
+}
+
 
 /* ---------- 登录页：无外壳，左右分栏 ---------- */
 .auth {

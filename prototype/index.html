@@ -46,7 +46,7 @@ try {
       <div class="card__head card__head--tight">
         <div>
           <h2 class="card__title">已完成的屏</h2>
-          <p class="card__desc">共 10 屏 · 个人端 7 屏 / 管理端 3 屏（管理端另有 5 屏待做）</p>
+          <p class="card__desc">共 13 屏 · 个人端 7 屏 / 管理端 6 屏（管理端另有 1 屏研判台待做）</p>
         </div>
       </div>
       <div class="rowlist">
@@ -113,15 +113,59 @@ try {
           <span class="rowitem__idx num">07</span>
           <div class="rowitem__main">
             <div class="rowitem__title">我的档案</div>
-            <div class="rowitem__meta">待做（批次 3）</div>
+            <div class="rowitem__meta">量表记录 · 风险摘要（标注示例）· 行动计划 · 事件时间线 · 可见范围</div>
           </div>
-          <span class="pill pill--neutral">未开始</span>
+          <a class="btn btn--sm" href="pages/personal-profile.html#light">打开</a>
         </div>
         <div class="rowitem">
           <span class="rowitem__idx num">08</span>
           <div class="rowitem__main">
-            <div class="rowitem__title">管理端 · 数据概览 / 筛查管理 / 采集审阅</div>
-            <div class="rowitem__meta">待做（批次 2）</div>
+            <div class="rowitem__title">RAG 分析结果</div>
+            <div class="rowitem__meta">等级读 riskLevel · 三节正文 · 建议分步 · 输入来源可逐项核对</div>
+          </div>
+          <a class="btn btn--sm" href="pages/personal-rag.html#light">打开</a>
+        </div>
+        <div class="rowitem">
+          <span class="rowitem__idx num">09</span>
+          <div class="rowitem__main">
+            <div class="rowitem__title">管理端 · 数据概览</div>
+            <div class="rowitem__meta">要做的 → 风险总量 → 整体进度 · 筛查趋势 · 风险分布环形图 · 处置概览</div>
+          </div>
+          <a class="btn btn--sm" href="pages/admin-dashboard.html#light">打开</a>
+        </div>
+        <div class="rowitem">
+          <span class="rowitem__idx num">10</span>
+          <div class="rowitem__main">
+            <div class="rowitem__title">管理端 · 筛查管理</div>
+            <div class="rowitem__meta">四个筛选维度 · 8 列表格 · 右侧就地展开详情 · 空态分两种措辞</div>
+          </div>
+          <a class="btn btn--sm" href="pages/admin-screenings.html#light">打开</a>
+        </div>
+        <div class="rowitem">
+          <span class="rowitem__idx num">11</span>
+          <div class="rowitem__main">
+            <div class="rowitem__title">管理端 · 采集审阅</div>
+            <div class="rowitem__meta">高风险提示条 · 三模态页签 · 审阅面板（结论与预警处置分开记录）</div>
+          </div>
+          <span class="inline" style="gap:var(--sp-3)">
+            <a class="btn btn--sm" href="pages/admin-collect.html#light">文本</a>
+            <a class="btn btn--sm" href="pages/admin-collect.html#audio,light">语音</a>
+            <a class="btn btn--sm" href="pages/admin-collect.html#image,light">图像</a>
+          </span>
+        </div>
+        <div class="rowitem">
+          <span class="rowitem__idx num">12</span>
+          <div class="rowitem__main">
+            <div class="rowitem__title">管理端 · 预警管理</div>
+            <div class="rowitem__meta">未分配提示条 · 状态筛选 · 认领/指派入口 · 处理人与状态可改</div>
+          </div>
+          <a class="btn btn--sm" href="pages/admin-alerts.html#light">打开</a>
+        </div>
+        <div class="rowitem">
+          <span class="rowitem__idx num">13</span>
+          <div class="rowitem__main">
+            <div class="rowitem__title">管理端 · 预警研判台</div>
+            <div class="rowitem__meta">待做（最后一屏）— 注意：现有实现的任务确认只改本地 state，不落后端</div>
           </div>
           <span class="pill pill--neutral">未开始</span>
         </div>
