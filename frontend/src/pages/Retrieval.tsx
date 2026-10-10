@@ -411,23 +411,40 @@ export default function Retrieval() {
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
               <div>
                 <h3 className="font-semibold text-slate-800">
-                  检索结果 <span className="text-sm font-normal text-slate-400">（找到 {results.length} 个高相似模式）</span>
+                  检索结果{' '}
+                  <span className="text-sm font-normal text-slate-400">
+                    {results.length === 0
+                      ? '（没有找到相似模式：试试换一种描述，或把检索范围改成「全部模态」）'
+                      : `（找到 ${results.length} 个高相似模式）`}
+                  </span>
                 </h3>
                 {indexInfo && (
-                  <p className="text-xs text-slate-400 mt-1">
-                    查询模态 {modalityLabels[(indexInfo.query_modality ?? 'text') as keyof typeof modalityLabels] ?? '文本'}
-                    {indexInfo.query_media ? '（媒体文件）' : ''}
-                    {' · '}查询码 <span className="font-mono">{indexInfo.query_code_hex?.slice(0, 8)}…</span>
-                    {' · '}命中主题 {indexInfo.query_themes?.join('、') || '—'}
-                    {' · '}候选 {indexInfo.candidates}/{indexInfo.index_size}
-                    {' · '}探测桶 {indexInfo.keys_probed}
-                    {' · '}{indexInfo.scoring === 'asymmetric' ? '非对称距离' : '汉明距离'}排序
-                    {indexInfo.data_source && (
-                      <>
-                        {' · '}数据来源 {SOURCE_LABELS[indexInfo.data_source] ?? indexInfo.data_source}
-                      </>
-                    )}
-                  </p>
+                  <>
+                    {/* 主层：只留人能直接读懂的信息 */}
+                    <p className="text-xs text-slate-400 mt-1">
+                      查询模态 {modalityLabels[(indexInfo.query_modality ?? 'text') as keyof typeof modalityLabels] ?? '文本'}
+                      {indexInfo.query_media ? '（媒体文件）' : ''}
+                      {' · '}命中主题 {indexInfo.query_themes?.join('、') || '—'}
+                      {indexInfo.data_source && (
+                        <>
+                          {' · '}数据来源 {SOURCE_LABELS[indexInfo.data_source] ?? indexInfo.data_source}
+                        </>
+                      )}
+                    </p>
+                    {/* 技术细节默认折叠：原先这些字段与主层挤在同一行，
+                        等于把"跨模态哈希"这个核心卖点当成调试信息展示 */}
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+                        技术详情（哈希编码与索引过程）
+                      </summary>
+                      <p className="text-xs text-slate-400 mt-1">
+                        查询码 <span className="font-mono">{indexInfo.query_code_hex?.slice(0, 8)}…</span>
+                        {' · '}候选 <span className="tabular-nums">{indexInfo.candidates}/{indexInfo.index_size}</span>
+                        {' · '}探测桶 <span className="tabular-nums">{indexInfo.keys_probed}</span>
+                        {' · '}{indexInfo.scoring === 'asymmetric' ? '非对称距离' : '汉明距离'}排序
+                      </p>
+                    </details>
+                  </>
                 )}
                 {indexInfo?.dataset && (
                   <p className="text-xs text-slate-400 mt-0.5">
@@ -471,10 +488,21 @@ export default function Retrieval() {
                       <div className="flex items-center gap-3">
                         <AlertBadge level={result.alertLevel} size="sm" />
                         <div className="text-right">
-                          <p className="text-lg font-bold text-primary-600">
+                          <p className="text-lg font-bold text-primary-600 tabular-nums">
                             {(result.similarity * 100).toFixed(0)}%
                           </p>
-                          <p className="text-xs text-slate-400">相似度</p>
+                          {/* 把裸数字换成「人能读的档位 + 分数条」：
+                              >80% 高度相似 / >60% 较相似 / 其余关联较弱 */}
+                          <p className="text-xs text-slate-500">
+                            {result.similarity >= 0.8 ? '高度相似' : result.similarity >= 0.6 ? '较相似' : '关联较弱'}
+                          </p>
+                          <div className="mt-1 ml-auto h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className={`h-full rounded-full ${result.similarity >= 0.6 ? 'bg-primary-500' : 'bg-slate-300'}`}
+                              style={{ width: `${Math.round(result.similarity * 100)}%` }}
+                              aria-hidden="true"
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -574,7 +602,11 @@ export default function Retrieval() {
                         </p>
                       )}
                       {result.explain && (
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                        <details className="text-xs text-slate-400">
+                          <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+                            技术细节（汉明距离 / 哈希码 / 时间窗）
+                          </summary>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
                           <span>
                             汉明距离{' '}
                             <span className="font-mono text-slate-500">
@@ -600,7 +632,8 @@ export default function Retrieval() {
                           {typeof result.explain.window === 'number' && (
                             <span>时间窗 {result.explain.window}</span>
                           )}
-                        </div>
+                          </div>
+                        </details>
                       )}
                     </div>
                   </div>
