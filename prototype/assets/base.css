@@ -1404,6 +1404,378 @@ details.tech .dl {
   line-height: var(--lh-cjk);
 }
 
+/* =============================================================================
+   选择系统：无外壳的一屏。两张门卡是唯一焦点，不做插画也不做渐变。
+   ============================================================================= */
+.selector {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--sp-12) var(--sp-8);
+  background: var(--bg-page);
+}
+.selector__inner {
+  width: min(100%, 960px);
+}
+.selector__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+  margin-bottom: var(--sp-12);
+}
+.selector__mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: var(--r-card);
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.selector__head h1 {
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  letter-spacing: var(--tracking-h1);
+}
+.selector__head p {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-base);
+  color: var(--txt-2);
+}
+.selector__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-8);
+}
+@media (max-width: 780px) {
+  .selector__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.door {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-10);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-card);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color var(--d-base) ease,
+    transform var(--d-move) var(--ease-move);
+}
+.door:hover {
+  border-color: var(--accent-border);
+  transform: translateY(-2px);
+}
+.door:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.door__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-control);
+  background: var(--accent-tint);
+  color: var(--pill-brand-text);
+}
+.door h2 {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+.door__desc {
+  margin: 0;
+  font-size: var(--fs-base);
+  color: var(--txt-2);
+  line-height: var(--lh-cjk);
+}
+.door__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  font-size: var(--fs-label);
+  color: var(--txt-3);
+}
+.door__list li {
+  padding-inline-start: var(--sp-6);
+  position: relative;
+}
+.door__list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.door__go {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: auto;
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--accent);
+}
+.selector__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  margin-top: var(--sp-12);
+  padding-top: var(--sp-6);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-label);
+  color: var(--txt-3);
+}
+.selector__foot a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.selector__foot a:hover {
+  text-decoration: underline;
+}
+
+/* =============================================================================
+   研判台专用：记录条 / 权限闸门 / 任务草案 / 证据链 / 命中规则
+   ============================================================================= */
+.recbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--sp-6);
+  margin: var(--sp-8) 0 0;
+  padding: var(--sp-6) 0 0;
+  border-top: 1px solid var(--line);
+}
+.recbar__value {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-kpi);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 权限闸门：是/否 只靠文字 + 一个形状标记，不靠颜色 */
+.gates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+.gate {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 26px;
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--bg-raised);
+  font-size: var(--fs-label);
+  color: var(--txt-2);
+}
+.gate::before {
+  content: '—';
+  font-weight: 700;
+  color: var(--txt-3);
+}
+.gate[data-on='1'] {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--pill-brand-text);
+}
+.gate[data-on='1']::before {
+  content: '✓';
+  color: currentColor;
+}
+
+/* 任务草案：状态用左侧细条 + 文字标签，禁用态明确说明原因 */
+.taskcard {
+  padding: var(--sp-6);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--txt-3);
+  border-radius: var(--r-card);
+  background: var(--bg-card);
+}
+.taskcard[data-state='proposed'] {
+  border-left-color: var(--accent);
+}
+.taskcard[data-state='confirmed'] {
+  border-left-color: var(--state-green);
+}
+.taskcard[data-state='modified'] {
+  border-left-color: var(--line-strong);
+}
+.taskcard[data-state='rejected'] {
+  border-left-color: var(--line-strong);
+  background: var(--bg-raised);
+}
+.taskcard__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-6);
+}
+.taskcard__title {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+.taskcard__meta {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-label);
+  color: var(--txt-3);
+}
+.taskcard__acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line);
+}
+.taskcard__foot {
+  margin-inline-start: auto;
+  font-size: var(--fs-meta);
+  color: var(--txt-3);
+}
+
+/* 证据链：节点用胶囊串起来，箭头是文字符号 */
+.chain {
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+}
+.chain__nodes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.chain__node {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-pill);
+  background: var(--bg-card);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  color: var(--pill-brand-text);
+}
+.chain__arrow {
+  font-size: var(--fs-meta);
+  color: var(--txt-3);
+}
+.chain__reason {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--fs-label);
+  color: var(--txt-2);
+  line-height: var(--lh-cjk);
+}
+
+/* 命中规则：左侧竖线，不用整块底色 */
+.rule {
+  padding-inline-start: var(--sp-5);
+  border-left: 2px solid var(--accent-border);
+}
+.rule__name {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+.rule__msg {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-label);
+  color: var(--txt-2);
+  line-height: var(--lh-cjk);
+}
+
+/* 案例卡：等级用左侧细条，事实区用定义列表对齐数字 */
+.casecard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--txt-3);
+  border-radius: var(--r-card);
+  background: var(--bg-card);
+}
+.casecard[data-level='green'] {
+  border-left-color: var(--state-green);
+}
+.casecard[data-level='yellow'] {
+  border-left-color: var(--state-yellow);
+}
+.casecard[data-level='orange'] {
+  border-left-color: var(--state-orange);
+}
+.casecard[data-level='red'] {
+  border-left-color: var(--state-red);
+}
+.casecard__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-5);
+}
+.casecard__name {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 700;
+}
+.casecard__meta {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-label);
+  color: var(--txt-3);
+}
+.casecard__facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line);
+}
+.casecard__facts > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+.casecard__facts dt {
+  font-size: var(--fs-label);
+  color: var(--txt-3);
+}
+.casecard__facts dd {
+  margin: 0;
+  font-size: var(--fs-label);
+  font-weight: 600;
+  color: var(--txt-2);
+}
+.casecard__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: auto;
+}
+
 
 /* ---------- 登录页：无外壳，左右分栏 ---------- */
 .auth {
