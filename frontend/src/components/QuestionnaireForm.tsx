@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, CheckCircle2, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { questionnaires } from "../data/questionnaireData";
 import type { QuestionnaireDefinition } from "../data/questionnaireData";
 import AlertBadge from "./AlertBadge";
@@ -26,6 +26,8 @@ export default function QuestionnaireForm({
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  // 一屏一题：当前题序号（原先 9 道题一长列，第 9 题问自伤念头，需要更稳的节奏）
+  const [current, setCurrent] = useState(0);
 
   if (!qDef) {
     return (
@@ -105,50 +107,103 @@ export default function QuestionnaireForm({
         <p className="text-sm text-slate-500 italic">{qDef.instructions}</p>
       </div>
 
-      {/* Questions */}
-      <div className="px-6 pb-6 space-y-6">
-        {qDef.questions.map((q) => (
-          <div
-            key={q.id}
-            className={`rounded-xl p-4 border transition-colors ${
-              answers[q.id] !== undefined
-                ? "border-emerald-200 bg-emerald-50/40"
-                : "border-slate-200 bg-slate-50/50"
-            }`}
-          >
-            <p className="text-sm font-medium text-slate-800 mb-3">
-              <span
-                className="inline-block w-6 h-6 rounded-full text-center leading-6 text-xs font-bold mr-2
-                bg-primary-100 text-primary-700"
-              >
-                {q.id}
-              </span>
-              {q.text}
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {q.options.map((opt) => {
-                const selected = answers[q.id] === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    disabled={submitted || saving}
-                    aria-pressed={selected}
-                    onClick={() =>
-                      setAnswers((prev) => ({ ...prev, [q.id]: opt.value }))
-                    }
-                    className={`py-2 px-3 rounded-lg text-sm border transition-all cursor-pointer text-center ${
-                      selected
-                        ? "bg-primary-500 text-white border-primary-600 font-medium"
-                        : "bg-white text-slate-600 border-slate-200 hover:border-primary-400 hover:bg-primary-50"
-                    } disabled:cursor-not-allowed`}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
+      {/* Questions：一屏一题 */}
+      <div className="px-6 pb-6">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-xs text-slate-500">
+            第{' '}
+            <span className="font-semibold text-slate-700 tabular-nums">{current + 1}</span> /{' '}
+            {totalQuestions} 题
+          </p>
+          <p className="text-xs text-slate-400">
+            {answeredCount > 0 ? `已作答 ${answeredCount} 题` : '请选择最符合的一项'}
+          </p>
+        </div>
+
+        {(() => {
+          const q = qDef.questions[current];
+          if (!q) return null;
+          // PHQ-9 第 9 题（自伤念头）按其临床应答规范做就地提示，不跳转、不变红
+          const isSafetyItem = qDef.id === 'PHQ-9' && q.id === 9;
+          const picked = answers[q.id];
+          return (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-5">
+              <p className="text-sm font-medium leading-6 text-slate-800">
+                <span
+                  className="mr-2 inline-block h-6 w-6 rounded-full text-center text-xs font-bold leading-6 tabular-nums
+                  bg-primary-100 text-primary-700"
+                >
+                  {q.id}
+                </span>
+                {q.text}
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {q.options.map((opt) => {
+                  const selected = picked === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      disabled={submitted || saving}
+                      aria-pressed={selected}
+                      onClick={() => {
+                        setAnswers((prev) => ({ ...prev, [q.id]: opt.value }));
+                        // 安全题答 1/2/3 时不自动翻页，让支持信息留在眼前
+                        const keepHere = isSafetyItem && opt.value >= 1;
+                        if (!keepHere && current < totalQuestions - 1) {
+                          setTimeout(
+                            () => setCurrent((c) => Math.min(totalQuestions - 1, c + 1)),
+                            180
+                          );
+                        }
+                      }}
+                      className={`cursor-pointer rounded-lg border px-3 py-2 text-center text-sm transition-all ${
+                        selected
+                          ? "border-primary-600 bg-primary-500 font-medium text-white"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-primary-400 hover:bg-primary-50"
+                      } disabled:cursor-not-allowed`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {isSafetyItem && typeof picked === "number" && picked >= 1 && (
+                <div
+                  role="status"
+                  className="mt-4 rounded-lg border border-primary-200 bg-primary-50/70 p-4"
+                >
+                  <p className="text-sm leading-6 text-slate-700">
+                    谢谢你如实说出来。这样的念头很多人都经历过，它不代表你做错了什么，也不意味着它一定会发生。
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    现在就可以联系：校心理健康教育中心（工作日 8:30–17:30，电话以学校公布为准），或
+                    24 小时心理援助热线 <span className="font-medium text-slate-800">12356</span>。
+                    如果此刻有立即的危险，请拨打 <span className="font-medium text-slate-800">120</span>
+                    ，或请身边的人陪着你。
+                  </p>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })()}
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <button
+            onClick={() => setCurrent((c) => Math.max(0, c - 1))}
+            disabled={current === 0 || saving}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 transition-colors hover:border-primary-300 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ArrowLeft className="h-4 w-4" /> 上一题
+          </button>
+          <button
+            onClick={() => setCurrent((c) => Math.min(totalQuestions - 1, c + 1))}
+            disabled={current >= totalQuestions - 1 || saving}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 transition-colors hover:border-primary-300 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            下一题 <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Result & Submit */}
