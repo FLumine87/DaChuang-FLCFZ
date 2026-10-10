@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   BrainCircuit,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ClipboardList,
   Database,
@@ -12,7 +13,6 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  PanelLeftClose,
   Search,
   ShieldCheck,
   TriangleAlert,
@@ -227,7 +227,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             aria-label="收起侧栏"
             onClick={() => setMobileOpen(false)}
           >
-            <PanelLeftClose className="h-5 w-5" />
+            <ChevronLeft className="h-5 w-5" />
           </button>
         </div>
         <nav className="shrink-0 px-5 pb-5">
