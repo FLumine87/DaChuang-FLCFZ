@@ -297,9 +297,29 @@ function ImageTab() {
       {/* Drop zone */}
       <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-2">绘画 / 图像上传</h3>
-        <p className="text-sm text-slate-400 mb-4">
-          请上传房树人测试（HTP）或情绪日记配图，用于辅助识别认知与情绪表达特征
+        <p className="text-sm text-slate-500 mb-4">
+          可以上传房树人绘画或表达当天心情的图片。不清楚怎么准备？点开下面的说明看看。
         </p>
+        <div className="space-y-2 mb-4">
+          <details className="group rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium text-slate-700 [&::-webkit-details-marker]:hidden">
+              房树人（HTP）是什么？
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-90" />
+            </summary>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              在纸上画一幅包含房子、树和人的图，拍照或扫描后上传即可。不需要画得好看。
+            </p>
+          </details>
+          <details className="group rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium text-slate-700 [&::-webkit-details-marker]:hidden">
+              情绪日记配图是什么？
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-90" />
+            </summary>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              一张能表达当天心情的照片或画，比如风景、颜色或涂鸦。选择你愿意分享的图片即可。
+            </p>
+          </details>
+        </div>
         <div
           onClick={() => fileRef.current?.click()}
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -320,6 +340,9 @@ function ImageTab() {
           className="hidden"
           onChange={(e) => addFiles(e.target.files)}
         />
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          图片仅用于辅助了解情绪表达，不能单独作为诊断依据。
+        </p>
       </div>
 
       {/* Preview */}
