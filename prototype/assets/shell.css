@@ -186,6 +186,7 @@
   background: var(--shell-bg);
   color: var(--shell-fg);
   border-bottom: 1px solid var(--shell-line);
+  box-shadow: inset 0 2px 0 0 var(--accent);
 }
 .crumbs {
   display: flex;
@@ -276,13 +277,14 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--sp-8);
-  margin-bottom: var(--sp-8);
+  margin-bottom: var(--sp-6);
 }
 .pagehead__desc {
   margin: var(--sp-2) 0 0;
   font-size: var(--fs-base);
   color: var(--txt-2);
-  max-width: 62ch;
+  max-width: 58ch;
+  line-height: var(--lh-base);
 }
 .pagehead__actions {
   display: flex;

@@ -208,12 +208,14 @@ svg {
 .tile {
   padding: var(--sp-5) var(--sp-5) var(--sp-4);
   border: 1px solid var(--line);
+  border-left: 2px solid var(--accent-border);
   border-radius: var(--r-card);
   background: var(--bg-raised);
 }
 .tile__label {
   font-size: var(--fs-meta);
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   color: var(--txt-2);
 }
 .tile__value {
@@ -251,16 +253,20 @@ svg {
 }
 .table th {
   padding: var(--sp-4) var(--sp-6);
+  position: sticky;
+  top: 0;
+  z-index: 1;
   font-size: var(--fs-meta);
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   color: var(--txt-2);
   text-align: start;
   background: var(--bg-raised);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-strong);
   white-space: nowrap;
 }
 .table td {
-  height: 2.125rem; /* 34px：够密，又不至于挤 */
+  height: 2rem; /* 32px：够密，又不至于挤 */
   padding: var(--sp-4) var(--sp-6);
   line-height: 1.35;
   border-bottom: 1px solid var(--line);
@@ -297,9 +303,10 @@ svg {
   gap: var(--sp-2);
   height: 1.375rem; /* 22px */
   padding: 0 var(--sp-3);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-chrome);
   font-size: var(--fs-meta);
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   background: var(--pill-neutral-bg);
   color: var(--pill-neutral-text);
@@ -637,6 +644,20 @@ svg {
   width: var(--v, 0%);
   background: var(--accent);
   transition: width var(--d-move) var(--ease-move);
+}
+
+/* 语义进度条：用 --state-*-text 而不是 --state-*，浅深两种模式都够对比 */
+.progress__fill--yellow {
+  background: var(--state-yellow-text);
+}
+.progress__fill--orange {
+  background: var(--state-orange-text);
+}
+.progress__fill--red {
+  background: var(--state-red-text);
+}
+.progress__fill--green {
+  background: var(--state-green-text);
 }
 
 /* ---------- 提示块：不做阻塞式弹窗，就地展开 ------------------------------- */
@@ -1547,6 +1568,115 @@ details.tech .dl {
 }
 .selector__foot a:hover {
   text-decoration: underline;
+}
+
+/* =============================================================================
+   原型门面：标题区事实条 / 演示动线 / 页脚清单
+   ============================================================================= */
+.front {
+  margin-bottom: var(--sp-12);
+}
+.front__top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+}
+.front h1 {
+  margin: 0;
+  font-size: calc(var(--fs-h1) + 0.25rem);
+  font-weight: 700;
+  letter-spacing: var(--tracking-h1);
+}
+.front__top p {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-base);
+  color: var(--txt-2);
+}
+.front__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-10);
+  margin: var(--sp-10) 0 0;
+  padding: var(--sp-6) 0;
+  list-style: none;
+  border-block: 1px solid var(--line);
+}
+.front__facts li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+}
+.front__k {
+  font-size: var(--fs-title);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.front__v {
+  font-size: var(--fs-label);
+  color: var(--txt-3);
+}
+
+.flow {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.flow__step {
+  display: flex;
+  gap: var(--sp-5);
+  padding-bottom: var(--sp-5);
+  border-bottom: 1px solid var(--line);
+}
+.flow__step:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.flow__no {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--pill-brand-text);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+}
+.flow__t {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+.flow__d {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-base);
+  color: var(--txt-2);
+  line-height: var(--lh-cjk);
+}
+.flow__d a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-border);
+}
+.flow__d a:hover {
+  border-bottom-color: var(--accent);
+}
+.flow__d em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--txt-1);
+}
+
+.foot-list {
+  margin: var(--sp-4) 0 0;
+  padding-inline-start: 18px;
+  color: var(--txt-2);
+  font-size: var(--fs-base);
+  line-height: var(--lh-cjk);
 }
 
 /* =============================================================================

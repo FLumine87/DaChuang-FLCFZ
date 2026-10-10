@@ -24,18 +24,21 @@
   --brand-a35: rgba(70, 95, 255, 0.35);
   --text-on-brand: #ffffff;
 
-  /* ---------- Slate：沿用现有中性阶 ------------------------------------------ */
-  --slate-50: #f9fafb;
-  --slate-100: #f2f4f7;
-  --slate-200: #e4e7ec;
-  --slate-300: #d0d5dd;
-  --slate-400: #98a2b3;
-  --slate-500: #667085;
-  --slate-600: #475467;
-  --slate-700: #344054;
-  --slate-800: #1d2939;
-  --slate-900: #101828;
-  --slate-950: #0c111d;
+  /* ---------- Slate：沿用现有中性阶，但整体往暖侧偏一格 ----------------------
+     纯石板灰（#f9fafb / #98a2b3）是所有 AI 生成后台的默认脸孔；这里保留原有
+     明度阶梯，只把色相往暖侧移 4–6 度，桌面系统（macOS 灰、Notion、Linear）
+     的观感也是偏暖的。所有组件只引用 var()，改这一处即可全站生效。 */
+  --slate-50: #f8f7f5;
+  --slate-100: #f1f0ed;
+  --slate-200: #e6e4e0;
+  --slate-300: #d5d2cc;
+  --slate-400: #9d9a94;
+  --slate-500: #6b6862;
+  --slate-600: #514e49;
+  --slate-700: #3b3936;
+  --slate-800: #232220;
+  --slate-900: #161514;
+  --slate-950: #0e0e0d;
 
   /* 外壳（侧栏/顶栏）：**跟随模式**，与现有前端一致 —— 浅色模式浅外壳，
      深色模式深外壳；不再让管理端永远深色。 */
@@ -52,7 +55,7 @@
   --ink-hover: rgba(255, 255, 255, 0.06);
   --ink-active: rgba(255, 255, 255, 0.1);
 
-  /* ---------- 内容面（浅色）-------------------------------------------------- */
+  /* ---------- 内容面（浅色）—— 暖中性纸面 ------------------------------------- */
   --paper: #ffffff;
   --paper-2: var(--slate-100); /* 抬升面：表头 / tile / 登录页左栏 */
   --paper-3: var(--slate-200); /* inset：骨架屏等 */
@@ -63,19 +66,19 @@
   --paper-border: var(--slate-200);
   --paper-border-strong: var(--slate-300);
   --paper-border-control: var(--slate-500);
-  --paper-hover: rgba(16, 24, 40, 0.03);
+  --paper-hover: rgba(35, 34, 32, 0.035);
 
-  /* ---------- 内容面（深色）—— 与现有深色模式同源 ---------------------------- */
+  /* ---------- 内容面（深色）—— 暖墨色，同样不是冷蓝黑 ------------------------- */
   --surface-0: var(--slate-950);
-  --surface-1: #151d2c;
-  --surface-2: var(--slate-800);
+  --surface-1: #171614;
+  --surface-2: #232220;
   --surface-3: var(--slate-700);
-  --surface-border: #26324a;
+  --surface-border: #2c2a27;
   --surface-border-strong: var(--slate-700);
-  --surface-text: #f9fafb;
-  --surface-text-2: #d0d5dd;
-  --surface-text-3: #98a2b3;
-  --surface-hover: rgba(255, 255, 255, 0.04);
+  --surface-text: #faf9f7;
+  --surface-text-2: #d5d2cc;
+  --surface-text-3: #9d9a94;
+  --surface-hover: rgba(255, 255, 255, 0.045);
 
   /* ---------- 语义色：四级预警（沿用现有 success/warning/danger 阶）---------- */
   --state-green: #12b76a;
@@ -104,12 +107,14 @@
   --pill-brand-bg: var(--brand-tint);
   --pill-brand-text: #3538cd;
 
-  /* ---------- 字号：沿用现有基准并保留我们已做的「标题上调」------------------ */
-  --fs-meta: 0.75rem; /* 12px  表头 / tile label（比正文小且灰） */
-  --fs-label: 0.8125rem; /* 13px 字段 label / 小按钮 */
-  --fs-base: 0.875rem; /* 14px  正文（现有前端基准） */
-  --fs-read: 0.9375rem; /* 15px 输入框 / 阅读面 */
-  --fs-title: 1.0625rem; /* 17px 卡片标题（我们已做的上调：16 → 17） */
+  /* ---------- 字号：正文 14px 不动，只把「小号灰字」整体上调 ---------------
+     12px 的灰字在真实屏幕上偏吃力，也是「AI 生成的密排后台」的典型特征。
+     表头/标签/副行统一到 12.5px，并配 0.01em 字距；数字仍走等宽。 */
+  --fs-meta: 0.78125rem; /* 12.5px 表头 / tile label / 副行 */
+  --fs-label: 0.8125rem; /* 13px   字段 label / 小按钮 */
+  --fs-base: 0.875rem; /* 14px   正文（现有前端基准） */
+  --fs-read: 0.9375rem; /* 15px   输入框 / 阅读面 */
+  --fs-title: 1.0625rem; /* 17px   卡片标题 */
   --fs-kpi: 1.375rem; /* 22px KPI 数值 */
   --fs-h1: 1.5rem; /* 24px  页面标题（现有 text-2xl） */
   --lh-tight: 1.3;
@@ -132,8 +137,8 @@
   /* ---------- 圆角：贴近现有（lg/xl），不搞混搭 ------------------------------ */
   --r-chrome: 6px;
   --r-control: 8px;
-  --r-card: 12px;
-  --r-float: 14px;
+  --r-card: 10px;
+  --r-float: 12px;
   --r-pill: 999px;
 
   /* ---------- 阴影：外壳不用阴影，只靠 1px 细边；仅浮动层用 ------------------ */
@@ -229,11 +234,11 @@
 [data-surface='admin'] {
   --fs-base: 0.875rem;
   --card-pad: var(--sp-8) var(--sp-10);
-  --card-gap: var(--sp-6);
+  --card-gap: var(--sp-5);
 }
 
 [data-surface='personal'] {
   --fs-base: 0.875rem;
   --card-pad: var(--sp-10) var(--sp-10);
-  --card-gap: var(--sp-6);
+  --card-gap: var(--sp-5);
 }
