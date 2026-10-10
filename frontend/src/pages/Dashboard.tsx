@@ -28,9 +28,28 @@ import {
   MetricCard,
   PanelHeading,
 } from "../components/DashboardUI";
-import AlertBadge from "../components/AlertBadge";
 import StatusBadge from "../components/StatusBadge";
 import LatestScreeningCard from "../components/LatestScreeningCard";
+import type { WarningEvent } from "../data/mockData";
+
+const warningAppearance: Record<WarningEvent["level"], { label: string; valueClassName: string; iconClassName: string }> = {
+  green: { label: "绿色", valueClassName: "text-success-600", iconClassName: "bg-success-50 text-success-600" },
+  yellow: { label: "黄色", valueClassName: "text-warning-600", iconClassName: "bg-warning-50 text-warning-600" },
+  orange: { label: "橙色", valueClassName: "text-orange-600", iconClassName: "bg-orange-50 text-orange-600" },
+  red: { label: "红色", valueClassName: "text-danger-600", iconClassName: "bg-danger-50 text-danger-600" },
+};
+
+function calendarDaysAgo(value: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  const today = new Date();
+  return Math.floor((Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) - date.getTime()) / 86400000);
+}
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -68,9 +87,22 @@ export default function Dashboard() {
     screeningRecords,
     userProfile,
   } = data;
-  const activeWarnings = warningEvents.filter(
-    (item) => item.status !== "resolved",
-  ).length;
+  const recentWarnings = warningEvents.flatMap((alert) => {
+    if (alert.status === "resolved") return [];
+    const daysAgo = calendarDaysAgo(alert.createdAt);
+    return daysAgo !== null && daysAgo >= 0 && daysAgo < 7 ? [{ alert, daysAgo }] : [];
+  });
+  const latestWarning = recentWarnings.sort((a, b) => b.alert.createdAt.localeCompare(a.alert.createdAt))[0];
+  const warningStyle = latestWarning ? warningAppearance[latestWarning.alert.level] : null;
+  const warningHint = !latestWarning
+    ? "近7天暂无新提醒，继续保持，你正在认真照顾自己。"
+    : latestWarning.daysAgo !== 0
+      ? "请查看预警详情，留意后续状态变化。"
+      : latestWarning.alert.level === "red"
+        ? "请尽快查看提醒，和专业人员一起评估。"
+        : latestWarning.alert.level === "orange"
+          ? "及时关注这份提醒，和可信赖的人或专业人员聊聊。"
+          : "请查看今天的预警详情，留意自己的状态。";
   const latestSleep = moodTrend[moodTrend.length - 1]?.sleep ?? 0;
   const lastRecord = screeningRecords.find(
     (item) => item.status === "completed",
@@ -122,10 +154,17 @@ export default function Dashboard() {
         <LatestScreeningCard record={lastRecord} />
         <MetricCard
           label="活跃预警"
-          value={`${activeWarnings} 条`}
+          value={warningStyle?.label ?? "暂无"}
+          valueNote={latestWarning ? (latestWarning.daysAgo === 0 ? "今天" : `${latestWarning.daysAgo}天前`) : undefined}
+          valueClassName={warningStyle?.valueClassName}
+          iconClassName={warningStyle?.iconClassName}
           icon={AlertTriangle}
-          hint={
-            activeWarnings > 0 ? "及时查看并跟进预警提醒" : "暂无需要跟进的预警，继续保持，你正在认真照顾自己。"
+          hint={warningHint}
+          action={
+            <Link to="/personal/alerts" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 hover:border-primary-300 hover:text-primary-600">
+              查看全部
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           }
         />
         <MetricCard
@@ -254,116 +293,34 @@ export default function Dashboard() {
           </div>
         </section>
       </div>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="ui-card p-6">
-          <PanelHeading
-            title="今日行动计划"
-            description="从一件小事开始，为自己留一点时间"
-          />
-          <div className="space-y-4">
-            {actionPlan.map((plan, index) => (
-              <div
-                key={plan.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-medium text-primary-500">
-                    0{index + 1}
-                  </span>
-                  <div>
-                    <p className="text-sm font-medium text-slate-700">
-                      {plan.title}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      建议时长 · {plan.duration}
-                    </p>
-                  </div>
-                </div>
-                <StatusBadge status={plan.status} />
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="ui-card p-6">
-          <PanelHeading
-            title="最近筛查记录"
-            description="每一次记录，都让你更了解自己"
-            action={
-              <Link
-                to="/personal/screening"
-                className="text-xs text-primary-500 hover:text-primary-600"
-              >
-                查看全部
-                <ArrowRight className="ml-1 inline h-3.5 w-3.5" />
-              </Link>
-            }
-          />
-          <div className="space-y-4">
-            {screeningRecords.slice(0, 3).map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"
-              >
+      <section className="ui-card p-6">
+        <PanelHeading
+          title="今日行动计划"
+          description="从一件小事开始，为自己留一点时间"
+        />
+        <div className="space-y-4">
+          {actionPlan.map((plan, index) => (
+            <div
+              key={plan.id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-medium text-primary-500">
+                  0{index + 1}
+                </span>
                 <div>
                   <p className="text-sm font-medium text-slate-700">
-                    {item.questionnaire}
-                    <span className="ml-3 text-slate-500">
-                      {item.score}/{item.maxScore} 分
-                    </span>
+                    {plan.title}
                   </p>
-                  <p className="mt-1.5 text-xs text-slate-400">
-                    {item.date} · {item.moodTag}
-                  </p>
-                </div>
-                <AlertBadge level={item.level} size="sm" />
-              </div>
-            ))}
-          </div>
-          {!screeningRecords.length && (
-            <p className="py-6 text-sm text-slate-400">暂无筛查记录</p>
-          )}
-        </section>
-      </div>
-      <section className="ui-card overflow-hidden">
-        <div className="px-6 pt-6">
-          <PanelHeading
-            title="最新预警提醒"
-            description="关注自己的状态，让每一条提醒得到回应"
-            action={
-              <Link to="/personal/alerts" className="ui-button text-xs">
-                查看全部
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            }
-          />
-        </div>
-        <div className="divide-y divide-slate-100">
-          {warningEvents.map((alert) => (
-            <div
-              key={alert.id}
-              className="flex flex-wrap items-center justify-between gap-4 px-6 py-5"
-            >
-              <div className="flex min-w-0 items-start gap-4">
-                <AlertBadge level={alert.level} size="sm" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-700">
-                    {alert.title}
-                  </p>
-                  <p className="mt-1.5 text-xs leading-5 text-slate-500">
-                    {alert.reason}
+                  <p className="mt-1 text-xs text-slate-400">
+                    建议时长 · {plan.duration}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-4 text-xs text-slate-400">
-                <span>{alert.createdAt}</span>
-                <StatusBadge status={alert.status} />
-              </div>
+              <StatusBadge status={plan.status} />
             </div>
           ))}
         </div>
-        {!warningEvents.length && (
-          <p className="p-8 text-center text-sm text-slate-400">暂无预警提醒</p>
-        )}
       </section>
       <div className="flex flex-wrap gap-3">
         <Link to="/personal/retrieval" className="ui-button">

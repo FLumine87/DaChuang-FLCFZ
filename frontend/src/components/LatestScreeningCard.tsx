@@ -27,7 +27,12 @@ export default function LatestScreeningCard({ record }: { record?: PersonalScree
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
           <Activity className="h-6 w-6" strokeWidth={1.7} />
         </div>
-        {isExample && <span className="rounded-full bg-primary-50 px-2 py-1 text-xs font-medium text-primary-600">示例数据</span>}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {isExample && <span className="rounded-full bg-primary-50 px-2 py-1 text-xs font-medium text-primary-600">示例数据</span>}
+          <Link to="/personal/screening" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 hover:border-primary-300 hover:text-primary-600">
+            查看全部 <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </div>
       <h2 className="text-sm font-normal text-slate-500">最近一次筛查</h2>
       {displayed ? (

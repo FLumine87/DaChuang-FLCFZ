@@ -14,6 +14,10 @@ export function MetricCard({
   icon: Icon,
   hint,
   encouragement,
+  action,
+  valueNote,
+  valueClassName,
+  iconClassName,
   trend,
   positive = true,
 }: {
@@ -22,19 +26,29 @@ export function MetricCard({
   icon: LucideIcon;
   hint?: string;
   encouragement?: string;
+  action?: ReactNode;
+  valueNote?: string;
+  valueClassName?: string;
+  iconClassName?: string;
   trend?: string;
   positive?: boolean;
 }) {
   return (
     <div className="ui-card p-5 xl:p-6">
-      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-        <Icon className="h-6 w-6" strokeWidth={1.7} />
+      <div className="mb-5 flex items-start justify-between gap-2">
+        <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${iconClassName ?? "bg-slate-100 text-slate-700"}`}>
+          <Icon className="h-6 w-6" strokeWidth={1.7} />
+        </div>
+        {action}
       </div>
       <p className="text-sm text-slate-500">{label}</p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-2">
-        <p className="text-[28px] font-semibold leading-tight tracking-tight text-slate-800 tabular-nums">
-          {value}
-        </p>
+        <div className="flex items-start gap-2">
+          <p className={`text-[28px] font-semibold leading-tight tracking-tight tabular-nums ${valueClassName ?? "text-slate-800"}`}>
+            {value}
+          </p>
+          {valueNote && <span className="pt-1 text-[11px] text-slate-400">{valueNote}</span>}
+        </div>
         {trend && (
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium ${positive ? "bg-success-50 text-success-600" : "bg-danger-50 text-danger-600"}`}
