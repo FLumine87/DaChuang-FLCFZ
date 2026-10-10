@@ -14,6 +14,32 @@ export default function AdminRetrieval() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<RetrievalResult[] | null>(null);
   const [report, setReport] = useState<RagReport | null>(null);
+  // 查询模态与媒体：后端支持文本 / 图像 / 语音三种查询，这里补齐入口
+  const [modality, setModality] = useState<'text' | 'image' | 'audio'>('text');
+  const [media, setMedia] = useState<{ name: string; base64: string } | null>(null);
+  const [mediaError, setMediaError] = useState('');
+
+  /** 选择图像 / 语音文件：读成 base64（去掉 dataURL 前缀）后随查询提交 */
+  const pickMedia = (kind: 'image' | 'audio', file: File | null) => {
+    setMediaError('');
+    if (!file) return;
+    if (kind === 'image' && !file.type.startsWith('image/')) {
+      setMediaError('请选择图像文件');
+      return;
+    }
+    if (kind === 'audio' && !file.type.startsWith('audio/')) {
+      setMediaError('请选择音频文件');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const raw = String(reader.result || '');
+      setMedia({ name: file.name, base64: raw.includes('base64,') ? raw.split('base64,')[1] : raw });
+      setModality(kind);
+    };
+    reader.onerror = () => setMediaError('文件读取失败，请重试');
+    reader.readAsDataURL(file);
+  };
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -21,7 +47,11 @@ export default function AdminRetrieval() {
     setResults(null);
     setReport(null);
     try {
-      const res = await adminSearch(query);
+      const res = await adminSearch(query, {
+        modality,
+        mediaBase64: media?.base64,
+        mediaName: media?.name,
+      });
       setResults(res.results as RetrievalResult[]);
       setReport(res.report as RagReport);
     } finally {
@@ -45,15 +75,76 @@ export default function AdminRetrieval() {
               className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
+          {/* 图像 / 语音查询入口（后端本就支持两种模态，此前前端只给了文本） */}
+          <input
+            id="admin-media-image"
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => pickMedia('image', e.target.files?.[0] ?? null)}
+          />
+          <input
+            id="admin-media-audio"
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={(e) => pickMedia('audio', e.target.files?.[0] ?? null)}
+          />
+          <button
+            type="button"
+            onClick={() => document.getElementById('admin-media-image')?.click()}
+            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+              modality === 'image'
+                ? 'border-primary-500 bg-primary-50 text-primary-600'
+                : 'border-slate-200 text-slate-600 hover:border-primary-300'
+            }`}
+          >
+            图像查询
+          </button>
+          <button
+            type="button"
+            onClick={() => document.getElementById('admin-media-audio')?.click()}
+            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+              modality === 'audio'
+                ? 'border-primary-500 bg-primary-50 text-primary-600'
+                : 'border-slate-200 text-slate-600 hover:border-primary-300'
+            }`}
+          >
+            语音查询
+          </button>
           <button
             onClick={handleSearch}
-            disabled={loading || !query.trim()}
+            disabled={loading || (!query.trim() && !media)}
             className="px-6 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             {loading ? '检索中...' : '检索'}
           </button>
         </div>
+
+        {(media || mediaError) && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+            {media ? (
+              <>
+                <span className="rounded-full bg-primary-50 px-2.5 py-1 font-medium text-primary-600">
+                  {modality === 'audio' ? '语音' : '图像'}查询：{media.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMedia(null);
+                    setModality('text');
+                  }}
+                  className="cursor-pointer text-slate-500 hover:text-slate-700 hover:underline"
+                >
+                  清除，改回文本查询
+                </button>
+              </>
+            ) : (
+              <span className="text-danger-600">{mediaError}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {loading && (

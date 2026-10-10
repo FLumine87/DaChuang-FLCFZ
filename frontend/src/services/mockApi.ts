@@ -417,15 +417,26 @@ export async function getAdminCases(): Promise<CaseRecord[]> {
   return request.get<CaseRecord[]>('/api/admin/cases');
 }
 
-export async function adminSearch(query: string): Promise<SearchResponse<AdminRetrievalResult>> {
+export async function adminSearch(
+  query: string,
+  opts?: {
+    modality?: 'text' | 'image' | 'audio';
+    mediaBase64?: string;
+    mediaName?: string;
+  }
+): Promise<SearchResponse<AdminRetrievalResult>> {
   if (USE_MOCK) {
     await delay(400 + Math.random() * 400);
     return { results: adminRetrievalResults, report: adminRagReport, query };
   }
-  return request.post<SearchResponse<AdminRetrievalResult>>(
-    '/api/admin/search',
-    { query }
-  );
+  // 后端本来就支持图像 / 语音查询（与个人端同一套），此前前端只传了 query
+  return request.post<SearchResponse<AdminRetrievalResult>>('/api/admin/search', {
+    query,
+    modality: opts?.modality ?? 'text',
+    ...(opts?.mediaBase64
+      ? { media_base64: opts.mediaBase64, media_name: opts.mediaName ?? '' }
+      : {}),
+  });
 }
 
 export async function getAdminCollectionData(): Promise<{
