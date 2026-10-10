@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>个人首页 · 心理筛查预警系统（原型）</title>
+<link rel="stylesheet" href="../assets/fonts/fonts.css">
+<link rel="stylesheet" href="../assets/tokens.css">
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="../assets/shell.css">
+<script>
+try {
+  var m = localStorage.getItem('proto-mode') ||
+    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-mode', m);
+} catch (e) {}
+</script>
+</head>
+<body data-surface="personal">
+
+<div class="app" data-shell='{"surface":"personal","active":"home","crumb":"个人首页"}'>
+  <aside class="sidebar" data-shell-sidebar></aside>
+  <div class="main">
+    <header class="topbar" data-shell-topbar></header>
+    <main class="content">
+      <div class="content__inner">
+
+        <div class="pagehead">
+          <div>
+            <h1>早上好，xiaoyu</h1>
+            <p class="pagehead__desc">早上好，新的一天，先给自己一个平稳的开始。</p>
+          </div>
+          <div class="pagehead__actions">
+            <a class="btn btn--primary btn--lg" href="personal-screening.html">开始筛查</a>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="tiles">
+            <div class="tile">
+              <div class="tile__label">最近一次筛查</div>
+              <div class="tile__value">15 <small>/ 27</small></div>
+              <div class="tile__sub">PHQ-9 · 高危范围 · 03-18</div>
+            </div>
+            <div class="tile">
+              <div class="tile__label">连续记录</div>
+              <div class="tile__value">12 <small>天</small></div>
+              <div class="tile__sub">最近一次：今天 08:20</div>
+            </div>
+            <div class="tile">
+              <div class="tile__label">本月预警</div>
+              <div class="tile__value">2 <small>条</small></div>
+              <div class="tile__sub">1 条跟踪中 · 1 条已缓解</div>
+            </div>
+            <div class="tile">
+              <div class="tile__label">近 10 天情绪均值</div>
+              <div class="tile__value">51</div>
+              <div class="tile__sub">较前一周期下降 6</div>
+            </div>
+          </div>
+
+          <div class="grid grid--sidebar">
+            <section class="card">
+              <div class="card__head card__head--tight">
+                <div>
+                  <h2 class="card__title">情绪与压力趋势</h2>
+                  <p class="card__desc">近 10 次记录 · 两个序列同为 0–100，共用一个值轴</p>
+                </div>
+                <a class="btn btn--ghost btn--sm" href="personal-profile.html">查看全部</a>
+              </div>
+
+              <svg viewBox="0 0 640 220" width="100%" height="220" role="img"
+                   aria-label="情绪与压力趋势折线图，10 个数据点，情绪从 62 降到 50，压力从 71 升到 80">
+                <g stroke="var(--line)" stroke-width="1" shape-rendering="crispEdges">
+                  <line x1="56" y1="14.5" x2="620" y2="14.5"/>
+                  <line x1="56" y1="57.5" x2="620" y2="57.5"/>
+                  <line x1="56" y1="100.5" x2="620" y2="100.5"/>
+                  <line x1="56" y1="143.5" x2="620" y2="143.5"/>
+                  <line x1="56" y1="186.5" x2="620" y2="186.5"/>
+                </g>
+                <g fill="var(--txt-3)" font-size="11" text-anchor="end" style="font-variant-numeric:tabular-nums">
+                  <text x="48" y="18">100</text><text x="48" y="61">75</text><text x="48" y="104">50</text>
+                  <text x="48" y="147">25</text><text x="48" y="190">0</text>
+                </g>
+                <polyline fill="none" stroke="var(--txt-3)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+                  points="56,63.9 118.7,58.7 181.3,55.3 244,50.1 306.7,43.2 369.3,51.8 432,46.7 494.7,39.8 557.3,36.4 620,48.4"/>
+                <polyline fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+                  points="56,79.4 118.7,86.2 181.3,91.4 244,94.8 306.7,101.7 369.3,96.6 432,98.3 494.7,105.2 557.3,108.6 620,100"/>
+                <g font-size="11" font-weight="600" text-anchor="end">
+                  <text x="614" y="52" fill="var(--txt-3)">压力 80</text>
+                  <text x="614" y="104" fill="var(--accent)">情绪 50</text>
+                </g>
+                <g fill="var(--txt-3)" font-size="11" text-anchor="middle" style="font-variant-numeric:tabular-nums">
+                  <text x="56" y="208">03-10</text><text x="181.3" y="208">03-12</text>
+                  <text x="306.7" y="208">03-14</text><text x="432" y="208">03-16</text>
+                  <text x="557.3" y="208">03-18</text>
+                </g>
+              </svg>
+
+              <details class="tech">
+                <summary>以表格查看数据</summary>
+                <div class="table-wrap" style="margin-top:12px">
+                  <table class="table">
+                    <caption class="sr-only">情绪与压力趋势数据表</caption>
+                    <thead><tr><th scope="col">日期</th><th scope="col" class="num">情绪</th><th scope="col" class="num">压力</th><th scope="col" class="num">睡眠(小时)</th></tr></thead>
+                    <tbody>
+                      <tr><td>03-15</td><td class="num">52</td><td class="num">78</td><td class="num">6.2</td></tr>
+                      <tr><td>03-16</td><td class="num">51</td><td class="num">81</td><td class="num">5.8</td></tr>
+                      <tr><td>03-17</td><td class="num">47</td><td class="num">85</td><td class="num">5.3</td></tr>
+                      <tr><td>03-18</td><td class="num">45</td><td class="num">87</td><td class="num">5.1</td></tr>
+                      <tr><td>03-19</td><td class="num">50</td><td class="num">80</td><td class="num">6.0</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </section>
+
+            <section class="card">
+              <div class="card__head card__head--tight">
+                <div>
+                  <h2 class="card__title">最近一次筛查</h2>
+                  <p class="card__desc">PHQ-9 抑郁筛查 · 2026-03-18</p>
+                </div>
+                <span class="pill pill--red"><span class="pill__dot"></span>高危</span>
+              </div>
+
+              <div class="spread" style="align-items:baseline">
+                <span style="font-size:var(--fs-kpi);font-weight:700;font-variant-numeric:tabular-nums">15 <span class="dim" style="font-size:var(--fs-label);font-weight:600">/ 27</span></span>
+                <span class="tier tier--weak">高危范围</span>
+              </div>
+              <div class="band" role="img" aria-label="PHQ-9 分数带：0 至 4 稳定，5 至 9 关注，10 至 14 警告，15 至 27 高危；本次 15 分落在高危段">
+                <span class="band__seg" data-on="1" style="opacity:.35"></span>
+                <span class="band__seg" data-on="2" style="opacity:.35"></span>
+                <span class="band__seg" data-on="3" style="opacity:.35"></span>
+                <span class="band__seg" data-on="4"></span>
+              </div>
+              <div class="band__legend"><span>0–4 稳定</span><span>5–9 关注</span><span>10–14 警告</span><span>15–27 高危</span></div>
+
+              <hr class="divider">
+              <p style="margin:0;font-size:var(--fs-base);color:var(--txt-2)">下一步建议：本周内完成一次心理辅导预约，并继续每日情绪记录。</p>
+              <div class="inline" style="margin-top:var(--sp-6)">
+                <a class="btn btn--primary" href="personal-retrieval.html">查看分析报告</a>
+                <a class="btn" href="personal-screening.html">重新筛查</a>
+              </div>
+            </section>
+          </div>
+
+          <div class="grid grid--sidebar">
+            <div class="grid">
+              <section class="card">
+                <div class="card__head card__head--tight">
+                  <div>
+                    <h2 class="card__title">今日行动计划</h2>
+                    <p class="card__desc">从一件小事开始，为自己留一点时间</p>
+                  </div>
+                </div>
+                <div class="rowlist">
+                  <div class="rowitem">
+                    <span class="rowitem__idx">01</span>
+                    <div class="rowitem__main">
+                      <div class="rowitem__title">定期筛查</div>
+                      <div class="rowitem__meta">建议每周一次 · 上次 03-18</div>
+                    </div>
+                    <span class="pill pill--brand">跟踪中</span>
+                  </div>
+                  <div class="rowitem">
+                    <span class="rowitem__idx">02</span>
+                    <div class="rowitem__main">
+                      <div class="rowitem__title">心理辅导</div>
+                      <div class="rowitem__meta">建议每月一次 · 尚未预约</div>
+                    </div>
+                    <span class="pill pill--orange">新触发</span>
+                  </div>
+                  <div class="rowitem">
+                    <span class="rowitem__idx">03</span>
+                    <div class="rowitem__main">
+                      <div class="rowitem__title">情绪记录</div>
+                      <div class="rowitem__meta">建议每日一次 · 已连续 12 天</div>
+                    </div>
+                    <span class="pill pill--green">已解决</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card__head card__head--tight">
+                  <div>
+                    <h2 class="card__title">睡眠时长</h2>
+                    <p class="card__desc">近 10 天 · 单位小时（与上图的 0–100 分不同量纲，故独立成图）</p>
+                  </div>
+                  <span class="tier tier--weak">均值 5.8 h</span>
+                </div>
+                <svg viewBox="0 0 560 90" width="100%" height="90" role="img" aria-label="睡眠时长趋势：近 10 天从 6.8 小时降到 5.1 小时后回升到 6.0 小时">
+                  <line x1="0" y1="72.5" x2="560" y2="72.5" stroke="var(--line)" stroke-width="1" shape-rendering="crispEdges"/>
+                  <line x1="0" y1="12.5" x2="560" y2="12.5" stroke="var(--line)" stroke-width="1" shape-rendering="crispEdges"/>
+                  <polyline fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+                    points="6,20.6 66.9,26.8 127.8,34.6 188.7,38.6 249.6,46.5 310.4,32.9 371.3,40.7 432.2,50.4 493.1,54.4 554,36.7"/>
+                  <g fill="var(--txt-3)" font-size="11" style="font-variant-numeric:tabular-nums">
+                    <text x="0" y="8">8 h</text><text x="0" y="86">4 h</text>
+                    <text x="552" y="86" text-anchor="end" fill="var(--accent)" font-weight="600">6.0</text>
+                  </g>
+                </svg>
+              </section>
+            </div>
+
+            <div class="grid">
+              <section class="card">
+                <div class="card__head card__head--tight">
+                  <div>
+                    <h2 class="card__title">最近预警</h2>
+                    <p class="card__desc">本月 2 条</p>
+                  </div>
+                  <a class="btn btn--ghost btn--sm" href="personal-alerts.html">全部</a>
+                </div>
+                <ul class="timeline">
+                  <li class="timeline__item" data-level="red">
+                    <div class="timeline__date">2026-03-18 08:40</div>
+                    <p class="timeline__title">连续负性情绪 + 睡眠下降</p>
+                    <p class="timeline__desc">过去 7 天文本与语音信号均出现高风险特征，且 PHQ-9 上升到 15 分。</p>
+                    <div class="inline" style="margin-top:8px">
+                      <span class="pill pill--red"><span class="pill__dot"></span>高危</span>
+                      <span class="pill">跟踪中</span>
+                    </div>
+                  </li>
+                  <li class="timeline__item" data-level="yellow">
+                    <div class="timeline__date">2026-03-16 21:12</div>
+                    <p class="timeline__title">睡眠时长连续偏短</p>
+                    <p class="timeline__desc">近 5 天睡眠均值 5.6 小时，低于建议区间。</p>
+                    <div class="inline" style="margin-top:8px">
+                      <span class="pill pill--yellow"><span class="pill__dot"></span>关注</span>
+                      <span class="pill">已缓解</span>
+                    </div>
+                  </li>
+                </ul>
+              </section>
+
+              <section class="card">
+                <div class="card__head card__head--tight">
+                  <div>
+                    <h2 class="card__title">可用量表</h2>
+                    <p class="card__desc">选择一个开始作答，约 2–4 分钟</p>
+                  </div>
+                </div>
+                <div class="rowlist">
+                  <div class="rowitem">
+                    <div class="rowitem__main">
+                      <div class="rowitem__title">PHQ-9 抑郁筛查</div>
+                      <div class="rowitem__meta">9 题 · 约 3 分钟 · 情绪低落、兴趣下降</div>
+                    </div>
+                    <a class="btn btn--sm" href="personal-screening.html">开始</a>
+                  </div>
+                  <div class="rowitem">
+                    <div class="rowitem__main">
+                      <div class="rowitem__title">GAD-7 焦虑筛查</div>
+                      <div class="rowitem__meta">7 题 · 约 2 分钟 · 紧张、担忧、躯体焦虑</div>
+                    </div>
+                    <a class="btn btn--sm" href="personal-screening.html">开始</a>
+                  </div>
+                  <div class="rowitem">
+                    <div class="rowitem__main">
+                      <div class="rowitem__title">ISI 失眠评估</div>
+                      <div class="rowitem__meta">7 题 · 约 3 分钟 · 睡眠质量下降</div>
+                    </div>
+                    <a class="btn btn--sm" href="personal-screening.html">开始</a>
+                  </div>
+                  <div class="rowitem">
+                    <div class="rowitem__main">
+                      <div class="rowitem__title">PSS-10 压力量表</div>
+                      <div class="rowitem__meta">10 题 · 约 4 分钟 · 学习和生活压力</div>
+                    </div>
+                    <a class="btn btn--sm" href="personal-screening.html">开始</a>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <p class="dim" style="margin-top:var(--sp-12);font-size:var(--fs-meta)">
+          原型样张 · 内容取自项目现有数据（量表分段按后端 alert_rules，PHQ-9 15 分 = 高危）
+        </p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="../assets/shell.js"></script>
+<script src="../assets/app.js"></script>
+</body>
+</html>
