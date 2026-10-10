@@ -88,3 +88,6 @@ Desktop.ini
 # ---- 哈希引擎运行状态（构建产物，数 MB 且随机器/语料变化）----
 # real_corpus.db 已被上面的 *.db 覆盖，这里补上状态文件。
 backend/data/hashing/hashing_state.json
+
+# git bundle 快照（本地产物，不入库）
+.bundles/
