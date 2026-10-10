@@ -376,7 +376,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               title="前往心理筛查"
               aria-label="前往心理筛查"
             >
-              <CircleHelp className="h-5 w-5" />
+              <CircleHelp className="h-5 w-5" strokeWidth={1.7} />
             </Link>
             <Link
               to={`${root}/alerts`}
@@ -384,7 +384,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               title="查看预警"
               aria-label="查看预警"
             >
-              <Bell className="h-5 w-5" />
+              <Bell className="h-5 w-5" strokeWidth={1.7} />
             </Link>
             <div className="relative" ref={profileRef}>
               <button
