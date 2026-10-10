@@ -201,7 +201,7 @@ export default function Dashboard() {
             description="留意状态的变化，关注每一次积极调整"
             action={<ChartRange recent={recent} onChange={setRecent} />}
           />
-          <div className="mb-2 flex gap-5 text-xs text-slate-500">
+          <div className="mb-5 flex gap-5 text-xs text-slate-500">
             <span className="flex items-center gap-2">
               <i className="h-2 w-2 rounded-full bg-primary-500" />
               情绪指数
@@ -211,9 +211,6 @@ export default function Dashboard() {
               压力指数
             </span>
           </div>
-          <p className="mb-5 text-xs text-slate-400">
-            当前为演示指数，后端未定义正常范围；请勿据此判断心理健康状态。
-          </p>
           <div className="h-[280px] min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
