@@ -368,22 +368,6 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-4">
-            <Link
-              to={`${root}/screening`}
-              className="ui-icon-button hidden rounded-full sm:flex"
-              title="前往心理筛查"
-              aria-label="前往心理筛查"
-            >
-              <ClipboardList className="h-5 w-5" strokeWidth={1.7} />
-            </Link>
-            <Link
-              to={`${root}/data-collection`}
-              className="ui-icon-button rounded-full"
-              title="前往多模态采集"
-              aria-label="前往多模态采集"
-            >
-              <Database className="h-5 w-5" strokeWidth={1.7} />
-            </Link>
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
