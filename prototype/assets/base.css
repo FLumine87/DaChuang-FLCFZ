@@ -610,6 +610,14 @@ svg {
 .band__seg[data-on='4'] {
   background: var(--state-red);
 }
+/* 结果带：轨道的「段」只负责长度，颜色只给当前所处的那一段。
+   0–4/5–9 → 绿、10–14 → 黄、15–19 → 橙、20–27 → 红（与后端 alert_rules 同源）。 */
+.band--focus .band__seg {
+  background: var(--bg-inset);
+}
+.band--focus .band__seg[data-active] {
+  background: var(--state-orange);
+}
 .band__legend {
   display: flex;
   justify-content: space-between;
@@ -666,8 +674,8 @@ svg {
 }
 .note--warn {
   border-left-color: var(--state-orange);
-  background: var(--pill-orange-bg);
-  border-color: transparent;
+  background: var(--bg-raised);
+  border-color: var(--line);
 }
 
 /* ---------- 时间线 ---------------------------------------------------------- */
@@ -973,6 +981,330 @@ details.tech .dl {
   background: var(--pill-neutral-bg);
   color: var(--pill-neutral-text);
 }
+
+/* ---------- 作答页：一屏一题的题面与选项 -------------------------------------
+   选项用原生 radio（键盘可操作、可读屏），视觉上做成整块按钮；
+   选中为「深色实心」而非变色边框 —— 一屏一题时不存在多选歧义。 */
+.card--tight {
+  --card-pad: var(--sp-8) var(--sp-8);
+  /* 作答页主体不跟着超宽屏拉长：一屏一题时行长过长会让选项显得散。
+     用 width 而非 max-width —— 不让这条规则改变栅格自身的列宽分配。 */
+  width: min(100%, 780px);
+}
+.steps {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-6);
+}
+.step {
+  flex: 1;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--bg-inset);
+}
+.step[data-on='done'] {
+  background: var(--accent);
+}
+.step[data-on='now'] {
+  background: var(--accent-a35, var(--accent));
+  box-shadow: 0 0 0 1px var(--accent-border);
+}
+.question__text {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-5);
+  margin: 0;
+  font-size: var(--fs-read);
+  font-weight: 600;
+  line-height: var(--lh-cjk);
+}
+.question__idx {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--pill-brand-text);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+}
+.options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-8);
+}
+@media (max-width: 720px) {
+  .options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  min-height: 46px;
+  padding: 0 var(--sp-6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--bg-card);
+  color: var(--txt-2);
+  font-size: var(--fs-base);
+  cursor: pointer;
+  transition:
+    border-color var(--d-base) ease,
+    background var(--d-base) ease,
+    color var(--d-base) ease;
+}
+.option:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--txt-1);
+}
+.option input[type='radio'] {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  min-height: 0;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+  background: transparent;
+}
+.option input[type='radio']:checked {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--bg-card), inset 0 0 0 9px var(--accent);
+}
+.option input[type='radio']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.option:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.option:has(input:checked) .option__score {
+  color: var(--text-on-accent);
+  opacity: 0.75;
+}
+.option__label {
+  font-weight: 600;
+}
+.option__score {
+  font-size: var(--fs-meta);
+  color: var(--txt-3);
+  transition: color var(--d-base) ease;
+}
+
+/* ---------- 模态切换：跟 chips 同源，但不放在凹槽里（内容区本身要展开） ------- */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 0;
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 34px;
+  padding: 0 var(--sp-6);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--txt-2);
+  font: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--txt-1);
+}
+.tab[aria-selected='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.tab__count {
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  color: var(--txt-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 录音台：大数字 + 波形，控件在下方（不用圆形红点那套） ----------- */
+.recorder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-10) var(--sp-8);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+}
+.recorder__clock {
+  font-family: var(--font-mono);
+  font-size: 2.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.recorder__clock small {
+  font-size: var(--fs-read);
+  font-weight: 500;
+  color: var(--txt-3);
+}
+.recorder__wave {
+  width: 100%;
+  height: 56px;
+}
+.recorder__hint {
+  margin: 0;
+  font-size: var(--fs-label);
+  color: var(--txt-3);
+  text-align: center;
+  line-height: var(--lh-cjk);
+}
+
+/* ---------- 已提交条目：左侧一个细条，不做整块成功色 ------------------------ */
+.entry {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+  padding: var(--sp-5) var(--sp-6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-card);
+}
+.entry__media {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: var(--r-control);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  color: var(--txt-3);
+}
+.entry__main {
+  min-width: 0;
+  flex: 1;
+}
+.entry__title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+.entry__meta {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-label);
+  color: var(--txt-3);
+  font-variant-numeric: tabular-nums;
+}
+.entry__side {
+  flex: none;
+  text-align: end;
+  font-size: var(--fs-meta);
+  color: var(--txt-3);
+}
+.filelist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+/* ---------- 上传区：虚线只表示「可放入」，不是装饰 --------------------------- */
+.uploadzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-8) var(--sp-6);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+  text-align: center;
+}
+.uploadzone__icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-control);
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  color: var(--txt-3);
+}
+.uploadzone__title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+.uploadzone__meta {
+  font-size: var(--fs-label);
+  color: var(--txt-3);
+  line-height: var(--lh-base);
+}
+
+/* ---------- 预警提示卡：左侧一条 3px 色条作为唯一语义色，其余保持中性 ------- */
+.alertcard {
+  padding: var(--sp-6) var(--sp-6) var(--sp-6) var(--sp-8);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--txt-3);
+  border-radius: var(--r-card);
+  background: var(--bg-card);
+}
+.alertcard[data-level='green'] {
+  border-left-color: var(--state-green);
+}
+.alertcard[data-level='yellow'] {
+  border-left-color: var(--state-yellow);
+}
+.alertcard[data-level='orange'] {
+  border-left-color: var(--state-orange);
+}
+.alertcard[data-level='red'] {
+  border-left-color: var(--state-red);
+}
+.alertcard + .alertcard {
+  margin-top: var(--sp-3);
+}
+.alertcard__title {
+  font-size: var(--fs-base);
+  font-weight: 700;
+}
+.alertcard__body {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-base);
+  color: var(--txt-2);
+  line-height: var(--lh-cjk);
+}
+.alertcard__acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line);
+}
+.alertcard[data-status='resolved'] {
+  background: var(--bg-raised);
+}
+.alertcard__foot {
+  margin-inline-start: auto;
+  font-size: var(--fs-meta);
+  color: var(--txt-3);
+}
+
 
 /* ---------- 登录页：无外壳，左右分栏 ---------- */
 .auth {
