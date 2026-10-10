@@ -19,7 +19,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { getDashboardData, type DashboardResponse } from "../services/mockApi";
 import {
   ChartRange,
@@ -52,6 +52,11 @@ function calendarDaysAgo(value: string): number | null {
 }
 
 export default function Dashboard() {
+  const [searchParams] = useSearchParams();
+  const requestedPreview = import.meta.env.DEV ? searchParams.get("alertPreview") : null;
+  const previewLevel: "red" | "orange" | null = requestedPreview === "red"
+    ? "red"
+    : requestedPreview === "orange" ? "orange" : null;
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const [reload, setReload] = useState(0);
@@ -93,14 +98,19 @@ export default function Dashboard() {
     return daysAgo !== null && daysAgo >= 0 && daysAgo < 7 ? [{ alert, daysAgo }] : [];
   });
   const latestWarning = recentWarnings.sort((a, b) => b.alert.createdAt.localeCompare(a.alert.createdAt))[0];
-  const warningStyle = latestWarning ? warningAppearance[latestWarning.alert.level] : null;
-  const warningHint = !latestWarning
+  const displayedWarning = previewLevel
+    ? { level: previewLevel, daysAgo: 0 }
+    : latestWarning
+      ? { level: latestWarning.alert.level, daysAgo: latestWarning.daysAgo }
+      : null;
+  const warningStyle = displayedWarning ? warningAppearance[displayedWarning.level] : null;
+  const warningHint = !displayedWarning
     ? "近7天暂无新提醒，继续保持，你正在认真照顾自己。"
-    : latestWarning.daysAgo !== 0
+    : displayedWarning.daysAgo !== 0
       ? "请查看预警详情，留意后续状态变化。"
-      : latestWarning.alert.level === "red"
+      : displayedWarning.level === "red"
         ? "请尽快查看提醒，和专业人员一起评估。"
-        : latestWarning.alert.level === "orange"
+        : displayedWarning.level === "orange"
           ? "及时关注这份提醒，和可信赖的人或专业人员聊聊。"
           : "请查看今天的预警详情，留意自己的状态。";
   const latestSleep = moodTrend[moodTrend.length - 1]?.sleep ?? 0;
@@ -118,6 +128,16 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {previewLevel && (
+        <div className="ui-card flex flex-wrap items-center justify-between gap-3 border-primary-200 bg-primary-50/50 px-4 py-3 text-xs text-slate-600">
+          <span>预警卡片示例预览，不计入真实记录。</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link to="/personal/dashboard?alertPreview=red" className="text-danger-600 hover:underline">红色示例</Link>
+            <Link to="/personal/dashboard?alertPreview=orange" className="text-orange-600 hover:underline">橙色示例</Link>
+            <Link to="/personal/dashboard" className="text-primary-600 hover:underline">退出预览</Link>
+          </div>
+        </div>
+      )}
       <section className="ui-card flex flex-wrap items-center justify-between gap-5 p-6">
         <div className="flex items-center gap-4">
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary-50 text-primary-500">
@@ -155,7 +175,7 @@ export default function Dashboard() {
         <MetricCard
           label="活跃预警"
           value={warningStyle?.label ?? "暂无"}
-          valueNote={latestWarning ? (latestWarning.daysAgo === 0 ? "今天" : `${latestWarning.daysAgo}天前`) : undefined}
+          valueNote={displayedWarning ? (displayedWarning.daysAgo === 0 ? "今天" : `${displayedWarning.daysAgo}天前`) : undefined}
           valueClassName={warningStyle?.valueClassName}
           iconClassName={warningStyle?.iconClassName}
           icon={AlertTriangle}
