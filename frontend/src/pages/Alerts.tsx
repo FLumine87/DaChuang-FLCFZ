@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Filter, ChevronDown, Clock, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { type WarningEvent } from '../data/mockData';
-import { getWarnings } from '../services/mockApi';
+import { getWarnings, updateWarningStatus } from '../services/mockApi';
 import AlertBadge from '../components/AlertBadge';
 import StatusBadge from '../components/StatusBadge';
 
@@ -10,6 +10,7 @@ export default function Alerts() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'new' | 'tracking' | 'resolved'>('all');
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
   const [warningEvents, setWarningEvents] = useState<WarningEvent[]>([]);
+  const [statusNotice, setStatusNotice] = useState<{ kind: 'busy' | 'ok' | 'error'; text: string } | null>(null);
   const [, setLoading] = useState(false);
 
   useEffect(() => {
@@ -33,6 +34,30 @@ export default function Alerts() {
   });
 
   const selected = warningEvents.find((a) => a.id === selectedAlert);
+
+  /**
+   * 标记预警状态。先做乐观更新让界面立刻响应，失败则回滚并明确播报
+   * （静默回滚会让用户以为成功了，是最坏的结果）。
+   */
+  const handleStatusChange = async (next: 'tracking' | 'resolved') => {
+    if (!selected) return;
+    const prev = selected;
+    setStatusNotice({ kind: 'busy', text: '正在同步…' });
+    setWarningEvents((list) =>
+      list.map((a) =>
+        a.id === prev.id
+          ? { ...a, status: next, updatedAt: new Date().toLocaleString('sv-SE').slice(0, 16) }
+          : a
+      )
+    );
+    try {
+      await updateWarningStatus(prev.id, next);
+      setStatusNotice({ kind: 'ok', text: next === 'tracking' ? '已标记为跟踪中' : '已标记为已缓解' });
+    } catch (e) {
+      setWarningEvents((list) => list.map((a) => (a.id === prev.id ? prev : a)));
+      setStatusNotice({ kind: 'error', text: `同步失败，已回滚：${(e as Error).message}` });
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -126,7 +151,9 @@ export default function Alerts() {
           ))}
           {filtered.length === 0 && (
             <div className="ui-card text-center py-12 text-slate-400 text-sm">
-              暂无匹配的预警记录
+              {warningEvents.length === 0
+                ? '还没有预警记录。系统检测到情绪、压力或睡眠的持续变化时，会在这里提醒你。'
+                : '当前筛选条件下没有预警记录，试试把「等级」或「状态」改成全部。'}
             </div>
           )}
         </div>
@@ -162,16 +189,38 @@ export default function Alerts() {
               </div>
               <div className="flex gap-2 pt-2">
                 {selected.status === 'new' && (
-                  <button className="flex-1 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 cursor-pointer">
+                  <button
+                    onClick={() => handleStatusChange('tracking')}
+                    disabled={statusNotice?.kind === 'busy'}
+                    className="flex-1 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
                     标记为跟踪中
                   </button>
                 )}
                 {selected.status === 'tracking' && (
-                  <button className="flex-1 py-2 bg-success-600 text-white rounded-lg text-sm font-medium hover:bg-success-500 cursor-pointer">
+                  <button
+                    onClick={() => handleStatusChange('resolved')}
+                    disabled={statusNotice?.kind === 'busy'}
+                    className="flex-1 py-2 bg-success-600 text-white rounded-lg text-sm font-medium hover:bg-success-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
                     标记为已缓解
                   </button>
                 )}
               </div>
+              {statusNotice && (
+                <p
+                  className={`text-xs mt-2 ${
+                    statusNotice.kind === 'error'
+                      ? 'text-danger-600'
+                      : statusNotice.kind === 'ok'
+                        ? 'text-success-600'
+                        : 'text-slate-500'
+                  }`}
+                  role="status"
+                >
+                  {statusNotice.text}
+                </p>
+              )}
             </div>
           ) : (
             <div className="text-center py-8 text-slate-400 text-sm">

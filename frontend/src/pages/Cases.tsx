@@ -47,6 +47,11 @@ export default function Cases() {
             最近筛查
           </h3>
           <div className="space-y-2">
+            {screeningRecords.length === 0 && (
+              <p className="rounded-lg bg-slate-50 px-3 py-6 text-center text-sm text-slate-400">
+                还没有筛查记录。完成一次心理筛查后，最近的结果会显示在这里。
+              </p>
+            )}
             {screeningRecords.slice(0, 4).map((item) => (
               <div key={item.id} className="p-3 bg-slate-50 rounded-lg">
                 <div className="flex items-center justify-between">
@@ -65,6 +70,11 @@ export default function Cases() {
             预警记录
           </h3>
           <div className="space-y-2">
+            {warningEvents.length === 0 && (
+              <p className="rounded-lg bg-slate-50 px-3 py-6 text-center text-sm text-slate-400">
+                目前没有预警记录。当情绪、压力或睡眠出现持续变化时，系统会在这里提醒你。
+              </p>
+            )}
             {warningEvents.map((item) => (
               <div key={item.id} className="p-3 bg-slate-50 rounded-lg">
                 <div className="flex items-center justify-between">
@@ -97,6 +107,11 @@ export default function Cases() {
         </h3>
         <div className="relative pl-6 space-y-5">
           <div className="absolute left-2.5 top-2 bottom-2 w-px bg-slate-200" />
+          {personalTimeline.length === 0 && (
+            <p className="rounded-lg bg-slate-50 px-3 py-6 text-center text-sm text-slate-400">
+              还没有时间线事件。完成筛查、记录情绪或产生预警后会自动生成。
+            </p>
+          )}
           {personalTimeline.map((event) => (
             <div key={`${event.date}-${event.title}`} className="relative">
               <span className="absolute -left-[18px] w-3 h-3 rounded-full bg-primary-500 border-2 border-white" />

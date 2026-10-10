@@ -28,10 +28,12 @@ export default function Screening() {
   const [params, setParams] = useSearchParams();
   const showExample = params.get('example') === '1';
   const selectedId = params.get('record');
+  // ?paper=PHQ-9 时直接打开该量表的作答表单（多模态采集页的量表卡片跳到这里）
+  const paperParam = params.get('paper');
   const [savedRecord, setSavedRecord] = useState<PersonalScreeningRecord | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLevel, setFilterLevel] = useState<'all' | AlertLevel>('all');
-  const [activeQuestionnaire, setActiveQuestionnaire] = useState<string | null>(null);
+  const [activeQuestionnaire, setActiveQuestionnaire] = useState<string | null>(paperParam);
   const [infoQuestionnaire, setInfoQuestionnaire] = useState<string | null>(null);
   const [localRecords, setLocalRecords] = useState<PersonalScreeningRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,6 +57,12 @@ export default function Screening() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [activeQuestionnaire, selectedId]);
+
+  // 让 ?paper= 成为"当前在作答哪个量表"的唯一来源：
+  // 带参数进来会打开表单，参数被清掉（点侧栏/关闭表单）则回到列表
+  useEffect(() => {
+    setActiveQuestionnaire(paperParam);
+  }, [paperParam]);
 
   useEffect(() => {
     if (!infoQuestionnaire) return;
@@ -105,7 +113,13 @@ export default function Screening() {
       <div className="space-y-4">
         <QuestionnaireForm
           questionnaireId={activeQuestionnaire}
-          onClose={() => setActiveQuestionnaire(null)}
+          onClose={() => {
+            setActiveQuestionnaire(null);
+            // 清掉 ?paper=，避免刷新后又被自动打开
+            if (paperParam) {
+              setParams(showExample ? { example: '1' } : {}, { replace: true });
+            }
+          }}
           onComplete={handleComplete}
         />
       </div>
@@ -134,8 +148,7 @@ export default function Screening() {
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-slate-400">{item.id}</p>
-                <h4 className="text-base font-semibold text-slate-800 mt-1">{item.name}</h4>
+                <h4 className="text-base font-semibold text-slate-800">{item.name}</h4>
                 <p className="text-sm text-slate-500 mt-2">{item.description}</p>
               </div>
               <ClipboardCheck className="w-5 h-5 text-primary-600 shrink-0 mt-1" />
@@ -147,7 +160,11 @@ export default function Screening() {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <button
-                onClick={() => setActiveQuestionnaire(item.id)}
+                onClick={() => {
+                  const next = new URLSearchParams(params);
+                  next.set('paper', item.id);
+                  setParams(next);
+                }}
                 className="ui-button ui-button-primary"
               >
                 <PlayCircle className="w-4 h-4" /> 开始 {item.id}
@@ -370,7 +387,11 @@ export default function Screening() {
         </table></div>
         {filtered.length === 0 && (
           <div className="text-center py-12 text-slate-400 text-sm">
-            {loading ? '加载中…' : '暂无匹配的筛查记录'}
+            {loading
+              ? '正在加载筛查记录…'
+              : records.length === 0
+                ? '还没有筛查记录。从上方选择一个量表开始作答，结果会显示在这里。'
+                : '当前筛选条件下没有筛查记录，试试清空搜索词或把等级改成全部。'}
           </div>
         )}
       </div>

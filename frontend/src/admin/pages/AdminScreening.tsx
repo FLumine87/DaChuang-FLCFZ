@@ -85,6 +85,13 @@ export default function AdminScreening() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-5 py-12 text-center text-sm text-slate-400">
+                  当前筛选条件下没有筛查记录。试试清空搜索词，或把等级筛选改成全部。
+                </td>
+              </tr>
+            )}
             {filtered.map((record) => (
               <tr key={record.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-5 py-3.5 text-sm font-mono text-slate-500">{record.id}</td>

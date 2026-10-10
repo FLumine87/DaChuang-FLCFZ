@@ -66,6 +66,11 @@ export default function AdminRetrieval() {
       {!loading && results && (
         <>
           <div className="ui-card divide-y divide-slate-100">
+            {results.length === 0 && (
+              <div className="px-5 py-12 text-center text-sm text-slate-400">
+                没有找到相似案例。试试换一种描述，或把检索范围放宽到「全部模态」。
+              </div>
+            )}
             {results.map((result) => (
               <div key={result.id} className="p-5 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center justify-between">
