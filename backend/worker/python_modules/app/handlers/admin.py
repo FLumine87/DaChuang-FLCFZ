@@ -45,11 +45,21 @@ async def get_admin_dashboard(ctx: RequestContext):
         count, alerts = trend_map.get(key, (0, 0))
         trend_data.append({"date": date.strftime("%m-%d"), "count": count, "alerts": alerts})
 
-    # 预警等级分布：GROUP BY 一次查出
+    # 预警等级分布及本月黄/红预警：GROUP BY 一次查出
+    month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    next_month_start = (month_start + timedelta(days=32)).replace(day=1)
     dist = {level: 0 for level in ("green", "yellow", "orange", "red")}
-    for row in await db.query_a("SELECT level, COUNT(*) AS c FROM alerts GROUP BY level"):
+    monthly_alert_counts = {"yellow": 0, "red": 0}
+    for row in await db.query_a(
+        "SELECT level, COUNT(*) AS c, "
+        "SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS month_c "
+        "FROM alerts GROUP BY level",
+        (month_start.strftime("%Y-%m-%d"), next_month_start.strftime("%Y-%m-%d")),
+    ):
         if row["level"] in dist:
             dist[row["level"]] = row["c"]
+        if row["level"] in monthly_alert_counts:
+            monthly_alert_counts[row["level"]] = row["month_c"] or 0
     alert_distribution = [
         {"name": "正常(绿)", "value": dist.get("green", 0), "color": "#22c55e"},
         {"name": "关注(黄)", "value": dist.get("yellow", 0), "color": "#f59e0b"},
@@ -115,6 +125,7 @@ async def get_admin_dashboard(ctx: RequestContext):
     return success_response(data={
         "trendData": trend_data,
         "alertDistribution": alert_distribution,
+        "monthlyAlertCounts": monthly_alert_counts,
         "alertRecords": alert_records,
         "screeningRecords": screening_records,
         "caseRecords": case_records,

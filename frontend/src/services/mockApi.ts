@@ -106,6 +106,7 @@ export interface DashboardResponse {
 export interface AdminDashboardResponse {
   trendData: { date: string; count: number; alerts: number }[];
   alertDistribution: { name: string; value: number; color: string }[];
+  monthlyAlertCounts: { yellow: number; red: number };
   alertRecords: AlertRecord[];
   screeningRecords: AdminScreeningRecord[];
   caseRecords: CaseRecord[];
@@ -335,9 +336,15 @@ export async function uploadFile(file: File): Promise<{ url: string; filename: s
 export async function getAdminDashboardData(): Promise<AdminDashboardResponse> {
   if (USE_MOCK) {
     await delay();
+    const now = new Date();
+    const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     return {
       trendData,
       alertDistribution,
+      monthlyAlertCounts: {
+        yellow: alertRecords.filter((item) => item.level === 'yellow' && item.createdAt.startsWith(monthPrefix)).length,
+        red: alertRecords.filter((item) => item.level === 'red' && item.createdAt.startsWith(monthPrefix)).length,
+      },
       alertRecords,
       screeningRecords: adminScreeningRecords,
       caseRecords,

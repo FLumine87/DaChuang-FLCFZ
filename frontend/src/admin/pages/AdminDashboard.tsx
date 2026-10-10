@@ -2,11 +2,9 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
-  ClipboardCheck,
   Plus,
   Search,
   TrendingUp,
-  Users,
 } from "lucide-react";
 import {
   Area,
@@ -67,6 +65,12 @@ export default function AdminDashboard() {
     (sum, item) => sum + item.value,
     0,
   );
+  const monthlyAlerts = data.monthlyAlertCounts ?? { yellow: 0, red: 0 };
+  const monthlyAlertMax = Math.max(monthlyAlerts.yellow, monthlyAlerts.red, 1);
+  const monthlyAlertBars = [
+    { label: "黄色预警", value: monthlyAlerts.yellow, color: "bg-amber-400", dot: "bg-amber-400" },
+    { label: "红色预警", value: monthlyAlerts.red, color: "bg-red-500", dot: "bg-red-500" },
+  ];
   const tooltip = {
     borderRadius: 12,
     border: "1px solid #e4e7ec",
@@ -77,20 +81,31 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="总筛查人数"
-          value="1,247"
-          icon={Users}
-          trend="+12%"
-          hint="较上月筛查人数"
-        />
-        <MetricCard
-          label="本月筛查"
-          value="156"
-          icon={ClipboardCheck}
-          trend="+8%"
-          hint="持续关注心理健康"
-        />
+        <section className="ui-card p-5 sm:col-span-2 xl:p-6">
+          <PanelHeading
+            title="本月预警"
+            description="按触发时间统计黄色与红色预警"
+          />
+          <div className="space-y-4" role="img" aria-label={`本月黄色预警 ${monthlyAlerts.yellow} 条，红色预警 ${monthlyAlerts.red} 条`}>
+            {monthlyAlertBars.map((item) => (
+              <div key={item.label}>
+                <div className="mb-2 flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 text-slate-600">
+                    <i className={`h-2.5 w-2.5 rounded-full ${item.dot}`} />
+                    {item.label}
+                  </span>
+                  <span className="font-semibold tabular-nums text-slate-800">{item.value} 条</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className={`h-full rounded-full ${item.color}`}
+                    style={{ width: `${(item.value / monthlyAlertMax) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
         <MetricCard
           label="待处理预警"
           value="9"
