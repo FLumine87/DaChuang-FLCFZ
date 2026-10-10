@@ -298,7 +298,7 @@ function ImageTab() {
       <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-2">绘画 / 图像上传</h3>
         <p className="text-sm text-slate-500 mb-4">
-          可上传房树人绘画或情绪日记配图。
+          可上传房树人绘画或情绪日记配图。图片仅用于辅助了解情绪表达，不能单独作为诊断依据。
         </p>
         <div
           onClick={() => fileRef.current?.click()}
@@ -321,9 +321,8 @@ function ImageTab() {
           onChange={(e) => addFiles(e.target.files)}
         />
         <div className="mt-3 space-y-1 text-xs leading-5 text-slate-500">
-          <p>房树人（HTP）：画一幅包含房子、树和人的图，拍照或扫描后上传；不需要画得好看。</p>
+          <p className="text-[11px]">房树人（HTP）：画一幅包含房子、树和人的图，拍照或扫描后上传；不需要画得好看。</p>
           <p>情绪日记配图：上传能表达当天心情的照片或画，例如风景或涂鸦。</p>
-          <p>图片仅用于辅助了解情绪表达，不能单独作为诊断依据。</p>
         </div>
       </div>
 
