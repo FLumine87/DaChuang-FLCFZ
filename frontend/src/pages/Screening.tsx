@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import ScreeningDetail from './ScreeningDetail';
+import { screeningExample } from '../data/screeningExample';
 import {
   Search,
   Filter,
@@ -22,6 +25,10 @@ import QuestionnaireForm from '../components/QuestionnaireForm';
 type AlertLevel = 'green' | 'yellow' | 'orange' | 'red';
 
 export default function Screening() {
+  const [params, setParams] = useSearchParams();
+  const showExample = params.get('example') === '1';
+  const selectedId = params.get('record');
+  const [savedRecord, setSavedRecord] = useState<PersonalScreeningRecord | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLevel, setFilterLevel] = useState<'all' | AlertLevel>('all');
   const [activeQuestionnaire, setActiveQuestionnaire] = useState<string | null>(null);
@@ -47,7 +54,7 @@ export default function Screening() {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [activeQuestionnaire]);
+  }, [activeQuestionnaire, selectedId]);
 
   useEffect(() => {
     if (!infoQuestionnaire) return;
@@ -65,7 +72,9 @@ export default function Screening() {
 
   const selectedInfo = questionnaires.find((item) => item.id === infoQuestionnaire);
 
-  const filtered = localRecords.filter(
+  const records = showExample ? [screeningExample, ...localRecords] : localRecords;
+  const selectedRecord = records.find(record => record.id === selectedId) ?? (savedRecord?.id === selectedId ? savedRecord : undefined);
+  const filtered = records.filter(
     (record) =>
       (record.id.includes(searchTerm) || record.questionnaire.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (filterLevel === 'all' || record.level === filterLevel)
@@ -73,14 +82,18 @@ export default function Screening() {
 
   const handleComplete = async (score: number, maxScore: number, level: AlertLevel) => {
     try {
-      await submitScreening({
+      const response = await submitScreening({
         questionnaire: activeQuestionnaire!,
         score,
         maxScore,
         level,
       });
+      if (response.status !== 'success') throw new Error('筛查尚未保存，请重试');
+      setSavedRecord({ id: response.id, questionnaire: activeQuestionnaire!, score, maxScore, level, status: 'completed', moodTag: '已完成', date: new Date().toLocaleDateString('sv-SE') });
+      setParams({ record: response.id });
     } catch (e) {
       console.error('提交筛查失败', e);
+      throw e;
     }
     setActiveQuestionnaire(null);
     // 重新从后端拉取（真实模式下后端会生成筛查记录与分级预警）
@@ -93,13 +106,14 @@ export default function Screening() {
         <QuestionnaireForm
           questionnaireId={activeQuestionnaire}
           onClose={() => setActiveQuestionnaire(null)}
-          onComplete={(score, maxScore, level) => {
-            handleComplete(score, maxScore, level);
-          }}
+          onComplete={handleComplete}
         />
       </div>
     );
   }
+
+  if (selectedRecord) return <ScreeningDetail record={selectedRecord} isExample={showExample && selectedRecord.id === screeningExample.id} onBack={() => setParams(showExample ? { example: '1' } : {})} />;
+  if (selectedId) return <div className="ui-card p-6"><p className="text-sm text-slate-500">{loading ? '正在加载筛查详情…' : '未找到该筛查记录，请返回列表重试。'}</p><button className="ui-button mt-4" onClick={() => setParams({})}>返回筛查记录</button></div>;
 
   return (
     <div className="space-y-6">
@@ -271,6 +285,11 @@ export default function Screening() {
       )}
 
       {/* Toolbar */}
+      <div className="ui-card flex flex-wrap items-center justify-between gap-3 p-5">
+        <div><h3 className="font-semibold text-slate-800">我的筛查记录</h3><p className="mt-1 text-sm text-slate-500">完成筛查后，点击下方记录的“查看详情”，回看得分、解释和建议。</p></div>
+        <button className="ui-button" onClick={() => setParams(showExample ? {} : { example: '1' })}>{showExample ? '退出示例' : '模拟完成后的记录'}</button>
+      </div>
+      {showExample && <p role="status" className="rounded-xl bg-primary-50 p-4 text-sm text-primary-700">已展示一条 PHQ-9 示例记录（8/27 分）。点击“查看详情”体验报告；示例不会保存为真实记录。</p>}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative">
@@ -316,12 +335,13 @@ export default function Screening() {
               <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">状态</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">情绪标签</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">日期</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.map((record) => (
               <tr key={record.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-5 py-3.5 text-sm font-mono text-slate-500">{record.id}</td>
+                <td className="px-5 py-3.5 text-sm font-mono text-slate-500">{record.id === screeningExample.id ? '示例记录' : record.id}</td>
                 <td className="px-5 py-3.5 text-sm text-slate-600">{record.questionnaire}</td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-2">
@@ -343,6 +363,7 @@ export default function Screening() {
                 <td className="px-5 py-3.5"><StatusBadge status={record.status} /></td>
                 <td className="px-5 py-3.5 text-sm text-slate-600">{record.moodTag}</td>
                 <td className="px-5 py-3.5 text-sm text-slate-500">{record.date}</td>
+                <td className="px-5 py-3.5"><button className="whitespace-nowrap text-sm font-medium text-primary-600 hover:underline" onClick={() => setParams({ ...(showExample ? { example: '1' } : {}), record: record.id })}>查看详情</button></td>
               </tr>
             ))}
           </tbody>

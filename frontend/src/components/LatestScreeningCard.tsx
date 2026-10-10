@@ -3,17 +3,7 @@ import { Activity, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { PersonalScreeningRecord } from "../data/mockData";
 import { questionnaires } from "../data/questionnaireData";
-
-const exampleRecord: PersonalScreeningRecord = {
-  id: "preview-only",
-  questionnaire: "PHQ-9",
-  score: 8,
-  maxScore: 27,
-  level: "yellow",
-  status: "completed",
-  moodTag: "已完成",
-  date: "2026-10-10",
-};
+import { screeningExample as exampleRecord } from "../data/screeningExample";
 
 const resultColors = {
   green: "bg-success-50 text-success-600",
@@ -60,9 +50,10 @@ export default function LatestScreeningCard({ record }: { record?: PersonalScree
           <p className="mt-3 text-xs leading-5 text-slate-400">完成一次筛查，了解当前状态</p>
         </>
       )}
-      <div className="mt-4">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        {isExample && <Link to="/personal/screening?example=1&record=preview-only" className="text-xs font-medium text-primary-600 hover:underline">查看示例详情</Link>}
         {record ? (
-          <Link to="/personal/screening" className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline">查看筛查记录 <ArrowRight className="h-3.5 w-3.5" /></Link>
+          <Link to={`/personal/screening?record=${encodeURIComponent(record.id)}`} className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline">查看筛查详情 <ArrowRight className="h-3.5 w-3.5" /></Link>
         ) : (
           <button type="button" onClick={() => setShowExample(!showExample)} aria-pressed={isExample} className="text-xs font-medium text-primary-600 hover:underline">
             {isExample ? "收起示例" : "看看有记录的样子"}

@@ -11,7 +11,7 @@ interface Props {
     score: number,
     maxScore: number,
     level: "green" | "yellow" | "orange" | "red",
-  ) => void;
+  ) => Promise<void>;
 }
 
 export default function QuestionnaireForm({
@@ -24,6 +24,8 @@ export default function QuestionnaireForm({
   );
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   if (!qDef) {
     return (
@@ -50,9 +52,18 @@ export default function QuestionnaireForm({
   );
   const result = qDef.scoring(totalScore);
 
-  const handleSubmit = () => {
-    setSubmitted(true);
-    onComplete(totalScore, maxScore, result.level);
+  const handleSubmit = async () => {
+    if (saving || !allAnswered) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      await onComplete(totalScore, maxScore, result.level);
+      setSubmitted(true);
+    } catch {
+      setSaveError('保存失败，你的作答仍保留在页面上，请重试。');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleReset = () => {
@@ -67,6 +78,7 @@ export default function QuestionnaireForm({
         <button
           onClick={onClose}
           aria-label="返回筛查列表"
+          disabled={saving}
           className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 text-slate-600" />
@@ -119,7 +131,7 @@ export default function QuestionnaireForm({
                 return (
                   <button
                     key={opt.value}
-                    disabled={submitted}
+                    disabled={submitted || saving}
                     aria-pressed={selected}
                     onClick={() =>
                       setAnswers((prev) => ({ ...prev, [q.id]: opt.value }))
@@ -141,15 +153,16 @@ export default function QuestionnaireForm({
 
       {/* Result & Submit */}
       <div className="px-6 pb-6">
+        {saveError && <p role="alert" className="mb-3 text-sm text-danger-600">{saveError}</p>}
         {!submitted ? (
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={handleSubmit}
-              disabled={!allAnswered}
+              disabled={!allAnswered || saving}
               className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" />
-              提交并查看结果
+              {saving ? '正在保存…' : '提交并查看结果'}
             </button>
             {!allAnswered && (
               <p className="text-xs text-slate-400">
