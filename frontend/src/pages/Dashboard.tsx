@@ -125,7 +125,7 @@ export default function Dashboard() {
           value={`${activeWarnings} 条`}
           icon={AlertTriangle}
           hint={
-            activeWarnings > 0 ? "及时查看并跟进预警提醒" : "继续关注自己的感受，照顾好每一天。"
+            activeWarnings > 0 ? "及时查看并跟进预警提醒" : "暂无需要跟进的预警，继续保持，你正在认真照顾自己。"
           }
         />
         <MetricCard
