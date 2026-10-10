@@ -282,14 +282,16 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               ? "从筛查到跟进，让关怀及时抵达。"
               : "从了解自己开始，照顾好每一天。"}
           </p>
-          <Link
-            to={`${root}/screening`}
-            onClick={closeNavigation}
-            className="ui-button ui-button-primary mt-4 w-full text-xs"
-          >
-            {isAdmin ? "查看筛查记录" : "开始心理筛查"}
-            <ArrowUpRight className="h-4 w-4" />
-          </Link>
+          {isAdmin && (
+            <Link
+              to={`${root}/screening`}
+              onClick={closeNavigation}
+              className="ui-button ui-button-primary mt-4 w-full text-xs"
+            >
+              查看筛查记录
+              <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          )}
         </div>
         <div className="sidebar-label shrink-0 border-t border-slate-100 px-7 py-4 text-[11px] text-slate-400">
           心理健康 · {isAdmin ? "管理工作空间" : "个人健康空间"}
