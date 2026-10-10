@@ -13,6 +13,7 @@ export function MetricCard({
   value,
   icon: Icon,
   hint,
+  encouragement,
   trend,
   positive = true,
 }: {
@@ -20,6 +21,7 @@ export function MetricCard({
   value: string;
   icon: LucideIcon;
   hint?: string;
+  encouragement?: string;
   trend?: string;
   positive?: boolean;
 }) {
@@ -47,6 +49,7 @@ export function MetricCard({
         )}
       </div>
       {hint && <p className="mt-3 text-xs leading-5 text-slate-400">{hint}</p>}
+      {encouragement && <p className="mt-4 text-xs leading-6 text-slate-500">{encouragement}</p>}
     </div>
   );
 }

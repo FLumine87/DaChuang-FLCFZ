@@ -117,6 +117,7 @@ export default function Dashboard() {
           icon={ClipboardCheck}
           trend="+3 天"
           hint="较上周连续记录"
+          encouragement="每一次记录，都是对自己的关心。"
         />
         <LatestScreeningCard record={lastRecord} />
         <MetricCard
