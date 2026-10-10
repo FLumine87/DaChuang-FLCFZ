@@ -45,6 +45,22 @@ async def _qn_name(questionnaire_id):
     return q["name"] if q else "未知"
 
 
+async def _current_user_name(ctx: RequestContext):
+    """当前登录用户的显示名。
+
+    此前档案接口的 name 字段写死为「用户」，只有存在筛查记录时才从 screenings
+    里取名字 —— 结果新账号（没有任何筛查）永远显示「用户」，users.name 白存了。
+    这里改成以 users 表为准，筛查记录只作为兜底。
+    """
+    payload = getattr(ctx, "user", None) or {}
+    user_id = payload.get("sub")
+    if user_id is not None:
+        row = await db.query_one_a("SELECT name, username FROM users WHERE id = ?", (user_id,))
+        if row:
+            return (row.get("name") or "").strip() or row.get("username") or ""
+    return ""
+
+
 async def get_personal_screenings(ctx: RequestContext):
     rows = await db.query_a("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 100")
     items = []
@@ -139,9 +155,13 @@ async def get_personal_dashboard(ctx: RequestContext):
 
     user_profile = {"name": "用户", "age": 0, "gender": "", "campus": "",
                     "major": "", "stage": "", "emergencyContact": ""}
+    # 显示名以 users 表为准（筛查记录仅作兜底），否则新账号永远显示「用户」
+    profile_name = await _current_user_name(ctx)
     if screenings:
-        user_profile["name"] = screenings[0].get("name") or "用户"
+        user_profile["name"] = profile_name or screenings[0].get("name") or "用户"
         user_profile["gender"] = screenings[0].get("gender") or ""
+    elif profile_name:
+        user_profile["name"] = profile_name
 
     return success_response(data={
         "moodTrend": mood_trend,
@@ -172,9 +192,13 @@ async def get_personal_profile(ctx: RequestContext):
 
     user_profile = {"name": "用户", "age": 0, "gender": "", "campus": "",
                     "major": "", "stage": "", "emergencyContact": ""}
+    # 显示名以 users 表为准（筛查记录仅作兜底），否则新账号永远显示「用户」
+    profile_name = await _current_user_name(ctx)
     if screenings:
-        user_profile["name"] = screenings[0].get("name") or "用户"
+        user_profile["name"] = profile_name or screenings[0].get("name") or "用户"
         user_profile["gender"] = screenings[0].get("gender") or ""
+    elif profile_name:
+        user_profile["name"] = profile_name
 
     personal_timeline = []
     for s in screenings[:5]:

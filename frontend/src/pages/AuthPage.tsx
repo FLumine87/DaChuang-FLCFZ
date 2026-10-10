@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
 import { apiLogin, apiRegister } from "../services/mockApi";
-import { saveSessionToken } from "../auth/session";
+import { saveSessionToken, saveDisplayName } from "../auth/session";
 
 type AuthTab = "login" | "register";
 
@@ -60,6 +60,8 @@ export default function AuthPage() {
         return;
       }
       saveSessionToken(result.token, rememberMe);
+      // 后端登录返回的显示名（users.name）不在 JWT 里，单独存一份给档案页用
+      saveDisplayName(result.name);
       setMessage("登录成功，正在跳转...");
       // 后端返回的role可能是'admin'或'counselor'，前端统一处理
       setTimeout(() => {

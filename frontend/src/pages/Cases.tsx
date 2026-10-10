@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ClipboardList, Clock, Sparkles, FileText, AlertTriangle } from 'lucide-react';
 import { type PersonalScreeningRecord, type WarningEvent, type PersonalTimelineEvent, type UserProfile } from '../data/mockData';
 import { getCases } from '../services/mockApi';
+import { getDisplayName } from '../auth/session';
 import AlertBadge from '../components/AlertBadge';
 
 export default function Cases() {
@@ -21,7 +22,16 @@ export default function Cases() {
         setScreeningRecords(data.screeningRecords ?? []);
         setWarningEvents(data.warningEvents ?? []);
         setPersonalTimeline(data.personalTimeline ?? []);
-        if (data.userProfile) setUserProfile(data.userProfile);
+        if (data.userProfile) {
+          // 后端在「无筛查记录」时会把 name 退化成占位符「用户」；
+          // 这时用登录时后端返回的显示名（users.name）覆盖，别让用户看见「用户」。
+          const fallback = getDisplayName();
+          const name = data.userProfile.name;
+          setUserProfile({
+            ...data.userProfile,
+            name: !name || name === '用户' ? (fallback || name || '—') : name,
+          });
+        }
       } catch (e) {
         console.error('加载档案失败', e);
       } finally {
@@ -30,14 +40,27 @@ export default function Cases() {
     })();
   }, []);
 
+  // 副标题只拼有值的字段：此前会把空字段也连起来，渲染成「名字 ·  · 0 岁 ·  ·」，
+  // 而 age 的 0 是「未知」不是真的 0 岁。宁可少显示，也不要显示假的。
+  const profileMeta = [
+    userProfile.name,
+    userProfile.gender,
+    userProfile.age ? `${userProfile.age} 岁` : '',
+    userProfile.stage,
+    userProfile.major,
+  ]
+    .map((v) => (v || '').toString().trim())
+    .filter(Boolean)
+    .join(' · ');
+
   return (
     <div className="space-y-6">
       <div className="ui-card p-5">
         <h2 className="text-xl font-semibold text-slate-800">我的心理档案</h2>
-        <p className="text-sm text-slate-500 mt-1">
-          {userProfile.name} · {userProfile.gender} · {userProfile.age} 岁 · {userProfile.stage} · {userProfile.major}
+        <p className="text-sm text-slate-500 mt-1">{profileMeta}</p>
+        <p className="text-xs text-slate-400 mt-2">
+          紧急支持联系人：{userProfile.emergencyContact || '未填写'}
         </p>
-        <p className="text-xs text-slate-400 mt-2">紧急支持联系人：{userProfile.emergencyContact}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

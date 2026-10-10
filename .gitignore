@@ -91,3 +91,7 @@ backend/data/hashing/hashing_state.json
 
 # git bundle 快照（本地产物，不入库）
 .bundles/
+
+# 本地 Node 运行时（为跑 dev server 下载，不入库）
+.tools/
+.shots/
