@@ -50,8 +50,20 @@ const fontInline = FONTS_CSS.replace(/url\('\.\/([^']+)'\)/g, (m, file) => {
 /* ---------------------------------------------------------------------------
    2) 外壳脚本：shell.js 原样用；app.js 里「读本机偏好」那两段在单文件里
       必须由外层路由统一决定，否则换页会被上一次的选择覆盖。
+
+   注意：shell.js 里的 NAV 是用 JS 字符串拼出侧边栏链接的
+   （{ href: 'admin-screenings.html' } -> '<a href="' + it.href + '">'），
+   第 75 行那个只针对 HTML 属性的 href 改写**匹配不到它们**。若不处理，
+   点击侧边栏会变成「真实文件导航」而不是 hash 换页：
+   - 单文件版：跳向不存在的 admin-screenings.html（404）
+   - 嵌在 iframe 里时：相对地址按父页面解析，同样 404
+   所以这里把 NAV 的 href 也统一改写成路由 hash。
 --------------------------------------------------------------------------- */
-const shellJs = read(path.join(ROOT, 'assets/shell.js'));
+const NAV_HREF_RE = /href:\s*(["'])([A-Za-z0-9_-]+)\.html\1/g;
+const shellJs = read(path.join(ROOT, 'assets/shell.js')).replace(
+  NAV_HREF_RE,
+  (m, q, name) => `href: ${q}#/pages/${name}.html${q}`,
+);
 let appJs = read(path.join(ROOT, 'assets/app.js'));
 
 /* ---------------------------------------------------------------------------

@@ -46,10 +46,10 @@ type Theme = "light" | "dark";
 /** 深色模式偏好存储键；index.html 的首屏脚本读取同一个键以避免闪白。 */
 const THEME_KEY = "psych_theme";
 
-/** 默认深色：只有用户显式切到浅色（存入 "light"）时才用浅色，
- *  这样换浏览器 / 新窗口 / 清过站点数据后进入任何界面都不会突然变亮。 */
+/** 默认浅色：只有用户显式切到深色（存入 "dark"）时才用深色，
+ *  换浏览器 / 新窗口 / 清过站点数据后一律回到浅色。 */
 const readStoredTheme = (): Theme =>
-  window.localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+  window.localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
 
 export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   const location = useLocation();
