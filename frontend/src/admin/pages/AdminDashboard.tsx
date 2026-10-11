@@ -82,10 +82,10 @@ export default function AdminDashboard() {
     processing: alerts.filter((a) => a.status === "processing").length,
     resolved: alerts.filter((a) => a.status === "resolved").length,
     // 没有任何处理人的预警：唯一一个「需要立刻认领」的信号
-    unassigned: alerts.filter((a) => (!a.assignee || a.assignee === "未分配") && (a.status === "pending" || a.status === "processing")).length,
+    unassigned: alerts.filter((a) => !a.assignee).length,
     byAssignee: Object.entries(
       alerts.reduce<Record<string, number>>((acc, a) => {
-        if (!a.assignee || a.assignee === "未分配") return acc;
+        if (!a.assignee) return acc;
         acc[a.assignee] = (acc[a.assignee] ?? 0) + 1;
         return acc;
       }, {})
@@ -111,6 +111,8 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* 注：顶部「待处理预警 / 本月完成率」等指标及其变化幅度目前是前端常量，
+          未接入 /api/dashboard/stats；下方趋势与分布来自真实聚合查询。 */}
       {/* 首行按「要做的 → 风险总量 → 整体进度」排序：
           未分配预警（需立刻认领）→ 本月预警（黄/红总量）→ 本月完成率（进展） */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -193,7 +195,7 @@ export default function AdminDashboard() {
               筛查人数
             </span>
             <span className="flex items-center gap-2">
-              <i className="h-2 w-2 rounded-full bg-slate-500" />
+              <i className="h-2 w-2 rounded-full bg-primary-300" />
               预警数量
             </span>
           </div>
@@ -236,18 +238,18 @@ export default function AdminDashboard() {
                 />
                 <Tooltip contentStyle={tooltip} />
                 <Area
-                  type="linear"
+                  type="monotone"
                   dataKey="count"
                   name="筛查人数"
                   stroke="#465fff"
                   strokeWidth={2.5}
-                  fill="transparent"
+                  fill="url(#screening-fill)"
                 />
                 <Area
-                  type="linear"
+                  type="monotone"
                   dataKey="alerts"
                   name="预警数量"
-                  stroke="var(--color-slate-500)"
+                  stroke="#9cb9ff"
                   strokeWidth={2}
                   fill="transparent"
                 />
@@ -255,7 +257,7 @@ export default function AdminDashboard() {
             </ResponsiveContainer>
           </div>
         </section>
-        <section className="ui-card order-4 overflow-hidden">
+        <section className="ui-card overflow-hidden">
           <div className="p-6">
             {/* 原来是「本月筛查目标」仪表盘：把 87% / 261 件又画了一遍（与上面两块重复），
                 且底部「待处理预警 9 条」是写死的常量。这里换成真正的新信息：
@@ -321,7 +323,9 @@ export default function AdminDashboard() {
             </Link>
           </div>
         </section>
-        <section className="ui-card order-3 overflow-hidden xl:col-span-2">
+      </div>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <section className="ui-card overflow-hidden xl:col-span-2">
           <div className="px-6 pt-6">
             <PanelHeading
               title="最新预警"
@@ -383,7 +387,7 @@ export default function AdminDashboard() {
             </p>
           )}
         </section>
-        <section className="ui-card order-2 p-6">
+        <section className="ui-card p-6">
           <PanelHeading
             title="风险等级分布"
             description="当前筛查结果的风险构成"

@@ -16,6 +16,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  ShieldCheck,
   Sun,
   TriangleAlert,
   UserRound,
@@ -81,7 +82,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         ? "筛查、预警与处置情况，一目了然。"
         : "关注每一天的状态，记录属于你的积极变化。",
       icon: LayoutDashboard,
-      group: isAdmin ? "总览" : "我的空间",
+      group: "工作空间",
     },
     {
       path: `${root}/screening`,
@@ -90,30 +91,30 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         ? "管理筛查记录，及时了解心理健康状态。"
         : "从一次简单的自我了解开始。",
       icon: ClipboardList,
-      group: isAdmin ? "总览" : "我的空间",
+      group: "工作空间",
     },
     {
       path: `${root}/data-collection`,
-      label: isAdmin ? "采集审阅" : "多模态采集",
+      label: "多模态采集",
       description: "通过文字、语音与图像，记录更完整的状态。",
       icon: Database,
-      group: isAdmin ? "总览" : "我的空间",
+      group: "工作空间",
     },
     {
       path: `${root}/retrieval`,
       label: "检索与分析",
       description: "查找相似案例，获取有据可循的分析与建议。",
       icon: Search,
-      group: isAdmin ? "研判" : "健康管理",
+      group: "智能分析",
     },
     ...(isAdmin
       ? [
           {
             path: `${root}/agent-workbench`,
-            label: "预警研判台",
+            label: "预警处置工作台",
             description: "汇总筛查证据与规则，辅助人工研判和处置。",
             icon: BrainCircuit,
-            group: "研判",
+            group: "智能分析",
           },
         ]
       : []),
@@ -122,7 +123,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       label: isAdmin ? "预警管理" : "预警中心",
       description: "查看风险变化，跟进每一条需要关注的提醒。",
       icon: TriangleAlert,
-      group: isAdmin ? "研判" : "健康管理",
+      group: "健康管理",
     },
     {
       path: `${root}/cases`,
@@ -131,7 +132,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         ? "汇集案例资料，持续跟踪干预与恢复进展。"
         : "把筛查、采集和行动记录，整理成你的健康档案。",
       icon: FolderOpen,
-      group: isAdmin ? "研判" : "健康管理",
+      group: "健康管理",
     },
   ];
   const active =
@@ -155,7 +156,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
     document.documentElement.classList.toggle("dark", dark);
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", dark ? "#171614" : "#465fff");
+      ?.setAttribute("content", dark ? "#0b1120" : "#465fff");
     try {
       window.localStorage.setItem(THEME_KEY, theme);
     } catch {
@@ -206,7 +207,6 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
     setProfileOpen(false);
   };
   const handleLogout = async () => {
-    if (!window.confirm("确定退出当前账号吗？请先保存正在填写的内容。")) return;
     setSigningOut(true);
     try {
       await logout();
@@ -221,7 +221,6 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       className="app-shell min-h-screen bg-slate-50"
       data-collapsed={collapsed}
       data-mobile-open={mobileOpen}
-      data-surface={mode}
     >
       <a
         href="#main-content"
@@ -245,13 +244,13 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         aria-label={isAdmin ? "管理端导航" : "个人端导航"}
         inert={isMobile && !mobileOpen}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 px-3">
+        <div className="flex h-24 shrink-0 items-center justify-between px-6">
           <Link
             to={`${root}/dashboard`}
             onClick={closeNavigation}
             aria-label="系统首页"
           >
-            <BrandLogo subtitle={isAdmin ? "咨询师工作空间" : "个人健康空间"} />
+            <BrandLogo />
           </Link>
           <button
             className="text-slate-400 lg:hidden"
@@ -261,13 +260,13 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             <ChevronLeft className="h-5 w-5" />
           </button>
         </div>
-        <nav className="flex-1 px-2 py-3">
-          {(isAdmin ? ["总览", "研判"] : ["我的空间", "健康管理"]).map((group) => (
-            <div className="sidebar-group mb-4" key={group}>
-              <div className="sidebar-group-title mb-2 flex h-5 items-center px-2 text-xs font-medium text-slate-400">
+        <nav className="shrink-0 px-5 pb-5">
+          {["工作空间", "智能分析", "健康管理"].map((group) => (
+            <div className="sidebar-group mb-7" key={group}>
+              <div className="sidebar-group-title mb-3 flex h-5 items-center px-3 text-[11px] font-medium tracking-widest text-slate-400">
                 <span className="sidebar-label">{group}</span>
               </div>
-              <div className="space-y-0.5">
+              <div className="space-y-1.5">
                 {items
                   .filter((item) => item.group === group)
                   .map((item) => (
@@ -282,19 +281,35 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                       title={item.label}
                     >
                       <item.icon
-                        className="h-4 w-4 shrink-0"
+                        className="h-5 w-5 shrink-0"
                         strokeWidth={1.7}
                       />
                       <span className="sidebar-label flex-1">{item.label}</span>
+                      {active.path === item.path && (
+                        <ChevronRight className="sidebar-label h-4 w-4" />
+                      )}
                     </Link>
                   ))}
               </div>
             </div>
           ))}
         </nav>
+        <div className="sidebar-label mx-5 mb-5 mt-auto shrink-0 rounded-2xl bg-slate-50 p-5 text-center">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white text-primary-500">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <p className="text-sm font-semibold text-slate-800">
+            每一份关注，都有意义
+          </p>
+          <p className="mt-2 whitespace-normal text-xs leading-5 text-slate-500">
+            {isAdmin
+              ? "从筛查到跟进，让关怀及时抵达。"
+              : "从了解自己开始，照顾好每一天。"}
+          </p>
+        </div>
         <div className="sidebar-footer">
-          <span className="sidebar-label whitespace-normal! leading-5">
-            {isAdmin ? "数据用于辅助人工研判" : "每一次记录，都是对自己的关心"}
+          <span className="sidebar-label">
+            心理健康 · {isAdmin ? "管理工作空间" : "个人健康空间"}
           </span>
           {/* 收起/展开侧栏。特意用「面板」图标 + 带边框的方形按钮，和导航图标区分开 */}
           <button
@@ -328,7 +343,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         )}
       </button>
       <div className="app-frame" inert={isMobile && mobileOpen}>
-        <header className="app-topbar sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-t-2 border-t-primary-500 border-b border-b-slate-200 bg-white px-4 sm:px-5">
+        <header className="sticky top-0 z-20 flex h-[82px] items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 sm:px-7">
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-5">
             <button
               className="ui-icon-button lg:hidden"
@@ -338,9 +353,8 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <span className="hidden shrink-0 text-sm font-semibold text-slate-800 lg:block">{active.label}</span>
-            <div className="relative w-full max-w-56" ref={searchContainerRef}>
-              <Search className="pointer-events-none absolute left-2 top-2 h-4 w-4 text-slate-400" />
+            <div className="relative w-full max-w-sm" ref={searchContainerRef}>
+              <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
               <input
                 ref={searchRef}
                 value={query}
@@ -359,9 +373,9 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                 aria-expanded={searchOpen}
                 aria-controls="page-search-results"
                 placeholder="搜索页面…"
-                className="h-8 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-xs sm:pr-14"
+                className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm sm:pr-16"
               />
-              <kbd className="pointer-events-none absolute right-2 top-1 hidden rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[11px] text-slate-400 sm:block">
+              <kbd className="pointer-events-none absolute right-2.5 top-2.5 hidden rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] text-slate-400 sm:block">
                 ⌘ K
               </kbd>
               {searchOpen && (
@@ -400,7 +414,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                 aria-expanded={profileOpen}
                 className="flex items-center gap-2.5 rounded-lg py-1 sm:pl-1"
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-50 text-sm font-semibold text-primary-500">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-50 text-sm font-semibold text-primary-500">
                   {username.slice(0, 1).toUpperCase()}
                 </span>
                 <span className="hidden text-left sm:block">
@@ -460,7 +474,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           </div>
         </header>
         <main className="app-content" id="main-content" tabIndex={-1}>
-          {!(isDashboard && !isAdmin) && <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div className="mb-7 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-slate-800">
                 {active.label}
@@ -486,7 +500,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               )}
               <span className="text-slate-800">{active.label}</span>
             </nav>
-          </div>}
+          </div>
           <div className="page-body">
             <Outlet />
           </div>

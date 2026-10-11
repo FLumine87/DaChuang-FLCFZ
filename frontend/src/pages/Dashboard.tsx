@@ -120,6 +120,7 @@ export default function Dashboard() {
     warningEvents,
     actionPlan,
     screeningRecords,
+    userProfile,
   } = data;
   const signedInUsername = getCurrentSession()?.username || "同学";
   const recentWarnings = warningEvents.flatMap((alert) => {
@@ -187,13 +188,21 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-      <section className="flex flex-wrap items-center justify-between gap-4">
+      <section className="ui-card flex flex-wrap items-center justify-between gap-5 p-6">
         <div className="flex items-center gap-4">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary-50 text-primary-500">
+            <Sparkles className="h-7 w-7" strokeWidth={1.5} />
+          </span>
           <div>
-            <h1 className="font-semibold text-slate-800">
+            <h2 className="text-lg font-semibold text-slate-800">
               欢迎回来，{signedInUsername}
-            </h1>
-            <p className="mt-2 text-sm text-slate-500">{dayTip}</p>
+            </h2>
+            <p className="mt-1.5 text-xs leading-5 text-slate-500">
+              {[userProfile?.stage, userProfile?.major, userProfile?.campus]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+            <p className="mt-2 text-xs text-slate-400">{dayTip}</p>
           </div>
         </div>
         <Link to="/personal/screening" className="ui-button ui-button-primary">
@@ -202,7 +211,6 @@ export default function Dashboard() {
         </Link>
       </section>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <LatestScreeningCard record={lastRecord} />
         <MetricCard
           label="连续打卡"
           value="12 天"
@@ -211,6 +219,7 @@ export default function Dashboard() {
           hint="较上周连续记录"
           encouragement="每一次记录，都是对自己的关心。"
         />
+        <LatestScreeningCard record={lastRecord} />
         <MetricCard
           label="活跃预警"
           value={warningStyle?.label ?? "暂无"}
@@ -246,7 +255,7 @@ export default function Dashboard() {
               情绪指数
             </span>
             <span className="flex items-center gap-2">
-              <i className="h-2 w-2 rounded-full bg-slate-500" />
+              <i className="h-2 w-2 rounded-full bg-violet-300" />
               压力指数
             </span>
           </div>
@@ -282,18 +291,18 @@ export default function Dashboard() {
                 />
                 <Tooltip contentStyle={tooltip} />
                 <Area
-                  type="linear"
+                  type="monotone"
                   dataKey="mood"
                   name="情绪指数"
                   stroke="#465fff"
                   strokeWidth={2.5}
-                  fill="transparent"
+                  fill="url(#mood-fill)"
                 />
                 <Area
-                  type="linear"
+                  type="monotone"
                   dataKey="stress"
                   name="压力指数"
-                  stroke="var(--color-slate-500)"
+                  stroke="#b3a0f9"
                   strokeWidth={2}
                   fill="transparent"
                 />

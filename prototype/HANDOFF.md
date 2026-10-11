@@ -12,9 +12,9 @@
 | `prototype/` | **静态高保真原型**：16 个手写 HTML + 一份 CSS/JS 设计系统 | 双击 HTML 就能看，不需要构建 | 完全安全，不影响线上 |
 | `frontend/` | **真实的 React 应用**（React 19 + Vite + Tailwind v4） | 需要 `npm install && npm run dev` | 会改到真正的产品代码 |
 
-**2026-10-11 更新：原型的共享视觉规范与主要首页布局已迁入 `frontend/`，不再仅存在于原型中。**
-后续修改登录后的应用请修改 `frontend/`；整合范围、演示启动和接口限制见 `frontend/INTEGRATION.md`。
-本文件其余原型说明保留作设计参考，第五节为原始迁移建议，不代表全部尚未实施。
+**这轮所有视觉改动都在 `prototype/` 里，`frontend/` 一个字没动。**
+想在原型上继续改：只碰 `prototype/`。
+想把新设计落到真实产品上：那是另一件事（见第五节）。
 
 ---
 
