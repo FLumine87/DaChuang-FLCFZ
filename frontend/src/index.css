@@ -381,7 +381,6 @@
     color: var(--color-primary-500);
   }
   .sidebar-footer {
-    position: relative;
     display: flex;
     flex-shrink: 0;
     align-items: center;
@@ -392,23 +391,20 @@
     color: var(--color-slate-500);
     font-size: 11px;
   }
-  /* 折叠按钮脱离居中流，贴右缘垂直居中 —— 文字因此是「真居中」，
-     按钮也不再和那行小字挤在一起。 */
+  /* 展开态页脚不放「折叠侧栏」按钮：侧栏右缘的悬浮把手（.sidebar-handle）
+     已经能收起侧栏，同一个动作不必在侧栏里出现两次。
+     页脚因此只剩一句版权文字，天然居中。 */
   .sidebar-footer .sidebar-action-collapse {
-    position: absolute;
-    right: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
+    display: none;
   }
-  /* 收起时页脚只剩「展开侧栏」一个按钮，此时回到普通居中布局 */
+  /* 收起态把手会隐藏（见 .app-shell[data-collapsed] .sidebar-handle），
+     这时把页脚那个「展开侧栏」按钮放出来并居中 */
   .app-shell[data-collapsed="true"] .sidebar-footer {
-    justify-content: center;
     margin-top: auto;
     padding: 0.75rem 0;
   }
   .app-shell[data-collapsed="true"] .sidebar-footer .sidebar-action-collapse {
-    position: static;
-    transform: none;
+    display: inline-flex;
   }
   .app-shell[data-collapsed="true"] .sidebar-link {
     justify-content: center;

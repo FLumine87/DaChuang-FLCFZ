@@ -313,8 +313,8 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           <span className="sidebar-label">
             心理健康 · {isAdmin ? "管理工作空间" : "个人健康空间"}
           </span>
-          {/* 收起/展开侧栏。用「面板」图标 + 带边框的方形按钮，和导航图标区分开；
-              绝对定位贴右缘，不参与页脚居中计算，左侧那句版权文字因此能真正居中 */}
+          {/* 只在收起态出现：展开态收起侧栏交给右缘的悬浮把手，
+              页脚因此只剩左侧那句居中的版权文字 */}
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
