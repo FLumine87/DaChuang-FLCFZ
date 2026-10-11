@@ -89,9 +89,19 @@ prototype/
 **重新打包单文件**
 → `node scripts/build-bundle.mjs`（需要 Node；`DSH_PYTHON` 环境变量可指定 Python 用于压图）
 
-**把新设计落成 React（尚未做）**
+**把新设计落成 React（个人首页已做，其余页面待做）**
 → `prototype/` 与 `frontend/` 解耦，设计 token 可直接对应
-`frontend/src/index.css` 里的 Tailwind 主题变量；落地方式是按页面逐个替换组件
+`frontend/src/index.css` 里的 Tailwind 主题变量；落地方式是按页面逐个替换组件。
+**个人首页已经落地**（提交 `14e463a`）：在旧版结构上整合了原型的
+「最近一次筛查（分数带 + 下一步建议 + 查看分析报告 / 重新筛查）」，
+并新增「睡眠时长」「最近预警」两块。几个约定：
+- 分数带不要另写阈值表：用 `frontend/src/data/questionnaireData.ts` 里各量表自己的
+  `scoring()` 在 `0..满分` 上扫一遍反推分档（见 `pages/Dashboard.tsx` 的 `scoringBands`）
+- 分数带图例固定两列（区间 + 等级）：右列只有 1/3 宽，四个标签排一行会挤在一起
+- Recharts 的曲线一律加 `isAnimationActive={false}`：否则首帧/截图会抓到
+  `stroke-dasharray: 0px`，看起来像一张空图
+- 「历史风险分布」圆环图已从个人首页移出（它是全量聚合数据，不是本人记录；
+  管理端「数据概览」里有同源的「风险等级分布」）
 
 ---
 
@@ -117,8 +127,19 @@ TMPDIR="$PWD/.chrome-tmp" "$CH" --headless=new --no-sandbox --disable-gpu \
 
 ## 七、当前状态（截至最后一次提交）
 
-- 分支 `main`，**未 push**，领先 `origin/main` 33 个提交（其中 6 个是原型工作）
+- 分支 `feature/frontend-redesign`，**未 push**；`main` 落后于它（原型工作都在 `main`）
+- 前端本轮进展（都在 `feature/frontend-redesign` 上）：
+  - `84f0665` 侧栏改成只有导航区滚动，矮窗口下吸底页脚不再压住底部说明卡
+  - `fd50cf0` 展开态去掉页脚里重复的「折叠侧栏」按钮（右缘悬浮把手足够）
+  - `14e463a` 个人首页整合分数带卡片 + 睡眠时长 + 最近预警，去掉底部两个重复按钮
+- 演示数据说明：跑 `npm run dev:demo`（`VITE_USE_MOCK=true`）时，个人首页的
+  筛查/预警/趋势全部来自 `frontend/src/data/mockData.ts`，**不是后端返回**；
+  其中「连续记录 12 天 / +3 天」是写死的演示值（数据里没有打卡流水）
+- 真接后端时：`VITE_USE_MOCK=false` + `/api/personal/dashboard`（见
+  `backend/app/handlers/personal.py`）。注意那个接口里「心情趋势」是公式生成的、
+  「行动计划」是写死的三条，别当成真实数据
 - 原型文件 32 个全部入库；截图（`*.png`）按仓库 `.gitignore` 不入库，但在磁盘上
 - `原型-单文件.html`（3.2MB）是强制入库的，因为它是主要交付物
 - 完整历史快照：`.bundles/` 目录下有 `git bundle`，可克隆出全部历史
-- 已知未做：把新设计落成 React 组件；管理端「预警研判台」的后端确认接口
+- 已知未做：其余页面（筛查/采集/检索/预警/档案）还没按原型落成 React；
+  管理端「预警研判台」的后端确认接口
