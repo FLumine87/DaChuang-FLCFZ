@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./assets/fonts/fonts.css";
 
 /* 深色模式采用 class 策略：由 AppShell 在 <html> 上切换 .dark，
    用户的显式选择优先于系统偏好，刷新后保持不变。 */
@@ -7,7 +8,9 @@
 /* TailAdmin Free design tokens. See THIRD_PARTY_NOTICES.md. */
 @theme {
   --font-sans:
-    "Outfit", "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    "Manrope", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --text-xs: 0.78125rem;
   --color-primary-50: #ecf3ff;
   --color-primary-100: #dde9ff;
   --color-primary-200: #c2d6ff;
@@ -18,17 +21,17 @@
   --color-primary-700: #2a31d8;
   --color-primary-800: #252dae;
   --color-primary-900: #262e89;
-  --color-slate-50: #f9fafb;
-  --color-slate-100: #f2f4f7;
-  --color-slate-200: #e4e7ec;
-  --color-slate-300: #d0d5dd;
-  --color-slate-400: #98a2b3;
-  --color-slate-500: #667085;
-  --color-slate-600: #475467;
-  --color-slate-700: #344054;
-  --color-slate-800: #1d2939;
-  --color-slate-900: #101828;
-  --color-slate-950: #0c111d;
+  --color-slate-50: #f8f7f5;
+  --color-slate-100: #f1f0ed;
+  --color-slate-200: #e6e4e0;
+  --color-slate-300: #d5d2cc;
+  --color-slate-400: #9d9a94;
+  --color-slate-500: #6b6862;
+  --color-slate-600: #514e49;
+  --color-slate-700: #3b3936;
+  --color-slate-800: #232220;
+  --color-slate-900: #161514;
+  --color-slate-950: #0e0e0d;
   --color-success-50: #ecfdf3;
   --color-success-100: #d1fadf;
   --color-success-500: #12b76a;
@@ -48,17 +51,17 @@
    （bg-white / text-slate-* / border-slate-* 等）引用的都是这些变量，
    因此各页面 JSX 无需改动，深色与浅色共用同一套结构。 */
 .dark {
-  --color-white: #151d2c; /* 卡片、侧栏、输入框等表面色 */
-  --color-slate-50: #0b1120; /* 页面底色与浅色块 */
-  --color-slate-100: #1b2333;
-  --color-slate-200: #232d3f; /* 边框 */
-  --color-slate-300: #313c50; /* 输入框边框 */
-  --color-slate-400: #7c899b; /* 图标与占位文字 */
-  --color-slate-500: #9aa7b8; /* 次级文字 */
-  --color-slate-600: #b7c3d2; /* 导航与正文 */
-  --color-slate-700: #d4dce6;
-  --color-slate-800: #e9eef4; /* 标题 */
-  --color-slate-900: #f6f8fb;
+  --color-white: #171614;
+  --color-slate-50: #0e0e0d;
+  --color-slate-100: #232220;
+  --color-slate-200: #2c2a27;
+  --color-slate-300: #3b3936;
+  --color-slate-400: #9d9a94;
+  --color-slate-500: #9d9a94;
+  --color-slate-600: #d5d2cc;
+  --color-slate-700: #e6e4e0;
+  --color-slate-800: #faf9f7;
+  --color-slate-900: #faf9f7;
   --color-slate-950: #ffffff;
   /* 浅底胶囊（导航激活项、状态标签）在深色下改为低饱和深底，避免刺眼 */
   --color-primary-50: #1a2340;
@@ -100,6 +103,7 @@
     background: var(--color-slate-50);
     color: var(--color-slate-800);
     font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -155,7 +159,7 @@
   .ui-card {
     min-width: 0;
     border: 1px solid var(--color-slate-200);
-    border-radius: 1rem;
+    border-radius: 0.625rem;
     background: var(--color-white);
   }
   .ui-button {
@@ -163,13 +167,13 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    min-height: 42px;
-    padding: 0.625rem 1rem;
+    min-height: 36px;
+    padding: 0.5rem 0.75rem;
     border: 1px solid var(--color-slate-300);
     border-radius: 0.5rem;
     background: var(--color-white);
     color: var(--color-slate-700);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     transition:
       background 150ms,
@@ -193,10 +197,10 @@
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    width: 42px;
-    height: 42px;
+    width: 34px;
+    height: 34px;
     border: 1px solid var(--color-slate-200);
-    border-radius: 0.75rem;
+    border-radius: 0.5rem;
     background: var(--color-white);
     color: var(--color-slate-500);
     transition:
@@ -210,6 +214,7 @@
   .ui-table-scroll {
     width: 100%;
     overflow-x: auto;
+    max-height: 70vh;
   }
   .ui-table {
     width: 100%;
@@ -221,28 +226,34 @@
     background: var(--color-slate-50);
   }
   .ui-table th {
-    padding: 1rem 1.25rem;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 0.625rem 0.875rem;
+    background: var(--color-slate-100);
+    border-bottom: 1px solid var(--color-slate-300);
     color: var(--color-slate-500);
-    font-size: 0.75rem;
+    font-size: 0.78125rem;
+    letter-spacing: 0.01em;
     font-weight: 500;
     white-space: nowrap;
   }
   .ui-table td {
-    padding: 1.125rem 1.25rem;
+    padding: 0.75rem 0.875rem;
     border-top: 1px solid var(--color-slate-100);
   }
   .ui-table tbody tr {
     transition: background 150ms;
   }
   .ui-table tbody tr:hover {
-    background: #f9fafb99;
+    background: var(--color-slate-50);
   }
   /* 侧栏宽度统一由变量驱动：悬浮把手的位置要跟着一起动 */
   .app-shell {
-    --sidebar-width: 290px;
+    --sidebar-width: 236px;
   }
   .app-shell[data-collapsed="true"] {
-    --sidebar-width: 90px;
+    --sidebar-width: 64px;
   }
   .app-sidebar {
     position: fixed;
@@ -329,9 +340,10 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    min-height: 46px;
-    padding: 0.75rem;
-    border-radius: 0.5rem;
+    min-height: 36px;
+    padding: 0.5rem;
+    border-left: 3px solid transparent;
+    border-radius: 0 0.375rem 0.375rem 0;
     color: var(--color-slate-600);
     font-size: 0.875rem;
     font-weight: 500;
@@ -345,6 +357,7 @@
   }
   .sidebar-link[aria-current="page"] {
     background: var(--color-primary-50);
+    border-left-color: var(--color-primary-500);
     /* 侧栏选中项：浅色下用 primary-600，在 primary-50 底上约 5.9:1（primary-500 只有 4.34） */
     color: var(--color-primary-600);
   }
@@ -399,7 +412,7 @@
   .app-content {
     max-width: 1600px;
     margin: 0 auto;
-    padding: 28px;
+    padding: 20px;
   }
   .app-content > .page-body > div > .flex.gap-3 {
     flex-wrap: wrap;
@@ -417,10 +430,10 @@
   .auth-art {
     position: relative;
     overflow: hidden;
-    background: #f2f4ff;
+    background: var(--color-slate-100);
   }
   .auth-art::before {
-    content: "";
+    content: none;
     position: absolute;
     inset: 0;
     background-image:
@@ -555,11 +568,11 @@
 }
 
 .dark .ui-table tbody tr:hover {
-  background: #1b233366;
+  background: var(--color-slate-100);
 }
 
 .dark .auth-art {
-  background: #131a29;
+  background: var(--color-slate-100);
 }
 
 /* 导航激活项在深底上需要更亮的前景色 */
@@ -635,7 +648,7 @@
    页面主标题 24 → 26px；卡片/分区标题 16 → 17px；其余按比例 +1~2px。
    ========================================================================== */
 h1 {
-  font-size: 1.625rem; /* 26px ← text-2xl */
+  font-size: 1.5rem;
 }
 h1.text-3xl {
   font-size: 2rem; /* 32px ← 30px（登录页/系统选择页） */
@@ -663,4 +676,39 @@ h4.text-xl {
 h2.text-2xl,
 h3.text-2xl {
   font-size: 1.625rem; /* 26px ← 24px */
+}
+
+/* Shared visual language migrated from prototype/assets: warm surfaces,
+   compact controls and restrained emphasis. Functional React routes keep their data flow. */
+.metric-card {
+  border-left: 2px solid var(--color-primary-200);
+  background: var(--color-slate-100);
+}
+.app-sidebar .sidebar-group + .sidebar-group {
+  border-top: 1px solid var(--color-slate-200);
+  padding-top: 12px;
+}
+.sidebar-footer {
+  justify-content: space-between;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.sidebar-handle { display: none; }
+.app-content .ui-card:is(.p-5, .p-6) { padding: 16px 20px; }
+.app-content .ui-card.metric-card { padding: 16px; }
+.app-content .bg-gradient-to-r { background-image: none; }
+.app-content span.rounded-full:not([class*="h-"]):not([class*="w-"]) {
+  border-radius: 6px;
+}
+.recharts-cartesian-grid line { stroke: var(--color-slate-200); }
+.recharts-default-tooltip {
+  background: var(--color-white) !important;
+  border-color: var(--color-slate-200) !important;
+  color: var(--color-slate-700);
+}
+@media (max-width: 1023px) {
+  .app-sidebar,
+  .app-shell[data-collapsed="true"] .app-sidebar {
+    width: min(290px, calc(100vw - 48px));
+  }
 }

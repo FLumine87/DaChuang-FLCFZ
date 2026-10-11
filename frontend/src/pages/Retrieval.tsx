@@ -653,9 +653,9 @@ export default function Retrieval() {
                       用户：{userProfile.name}，综合 {results.length} 个相似模式与知识库生成
                     </p>
                   </div>
-                  <div className="ml-auto px-3 py-1 bg-danger-50 text-danger-600 rounded-full text-sm font-medium">
-                    高风险
-                  </div>
+                  {report.riskLevel && <div className="ml-auto px-3 py-1 bg-slate-100 text-slate-700 rounded-md text-sm font-medium">
+                    风险提示：{report.riskLevel}
+                  </div>}
                 </div>
               </div>
 

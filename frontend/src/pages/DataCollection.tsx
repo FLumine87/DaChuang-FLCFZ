@@ -359,7 +359,8 @@ function ImageTab() {
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
                   <button
                     onClick={() => remove(img.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-full p-1 cursor-pointer"
+                    aria-label="移除这张图片"
+                    className="bg-white rounded-md p-1 cursor-pointer"
                   >
                     <X className="w-4 h-4 text-danger-500" />
                   </button>
@@ -421,13 +422,6 @@ function ImageTab() {
 // ─── Text Tab ─────────────────────────────────────────────────────────────────
 function TextTab() {
   const [freeText, setFreeText] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-
-  const handleSubmit = () => {
-    if (!freeText.trim()) return;
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 4000);
-  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -464,6 +458,7 @@ function TextTab() {
           描述你近期的情绪状态、睡眠情况、人际关系和学习压力变化
         </p>
         <textarea
+          aria-label="情绪日记内容"
           value={freeText}
           onChange={(e) => setFreeText(e.target.value)}
           placeholder="今天感觉...最近睡眠...人际上..."
@@ -472,20 +467,16 @@ function TextTab() {
         <div className="flex items-center justify-between mt-3">
           <span className="text-xs text-slate-400">{freeText.length} 字</span>
           <div className="flex items-center gap-2">
-            {submitted && (
-              <span className="text-xs text-success-600 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> 已记下（演示模式：暂存在本机，未上传服务端）
-              </span>
-            )}
             <button
-              onClick={handleSubmit}
-              disabled={!freeText.trim()}
+              disabled
+              title="日记保存功能暂未开放"
               className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary-600 transition-colors cursor-pointer"
             >
-              提交文本
+              暂不可提交
             </button>
           </div>
         </div>
+        <p className="mt-3 text-xs leading-5 text-slate-500">日记保存功能暂未开放，此处输入的内容不会保存。你可以先通过量表记录状态。</p>
       </div>
     </div>
   );

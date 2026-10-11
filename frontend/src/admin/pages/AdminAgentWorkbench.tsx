@@ -48,9 +48,6 @@ export default function AdminAgentWorkbench() {
   const [screeningId, setScreeningId] = useState("");
   const [overview, setOverview] = useState<GraphOverview | null>(null);
   const [data, setData] = useState<AssessmentResponse | null>(null);
-  const [taskStates, setTaskStates] = useState<Record<string, LocalTaskState>>(
-    {},
-  );
   const [loading, setLoading] = useState(false);
   const [overviewError, setOverviewError] = useState("");
   const [error, setError] = useState("");
@@ -80,14 +77,6 @@ export default function AdminAgentWorkbench() {
     try {
       const response = await assessWarning(id);
       setData(response);
-      setTaskStates(
-        Object.fromEntries(
-          response.assessment.proposed_tasks.map((task) => [
-            task.task_key,
-            task.status,
-          ]),
-        ),
-      );
     } catch (reason) {
       setData(null);
       setError(
@@ -96,14 +85,6 @@ export default function AdminAgentWorkbench() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const setTaskState = (task: ProposedTask, state: LocalTaskState) => {
-    if (state === "modified") {
-      const title = window.prompt("填写调整后的处置说明：", task.title);
-      if (title === null) return;
-    }
-    setTaskStates((current) => ({ ...current, [task.task_key]: state }));
   };
 
   const alertLevel = data?.evidence_pack.screening.alert_level || "green";
@@ -242,13 +223,13 @@ export default function AdminAgentWorkbench() {
                   Agent 处置任务草案
                 </h3>
                 <span className="text-xs text-slate-400">
-                  所有动作均需人工确认
+                  草案 · 未提交处置
                 </span>
               </div>
               <div className="mt-4 space-y-3">
                 {tasks.length ? (
                   tasks.map((task) => {
-                    const status = taskStates[task.task_key] ?? task.status;
+                    const status = task.status;
                     return (
                       <div
                         key={task.task_key}
@@ -275,19 +256,16 @@ export default function AdminAgentWorkbench() {
                             <ActionButton
                               icon={<Check className="h-3.5 w-3.5" />}
                               label="确认"
-                              onClick={() => setTaskState(task, "confirmed")}
                               tone="success"
                             />
                             <ActionButton
                               icon={<RefreshCw className="h-3.5 w-3.5" />}
                               label="修改"
-                              onClick={() => setTaskState(task, "modified")}
                               tone="neutral"
                             />
                             <ActionButton
                               icon={<X className="h-3.5 w-3.5" />}
                               label="拒绝"
-                              onClick={() => setTaskState(task, "rejected")}
                               tone="danger"
                             />
                           </div>
@@ -301,6 +279,7 @@ export default function AdminAgentWorkbench() {
                   </p>
                 )}
               </div>
+              <p className="mt-3 text-xs leading-5 text-slate-500">处置提交功能暂未开放。以上建议尚未执行，请由专业人员复核。</p>
             </div>
           </section>
 
@@ -387,12 +366,10 @@ function Metric({
 function ActionButton({
   icon,
   label,
-  onClick,
   tone,
 }: {
   icon: ReactNode;
   label: string;
-  onClick: () => void;
   tone: "success" | "neutral" | "danger";
 }) {
   const tones = {
@@ -403,8 +380,9 @@ function ActionButton({
   };
   return (
     <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium ${tones[tone]}`}
+      disabled
+      title="处置提交功能暂未开放"
+      className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${tones[tone]}`}
     >
       {icon}
       {label}

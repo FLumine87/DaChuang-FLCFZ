@@ -69,8 +69,15 @@ export default function QuestionnaireForm({
   };
 
   const handleReset = () => {
+    if (!window.confirm("重新作答会清空本次答案，确定继续吗？")) return;
     setAnswers({});
     setSubmitted(false);
+    setCurrent(0);
+  };
+
+  const handleClose = () => {
+    if (!submitted && answeredCount > 0 && !window.confirm("本次答案尚未保存，确定退出筛查吗？")) return;
+    onClose();
   };
 
   return (
@@ -78,7 +85,7 @@ export default function QuestionnaireForm({
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3 px-6 py-4 border-b border-slate-100 bg-slate-50">
         <button
-          onClick={onClose}
+          onClick={handleClose}
           aria-label="返回筛查列表"
           disabled={saving}
           className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"

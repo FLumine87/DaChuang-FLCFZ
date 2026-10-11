@@ -13,6 +13,7 @@ import {
 import BrandLogo from "../components/BrandLogo";
 import { apiLogin, apiRegister } from "../services/mockApi";
 import { saveSessionToken, saveDisplayName } from "../auth/session";
+import { USE_MOCK } from "../services/http";
 
 type AuthTab = "login" | "register";
 
@@ -302,15 +303,18 @@ export default function AuthPage() {
           <p className="mt-6 text-center text-xs leading-6 text-slate-400">
             登录后将根据账号身份进入管理端或个人端。
           </p>
+          {USE_MOCK && <details className="mt-3 rounded-lg border border-slate-200 p-3 text-xs leading-6 text-slate-500">
+            <summary className="cursor-pointer">本地演示账号</summary>
+            <p>个人端：xiaoyu / 123456</p>
+            <p>管理端：adminer / admin</p>
+            <p>当前展示示例数据。</p>
+          </details>}
         </div>
         <p className="text-xs text-slate-400">
           心理筛查与健康管理 · 让关怀持续发生
         </p>
       </div>
       <div className="auth-art hidden min-h-screen items-center justify-center p-12 lg:flex">
-        <div className="auth-orbit" />
-        <div className="auth-orbit scale-[1.35]" />
-        <div className="auth-orbit scale-[1.7]" />
         <div className="relative z-10 w-full max-w-[390px]">
           <div className="mb-9 flex justify-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-primary-100 bg-white/80 px-4 py-2 text-xs font-medium text-primary-500">
@@ -318,7 +322,7 @@ export default function AuthPage() {
               关注状态 · 看见变化
             </span>
           </div>
-          <div className="rounded-2xl border border-white bg-white/90 p-7 shadow-[0_16px_48px_-16px_#465fff26]">
+          <div className="rounded-xl border border-slate-200 bg-white p-7">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-slate-400">每一次记录，都有意义</p>

@@ -22,10 +22,11 @@ export default function LatestScreeningCard({ record }: { record?: PersonalScree
   const result = displayed && definition?.scoring(displayed.score);
 
   return (
-    <section className="ui-card flex flex-col p-5 xl:p-6" aria-label="最近一次筛查">
-      <div className="mb-5 flex items-center justify-between gap-2">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-          <Activity className="h-6 w-6" strokeWidth={1.7} />
+    <section className="ui-card metric-card flex flex-col p-4" aria-label="最近一次筛查">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-slate-500">
+          <Activity className="h-4 w-4" strokeWidth={1.7} />
+          <span className="text-xs font-medium">最近一次筛查</span>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {isExample && <span className="rounded-full bg-primary-50 px-2 py-1 text-xs font-medium text-primary-600">示例数据</span>}
@@ -34,10 +35,9 @@ export default function LatestScreeningCard({ record }: { record?: PersonalScree
           </Link>
         </div>
       </div>
-      <h2 className="text-sm font-normal text-slate-500">最近一次筛查</h2>
       {displayed ? (
         <>
-          <p className="mt-2 text-[28px] font-semibold leading-tight tracking-tight text-slate-800 tabular-nums">
+          <p className="mt-2 text-2xl font-semibold leading-tight tracking-tight text-slate-800 tabular-nums">
             {displayed.score}<span className="ml-1 text-base font-normal text-slate-400">/ {displayed.maxScore} 分</span>
           </p>
           <p className="mt-3 text-sm font-medium text-slate-700">{definition?.name ?? displayed.questionnaire}</p>
