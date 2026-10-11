@@ -13,7 +13,7 @@ import {
   Square,
 } from 'lucide-react';
 import { search, fetchRetrievalMedia } from '../services/mockApi';
-import { userProfile } from '../data/mockData';
+import { getCurrentSession } from '../auth/session';
 import type { RetrievalResult, RetrievalIndexInfo } from '../data/mockData';
 import AlertBadge from '../components/AlertBadge';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
@@ -650,7 +650,7 @@ export default function Retrieval() {
                   <div>
                     <h3 className="font-semibold text-slate-800">RAG 智能分析报告</h3>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      用户：{userProfile.name}，综合 {results.length} 个相似模式与知识库生成
+                      用户：{getCurrentSession()?.username || '用户'}，综合 {results.length} 个相似模式与知识库生成
                     </p>
                   </div>
                   {report.riskLevel && <div className="ml-auto px-3 py-1 bg-slate-100 text-slate-700 rounded-md text-sm font-medium">

@@ -31,6 +31,7 @@ import {
 import StatusBadge from "../components/StatusBadge";
 import LatestScreeningCard from "../components/LatestScreeningCard";
 import type { WarningEvent } from "../data/mockData";
+import { getCurrentSession } from "../auth/session";
 
 const warningAppearance: Record<WarningEvent["level"], { label: string; valueClassName: string; iconClassName: string }> = {
   green: { label: "绿色", valueClassName: "text-success-600", iconClassName: "bg-success-50 text-success-600" },
@@ -119,8 +120,8 @@ export default function Dashboard() {
     warningEvents,
     actionPlan,
     screeningRecords,
-    userProfile,
   } = data;
+  const signedInUsername = getCurrentSession()?.username || "同学";
   const recentWarnings = warningEvents.flatMap((alert) => {
     if (alert.status === "resolved") return [];
     const daysAgo = calendarDaysAgo(alert.createdAt);
@@ -190,7 +191,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-4">
           <div>
             <h1 className="font-semibold text-slate-800">
-              欢迎回来，{userProfile?.name || "同学"}
+              欢迎回来，{signedInUsername}
             </h1>
             <p className="mt-2 text-sm text-slate-500">{dayTip}</p>
           </div>

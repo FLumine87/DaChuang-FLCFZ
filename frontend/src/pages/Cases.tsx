@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { ClipboardList, Clock, Sparkles, FileText, AlertTriangle } from 'lucide-react';
 import { type PersonalScreeningRecord, type WarningEvent, type PersonalTimelineEvent, type UserProfile } from '../data/mockData';
 import { getCases } from '../services/mockApi';
-import { getDisplayName } from '../auth/session';
+import { getCurrentSession, getDisplayName } from '../auth/session';
 import AlertBadge from '../components/AlertBadge';
 
 export default function Cases() {
@@ -23,13 +23,13 @@ export default function Cases() {
         setWarningEvents(data.warningEvents ?? []);
         setPersonalTimeline(data.personalTimeline ?? []);
         if (data.userProfile) {
-          // 后端在「无筛查记录」时会把 name 退化成占位符「用户」；
-          // 这时用登录时后端返回的显示名（users.name）覆盖，别让用户看见「用户」。
+          // 个人端名称与登录时输入的用户名一致，避免演示资料中的姓名覆盖当前账号。
+          const signedInUsername = getCurrentSession()?.username;
           const fallback = getDisplayName();
           const name = data.userProfile.name;
           setUserProfile({
             ...data.userProfile,
-            name: !name || name === '用户' ? (fallback || name || '—') : name,
+            name: signedInUsername || fallback || name || '—',
           });
         }
       } catch (e) {
