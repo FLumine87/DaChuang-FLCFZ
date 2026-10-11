@@ -239,8 +239,10 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           onClick={() => setMobileOpen(false)}
         />
       )}
+      {/* 只有导航区（.sidebar-nav）滚动：底部说明卡与页脚留在文档流里，
+          短窗口下不会再被吸底的页脚盖住。 */}
       <aside
-        className="app-sidebar app-scrollbar overflow-y-auto"
+        className="app-sidebar"
         aria-label={isAdmin ? "管理端导航" : "个人端导航"}
         inert={isMobile && !mobileOpen}
       >
@@ -260,7 +262,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             <ChevronLeft className="h-5 w-5" />
           </button>
         </div>
-        <nav className="shrink-0 px-5 pb-5">
+        <nav className="sidebar-nav app-scrollbar px-5 pb-5">
           {["工作空间", "智能分析", "健康管理"].map((group) => (
             <div className="sidebar-group mb-7" key={group}>
               <div className="sidebar-group-title mb-3 flex h-5 items-center px-3 text-[11px] font-medium tracking-widest text-slate-400">
@@ -311,7 +313,8 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           <span className="sidebar-label">
             心理健康 · {isAdmin ? "管理工作空间" : "个人健康空间"}
           </span>
-          {/* 收起/展开侧栏。特意用「面板」图标 + 带边框的方形按钮，和导航图标区分开 */}
+          {/* 收起/展开侧栏。用「面板」图标 + 带边框的方形按钮，和导航图标区分开；
+              绝对定位贴右缘，不参与页脚居中计算，左侧那句版权文字因此能真正居中 */}
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}

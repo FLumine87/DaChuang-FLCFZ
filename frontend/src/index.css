@@ -322,6 +322,14 @@
     overflow: hidden;
     white-space: nowrap;
   }
+  /* 侧栏里只有导航区滚动：品牌头、底部说明卡、页脚都留在文档流里，
+     短窗口下页脚不会吸在底部反过来盖住说明卡（此前 720px 高就会压住）。 */
+  .sidebar-nav {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
   .app-shell[data-collapsed="true"] .sidebar-label {
     display: none;
   }
@@ -373,25 +381,34 @@
     color: var(--color-primary-500);
   }
   .sidebar-footer {
-    position: sticky;
-    bottom: 0;
-    z-index: 1;
+    position: relative;
     display: flex;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    gap: 0.75rem;
-    padding: 0.5rem 1.25rem;
+    padding: 0.75rem 1.25rem;
     border-top: 1px solid var(--color-slate-100);
     background: var(--color-white);
     color: var(--color-slate-500);
     font-size: 11px;
   }
-  /* 收起时页脚只剩「展开侧栏」一个按钮，居中即可 */
+  /* 折叠按钮脱离居中流，贴右缘垂直居中 —— 文字因此是「真居中」，
+     按钮也不再和那行小字挤在一起。 */
+  .sidebar-footer .sidebar-action-collapse {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  /* 收起时页脚只剩「展开侧栏」一个按钮，此时回到普通居中布局 */
   .app-shell[data-collapsed="true"] .sidebar-footer {
     justify-content: center;
     margin-top: auto;
     padding: 0.75rem 0;
+  }
+  .app-shell[data-collapsed="true"] .sidebar-footer .sidebar-action-collapse {
+    position: static;
+    transform: none;
   }
   .app-shell[data-collapsed="true"] .sidebar-link {
     justify-content: center;
