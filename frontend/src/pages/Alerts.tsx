@@ -159,7 +159,9 @@ export default function Alerts() {
         </div>
 
         {/* Alert Detail Panel */}
-        <div className="ui-card p-5 h-fit sticky top-6">
+        {/* 不用 sticky / h-fit：面板随列表一起滚动，并撑到与左侧列表等高，
+            这样两列的上下边缘始终对齐（此前 sticky 会在滚动时错位） */}
+        <div className="ui-card flex flex-col p-5">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -223,8 +225,8 @@ export default function Alerts() {
               )}
             </div>
           ) : (
-            <div className="text-center py-8 text-slate-400 text-sm">
-              <ShieldAlert className="w-8 h-8 mx-auto mb-2 text-slate-200" />
+            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center text-sm text-slate-400">
+              <ShieldAlert className="mb-2 h-8 w-8 text-slate-200" />
               选择一条预警查看详情
             </div>
           )}
