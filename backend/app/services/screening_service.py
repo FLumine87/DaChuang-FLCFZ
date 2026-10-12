@@ -86,11 +86,11 @@ async def create_screening(data: dict) -> dict:
     q = await db.query_one_a("SELECT * FROM questionnaires WHERE id = ?", (data.get("questionnaire_id"),))
     max_score = q["max_score"] if q else data.get("max_score", 100)
     row_id = await db.execute_a(
-        "INSERT INTO screenings (screening_id, name, age, gender, department, phone, "
+        "INSERT INTO screenings (screening_id, user_id, name, age, gender, department, phone, "
         "questionnaire_id, score, max_score, answers, status, alert_level, counselor_id, notes, screening_date) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            screening_id, data.get("name", "匿名用户"), data.get("age"), data.get("gender"),
+            screening_id, data.get("user_id"), data.get("name", "匿名用户"), data.get("age"), data.get("gender"),
             data.get("department"), data.get("phone"), data.get("questionnaire_id"),
             data.get("score", 0), max_score, data.get("answers"),
             data.get("status", "pending"), data.get("alert_level", "green"),

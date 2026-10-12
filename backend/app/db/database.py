@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS questionnaires (
 CREATE TABLE IF NOT EXISTS screenings (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     screening_id    TEXT NOT NULL UNIQUE,
+    user_id         INTEGER,
     name            TEXT NOT NULL,
     age             INTEGER,
     gender          TEXT,
@@ -99,6 +100,17 @@ CREATE TABLE IF NOT EXISTS alerts (
 );
 CREATE INDEX IF NOT EXISTS ix_alerts_alert_id ON alerts(alert_id);
 
+CREATE TABLE IF NOT EXISTS alert_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_id    INTEGER NOT NULL,
+    actor_id    INTEGER NOT NULL,
+    from_status TEXT,
+    to_status   TEXT NOT NULL,
+    note        TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_alert_events_alert_id ON alert_events(alert_id);
+
 CREATE TABLE IF NOT EXISTS case_tag_master (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL UNIQUE,
@@ -110,6 +122,7 @@ CREATE TABLE IF NOT EXISTS case_tag_master (
 CREATE TABLE IF NOT EXISTS cases (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     case_id             TEXT NOT NULL UNIQUE,
+    user_id             INTEGER,
     name                TEXT NOT NULL,
     age                 INTEGER,
     gender              TEXT,
@@ -193,6 +206,13 @@ def init_db_sync() -> None:
     with _local_lock:
         conn = _get_local_conn()
         conn.executescript(SCHEMA_SQL)
+        # CREATE TABLE IF NOT EXISTS 不会为既有 SQLite 表增加列。
+        for table in ("screenings", "cases"):
+            columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+            if "user_id" not in columns:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN user_id INTEGER")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_screenings_user_id ON screenings(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_cases_user_id ON cases(user_id)")
         conn.commit()
 
 

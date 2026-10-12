@@ -42,7 +42,7 @@ async def register(ctx: RequestContext):
         "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
         (
             username, get_password_hash(password), data.get("name") or username,
-            data.get("role", "user"), data.get("department"), data.get("phone"),
+            "user", data.get("department"), data.get("phone"),
             data.get("email"),
         ),
     )

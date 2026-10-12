@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ArrowLeft, CheckCircle2, RotateCcw } from 'lucide-react';
 import { questionnaires } from '../data/questionnaireData';
 import type { QuestionnaireDefinition } from '../data/questionnaireData';
@@ -7,13 +7,16 @@ import AlertBadge from './AlertBadge';
 interface Props {
   questionnaireId: string;
   onClose: () => void;
-  onComplete: (score: number, maxScore: number, level: 'green' | 'yellow' | 'orange' | 'red') => void;
+  onComplete: (score: number, maxScore: number, level: 'green' | 'yellow' | 'orange' | 'red', answers: Record<string, number>) => Promise<void>;
 }
 
 export default function QuestionnaireForm({ questionnaireId, onClose, onComplete }: Props) {
   const qDef: QuestionnaireDefinition | undefined = questionnaires.find((q) => q.id === questionnaireId);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const submitRef = useRef(false);
 
   if (!qDef) {
     return (
@@ -32,9 +35,20 @@ export default function QuestionnaireForm({ questionnaireId, onClose, onComplete
   const maxScore = qDef.questions.reduce((sum, q) => sum + Math.max(...q.options.map((o) => o.value)), 0);
   const result = qDef.scoring(totalScore);
 
-  const handleSubmit = () => {
-    setSubmitted(true);
-    onComplete(totalScore, maxScore, result.level);
+  const handleSubmit = async () => {
+    if (submitRef.current || !allAnswered) return;
+    submitRef.current = true;
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      await onComplete(totalScore, maxScore, result.level, answers);
+      setSubmitted(true);
+    } catch (reason) {
+      setSubmitError(reason instanceof Error ? reason.message : '提交失败，请稍后重试');
+    } finally {
+      submitRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   const handleReset = () => {
@@ -114,12 +128,13 @@ export default function QuestionnaireForm({ questionnaireId, onClose, onComplete
           <div className="flex items-center gap-3">
             <button
               onClick={handleSubmit}
-              disabled={!allAnswered}
+              disabled={!allAnswered || submitting}
               className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" />
-              提交并查看结果
+              {submitting ? '提交中…' : '提交并查看结果'}
             </button>
+            {submitError && <p role="alert" className="text-sm text-rose-700">{submitError}</p>}
             {!allAnswered && (
               <p className="text-xs text-slate-400">还有 {totalQuestions - answeredCount} 题未作答</p>
             )}

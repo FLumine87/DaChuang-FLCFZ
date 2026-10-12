@@ -4,6 +4,7 @@ from typing import Optional
 import uuid
 
 from app.db import database as db
+from app.core.exceptions import HttpError
 
 
 async def generate_alert_id() -> str:
@@ -122,7 +123,7 @@ async def get_alert_by_id(alert_id: int) -> Optional[dict]:
 
 
 async def create_alert(data: dict) -> dict:
-    alert_id = generate_alert_id()
+    alert_id = await generate_alert_id()
     row_id = await db.execute_a(
         "INSERT INTO alerts (alert_id, screening_id, name, level, trigger, description, "
         "status, assignee_id, follow_up_notes, created_at) "
@@ -136,33 +137,58 @@ async def create_alert(data: dict) -> dict:
     return await db.query_one_a("SELECT * FROM alerts WHERE id = ?", (row_id,))
 
 
-async def update_alert(alert_id: int, data: dict) -> Optional[dict]:
-    row = get_alert_by_id(alert_id)
+async def update_alert(alert_id: int, data: dict, actor_id: int = None) -> Optional[dict]:
+    row = await get_alert_by_id(alert_id)
     if not row:
         return None
-    allowed = ("screening_id", "name", "level", "trigger", "description",
-               "status", "assignee_id", "follow_up_notes")
-    sets, params = [], []
-    for k in allowed:
-        if k in data and data[k] is not None:
-            sets.append(f"{k} = ?")
-            params.append(data[k])
-    if sets:
-        params.append(alert_id)
-        await db.execute_a(
-            "UPDATE alerts SET " + ", ".join(sets) + ", updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            params,
-        )
-    return get_alert_by_id(alert_id)
-
-
-async def resolve_alert(alert_id: int, notes: str = "") -> Optional[dict]:
-    row = get_alert_by_id(alert_id)
-    if not row:
-        return None
+    allowed = {"status", "assignee_id", "follow_up_notes"}
+    if set(data) - allowed:
+        raise HttpError(400, "只允许更新处理状态、处理人和跟进备注")
+    status = data.get("status", row["status"])
+    transitions = {
+        "pending": {"processing"}, "processing": {"resolved"},
+        "resolved": {"closed"}, "closed": set(),
+    }
+    if status not in transitions:
+        raise HttpError(400, "无效的预警状态")
+    if status != row["status"] and status not in transitions.get(row["status"], set()):
+        raise HttpError(409, "预警状态只能按待处理、处理中、已解决、已关闭顺序流转")
+    note = str(data.get("follow_up_notes") or "").strip()
+    if status == "resolved" and row["status"] != "resolved" and not note:
+        raise HttpError(400, "解决预警时需要填写处理记录")
+    assignee_id = row["assignee_id"]
+    if "assignee_id" in data:
+        assignee_id = data["assignee_id"]
+        if assignee_id is not None:
+            try:
+                assignee_id = int(assignee_id)
+            except (TypeError, ValueError):
+                raise HttpError(400, "处理人无效")
+            assignee = await db.query_one_a(
+                "SELECT id FROM users WHERE id = ? AND is_active = 1 "
+                "AND role IN ('admin', 'counselor')", (assignee_id,))
+            if not assignee:
+                raise HttpError(400, "处理人不存在或不可用")
+    changed = status != row["status"] or assignee_id != row["assignee_id"] or bool(note)
+    if not changed:
+        return row
+    follow_up = row.get("follow_up_notes") or ""
+    if note:
+        follow_up = (follow_up + "\n" + note).strip()
     await db.execute_a(
-        "UPDATE alerts SET status = 'resolved', follow_up_notes = ?, resolved_at = ?, "
+        "UPDATE alerts SET status = ?, assignee_id = ?, follow_up_notes = ?, "
+        "resolved_at = CASE WHEN ? = 'resolved' THEN CURRENT_TIMESTAMP ELSE resolved_at END, "
         "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        (notes, datetime.now(), alert_id),
+        (status, assignee_id, follow_up, status, alert_id),
     )
-    return get_alert_by_id(alert_id)
+    if actor_id is not None:
+        await db.execute_a(
+            "INSERT INTO alert_events (alert_id, actor_id, from_status, to_status, note) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (alert_id, actor_id, row["status"], status, note or None),
+        )
+    return await get_alert_by_id(alert_id)
+
+
+async def resolve_alert(alert_id: int, notes: str = "", actor_id: int = None) -> Optional[dict]:
+    return await update_alert(alert_id, {"status": "resolved", "follow_up_notes": notes}, actor_id)

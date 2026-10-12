@@ -37,17 +37,14 @@ export default function Screening() {
       (filterLevel === 'all' || record.level === filterLevel)
   );
 
-  const handleComplete = async (score: number, maxScore: number, level: AlertLevel) => {
-    try {
-      await submitScreening({
-        questionnaire: activeQuestionnaire!,
-        score,
-        maxScore,
-        level,
-      });
-    } catch (e) {
-      console.error('提交筛查失败', e);
-    }
+  const handleComplete = async (score: number, maxScore: number, level: AlertLevel, answers: Record<string, number>) => {
+    await submitScreening({
+      questionnaire: activeQuestionnaire!,
+      score,
+      maxScore,
+      level,
+      answers,
+    });
     setActiveQuestionnaire(null);
     // 重新从后端拉取（真实模式下后端会生成筛查记录与分级预警）
     await fetchRecords();
@@ -59,9 +56,7 @@ export default function Screening() {
         <QuestionnaireForm
           questionnaireId={activeQuestionnaire}
           onClose={() => setActiveQuestionnaire(null)}
-          onComplete={(score, maxScore, level) => {
-            handleComplete(score, maxScore, level);
-          }}
+          onComplete={handleComplete}
         />
       </div>
     );
