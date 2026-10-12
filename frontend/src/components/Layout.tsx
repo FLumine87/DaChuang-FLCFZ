@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -10,11 +10,12 @@ import {
   Menu,
   X,
   Brain,
-  Bell,
   User,
   LogOut,
 } from 'lucide-react';
 import { getCurrentSession, logout } from '../auth/session';
+import { getWarnings } from '../services/mockApi';
+import NotificationBell, { type NotifyItem } from './NotificationBell';
 
 const navItems = [
   { path: '/personal/dashboard', label: '个人首页', icon: LayoutDashboard },
@@ -31,6 +32,33 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const session = getCurrentSession();
   const username = session?.username || '个人用户';
+  const [notifs, setNotifs] = useState<NotifyItem[]>([]);
+  const [notifLoading, setNotifLoading] = useState(true);
+
+  // 预警通知：进入页面时拉取一次，未处理数作为红点
+  useEffect(() => {
+    let alive = true;
+    getWarnings()
+      .then((list) => {
+        if (!alive) return;
+        const active = list.filter((w) => w.status !== 'resolved');
+        setNotifs(
+          active.slice(0, 8).map((w) => ({
+            id: w.id,
+            title: w.title,
+            description: w.reason,
+            time: w.createdAt,
+            level: w.level === 'red' ? 'danger' : w.level === 'orange' || w.level === 'yellow' ? 'warning' : 'info',
+            onClick: () => navigate('/personal/alerts'),
+          }))
+        );
+      })
+      .catch(() => setNotifs([]))
+      .finally(() => alive && setNotifLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [navigate]);
 
   const handleLogout = () => {
     logout();
@@ -43,7 +71,8 @@ export default function Layout() {
       <aside
         className={`${
           sidebarOpen ? 'w-64' : 'w-20'
-        } bg-white/90 border-r border-emerald-200 flex flex-col transition-all duration-300 shadow-sm backdrop-blur`}
+        } relative z-20 shrink-0 bg-white/90 border-r border-emerald-200 flex flex-col
+                    transition-all duration-300 shadow-sm backdrop-blur`}
       >
         {/* Logo */}
         <div className="h-16 flex items-center px-4 border-b border-emerald-200">
@@ -108,10 +137,11 @@ export default function Layout() {
         )}
       </aside>
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Main content：外层不能用 overflow-hidden（会裁掉通知铃铛下拉面板），
+          min-h-0 让 main 的 overflow-auto 生效 */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {/* Top bar */}
-        <header className="h-16 bg-white/90 border-b border-emerald-200 flex items-center justify-between px-6 shadow-sm backdrop-blur">
+        <header className="relative z-20 h-16 shrink-0 bg-white/90 border-b border-emerald-200 flex items-center justify-between px-6 shadow-sm backdrop-blur">
           <h1 className="text-lg font-semibold text-slate-800">
             {navItems.find(
               (item) =>
@@ -120,12 +150,12 @@ export default function Layout() {
             )?.label || '仪表盘'}
           </h1>
           <div className="flex items-center gap-4">
-            <button className="relative text-emerald-500 hover:text-emerald-700 cursor-pointer">
-              <Bell className="w-5 h-5" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-danger-500 text-white text-xs rounded-full flex items-center justify-center">
-                3
-              </span>
-            </button>
+            <NotificationBell
+              items={notifs}
+              unread={notifs.length}
+              loading={notifLoading}
+              emptyText="暂无预警通知"
+            />
           </div>
         </header>
 

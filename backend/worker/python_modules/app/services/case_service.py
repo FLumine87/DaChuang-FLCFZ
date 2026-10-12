@@ -35,9 +35,9 @@ async def get_cases(page: int = 1, page_size: int = 10, alert_level: Optional[st
         params.append(f"%{keyword}%")
 
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
-    total = await db.query_one_a(
+    total = (await db.query_one_a(
         "SELECT COUNT(*) AS c FROM cases c" + where_sql, params
-    )["c"]
+    ))["c"]
 
     offset = (page - 1) * page_size
     rows = await db.query_a(

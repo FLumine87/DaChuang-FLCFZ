@@ -82,12 +82,38 @@ export default function Dashboard() {
   const activeWarnings = warningEvents.filter((w) => w.status !== 'resolved').length;
   const latestSleep = moodTrend[moodTrend.length - 1]?.sleep ?? 0;
   const lastRecord = screeningRecords.find((r) => r.status === 'completed');
+  const completedCount = screeningRecords.filter((r) => r.status === 'completed').length;
 
+  // 卡片数据全部来自接口返回的记录，不写死任何数字
   const stats = [
-    { label: '连续打卡', value: '12 天', icon: ClipboardCheck, color: 'bg-success-50 text-success-600', hint: '较上周 +3 天' },
-    { label: '最近一次筛查', value: lastRecord ? `${lastRecord.questionnaire} ${lastRecord.score}分` : '暂无', icon: Activity, color: 'bg-warning-50 text-warning-600', hint: lastRecord ? lastRecord.moodTag : '' },
-    { label: '活跃预警', value: `${activeWarnings} 条`, icon: AlertTriangle, color: 'bg-danger-50 text-danger-600', hint: activeWarnings > 0 ? '需优先处理红色预警' : '暂无活跃预警' },
-    { label: '最近睡眠均值', value: `${latestSleep} 小时`, icon: Moon, color: 'bg-primary-50 text-primary-600', hint: '建议提升至 6.5h+' },
+    {
+      label: '完成筛查',
+      value: `${completedCount} 次`,
+      icon: ClipboardCheck,
+      color: 'bg-success-50 text-success-600',
+      hint: completedCount > 0 ? `最近：${lastRecord?.questionnaire ?? '—'}` : '尚未完成筛查',
+    },
+    {
+      label: '最近一次筛查',
+      value: lastRecord ? `${lastRecord.score} 分` : '暂无',
+      icon: Activity,
+      color: 'bg-warning-50 text-warning-600',
+      hint: lastRecord ? `${lastRecord.questionnaire} · ${lastRecord.moodTag}` : '—',
+    },
+    {
+      label: '活跃预警',
+      value: `${activeWarnings} 条`,
+      icon: AlertTriangle,
+      color: 'bg-danger-50 text-danger-600',
+      hint: activeWarnings > 0 ? '需优先处理' : '暂无活跃预警',
+    },
+    {
+      label: '最近睡眠均值',
+      value: latestSleep > 0 ? `${latestSleep} 小时` : '—',
+      icon: Moon,
+      color: 'bg-primary-50 text-primary-600',
+      hint: latestSleep > 0 ? '建议保持规律作息' : '暂无睡眠数据',
+    },
   ];
 
   return (
@@ -120,7 +146,9 @@ export default function Dashboard() {
               {userProfile?.stage || ''} · {userProfile?.major || ''} · {userProfile?.campus || ''}
             </p>
             <p className="text-xs text-slate-400 mt-2">
-              当前重点：先稳定睡眠，再降低学习压力峰值，最后恢复社交节奏。
+              {activeWarnings > 0
+                ? `当前有 ${activeWarnings} 条活跃预警，建议优先查看并联系咨询师。`
+                : '暂无活跃预警，保持规律作息与周期性自评。'}
             </p>
           </div>
           <Link

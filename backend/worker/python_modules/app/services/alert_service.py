@@ -86,9 +86,9 @@ async def get_alerts(page: int = 1, page_size: int = 10, level: Optional[str] = 
         params.append(status)
 
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
-    total = await db.query_one_a(
+    total = (await db.query_one_a(
         "SELECT COUNT(*) AS c FROM alerts a" + where_sql, params
-    )["c"]
+    ))["c"]
 
     offset = (page - 1) * page_size
     rows = await db.query_a(
@@ -137,7 +137,7 @@ async def create_alert(data: dict) -> dict:
 
 
 async def update_alert(alert_id: int, data: dict) -> Optional[dict]:
-    row = get_alert_by_id(alert_id)
+    row = await get_alert_by_id(alert_id)
     if not row:
         return None
     allowed = ("screening_id", "name", "level", "trigger", "description",

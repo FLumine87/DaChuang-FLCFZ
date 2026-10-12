@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -10,11 +10,12 @@ import {
   Menu,
   X,
   Brain,
-  Bell,
   User,
   LogOut,
 } from 'lucide-react';
 import { getCurrentSession, logout } from '../../auth/session';
+import { getAdminAlerts } from '../../services/mockApi';
+import NotificationBell, { type NotifyItem } from '../../components/NotificationBell';
 
 const navItems = [
   { path: '/admin/dashboard', label: '仪表盘', icon: LayoutDashboard },
@@ -26,12 +27,47 @@ const navItems = [
   { path: '/admin/cases', label: '案例管理', icon: FolderOpen },
 ];
 
+const LEVEL_NAMES = { red: '危险', orange: '警告', yellow: '关注', green: '正常' } as const;
+const levelName = (lv: keyof typeof LEVEL_NAMES) => LEVEL_NAMES[lv] ?? lv;
+
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const session = getCurrentSession();
-  const username = session?.username || 'adminer';
+  const username = session?.username || '管理员';
+  const [notifs, setNotifs] = useState<NotifyItem[]>([]);
+  const [notifLoading, setNotifLoading] = useState(true);
+
+  // 通知：取待处理 + 处理中的预警，按等级排序（危险优先）
+  useEffect(() => {
+    let alive = true;
+    getAdminAlerts({ page: 1, page_size: 8 })
+      .then((res) => {
+        if (!alive) return;
+        const open = res.items.filter(
+          (a) => a.status === 'pending' || a.status === 'processing'
+        );
+        const order = { red: 0, orange: 1, yellow: 2, green: 3 } as const;
+        setNotifs(
+          [...open]
+            .sort((a, b) => order[a.level] - order[b.level])
+            .map((a) => ({
+              id: a.id,
+              title: `${a.name} · ${levelName(a.level)}预警`,
+              description: a.trigger,
+              time: a.createdAt,
+              level: a.level === 'red' ? 'danger' : a.level === 'green' ? 'info' : 'warning',
+              onClick: () => navigate('/admin/alerts'),
+            }))
+        );
+      })
+      .catch(() => setNotifs([]))
+      .finally(() => alive && setNotifLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [navigate]);
 
   const handleLogout = () => {
     logout();
@@ -43,7 +79,8 @@ export default function AdminLayout() {
       <aside
         className={`${
           sidebarOpen ? 'w-64' : 'w-20'
-        } bg-slate-900/95 border-r border-slate-700 flex flex-col transition-all duration-300 shadow-2xl backdrop-blur`}
+        } relative z-20 shrink-0 bg-slate-900/95 border-r border-slate-700 flex flex-col
+                    transition-all duration-300 shadow-2xl backdrop-blur`}
       >
         <div className="h-16 flex items-center px-4 border-b border-slate-700">
           <Brain className="w-8 h-8 text-cyan-300 shrink-0" />
@@ -103,8 +140,10 @@ export default function AdminLayout() {
         )}
       </aside>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-slate-900/80 border-b border-slate-700 flex items-center justify-between px-6 shadow-sm backdrop-blur">
+      {/* 注意：此处不能用 overflow-hidden，否则会裁掉通知铃铛的下拉面板。
+          页面滚动交由 main 内部的 overflow-auto 处理；min-h-0 让 flex 子项能正确收缩。 */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        <header className="relative z-20 h-16 shrink-0 bg-slate-900/80 border-b border-slate-700 flex items-center justify-between px-6 shadow-sm backdrop-blur">
           <h1 className="text-lg font-semibold text-white">
             {navItems.find(
               (item) =>
@@ -113,12 +152,12 @@ export default function AdminLayout() {
             )?.label || '仪表盘'}
           </h1>
           <div className="flex items-center gap-4">
-            <button className="relative text-cyan-300 hover:text-cyan-100 cursor-pointer">
-              <Bell className="w-5 h-5" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-danger-500 text-white text-xs rounded-full flex items-center justify-center">
-                3
-              </span>
-            </button>
+            <NotificationBell
+              items={notifs}
+              unread={notifs.length}
+              loading={notifLoading}
+              emptyText="暂无待处理预警"
+            />
           </div>
         </header>
 

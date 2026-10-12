@@ -16,7 +16,9 @@ async def login(ctx: RequestContext):
     user = await db.query_one_a("SELECT * FROM users WHERE username = ?", (username,))
     if not user or not verify_password(password, user.get("password_hash") or ""):
         raise HttpError(401, "用户名或密码错误")
-    if not user.get("is_active", 1):
+    # 仅显式为 0/False 才算禁用；NULL（历史数据缺该字段）等同于启用，
+    # 否则旧库里 is_active 为 NULL 的账号会被误判为禁用而无法登录。
+    if user.get("is_active") is not None and not user.get("is_active"):
         raise HttpError(403, "用户已被禁用")
     token = create_access_token(
         data={"sub": str(user["id"]), "username": user["username"], "role": user["role"]},

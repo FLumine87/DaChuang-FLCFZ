@@ -2,10 +2,10 @@
 from datetime import datetime, timedelta
 
 from app.core.responses import success_response
+from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
 from app.db import database as db
-from app.engines import get_rag_engine
-from app.handlers.retrieval import perform_search, to_frontend_hit
+from app.engines import get_hashing_engine, get_rag_engine
 
 
 def _fmt(v, fmt="%Y-%m-%d"):
@@ -17,6 +17,39 @@ async def _counselor_name(counselor_id):
         return None
     row = await db.query_one_a("SELECT name FROM users WHERE id = ?", (counselor_id,))
     return row["name"] if row else None
+
+
+def _paging(ctx: RequestContext, default_size: int = 12, max_size: int = 100) -> tuple:
+    """从查询串解析分页参数，并返回 (page, page_size, offset)。
+
+    兼容旧的「不传参数即全量返回」行为：显式传入 page=0 时不启用分页。
+    """
+    q = ctx.query_params
+    try:
+        page = int(q.get("page", 1) or 0)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = int(q.get("page_size", default_size) or default_size)
+    except (TypeError, ValueError):
+        page_size = default_size
+    page_size = min(max(1, page_size), max_size)
+    if page <= 0:  # 不分页
+        return 0, 0, 0
+    return page, page_size, (page - 1) * page_size
+
+
+def _paginate(items: list, total: int, page: int, page_size: int) -> dict:
+    """统一分页响应；page=0 表示不分页时保持旧的纯数组结构。"""
+    if page <= 0:
+        return items
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+    }
 
 
 async def test_admin(ctx: RequestContext):
@@ -123,7 +156,28 @@ async def get_admin_dashboard(ctx: RequestContext):
 
 
 async def get_admin_screenings(ctx: RequestContext):
-    rows = await db.query_a("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 100")
+    q = ctx.query_params
+    page, page_size, offset = _paging(ctx)
+    where, params = [], []
+    if kw := (q.get("keyword") or "").strip():
+        where.append("(s.name LIKE ? OR s.screening_id LIKE ?)")
+        params += [f"%{kw}%", f"%{kw}%"]
+    if level := (q.get("level") or "").strip():
+        where.append("s.alert_level = ?")
+        params.append(level)
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
+    total = (await db.query_one_a(
+        "SELECT COUNT(*) AS c FROM screenings s" + where_sql, params))["c"]
+
+    sql = ("SELECT * FROM screenings s" + where_sql +
+           " ORDER BY screening_date DESC, id DESC")
+    args = list(params)
+    if page > 0:
+        sql += " LIMIT ? OFFSET ?"
+        args += [page_size, offset]
+    rows = await db.query_a(sql, args)
+
     items = []
     for s in rows:
         qn = await db.query_one_a("SELECT name FROM questionnaires WHERE id = ?", (s.get("questionnaire_id"),))
@@ -141,11 +195,34 @@ async def get_admin_screenings(ctx: RequestContext):
             "date": _fmt(s.get("screening_date") or s.get("created_at")),
             "counselor": counselor or "未分配",
         })
-    return success_response(data=items)
+    return success_response(data=_paginate(items, total, page, page_size))
 
 
 async def get_admin_alerts(ctx: RequestContext):
-    alerts = await db.query_a("SELECT * FROM alerts ORDER BY created_at DESC, id DESC LIMIT 100")
+    q = ctx.query_params
+    page, page_size, offset = _paging(ctx)
+    where, params = [], []
+    if kw := (q.get("keyword") or "").strip():
+        where.append("(a.name LIKE ? OR a.alert_id LIKE ?)")
+        params += [f"%{kw}%", f"%{kw}%"]
+    if level := (q.get("level") or "").strip():
+        where.append("a.level = ?")
+        params.append(level)
+    if status := (q.get("status") or "").strip():
+        where.append("a.status = ?")
+        params.append(status)
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
+    total = (await db.query_one_a(
+        "SELECT COUNT(*) AS c FROM alerts a" + where_sql, params))["c"]
+
+    sql = "SELECT * FROM alerts a" + where_sql + " ORDER BY a.created_at DESC, a.id DESC"
+    args = list(params)
+    if page > 0:
+        sql += " LIMIT ? OFFSET ?"
+        args += [page_size, offset]
+    alerts = await db.query_a(sql, args)
+
     items = []
     for a in alerts:
         screening = await db.query_one_a("SELECT * FROM screenings WHERE id = ?", (a.get("screening_id"),))
@@ -162,11 +239,34 @@ async def get_admin_alerts(ctx: RequestContext):
             "createdAt": _fmt(a.get("created_at"), "%Y-%m-%d %H:%M"),
             "updatedAt": _fmt(a.get("updated_at"), "%Y-%m-%d %H:%M"),
         })
-    return success_response(data=items)
+    return success_response(data=_paginate(items, total, page, page_size))
 
 
 async def get_admin_cases(ctx: RequestContext):
-    cases = await db.query_a("SELECT * FROM cases ORDER BY created_at DESC, id DESC LIMIT 100")
+    q = ctx.query_params
+    page, page_size, offset = _paging(ctx)
+    where, params = [], []
+    if kw := (q.get("keyword") or "").strip():
+        where.append("(c.name LIKE ? OR c.case_id LIKE ? OR c.department LIKE ?)")
+        params += [f"%{kw}%", f"%{kw}%", f"%{kw}%"]
+    if level := (q.get("level") or "").strip():
+        where.append("c.alert_level = ?")
+        params.append(level)
+    if status := (q.get("status") or "").strip():
+        where.append("c.status = ?")
+        params.append(status)
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
+    total = (await db.query_one_a(
+        "SELECT COUNT(*) AS c FROM cases c" + where_sql, params))["c"]
+
+    sql = "SELECT * FROM cases c" + where_sql + " ORDER BY c.created_at DESC, c.id DESC"
+    args = list(params)
+    if page > 0:
+        sql += " LIMIT ? OFFSET ?"
+        args += [page_size, offset]
+    cases = await db.query_a(sql, args)
+
     items = []
     for c in cases:
         items.append({
@@ -181,7 +281,79 @@ async def get_admin_cases(ctx: RequestContext):
             "alertLevel": c.get("alert_level"),
             "status": c.get("status"),
         })
-    return success_response(data=items)
+    return success_response(data=_paginate(items, total, page, page_size))
+
+
+# ---- 预警处置（管理端） ----
+
+# 允许流转的状态（与前端 AdminStatusBadge 的取值保持一致）
+_ALERT_STATUSES = ("pending", "processing", "resolved", "closed")
+
+
+async def update_admin_alert(ctx: RequestContext, alert_code: str):
+    """按预警编号（ALT-xxx）更新状态 / 处理人 / 跟进记录。
+
+    与 /api/alerts/{id}（数字主键）并存：管理端列表用的是alert_code 编号。
+    """
+    row = await db.query_one_a(
+        "SELECT id, status FROM alerts WHERE alert_id = ?", (alert_code,))
+    if not row:
+        raise HttpError(404, "预警记录不存在")
+
+    data = ctx.body or {}
+    sets, params = [], []
+
+    if "status" in data and data["status"] is not None:
+        st = str(data["status"])
+        if st not in _ALERT_STATUSES:
+            raise HttpError(400, f"状态无效，可选：{'/'.join(_ALERT_STATUSES)}")
+        sets.append("status = ?")
+        params.append(st)
+        # 标记为已解决时同步写入解决时间，便于后续统计处置时效
+        if st == "resolved":
+            sets.append("resolved_at = CURRENT_TIMESTAMP")
+        else:
+            sets.append("resolved_at = NULL")
+
+    if "assignee_id" in data:
+        sets.append("assignee_id = ?")
+        params.append(data["assignee_id"])
+
+    if "follow_up_notes" in data and data["follow_up_notes"] is not None:
+        sets.append("follow_up_notes = ?")
+        params.append(str(data["follow_up_notes"]))
+
+    if not sets:
+        raise HttpError(400, "没有需要更新的字段")
+
+    sets.append("updated_at = CURRENT_TIMESTAMP")
+    await db.execute_a(
+        f"UPDATE alerts SET {', '.join(sets)} WHERE id = ?", params + [row["id"]]
+    )
+
+    updated = await db.query_one_a(
+        "SELECT a.*, u.name AS assignee_name FROM alerts a "
+        "LEFT JOIN users u ON a.assignee_id = u.id WHERE a.id = ?", (row["id"],)
+    )
+    return success_response(data={
+        "id": updated.get("alert_id"),
+        "status": updated.get("status"),
+        "assignee": updated.get("assignee_name") or "未分配",
+        "followUpNotes": updated.get("follow_up_notes") or "",
+        "resolvedAt": _fmt(updated.get("resolved_at"), "%Y-%m-%d %H:%M"),
+    })
+
+
+async def list_admin_counselors(ctx: RequestContext):
+    """可分配的处理人列表（管理员 + 咨询师角色）。"""
+    rows = await db.query_a(
+        "SELECT id, username, name, role FROM users "
+        "WHERE role IN ('admin', 'counselor') AND (is_active IS NULL OR is_active = 1) "
+        "ORDER BY role DESC, id"
+    )
+    return success_response(data=[
+        {"id": r["id"], "name": r["name"], "role": r["role"]} for r in rows
+    ])
 
 
 async def admin_search(ctx: RequestContext):

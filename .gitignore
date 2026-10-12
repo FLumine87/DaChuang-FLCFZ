@@ -87,3 +87,9 @@ Desktop.ini
 # ---- 哈希引擎运行状态（构建产物，数 MB 且随机器/语料变化）----
 # real_corpus.db 已被上面的 *.db 覆盖，这里补上状态文件。
 backend/data/hashing/hashing_state.json
+
+# ---- 本地工作区（WorkBuddy 记忆、快照、诊断脚本；勿提交）----
+.workbuddy/
+.tools/
+# 根目录误生成的lockfile（前端依赖锁在 frontend/package-lock.json）
+/package-lock.json

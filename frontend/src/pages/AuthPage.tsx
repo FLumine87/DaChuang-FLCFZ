@@ -6,6 +6,9 @@ import { saveSessionToken } from '../auth/session';
 
 type AuthTab = 'login' | 'register';
 
+/** 演示账号：与后端 data/dev.db 中的种子数据一致（仅管理员账号密码已确认）。 */
+const DEMO_ACCOUNTS = [{ role: '管理端', username: 'admin', password: 'admin123' }];
+
 export default function AuthPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<AuthTab>('login');
@@ -35,6 +38,14 @@ export default function AuthPage() {
   const resetTips = () => {
     setMessage('');
     setError('');
+  };
+
+  /** 一键填入演示账号，避免手输出错 */
+  const fillDemo = (account: string, pwd: string) => {
+    setTab('login');
+    setUsername(account);
+    setPassword(pwd);
+    resetTips();
   };
 
   const handleLogin = async () => {
@@ -94,9 +105,26 @@ export default function AuthPage() {
           </p>
           <h1 className="text-3xl font-bold text-white mt-5">心理筛查预警系统</h1>
           <p className="text-slate-300 mt-3 leading-7">
-            支持管理端与个人端双系统。使用管理账号 <code>admin/admin123</code> 登录将进入管理系统，
+            支持管理端与个人端双系统。使用管理账号 <code className="text-white">admin</code> 登录将进入管理系统，
             其他账号将进入个人系统。
           </p>
+
+          <div className="mt-5">
+            <p className="text-xs text-slate-400 mb-2">演示账号（点击自动填入）</p>
+            <div className="flex flex-wrap gap-2">
+              {DEMO_ACCOUNTS.map((acc) => (
+                <button
+                  key={acc.username}
+                  type="button"
+                  onClick={() => fillDemo(acc.username, acc.password)}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700 hover:border-cyan-500/60 hover:bg-slate-800 text-xs text-slate-200 transition-colors cursor-pointer"
+                >
+                  <span className="text-cyan-300">{acc.role}</span>
+                  <code>{acc.username}</code>
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-8">
             <div className="rounded-xl bg-slate-800/80 border border-slate-700 p-4">
@@ -245,7 +273,8 @@ export default function AuthPage() {
           </div>
 
           <p className="text-xs text-slate-400 mt-5 leading-5">
-            规则：仅 <code>admin/admin123</code> 进入管理端；其余账号（包括注册账号）均进入个人端。
+            规则：仅管理员账号 <code className="text-slate-600">admin</code> 进入管理端；
+            其余账号（包括注册账号）均进入个人端。
           </p>
         </div>
       </div>

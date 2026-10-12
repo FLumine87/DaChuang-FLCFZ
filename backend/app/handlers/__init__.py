@@ -28,6 +28,10 @@ ROUTES = [
     ("POST", "/api/admin/search", admin.admin_search, "admin"),
     ("GET", "/api/admin/data-collection", admin.get_admin_data_collection, "admin"),
 
+    # ---- 预警处置（按预警编号 ALT-xxx 操作）----
+    ("PUT", "/api/admin/alerts/{alert_code}", admin.update_admin_alert, "admin"),
+    ("GET", "/api/admin/counselors", admin.list_admin_counselors, "admin"),
+
     # ---- 筛查管理 ----
     ("GET", "/api/screening/questionnaires", screening.list_questionnaires, "user"),
     ("POST", "/api/screening/questionnaires", screening.create_questionnaire, "admin"),

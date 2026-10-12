@@ -24,11 +24,11 @@ import {
   type PersonalScreeningRecord,
   type AlertLevel,
   type RetrievalResult as PersonalRetrievalResult,
-  type RetrievalIndexInfo,
   type WarningEvent,
   type UserProfile,
   type PersonalTimelineEvent,
   type MoodTrendPoint,
+  type RetrievalIndexInfo,
 } from '../data/mockData';
 
 import {
@@ -64,6 +64,83 @@ function delay(ms?: number): Promise<void> {
   );
 }
 
+/** 分页响应结构（后端 list类接口统一返回） */
+export interface Paged<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface ListQuery {
+  page?: number;
+  page_size?: number;
+  keyword?: string;
+  level?: string;
+  status?: string;
+}
+
+/** 把分页查询参数拼成 query string（自动剔除空值） */
+function toQuery(q: ListQuery = {}): string {
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(q)) {
+    if (v !== undefined && v !== null && v !== '') parts.push(`${k}=${encodeURIComponent(String(v))}`);
+  }
+  return parts.length ? `?${parts.join('&')}` : '';
+}
+
+/**
+ * 兼容层：后端未开启分页（不传 page）时返回纯数组，
+ * 开启分页时返回 Paged<T>。这里统一归一化为 Paged<T>，页面只处理一种结构。
+ */
+async function normalizeList<T>(
+  fetcher: () => Promise<T[] | Paged<T>>,
+  q: ListQuery
+): Promise<Paged<T>> {
+  const res = await fetcher();
+  if (Array.isArray(res)) {
+    const total = res.length;
+    const size = q.page_size ?? (total || 1);
+    return {
+      items: res,
+      total,
+      page: q.page ?? 1,
+      page_size: size,
+      total_pages: 1,
+    };
+  }
+  return res;
+}
+
+/** mock 数据在前端切页，保持与真实后端一致的交互 */
+function paginateMock<T>(all: T[], q: ListQuery): Paged<T> {
+  const page = q.page && q.page > 0 ? q.page : 1;
+  const size = q.page_size && q.page_size > 0 ? q.page_size : 12;
+  const kw = (q.keyword || '').trim().toLowerCase();
+  const level = (q.level || '').trim();
+  const status = (q.status || '').trim();
+
+  let list = all;
+  if (kw) {
+    list = list.filter((it) =>
+      JSON.stringify(it).toLowerCase().includes(kw)
+    );
+  }
+  if (level) list = list.filter((it) => (it as Record<string, unknown>).alertLevel === level);
+  if (status) list = list.filter((it) => (it as Record<string, unknown>).status === status);
+
+  const total = list.length;
+  const start = (page - 1) * size;
+  return {
+    items: list.slice(start, start + size),
+    total,
+    page,
+    page_size: size,
+    total_pages: Math.max(1, Math.ceil(total / size)),
+  };
+}
+
 // ─── 类型定义 ────────────────────────────────────────────────────────────────
 
 export interface LoginResult {
@@ -77,6 +154,26 @@ export interface LoginResult {
 export interface RegisterResult {
   ok: boolean;
   message?: string;
+}
+
+export interface RetrievalMediaPayload {
+  unit_id: string;
+  modality: 'image' | 'audio';
+  media_kind?: string | null;
+  /** data URL：语音为可直接播放的 wav，图像为原图 */
+  media: string;
+  media_meta?: Record<string, unknown> | null;
+}
+
+export interface RetrievalQuery {
+  /** 查询模态：text（默认）/ image / audio */
+  modality?: 'text' | 'image' | 'audio';
+  /** 结果范围过滤：只返回该模态的命中单元 */
+  modalityFilter?: 'text' | 'image' | 'audio';
+  /** 图像 / 语音查询的媒体内容（base64，不含 data URL 前缀） */
+  mediaBase64?: string | null;
+  /** 媒体原始文件名（仅用于推断扩展名，决定落盘格式） */
+  mediaName?: string;
 }
 
 export interface SearchResponse<T> {
@@ -255,18 +352,6 @@ export async function getCases() {
   }>('/api/personal/profile');
 }
 
-/** 检索请求参数（文本 / 图像 / 语音三种查询方式共用） */
-export interface RetrievalQuery {
-  /** 查询模态：text（默认）/ image / audio */
-  modality?: 'text' | 'image' | 'audio';
-  /** 结果范围过滤：只返回该模态的命中单元 */
-  modalityFilter?: 'text' | 'image' | 'audio';
-  /** 图像 / 语音查询的媒体内容（base64，不含 data URL 前缀） */
-  mediaBase64?: string | null;
-  /** 媒体原始文件名（仅用于推断扩展名，决定落盘格式） */
-  mediaName?: string;
-}
-
 export async function search(
   query: string,
   opts: RetrievalQuery = {},
@@ -287,26 +372,6 @@ export async function search(
       media_base64: opts.mediaBase64 ?? null,
       media_name: opts.mediaName ?? '',
     }
-  );
-}
-
-/** 单元的真实媒体文件（语音可播放 / 图像原图），按需单独取用 */
-export interface RetrievalMediaPayload {
-  unit_id: string;
-  modality: 'image' | 'audio';
-  media_kind?: string | null;
-  /** data URL：语音为可直接播放的 wav，图像为原图 */
-  media: string;
-  media_meta?: Record<string, unknown> | null;
-}
-
-export async function fetchRetrievalMedia(unitId: string): Promise<RetrievalMediaPayload> {
-  if (USE_MOCK) {
-    await delay(150);
-    throw new Error('演示语料没有真实媒体文件，请连接后端（VITE_USE_MOCK=false）');
-  }
-  return request.get<RetrievalMediaPayload>(
-    `/api/retrieval/media/${encodeURIComponent(unitId)}`
   );
 }
 
@@ -347,32 +412,85 @@ export async function getAdminDashboardData(): Promise<AdminDashboardResponse> {
   return request.get<AdminDashboardResponse>('/api/admin/dashboard');
 }
 
-export async function getAdminScreeningRecords(): Promise<AdminScreeningRecord[]> {
-  if (USE_MOCK) {
-    await delay();
-    return [...adminScreeningRecords];
-  }
-  return request.get<AdminScreeningRecord[]>('/api/admin/screenings');
+/** 仪表盘顶部统计卡所需的真实指标 */
+export interface DashboardStats {
+  total_screenings: number;
+  monthly_screenings: number;
+  pending_alerts: number;
+  completion_rate: number;
+  alert_distribution: Record<'green' | 'yellow' | 'orange' | 'red', number>;
 }
 
-export async function getAdminAlerts(): Promise<AlertRecord[]> {
-  if (USE_MOCK) {
-    await delay();
-    return [...alertRecords];
-  }
-  return request.get<AlertRecord[]>('/api/admin/alerts');
+export async function getDashboardStats(): Promise<DashboardStats> {
+  return request.get<DashboardStats>('/api/dashboard/stats');
 }
 
-export async function getAdminCases(): Promise<CaseRecord[]> {
+export async function getAdminScreeningRecords(q: ListQuery = {}): Promise<Paged<AdminScreeningRecord>> {
   if (USE_MOCK) {
     await delay();
-    return [...caseRecords];
+    return paginateMock(adminScreeningRecords, q);
   }
-  return request.get<CaseRecord[]>('/api/admin/cases');
+  return normalizeList<AdminScreeningRecord>(
+    () => request.get<AdminScreeningRecord[] | Paged<AdminScreeningRecord>>(
+      `/api/admin/screenings${toQuery(q)}`
+    ),
+    q
+  );
 }
 
-export async function adminSearch(query: string): Promise<SearchResponse<AdminRetrievalResult>> {
+export async function getAdminAlerts(q: ListQuery = {}): Promise<Paged<AlertRecord>> {
   if (USE_MOCK) {
+    await delay();
+    return paginateMock(alertRecords, q);
+  }
+  return normalizeList<AlertRecord>(
+    () => request.get<AlertRecord[] | Paged<AlertRecord>>(`/api/admin/alerts${toQuery(q)}`),
+    q
+  );
+}
+
+export async function getAdminCases(q: ListQuery = {}): Promise<Paged<CaseRecord>> {
+  if (USE_MOCK) {
+    await delay();
+    return paginateMock(caseRecords, q);
+  }
+  return normalizeList<CaseRecord>(
+    () => request.get<CaseRecord[] | Paged<CaseRecord>>(`/api/admin/cases${toQuery(q)}`),
+    q
+  );
+}
+
+export async function updateAdminAlert(
+  alertCode: string,
+  patch: { status?: string; assignee_id?: number | null; follow_up_notes?: string }
+): Promise<{ id: string; status: string; assignee: string; followUpNotes: string; resolvedAt: string }> {
+  return request.put(`/api/admin/alerts/${encodeURIComponent(alertCode)}`, patch);
+}
+
+/** 可分配的处理人（管理员 / 咨询师） */
+export async function getAdminCounselors(): Promise<{ id: number; name: string; role: string }[]> {
+  if (USE_MOCK) {
+    await delay();
+    return [
+      { id: 2, name: '李老师', role: 'counselor' },
+      { id: 1, name: '管理员', role: 'admin' },
+    ];
+  }
+  return request.get<{ id: number; name: string; role: string }[]>('/api/admin/counselors');
+}
+
+
+export async function fetchRetrievalMedia(unitId: string): Promise<RetrievalMediaPayload> {
+  if (USE_MOCK) {
+    await delay(150);
+    throw new Error('演示语料没有真实媒体文件，请连接后端（VITE_USE_MOCK=false）');
+  }
+  return request.get<RetrievalMediaPayload>(
+    `/api/retrieval/media/${encodeURIComponent(unitId)}`
+  );
+}
+
+export async function adminSearch(query: string): Promise<SearchResponse<AdminRetrievalResult>> {  if (USE_MOCK) {
     await delay(400 + Math.random() * 400);
     return { results: adminRetrievalResults, report: adminRagReport, query };
   }

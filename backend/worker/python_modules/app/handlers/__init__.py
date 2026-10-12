@@ -3,7 +3,7 @@
 auth_level: None=公开 / 'user'=需登录 / 'admin'=需管理员
 """
 from app.handlers import (auth, screening, alerts, cases, retrieval, upload,
-                          dashboard, personal, admin)
+                          dashboard, personal, admin, knowledge_graph, warning_agent)
 
 ROUTES = [
     # ---- 认证（公开）----
@@ -27,6 +27,10 @@ ROUTES = [
     ("GET", "/api/admin/cases", admin.get_admin_cases, "admin"),
     ("POST", "/api/admin/search", admin.admin_search, "admin"),
     ("GET", "/api/admin/data-collection", admin.get_admin_data_collection, "admin"),
+
+    # ---- 预警处置（按预警编号 ALT-xxx 操作）----
+    ("PUT", "/api/admin/alerts/{alert_code}", admin.update_admin_alert, "admin"),
+    ("GET", "/api/admin/counselors", admin.list_admin_counselors, "admin"),
 
     # ---- 筛查管理 ----
     ("GET", "/api/screening/questionnaires", screening.list_questionnaires, "user"),
@@ -63,8 +67,16 @@ ROUTES = [
 
     # ---- 检索分析 ----
     ("POST", "/api/retrieval/search", retrieval.search, "user"),
+    ("GET", "/api/retrieval/index-stats", retrieval.index_stats, "user"),
+    ("GET", "/api/retrieval/media/{unit_id}", retrieval.get_media, "user"),
     ("POST", "/api/retrieval/analyze", retrieval.analyze, "user"),
     ("GET", "/api/retrieval/report/{screening_id}", retrieval.get_report, "user"),
+
+    # ---- 预警知识图谱（仅返回匿名证据链与人工复核规则）----
+    ("GET", "/api/knowledge-graph/overview", knowledge_graph.get_overview, "user"),
+    ("GET", "/api/knowledge-graph/screenings/{screening_id}/evidence",
+     knowledge_graph.get_screening_evidence, "user"),
+    ("POST", "/api/agents/warning-assessment", warning_agent.assess, "user"),
 
     # ---- 文件上传 ----
     ("POST", "/api/upload", upload.upload_file, "user"),
