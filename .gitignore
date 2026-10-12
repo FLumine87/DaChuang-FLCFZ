@@ -95,3 +95,18 @@ backend/data/hashing/hashing_state.json
 # 本地 Node 运行时（为跑 dev server 下载，不入库）
 .tools/
 .shots/
+
+# ---- 本地产物 / 临时目录（不入库）----
+# 这三个都是本机生成的工作产物，体积大且与提交无关：
+#   distribution/ 是给竞赛提交用的打包（含 65MB 代码归档 zip）
+#   output/       是导出 PDF 等中间产物
+#   tmp/          是临时脚本
+distribution/
+output/
+tmp/
+
+# 开发过程截图归档（图片已被上面的 *.png/*.jpg 规则忽略，这里连目录一起挡掉）
+docs/screenshots/
+
+# 本机专用脚本：内含本机绝对路径 / 用于把 token 写进本机钥匙串，不入库
+存储token.command
