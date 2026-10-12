@@ -4,8 +4,8 @@ requires-python = ">=3.13.2"
 
 [[packages]]
 name = "mental-screening-backend"
-version = "1.0.1"
-archive = { path = "C:/ETO/CBP/web/DaChuang-FLCFZ/backend/dist/mental_screening_backend-1.0.1-py3-none-any.whl", hashes = { sha256 = "823d0390117e62b1f57d1268884a988d60c31a03c44d3114df4f19a9d0ab43c6" } }
+version = "1.0.2"
+archive = { path = "C:/ETO/CBP/web/DaChuang-FLCFZ/backend/dist/mental_screening_backend-1.0.2-py3-none-any.whl", hashes = { sha256 = "f13eebef373758506b36fb99c9ba256fdb8b10f0b0ddcc91a241a2fbed4bd04b" } }
 
 [[packages]]
 name = "workers-runtime-sdk"

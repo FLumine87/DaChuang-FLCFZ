@@ -51,10 +51,10 @@ wheels = [
 
 [[package]]
 name = "mental-screening-backend"
-version = "1.0.1"
-source = { path = "C:/ETO/CBP/web/DaChuang-FLCFZ/backend/dist/mental_screening_backend-1.0.1-py3-none-any.whl" }
+version = "1.0.2"
+source = { path = "C:/ETO/CBP/web/DaChuang-FLCFZ/backend/dist/mental_screening_backend-1.0.2-py3-none-any.whl" }
 wheels = [
-    { filename = "mental_screening_backend-1.0.1-py3-none-any.whl", hash = "sha256:823d0390117e62b1f57d1268884a988d60c31a03c44d3114df4f19a9d0ab43c6" },
+    { filename = "mental_screening_backend-1.0.2-py3-none-any.whl", hash = "sha256:f13eebef373758506b36fb99c9ba256fdb8b10f0b0ddcc91a241a2fbed4bd04b" },
 ]
 
 [[package]]
@@ -72,7 +72,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "mental-screening-backend", path = "C:/ETO/CBP/web/DaChuang-FLCFZ/backend/dist/mental_screening_backend-1.0.1-py3-none-any.whl" }]
+requires-dist = [{ name = "mental-screening-backend", path = "C:/ETO/CBP/web/DaChuang-FLCFZ/backend/dist/mental_screening_backend-1.0.2-py3-none-any.whl" }]
 
 [package.metadata.requires-dev]
 dev = [
