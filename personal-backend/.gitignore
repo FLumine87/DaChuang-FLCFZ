@@ -1,0 +1,24 @@
+# personal-backend 专属忽略项（个人端 Agent + 知识图谱 FastAPI 服务）
+
+# 环境配置（含密钥，绝不进库）
+.env
+.env.local
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 运行产物
+*.db
+*.sqlite3
+*.log
+*.pid
+_inf_check.json
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
