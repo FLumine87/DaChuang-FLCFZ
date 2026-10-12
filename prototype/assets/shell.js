@@ -54,13 +54,16 @@ window.PROTO = (function () {
       body + '</svg>';
   }
 
-  /* ---------- 导航：一处维护 ---------- */
+  /* ---------- 导航：一处维护 ----------
+     个人端按评审意见合并入口：「心理筛查」与「多模态采集」原本是两个入口，
+     其中原「心理筛查」实际只是量表作答，而量表不是项目重点。现在合并为一个
+     「心理筛查」（对应 personal-collect.html，三模态采集为主），问卷降级为
+     该页里的辅助功能。 */
   var NAV = {
     personal: [
       { label: '工作空间', items: [
         { id: 'home', text: '个人首页', href: 'personal-home.html', icon: 'home' },
-        { id: 'screening', text: '心理筛查', href: 'personal-screening.html', icon: 'screening' },
-        { id: 'collect', text: '多模态采集', href: 'personal-collect.html', icon: 'collect' }
+        { id: 'collect', text: '心理筛查', href: 'personal-collect.html', icon: 'screening' }
       ] },
       { label: '智能分析', items: [
         { id: 'retrieval', text: '检索与分析', href: 'personal-retrieval.html', icon: 'retrieval' }

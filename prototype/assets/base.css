@@ -2029,3 +2029,826 @@ details.tech .dl {
     scroll-behavior: auto !important;
   }
 }
+
+/* ==========================================================================
+   登录页 v2：卡片式展览 + 以用户登录为主
+   —— 左侧展览区承载作品创新点（多模态特征提取 / 动态跨模态哈希检索 / RAG 报告 /
+      联邦学习 / 知识图谱 / 分级预警），右侧登录卡做视觉主体。
+      管理员登录由右上角入口切换（同一张卡换面板），不新增页面。
+   命名空间 authx-*，不影响其它页面。
+   ========================================================================== */
+.authx {
+  position: relative;
+  display: grid;
+  /* 登录为主：右侧登录列加宽，展览区退为配角 */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 560px);
+  min-height: 100vh;
+  align-items: start;
+  background: var(--bg-page);
+}
+
+/* 装饰层：光晕与网格单独一层，用 overflow 裁切，避免裁到正文 */
+.authx__deco {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* 极淡网格底纹，向内淡出 */
+.authx__deco::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(120% 95% at 18% 0%, #000 25%, transparent 78%);
+  mask-image: radial-gradient(120% 95% at 18% 0%, #000 25%, transparent 78%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* ---------- 左：展览区 ---------- */
+.authx__expo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--sp-6);
+  padding: var(--sp-16) clamp(var(--sp-8), 3.6vw, 72px) var(--sp-12);
+}
+/* 视口较矮时（笔记本小屏 / 缩放）改为顶部对齐，避免内容被裁 */
+@media (max-height: 780px) {
+  .authx__expo {
+    justify-content: flex-start;
+    padding-top: var(--sp-12);
+  }
+}
+/* 品牌光晕：给页面“生命力”，但不干扰阅读 */
+.authx__glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(64px);
+  pointer-events: none;
+}
+.authx__glow--a {
+  width: 540px;
+  height: 540px;
+  top: -200px;
+  left: -180px;
+  background: var(--brand-a18);
+}
+.authx__glow--b {
+  width: 430px;
+  height: 430px;
+  bottom: -190px;
+  left: 26%;
+  background: var(--accent-a12);
+}
+.authx__expo > :not(.authx__deco) {
+  position: relative;
+}
+
+.authx__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-5);
+}
+.authx__title {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.5vw, 1.9rem);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-h1);
+}
+.authx__lede {
+  margin: 0;
+  max-width: 46ch;
+  font-size: var(--fs-base);
+  line-height: var(--lh-cjk);
+  color: var(--txt-2);
+}
+
+/* 成就条 */
+.authx__honors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+/* 创新链路 */
+.authx__flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+}
+.authx__flow-step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  color: var(--txt-2);
+}
+.authx__flow-step svg {
+  width: 15px;
+  height: 15px;
+  color: var(--accent);
+}
+.authx__flow-arrow {
+  color: var(--txt-3);
+  font-size: var(--fs-meta);
+}
+
+/* 展卡：横向滚动卡列（每张一个创新点，一卡一色） */
+.authx__expo-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+.authx__carousel-wrap {
+  position: relative;
+  margin: 0 calc(var(--sp-2) * -1);
+}
+.authx__carousel {
+  display: flex;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-2) var(--sp-5);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+/* 滚动条做细，不喧哗 */
+.authx__carousel::-webkit-scrollbar {
+  height: 6px;
+}
+.authx__carousel::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: var(--r-pill);
+}
+.authx__nav {
+  display: flex;
+  gap: var(--sp-2);
+}
+.authx__nav button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--bg-raised);
+  color: var(--txt-2);
+  cursor: pointer;
+  transition:
+    border-color var(--d-base) ease,
+    color var(--d-base) ease,
+    background var(--d-base) ease;
+}
+.authx__nav button:hover {
+  border-color: var(--accent-border);
+  color: var(--txt-1);
+}
+.authx__nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.authx__nav svg {
+  width: 15px;
+  height: 15px;
+}
+
+.authx-card {
+  /* 默认色（brand），每张卡用修饰类覆盖这三个变量 */
+  --card-accent: var(--brand);
+  --card-tint: var(--pill-brand-bg);
+  --card-ink: var(--pill-brand-text);
+  position: relative;
+  display: flex;
+  flex: 0 0 clamp(248px, 24vw, 292px);
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-height: 226px;
+  padding: var(--sp-6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+  scroll-snap-align: start;
+  overflow: hidden;
+  transition:
+    transform var(--d-base) var(--ease-move),
+    border-color var(--d-base) ease,
+    box-shadow var(--d-base) ease;
+}
+/* 顶部一条主题色，让卡片"活"起来 */
+.authx-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--card-accent);
+  opacity: 0.85;
+}
+.authx-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--card-accent);
+  box-shadow: var(--shadow-float);
+}
+.authx-card--green {
+  --card-accent: var(--state-green);
+  --card-tint: var(--pill-green-bg);
+  --card-ink: var(--pill-green-text);
+}
+.authx-card--orange {
+  --card-accent: var(--state-orange);
+  --card-tint: var(--pill-orange-bg);
+  --card-ink: var(--pill-orange-text);
+}
+.authx-card--yellow {
+  --card-accent: var(--state-yellow);
+  --card-tint: var(--pill-yellow-bg);
+  --card-ink: var(--pill-yellow-text);
+}
+.authx-card--red {
+  --card-accent: var(--state-red);
+  --card-tint: var(--pill-red-bg);
+  --card-ink: var(--pill-red-text);
+}
+.authx-card--neutral {
+  --card-accent: var(--slate-600);
+  --card-tint: var(--pill-neutral-bg);
+  --card-ink: var(--pill-neutral-text);
+}
+.authx-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.authx-card__icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--card-tint);
+  color: var(--card-accent);
+}
+.authx-card__icon svg {
+  width: 18px;
+  height: 18px;
+}
+.authx-card__title {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 700;
+  color: var(--txt-1);
+}
+.authx-card__desc {
+  margin: 0;
+  font-size: var(--fs-label);
+  line-height: var(--lh-cjk);
+  color: var(--txt-2);
+}
+/* 硬指标数字：放大 + 主题色 */
+.authx-card__stat {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-top: auto;
+  padding-top: var(--sp-4);
+  border-top: 1px dashed var(--line);
+}
+.authx-card__stat b {
+  font-size: var(--fs-h1);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--card-accent);
+  font-variant-numeric: tabular-nums;
+}
+.authx-card__stat span {
+  font-size: var(--fs-meta);
+  color: var(--txt-3);
+}
+
+/* ---------- 右：登录区（视觉主体，滚动时固定在视口内） ---------- */
+.authx__login {
+  position: sticky;
+  top: 0;
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  padding: var(--sp-12) var(--sp-8);
+  border-left: 1px solid var(--line);
+  background: var(--bg-raised);
+}
+.authx-formcard {
+  width: 100%;
+  max-width: 470px;
+  padding: var(--sp-12) var(--sp-10);
+  border: 1px solid var(--line);
+  border-radius: var(--r-float);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-float);
+}
+.authx-formcard__eyebrow {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.authx-formcard__title {
+  margin: 0;
+  font-size: clamp(1.6rem, 2vw, 1.85rem);
+  line-height: var(--lh-tight);
+}
+.authx-formcard__sub {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-label);
+  line-height: var(--lh-cjk);
+  color: var(--txt-2);
+}
+.authx-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin: var(--sp-8) 0 var(--sp-5);
+  font-size: var(--fs-meta);
+  color: var(--txt-3);
+}
+.authx-divider::before,
+.authx-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.authx-pw {
+  position: relative;
+}
+.authx-pw__toggle {
+  position: absolute;
+  right: var(--sp-3);
+  bottom: 7px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--txt-3);
+  cursor: pointer;
+}
+.authx-pw__toggle:hover {
+  background: var(--hover-surface);
+  color: var(--txt-1);
+}
+.authx-pw__toggle svg {
+  width: 16px;
+  height: 16px;
+}
+.authx-foot {
+  margin: var(--sp-6) 0 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-cjk);
+  color: var(--txt-3);
+}
+
+/* 右上角入口组：管理员登录 + 主题切换 */
+.authx__corner {
+  position: fixed;
+  top: var(--sp-5);
+  right: var(--sp-5);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.authx-admin {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 34px;
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--bg-raised);
+  color: var(--txt-2);
+  font-size: var(--fs-label);
+  cursor: pointer;
+  transition:
+    border-color var(--d-base) ease,
+    color var(--d-base) ease;
+}
+.authx-admin:hover {
+  border-color: var(--accent-border);
+  color: var(--txt-1);
+}
+.authx-admin[aria-pressed="true"] {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.authx-admin svg {
+  width: 15px;
+  height: 15px;
+}
+/* 面板切换：用户 / 管理员 */
+.authx[data-panel="user"] .authx-admin-only {
+  display: none;
+}
+.authx[data-panel="admin"] .authx-user-only {
+  display: none;
+}
+
+/* 管理员模式：提示文字换成更克制的青绿，暗示不同身份 */
+.authx[data-panel="admin"] .authx-formcard__eyebrow {
+  color: var(--state-green-text);
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 1120px) {
+  .authx {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 480px);
+  }
+}
+@media (max-width: 980px) {
+  /* 窄屏：登录优先，展览下沉，取消粘性定位 */
+  .authx {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .authx__login {
+    position: static;
+    order: 1;
+    height: auto;
+    border-left: 0;
+    border-bottom: 1px solid var(--line);
+    padding: var(--sp-16) var(--sp-6) var(--sp-12);
+  }
+  .authx__expo {
+    order: 2;
+    padding: var(--sp-12) var(--sp-8) var(--sp-16);
+  }
+  .authx-card {
+    flex-basis: 78%;
+  }
+}
+@media (max-width: 640px) {
+  .authx-formcard {
+    padding: var(--sp-8) var(--sp-6);
+  }
+  .authx-card {
+    flex-basis: 86%;
+    min-height: 200px;
+  }
+}
+
+/* ==========================================================================
+   个人首页 v2：以"用户关怀 + 下一步行动"为主线
+   —— 依据评审意见：①一步进入筛查 ②重要数据要大要显眼 ③删掉睡眠等次要内容
+      ④补齐 RAG 对话能力 ⑤行动清单可打勾 ⑥量表降级为「辅助依据」
+   命名空间 homex-*，只影响个人首页。
+   ========================================================================== */
+
+/* ---------- 首屏主操作：一次综合状态记录（三模态） ---------- */
+.homex-hero {
+  display: grid;
+  gap: var(--sp-6);
+  padding: var(--sp-8) var(--sp-8) var(--sp-6);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--r-float);
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--brand-a12) 0%, transparent 58%),
+    var(--bg-raised);
+}
+.homex-hero__title {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.2vw, 1.75rem);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-h1);
+}
+.homex-hero__desc {
+  margin: var(--sp-3) 0 0;
+  max-width: 52ch;
+  font-size: var(--fs-base);
+  line-height: var(--lh-cjk);
+  color: var(--txt-2);
+}
+/* 三种输入方式并列：让"多模态"变成看得见的三个动作 */
+.homex-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+.homex-mode {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-card);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform var(--d-base) var(--ease-move),
+    border-color var(--d-base) ease,
+    box-shadow var(--d-base) ease;
+}
+.homex-mode:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-float);
+}
+.homex-mode__icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.homex-mode__icon svg {
+  width: 19px;
+  height: 19px;
+}
+.homex-mode__text {
+  min-width: 0;
+}
+.homex-mode__title {
+  display: block;
+  font-size: var(--fs-base);
+  font-weight: 700;
+  color: var(--txt-1);
+}
+.homex-mode__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-meta);
+  color: var(--txt-3);
+}
+.homex-hero__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+/* ---------- 综合状态：重要数据放大、量表降级 ---------- */
+.homex-status__value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  font-size: clamp(2.6rem, 5vw, 3.4rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.homex-status__value small {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--txt-3);
+}
+.homex-status__rows {
+  display: grid;
+  gap: var(--sp-4);
+  margin-top: var(--sp-6);
+}
+.homex-status__row {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--fs-label);
+}
+.homex-status__row > span:first-child {
+  color: var(--txt-3);
+}
+.homex-track {
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--score-track);
+  overflow: hidden;
+}
+.homex-track > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+}
+.homex-track--voice > i {
+  background: var(--accent);
+}
+.homex-track--image > i {
+  background: var(--state-orange);
+}
+.homex-status__row b {
+  font-variant-numeric: tabular-nums;
+  color: var(--txt-1);
+}
+/* 量表降级：小字、灰底、可折叠 */
+.homex-aux {
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-5);
+  border-top: 1px dashed var(--line);
+}
+.homex-aux__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-3);
+  font-size: var(--fs-label);
+  color: var(--txt-2);
+}
+.homex-aux__note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-meta);
+  color: var(--txt-3);
+}
+
+/* ---------- 多模态证据预览 ---------- */
+.homex-evi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  height: 100%;
+}
+.homex-evi__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  color: var(--txt-1);
+}
+.homex-evi__head span:last-child {
+  font-weight: 500;
+  color: var(--txt-3);
+}
+.homex-evi__quote {
+  margin: 0;
+  font-size: var(--fs-label);
+  line-height: var(--lh-cjk);
+  color: var(--txt-2);
+}
+.homex-evi__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: auto;
+}
+
+/* ---------- 今日行动：可打勾 ---------- */
+.homex-plan {
+  display: grid;
+  gap: var(--sp-2);
+}
+.homex-plan__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: var(--sp-4);
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--d-base) ease,
+    border-color var(--d-base) ease;
+}
+.homex-plan__item:hover {
+  background: var(--hover-surface);
+  border-color: var(--line);
+}
+.homex-check {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  flex: none;
+  border: 1.5px solid var(--line-control);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: transparent;
+  transition:
+    background var(--d-fast) ease,
+    border-color var(--d-fast) ease,
+    color var(--d-fast) ease;
+}
+.homex-check svg {
+  width: 13px;
+  height: 13px;
+}
+.homex-plan__item[aria-pressed="true"] .homex-check {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--text-on-brand);
+}
+.homex-plan__text {
+  min-width: 0;
+  flex: 1;
+}
+.homex-plan__title {
+  display: block;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--txt-1);
+}
+.homex-plan__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-meta);
+  color: var(--txt-3);
+}
+.homex-plan__item[aria-pressed="true"] .homex-plan__title {
+  color: var(--txt-3);
+  text-decoration: line-through;
+}
+
+/* ---------- RAG 分析助手 ---------- */
+.homex-ask {
+  display: grid;
+  gap: var(--sp-5);
+}
+.homex-ask__prompt {
+  display: flex;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-card);
+}
+.homex-ask__prompt svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  margin-top: 2px;
+  color: var(--brand);
+}
+.homex-ask__prompt p {
+  margin: 0;
+  font-size: var(--fs-label);
+  line-height: var(--lh-cjk);
+  color: var(--txt-2);
+}
+.homex-ask__qs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.homex-ask__input {
+  display: flex;
+  gap: var(--sp-3);
+}
+.homex-ask__input input {
+  flex: 1;
+}
+
+/* ---------- 求助出口（心理健康产品的专业底线） ---------- */
+.homex-help {
+  display: grid;
+  gap: var(--sp-4);
+}
+.homex-help__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--bg-card);
+  font-size: var(--fs-label);
+}
+.homex-help__row b {
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--txt-1);
+}
+
+@media (max-width: 900px) {
+  .homex-modes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .homex-status__row {
+    grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+  }
+}

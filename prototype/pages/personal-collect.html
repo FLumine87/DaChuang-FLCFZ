@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>多模态采集 · 心理筛查预警系统（原型）</title>
+<title>心理筛查 · 心理筛查预警系统（原型）</title>
 <link rel="stylesheet" href="../assets/fonts/fonts.css">
 <link rel="stylesheet" href="../assets/tokens.css">
 <link rel="stylesheet" href="../assets/base.css">
@@ -19,7 +19,7 @@ try {
 </head>
 <body data-surface="personal">
 
-<div class="app" data-shell='{"surface":"personal","active":"collect","crumb":"多模态采集"}'>
+<div class="app" data-shell='{"surface":"personal","active":"collect","crumb":"心理筛查"}'>
   <aside class="sidebar" data-shell-sidebar></aside>
   <div class="main">
     <header class="topbar" data-shell-topbar></header>
@@ -28,8 +28,11 @@ try {
 
         <div class="pagehead">
           <div>
-            <h1>多模态采集</h1>
-            <p class="pagehead__desc">文本日记、语音片段、绘画或照片都可以提交。系统会做跨模态编码，再与历史模式比对，最后结合知识库给出建议。</p>
+            <h1>心理筛查</h1>
+            <p class="pagehead__desc">
+              一次筛查从三种线索开始：写一段话、录一段语音、传一张图，任选其一或都做。
+              系统会做跨模态编码、与历史模式比对，再结合知识库给出有依据的提示；量表只作辅助对照。
+            </p>
           </div>
           <div class="pagehead__actions">
             <a class="btn" href="personal-retrieval.html">直接检索</a>
@@ -269,22 +272,22 @@ try {
             </section>
 
             <section class="card card--tight">
-              <div class="eyebrow">顺便做一次量表</div>
+              <div class="eyebrow">辅助量表（不单独作为结论）</div>
               <p class="dim" style="margin:var(--sp-3) 0 0;font-size:var(--fs-base);line-height:var(--lh-cjk)">
-                文本与语音反映的是当下状态，量表给出的是可比的分段结果，两者一起看更稳。
+                文本、语音、图像反映的是当下状态，量表给出的是可比的分段结果，两者一起看更稳。
               </p>
               <div class="rowlist" style="margin-top:var(--sp-5)">
                 <div class="rowitem">
                   <div class="rowitem__main">
                     <div class="rowitem__title">PHQ-9 抑郁筛查</div>
-                    <div class="rowitem__meta">9 题 · 约 3 分钟</div>
+                    <div class="rowitem__meta">9 题 · 满分 27 · 约 3 分钟</div>
                   </div>
                   <a class="btn btn--sm" href="personal-screening.html">开始</a>
                 </div>
                 <div class="rowitem">
                   <div class="rowitem__main">
                     <div class="rowitem__title">ISI 失眠评估</div>
-                    <div class="rowitem__meta">7 题 · 约 3 分钟</div>
+                    <div class="rowitem__meta">7 题 · 满分 28 · 约 3 分钟</div>
                   </div>
                   <a class="btn btn--sm" href="personal-screening.html">开始</a>
                 </div>
