@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import type { ReactElement } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
+import DashboardV2 from './pages/DashboardV2';
 import Screening from './pages/Screening';
 import DataCollection from './pages/DataCollection';
 import Retrieval from './pages/Retrieval';
@@ -42,6 +43,7 @@ export default function App() {
       <Route path="/personal" element={<RequireRole role="user"><Layout /></RequireRole>}>
         <Route index element={<Navigate to="/personal/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="dashboard-v2" element={<DashboardV2 />} />
         <Route path="screening" element={<Screening />} />
         <Route path="data-collection" element={<DataCollection />} />
         <Route path="retrieval" element={<Retrieval />} />

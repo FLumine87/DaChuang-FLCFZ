@@ -15,6 +15,8 @@
         } catch (error) {
           /* localStorage 不可用时按默认浅色处理 */
         }
+        document.documentElement.style.colorScheme =
+          stored === "dark" ? "dark" : "light";
         if (stored === "dark") {
           document.documentElement.classList.add("dark");
           var meta = document.querySelector('meta[name="theme-color"]');

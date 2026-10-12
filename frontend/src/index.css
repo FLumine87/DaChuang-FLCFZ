@@ -18,6 +18,11 @@
   --color-primary-700: #2a31d8;
   --color-primary-800: #252dae;
   --color-primary-900: #262e89;
+  /* 语义化表面色：浅色下是项目的浅蓝底与淡紫蓝顶栏；
+     深色下由下方 .dark 覆盖。用变量而不是硬编码十六进制，
+     否则会绕过变量体系、在深色模式下不翻转。 */
+  --color-page: #f7f9fe;
+  --color-header: #e7ecff;
   --color-slate-50: #f9fafb;
   --color-slate-100: #f2f4f7;
   --color-slate-200: #e4e7ec;
@@ -60,6 +65,8 @@
   --color-slate-800: #e9eef4; /* 标题 */
   --color-slate-900: #f6f8fb;
   --color-slate-950: #ffffff;
+    --color-page: #0b1120; /* 页面底色 */
+    --color-header: #131b2b; /* 顶栏：比卡片略深，仍靠颜色区分层次 */
   /* 浅底胶囊（导航激活项、状态标签）在深色下改为低饱和深底，避免刺眼 */
   --color-primary-50: #1a2340;
   --color-primary-100: #20294a;
@@ -93,7 +100,33 @@
   --color-violet-50: #241a3d;
 }
 
+/* 切换主题时的短暂过渡：只在切换的那 ~240ms 内给所有元素加颜色过渡，
+   切换完就移除，避免常驻 transition 影响 hover 等交互。 */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    fill 200ms ease,
+    stroke 200ms ease !important;
+  transition-delay: 0ms !important;
+}
+
 @layer base {
+  /* color-scheme 决定滚动条、原生控件与「视口画布」用浅色还是深色渲染。
+     不声明时浏览器一律按浅色处理——深色模式下切换/滚动会透出白底。 */
+  html {
+    color-scheme: light;
+    background: var(--color-slate-50);
+  }
+
+  .dark {
+    color-scheme: dark;
+  }
+
   body {
     margin: 0;
     min-width: 320px;
@@ -427,27 +460,34 @@
     scrollbar-width: thin;
     scrollbar-color: var(--color-slate-200) transparent;
   }
-  .auth-art {
-    position: relative;
-    overflow: hidden;
-    background: #f2f4ff;
-  }
-  .auth-art::before {
+  .auth-shell::before {
     content: "";
     position: absolute;
     inset: 0;
     background-image:
       linear-gradient(#465fff0a 1px, transparent 1px),
       linear-gradient(90deg, #465fff0a 1px, transparent 1px);
-    background-size: 48px 48px;
-    mask-image: radial-gradient(ellipse at center, black 25%, transparent 75%);
+    background-size: 52px 52px;
+    mask-image: linear-gradient(to bottom, black, transparent 82%);
+    pointer-events: none;
   }
-  .auth-orbit {
+  .auth-glow {
     position: absolute;
-    width: 560px;
-    height: 560px;
-    border: 1px solid #465fff12;
-    border-radius: 50%;
+    width: 520px;
+    height: 520px;
+    border-radius: 999px;
+    filter: blur(2px);
+    pointer-events: none;
+  }
+  .auth-glow-left {
+    top: 8%;
+    left: -260px;
+    background: radial-gradient(circle, #465fff1f 0%, transparent 70%);
+  }
+  .auth-glow-right {
+    right: -220px;
+    bottom: -180px;
+    background: radial-gradient(circle, #12b76a12 0%, transparent 70%);
   }
   @media (max-width: 1023px) {
     .app-sidebar,
@@ -571,8 +611,10 @@
   background: #1b233366;
 }
 
-.dark .auth-art {
-  background: #131a29;
+.dark .auth-shell::before {
+  background-image:
+    linear-gradient(#7592ff0b 1px, transparent 1px),
+    linear-gradient(90deg, #7592ff0b 1px, transparent 1px);
 }
 
 /* 导航激活项在深底上需要更亮的前景色 */
@@ -676,4 +718,126 @@ h4.text-xl {
 h2.text-2xl,
 h3.text-2xl {
   font-size: 1.625rem; /* 26px ← 24px */
+}
+
+/* ==========================================================================
+   登录页整屏翻页
+   —— 由 AuthPage 挂载时给 <html> 加 .auth-snap，离开时移除，
+      所以只作用于登录页，不影响其他页面。
+   —— 桌面端的"落屏"由 JS 做缓动（这样才能控制换页时长），
+      因此这里关掉原生吸附、避免两边同时抢滚动；
+      触屏没有滚轮、也不便接管，保留 proximity 原生吸附。
+   ========================================================================== */
+.auth-snap {
+  scroll-padding-top: 4rem;
+}
+@media (hover: none) {
+  .auth-snap {
+    scroll-snap-type: y proximity;
+  }
+}
+.auth-snap .auth-screen {
+  scroll-snap-align: start;
+}
+
+/* 视口较矮（常见笔记本）时收紧章节上下留白，尽量保证一屏装得下 */
+@media (max-height: 900px) {
+  .auth-snap .auth-screen > div {
+    padding-top: 3rem;
+    padding-bottom: 3rem;
+  }
+  /* 登录屏靠 flex 居中，不需要这层额外留白，否则矮屏会被顶高一屏 */
+  .auth-snap #login > div {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
+/* 首屏内容最多（左文案 + 右登录卡），留白要比章节更紧，确保一屏装得下 */
+.auth-snap #top {
+  padding-top: 1.5rem;
+  padding-bottom: 1rem;
+}
+.auth-snap #top > div {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* ==========================================================================
+   登录页标题层级
+   —— 上面针对 h1~h4 的全局规则写在 @layer 之外，会压过 Tailwind 的 text-*
+      工具类（无层级样式优先于分层样式），所以这里必须同样用无层级规则覆盖，
+      否则落地页标题会被锁在 h1=26px / h2=17px。
+   ========================================================================== */
+.auth-snap .auth-hero-title {
+  font-size: 2.125rem; /* 34px */
+  line-height: 1.2;
+  font-weight: 700;
+}
+.auth-snap .auth-section-title {
+  font-size: 2.375rem; /* 38px */
+  line-height: 1.14;
+  font-weight: 700;
+}
+@media (min-width: 640px) {
+  .auth-snap .auth-hero-title {
+    font-size: 3.125rem; /* 50px */
+  }
+  .auth-snap .auth-section-title {
+    font-size: 3.75rem; /* 60px */
+  }
+}
+
+/* 标题防溢出：中文长标题不可断行时会顶出栅格、被右侧卡片盖住。
+   这里统一允许在字符间断行，并留一个兜底防止超长英文串撑破容器。 */
+.auth-snap .auth-hero-title,
+.auth-snap .auth-section-title {
+  word-break: normal;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+/* 超宽屏（全屏 2K/4K）适配：内容上浮一档，避免"小内容飘在大屏中央" */
+@media (min-width: 1536px) {
+  .auth-snap .auth-hero-title {
+    font-size: 3.75rem; /* 56 → 60px */
+  }
+  .auth-snap .auth-section-title {
+    font-size: 4.25rem; /* 60 → 68px */
+  }
+}
+
+/* ==========================================================================
+   登录页左侧宣传区：细网格底纹 + 同心圆轨道（沿用旧版视觉）
+   ========================================================================== */
+/* 折线图的网格线与辅助线：用变量而非硬编码，深色下自动变暗 */
+.chart-grid {
+  stroke: var(--color-slate-100);
+}
+.chart-guide {
+  stroke: var(--color-slate-200);
+}
+
+.auth-art {
+  position: relative;
+  overflow: hidden;
+}
+.auth-art::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(#465fff0a 1px, transparent 1px),
+    linear-gradient(90deg, #465fff0a 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: radial-gradient(ellipse at center, black 25%, transparent 75%);
+  mask-image: radial-gradient(ellipse at center, black 25%, transparent 75%);
+}
+.auth-orbit {
+  position: absolute;
+  width: 560px;
+  height: 560px;
+  border: 1px solid #465fff12;
+  border-radius: 50%;
+  pointer-events: none;
 }

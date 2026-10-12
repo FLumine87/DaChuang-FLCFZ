@@ -141,7 +141,9 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         location.pathname === item.path ||
         location.pathname.startsWith(`${item.path}/`),
     ) || items[0];
-  const isDashboard = location.pathname === `${root}/dashboard`;
+  const isDashboard =
+    location.pathname === `${root}/dashboard` ||
+    location.pathname === `${root}/dashboard-v2`;
   const results = items.filter((item) =>
     `${item.label}${item.description}`.includes(query.trim()),
   );
@@ -154,6 +156,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   useEffect(() => {
     const dark = theme === "dark";
     document.documentElement.classList.toggle("dark", dark);
+    document.documentElement.style.colorScheme = dark ? "dark" : "light";
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", dark ? "#0b1120" : "#465fff");
@@ -214,7 +217,13 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       navigate("/auth", { replace: true });
     }
   };
-  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
+  const toggleTheme = () => {
+    /* 切换的 ~260ms 内加过渡类：整页颜色渐变而非硬切（大面积浅↔深硬切会看着像闪一下） */
+    const root = document.documentElement;
+    root.classList.add("theme-switching");
+    window.setTimeout(() => root.classList.remove("theme-switching"), 260);
+    setTheme(isDark ? "light" : "dark");
+  };
 
   return (
     <div

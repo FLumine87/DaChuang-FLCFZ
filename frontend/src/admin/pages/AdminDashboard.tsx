@@ -221,7 +221,7 @@ export default function AdminDashboard() {
                     />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="#f2f4f7" />
+                <CartesianGrid vertical={false} className="chart-grid" />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11, fill: "#98a2b3" }}

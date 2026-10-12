@@ -341,7 +341,7 @@ export default function Dashboard() {
                     />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="#f2f4f7" />
+                <CartesianGrid vertical={false} className="chart-grid" />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11, fill: "#98a2b3" }}
@@ -523,7 +523,7 @@ export default function Dashboard() {
             <div className="h-[120px] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={moodTrend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke="#f2f4f7" />
+                  <CartesianGrid vertical={false} className="chart-grid" />
                   <XAxis
                     dataKey="date"
                     tick={{ fontSize: 11, fill: "#98a2b3" }}
