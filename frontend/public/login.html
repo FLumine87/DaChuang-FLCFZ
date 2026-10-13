@@ -1533,10 +1533,10 @@
           <div class="header-actions">
             <button type="button" class="text-link" id="backHome">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M19 12H5M11 18l-6-6 6-6" stroke="currentColor" stroke-width="2"
+                <path id="headerActionIcon" d="M19 12H5M11 18l-6-6 6-6" stroke="currentColor" stroke-width="2"
                       stroke-linecap="round" stroke-linejoin="round" />
               </svg>
-              返回主页
+              <span id="headerActionText">返回主页</span>
             </button>
             <button
               type="button"
@@ -1742,9 +1742,10 @@
               </p>
 
               <ul class="check-list" style="gap:6px;padding-top:20px;margin-top:24px">
-                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" ><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>个体与批量筛查：适用于校园、企业、社区场景</li>
-                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" ><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>三模态互补：文本、语音、图像同时进入评估</li>
-                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" ><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>处置闭环：高风险自动进入人工复核并留痕</li>
+                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>动态跨模态哈希检索：毫秒级匹配相似案例</li>
+                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>RAG 报告生成：以检索样例与心理知识库为依据</li>
+                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>三模态互补：文本、语音、图像同时进入评估</li>
+                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>处置闭环：高风险自动进入人工复核并留痕</li>
               </ul>
 
               <div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:8px">
@@ -2173,10 +2174,15 @@
 
         /* 返回主页：不直接调 goTo（它在分页脚本的 IIFE 里，本作用域取不到），
            改为点击同一个目标按钮，复用既有的翻页逻辑；找不到按钮时退回原生滚动。 */
+        /* 顶栏动作：当前在登录屏 → 回主页；当前在主页 → 去登录屏 */
         $("backHome").addEventListener("click", function () {
-          var btn = document.querySelector('nav.sections button[data-goto="top"]');
+          var label = document.getElementById("pageLabel");
+          var target = (label && label.textContent.trim() === "登录") ? "top" : "login";
+          var btn =
+            document.querySelector('nav.sections button[data-goto="' + target + '"]') ||
+            document.querySelector('.dots button[data-goto="' + target + '"]');
           if (btn) { btn.click(); return; }
-          var el = document.getElementById("top");
+          var el = document.getElementById(target);
           if (el) window.scrollTo({ top: Math.max(0, el.offsetTop - 64), behavior: "smooth" });
         });
 
@@ -2440,6 +2446,14 @@
             var label = pageLabels[id];
             var pl = document.getElementById("pageLabel");
             if (label && pl) pl.textContent = label;
+
+            /* 顶栏动作随所在屏切换：登录屏给「返回主页」，主页各屏给「登录」——
+               HTML 是单文件六屏（登录是第 1 屏），写死"返回主页"在主页上就自相矛盾。 */
+            var onLogin = id === "login";
+            var at = document.getElementById("headerActionText");
+            var ai = document.getElementById("headerActionIcon");
+            if (at) at.textContent = onLogin ? "返回主页" : "登录";
+            if (ai) ai.setAttribute("d", onLogin ? "M19 12H5M11 18l-6-6 6-6" : "M5 12h14M13 6l6 6-6 6");
           }
 
           function goTo(id) {
