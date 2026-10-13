@@ -982,6 +982,23 @@ html.reveal-ready .auth-screen.is-inview [data-reveal][data-visual] > * {
   transition-delay: 240ms;
 }
 
+/* 长正文：沿阅读方向做「左→右擦除」式渐显。
+   理由：正文是"读"的内容，跟阅读方向一致才自然；
+   而眉标/标题是"看"的元素，从下往上浮现更有落点感。
+   用 clip-path 揭示（不改变布局、不重排），比整段同时淡入更像"被写上去"。 */
+html.reveal-ready .auth-screen [data-reveal] > .desc-reveal {
+  /* 上下留出余量，避免把中文的字脚/标点裁掉 */
+  clip-path: inset(-10% 100% -10% 0);
+  transition:
+    opacity 620ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 620ms cubic-bezier(0.22, 1, 0.36, 1),
+    clip-path 920ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html.reveal-ready .auth-screen.is-inview [data-reveal] > .desc-reveal {
+  clip-path: inset(-10% 0 -10% 0);
+}
+
 /* 第二层：面板内部的图示元素（链路步骤、指标卡、图表、信息卡、要点条目、徽章）
    也逐个浮现——腾讯系的观感是"文字先来、图示跟上"，而不是整块面板一起出现。
    :not(strong):not(em) 是为了避开正文里的加粗词，否则会出现"句子里某个词后到"的怪相。 */

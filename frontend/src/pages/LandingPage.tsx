@@ -477,7 +477,7 @@ export default function LandingPage() {
             {/* 首屏讲"这个产品能做什么"，技术路线留给「核心技术」屏。
                 依据申报书「使用说明」：用户经三模态采集 → 自动生成预警报告 →
                 管理端完成预警处置与个案跟踪。 */}
-            <p className="mt-8 max-w-[640px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
+            <p className="desc-reveal mt-8 max-w-[640px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
               面向校园、企业、社区的
                 <strong className="font-medium text-slate-800">心理筛查预警平台</strong>
               。用户完成一次文本、语音、图像的三模态采集，系统即以

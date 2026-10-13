@@ -49,7 +49,7 @@ export function Section({
           <h2 className="auth-section-title mt-6 max-w-[720px] text-balance tracking-tight text-slate-900">
             {title}
           </h2>
-          <p className="mt-8 max-w-[640px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
+          <p className="desc-reveal mt-8 max-w-[640px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
             {desc}
           </p>
           {points && points.length > 0 && (
