@@ -34,7 +34,7 @@ export default function BrandLogo({
           </span>
           {showSubtitle && (
             <span
-              className={`block text-[11px] tracking-wide ${
+              className={`block text-[12px] tracking-wide ${
                 light ? "text-white/70" : "text-slate-400"
               }`}
             >

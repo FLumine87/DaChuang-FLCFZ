@@ -431,7 +431,7 @@ html.theme-switching *::after {
     border-top: 1px solid var(--color-slate-100);
     background: var(--color-white);
     color: var(--color-slate-500);
-    font-size: 11px;
+    font-size: 12px;
   }
   /* 展开态页脚不放「折叠侧栏」按钮：侧栏右缘的悬浮把手（.sidebar-handle）
      已经能收起侧栏，同一个动作不必在侧栏里出现两次。

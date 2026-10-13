@@ -47,7 +47,7 @@ export function MetricCard({
           <p className={`text-[28px] font-semibold leading-tight tracking-tight tabular-nums ${valueClassName ?? "text-slate-800"}`}>
             {value}
           </p>
-          {valueNote && <span className="pt-1 text-[11px] text-slate-400">{valueNote}</span>}
+          {valueNote && <span className="pt-1 text-[12px] text-slate-400">{valueNote}</span>}
         </div>
         {trend && (
           <span

@@ -274,7 +274,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         <nav className="sidebar-nav app-scrollbar px-5 pb-5">
           {["工作空间", "智能分析", "健康管理"].map((group) => (
             <div className="sidebar-group mb-7" key={group}>
-              <div className="sidebar-group-title mb-3 flex h-5 items-center px-3 text-[11px] font-medium tracking-widest text-slate-400">
+              <div className="sidebar-group-title mb-3 flex h-5 items-center px-3 text-[12px] font-medium tracking-widest text-slate-400">
                 <span className="sidebar-label">{group}</span>
               </div>
               <div className="space-y-1.5">
@@ -387,7 +387,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                 placeholder="搜索页面…"
                 className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm sm:pr-16"
               />
-              <kbd className="pointer-events-none absolute right-2.5 top-2.5 hidden rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] text-slate-400 sm:block">
+              <kbd className="pointer-events-none absolute right-2.5 top-2.5 hidden rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[12px] text-slate-400 sm:block">
                 ⌘ K
               </kbd>
               {searchOpen && (
@@ -433,7 +433,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                   <span className="block max-w-28 truncate text-sm font-medium text-slate-700">
                     {username}
                   </span>
-                  <span className="block text-[11px] text-slate-400">
+                  <span className="block text-[12px] text-slate-400">
                     {isAdmin ? "管理员" : "个人用户"}
                   </span>
                 </span>

@@ -340,7 +340,7 @@ function ImageTab() {
           onChange={(e) => addFiles(e.target.files)}
         />
         <div className="mt-3 space-y-1 text-xs leading-5 text-slate-500">
-          <p className="text-[11px]">房树人（HTP）：画一幅包含房子、树和人的图，拍照或扫描后上传；不需要画得好看。</p>
+          <p className="text-[12px]">房树人（HTP）：画一幅包含房子、树和人的图，拍照或扫描后上传；不需要画得好看。</p>
           <p>情绪日记配图：上传能表达当天心情的照片或画，例如风景或涂鸦。</p>
         </div>
       </div>

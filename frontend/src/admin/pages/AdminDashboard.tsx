@@ -224,14 +224,14 @@ export default function AdminDashboard() {
                 <CartesianGrid vertical={false} className="chart-grid" />
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 11, fill: "#98a2b3" }}
+                  tick={{ fontSize: 12, fill: "#98a2b3" }}
                   axisLine={false}
                   tickLine={false}
                   dy={10}
                   minTickGap={24}
                 />
                 <YAxis
-                  tick={{ fontSize: 11, fill: "#98a2b3" }}
+                  tick={{ fontSize: 12, fill: "#98a2b3" }}
                   axisLine={false}
                   tickLine={false}
                   allowDecimals={false}

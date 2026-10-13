@@ -311,14 +311,14 @@ export default function DashboardV2() {
               className={`relative min-h-48 border-b border-slate-100 p-6 md:border-r xl:border-b-0 ${step.featured ? "bg-primary-50/45" : "bg-white"}`}
             >
               {step.featured && (
-                <span className="absolute right-4 top-4 rounded-full bg-primary-100 px-2 py-1 text-[10px] font-semibold text-primary-600">
+                <span className="absolute right-4 top-4 rounded-full bg-primary-100 px-2 py-1 text-[12px] font-semibold text-primary-600">
                   核心
                 </span>
               )}
               <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${step.featured ? "bg-primary-600 text-white" : "bg-slate-100 text-slate-600"}`}>
                 <step.icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
               </span>
-              <p className="mt-5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">
+              <p className="mt-5 text-[12px] font-medium uppercase tracking-[0.12em] text-slate-400">
                 0{index + 1} · {step.eyebrow}
               </p>
               <h4 className="mt-2 text-sm font-semibold leading-5 text-slate-800">{step.title}</h4>
@@ -364,8 +364,8 @@ export default function DashboardV2() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke="#f2f4f7" />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#98a2b3" }} axisLine={false} tickLine={false} dy={10} minTickGap={24} />
-                <YAxis tick={{ fontSize: 11, fill: "#98a2b3" }} axisLine={false} tickLine={false} domain={[0, 100]} />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#98a2b3" }} axisLine={false} tickLine={false} dy={10} minTickGap={24} />
+                <YAxis tick={{ fontSize: 12, fill: "#98a2b3" }} axisLine={false} tickLine={false} domain={[0, 100]} />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Area type="monotone" dataKey="mood" name="情绪状态" stroke="#5b6dff" strokeWidth={2.5} fill="url(#dashboard-mood-fill)" isAnimationActive={false} />
                 <Area type="monotone" dataKey="stress" name="压力状态" stroke="#f58b9b" strokeWidth={2} fill="url(#dashboard-stress-fill)" isAnimationActive={false} />

@@ -344,14 +344,14 @@ export default function Dashboard() {
                 <CartesianGrid vertical={false} className="chart-grid" />
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 11, fill: "#98a2b3" }}
+                  tick={{ fontSize: 12, fill: "#98a2b3" }}
                   axisLine={false}
                   tickLine={false}
                   dy={10}
                   minTickGap={24}
                 />
                 <YAxis
-                  tick={{ fontSize: 11, fill: "#98a2b3" }}
+                  tick={{ fontSize: 12, fill: "#98a2b3" }}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -434,7 +434,7 @@ export default function Dashboard() {
                     })}
                   </div>
                   {/* 图例固定两列：列宽只有 1/3 时，四个「区间 + 等级」排一行会挤在一起 */}
-                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] tabular-nums text-slate-400">
+                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] tabular-nums text-slate-400">
                     {bands.map((band) => (
                       <span key={band.level}>
                         {band.from}–{band.to} {levelStyles[band.level].label}
@@ -526,7 +526,7 @@ export default function Dashboard() {
                   <CartesianGrid vertical={false} className="chart-grid" />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 11, fill: "#98a2b3" }}
+                    tick={{ fontSize: 12, fill: "#98a2b3" }}
                     axisLine={false}
                     tickLine={false}
                     dy={6}
@@ -536,7 +536,7 @@ export default function Dashboard() {
                     domain={[4, 8]}
                     ticks={[4, 6, 8]}
                     tickFormatter={(value: number) => `${value}h`}
-                    tick={{ fontSize: 11, fill: "#98a2b3" }}
+                    tick={{ fontSize: 12, fill: "#98a2b3" }}
                     axisLine={false}
                     tickLine={false}
                     width={46}
