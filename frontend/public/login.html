@@ -105,6 +105,42 @@
       .reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(3) { transition-delay: 180ms; }
       .reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(4) { transition-delay: 270ms; }
       .reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(5) { transition-delay: 360ms; }
+      /* 卡片"框"本身也渐入，且与框内首个元素同时起——否则框会先落地、内容再填进去 */
+      .auth-screen [data-visual] {
+        transition: opacity 560ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .reveal-ready .auth-screen [data-visual] { opacity: 0; transform: translateY(18px); }
+      .reveal-ready .auth-screen.is-inview [data-visual] { opacity: 1; transform: none; }
+
+      /* 第二层：面板内部（链路 / 指标行 / 图表 / 信息卡）跟在文字之后浮现 */
+      .auth-screen [data-reveal] > * > *:not(strong):not(em) {
+        transition: opacity 560ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em) { opacity: 0; transform: translateY(12px); }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:not(strong):not(em) { opacity: 1; transform: none; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(1) { transition-delay: 260ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(2) { transition-delay: 330ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(3) { transition-delay: 400ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(4) { transition-delay: 470ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(5) { transition-delay: 540ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(6) { transition-delay: 610ms; }
+
+      /* 第三层：要点条目 / 指标卡 / 链路步骤各自浮现 */
+      .auth-screen [data-reveal] > * > * > *:not(strong):not(em) {
+        transition: opacity 520ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em) { opacity: 0; transform: translateY(10px); }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:not(strong):not(em) { opacity: 1; transform: none; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(1) { transition-delay: 380ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(2) { transition-delay: 430ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(3) { transition-delay: 480ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(4) { transition-delay: 530ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(5) { transition-delay: 580ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(6) { transition-delay: 630ms; }
+
       .reveal-ready .auth-screen [data-reveal] svg.lucide {
         transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1),
                     transform 520ms cubic-bezier(0.34, 1.4, 0.64, 1);
@@ -1554,7 +1590,7 @@
               </div>
             </div>
 
-            <div class="panel" data-reveal>
+            <div class="panel" data-reveal data-visual>
               <p class="panel-label">评估链路</p>
 
               <div class="chart-labels">
@@ -1621,7 +1657,7 @@
                   <li>知识图谱：提升结果可解释性与报告关联性</li>
               </ul>
             </div>
-            <div class="panel" data-reveal>
+            <div class="panel" data-reveal data-visual>
               <p class="panel-label">技术链路</p>
               <div class="panel-body">
                 <div class="chain">
@@ -1666,7 +1702,7 @@
                   <li>标准化量表：PHQ-9 / GAD-7 / ISI / PSS-10 辅助校准</li>
               </ul>
             </div>
-            <div class="panel" data-reveal>
+            <div class="panel" data-reveal data-visual>
               <p class="panel-label">三模态 × 多维度</p>
               <div class="panel-body">
                 <div class="groups">
@@ -1712,7 +1748,7 @@
                   <li>两端协同：Web 端与移动端同步处置进度</li>
               </ul>
             </div>
-            <div class="panel" data-reveal>
+            <div class="panel" data-reveal data-visual>
               <p class="panel-label">四级预警 · 处置闭环</p>
               <div class="panel-body">
                 <div class="levels"><div class="level">
@@ -1772,7 +1808,7 @@
               </ul>
               <p class="footnote">心理筛查预警 · 健康管理平台　|　科学评估 · 隐私保护 · 人工复核</p>
             </div>
-            <div class="panel" data-reveal>
+            <div class="panel" data-reveal data-visual>
               <p class="panel-label">联邦学习架构</p>
               <div class="panel-body">
                 <div class="nodes">

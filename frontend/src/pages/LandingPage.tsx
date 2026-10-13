@@ -518,10 +518,10 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div
-            data-reveal
-            className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-9"
-          >
+          {/* 外层 data-reveal 负责"框"本身的渐入，内层才是内容：
+              否则框会瞬间出现、内容再逐条浮现，看着像"空盒子先落地"。 */}
+          <div data-reveal data-visual>
+            <div className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-9">
             <p className="text-xs font-medium tracking-[0.18em] text-slate-400">评估链路</p>
 
             <div className="relative mt-6 h-6">
@@ -605,6 +605,7 @@ export default function LandingPage() {
                 </div>
               ))}
             </div>
+          </div>
           </div>
         </div>
       </section>

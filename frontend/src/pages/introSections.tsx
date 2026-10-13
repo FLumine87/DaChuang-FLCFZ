@@ -67,7 +67,7 @@ export function Section({
           )}
           {footnote && <p className="mt-10 text-xs text-slate-400">{footnote}</p>}
         </div>
-        <div data-reveal>{visual}</div>
+        <div data-reveal data-visual>{visual}</div>
       </div>
     </section>
   );
