@@ -1157,13 +1157,18 @@ html.reveal-ready .auth-screen.is-inview [data-reveal]:nth-child(2) {
 .auth-snap .auth-hero-title {
   font-size: 2.125rem; /* 34px */
   line-height: 1.2;
-  font-weight: 600;
+  /* 500（Medium）：在 400 的轻盈与 600 的厚重之间取中。
+     密度标定（归一化到同字高后与目标图比对）：
+       400 0.129 / 500 0.159 / 600 0.177，目标图 0.125；
+     400 最贴近截图，但实际观感偏细，按"两者中和"取 500。
+     抗锯齿保持系统默认（auto），不退回灰度抗锯齿。 */
+  font-weight: 500;
   letter-spacing: 0.25px;
 }
 .auth-snap .auth-section-title {
   font-size: 2.375rem; /* 38px */
   line-height: 1.2;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.25px;
 }
 @media (min-width: 640px) {
