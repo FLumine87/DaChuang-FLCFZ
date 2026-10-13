@@ -299,7 +299,7 @@ export function PrivacyVisual() {
   ];
   return (
     <Panel label="联邦学习架构">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         {["学校 A", "学校 B"].map((node) => (
           <div key={node} className="flex items-start gap-3.5 rounded-2xl border border-slate-100 bg-slate-50 p-5">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-primary-500">

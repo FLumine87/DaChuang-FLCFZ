@@ -1113,6 +1113,11 @@
         grid-template-columns: 1fr 1fr;
         gap: 16px;
       }
+      /* 手机上单列：两列时每张卡的文字只剩约 54px 宽，
+         会变成"本地训 练·原 始数据"这种每行 2~3 个字的破版 */
+      @media (max-width: 639px) {
+        .nodes { grid-template-columns: minmax(0, 1fr); }
+      }
 
       .node {
         display: flex;
@@ -1483,6 +1488,14 @@
         .card { padding: 18px; }
         .chart { aspect-ratio: 5 / 1; }
         .points, .check-list { margin-top: 12px; padding-top: 12px; }
+      }
+
+      /* 隐私屏的两张机构卡：手机上单列，否则文字被压到 50~70px 宽、
+         每行只剩 2~3 个字（"本地训 练·原 始数据"） */
+      @media (max-width: 639px) {
+        .panel [style*="grid-template-columns:repeat(2"],
+        .panel [style*="grid-template-columns: repeat(2"],
+        .priv-nodes { grid-template-columns: minmax(0, 1fr) !important; }
       }
 </style>
   </head>
@@ -2572,7 +2585,7 @@
     </script>
 
   
-  <div style="position:fixed;right:14px;bottom:14px;z-index:99999;display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:#067647;color:#fff;font:500 13px/1.4 -apple-system,'PingFang SC',sans-serif;box-shadow:0 8px 24px rgba(16,24,40,.3)">
+  <div style="position:fixed;right:14px;bottom:14px;z-index:99999;pointer-events:none;display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:#067647;color:#fff;font:500 13px/1.4 -apple-system,'PingFang SC',sans-serif;box-shadow:0 8px 24px rgba(16,24,40,.3)">
     <span style="font-weight:600">二改</span><span style="opacity:.75">10-13 版 · 主页 + 登录页拆分</span>
   </div>
 </body>
