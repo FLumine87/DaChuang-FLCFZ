@@ -144,7 +144,8 @@ export default function FirstRunResult() {
       steps={firstRunSteps(4)}
     >
       {/* ============ 本次筛查报告卡 ============ */}
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)] sm:p-7">
+      {/* 长宽固定：切「结果摘要 / 分析依据 / 后续建议」时卡片尺寸不变，内容多就在卡内滚动（用户要求：方框长宽不要变） */}
+      <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)] sm:p-7 report-card">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h2 className="text-base font-semibold text-slate-900">本次筛查结果</h2>
           <p className="text-[12px] text-slate-400">
@@ -217,8 +218,11 @@ export default function FirstRunResult() {
           ))}
         </div>
 
-        {/* 内容区：随标签切换，只展示对应信息 */}
-        <div className="mt-5">
+        {/* 内容区：占满剩余高度，超长时在卡内滚动——这样卡片高度不会随标签变化。
+            子元素用 my-auto 垂直居中：矮内容（结果摘要）不再贴着标签栏顶、
+            把空白全堆在按钮上方；内容超高时 auto 外边距归零，从顶部开始滚动，
+            不会裁掉第一行。 */}
+        <div className="app-scrollbar mt-5 flex min-h-0 flex-1 flex-col overflow-y-auto pr-1 [&>*]:my-auto">
           {tab === "summary" && (
             <div className="grid gap-3">
               {/* 结论与免责声明必须拉开层级：原来两句都是 14/12px 的灰字，
@@ -313,7 +317,7 @@ export default function FirstRunResult() {
         {/* 底部操作：只留一个出口。原先还有个「查看本次记录」，
             它指向工作台那套旧的记录详情页——而结果已经完整体现在这张卡上，
             没必要再把人送走一趟。 */}
-        <div className="mt-6 border-t border-slate-100 pt-5 lg:mt-auto">
+        <div className="mt-6 shrink-0 border-t border-slate-100 pt-5 lg:mt-auto">
           <Link
             to="/personal/dashboard"
             className="ui-button ui-button-primary h-12 w-full rounded-xl"

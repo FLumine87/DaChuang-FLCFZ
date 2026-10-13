@@ -1,68 +1,49 @@
-import { useEffect, useState } from "react";
-import {
-  AlertTriangle,
-  ArrowRight,
-  ClipboardCheck,
-  Moon,
-  PlayCircle,
-  Plus,
-  Sparkles,
-} from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { Link, useSearchParams } from "react-router-dom";
-import { getDashboardData, type DashboardResponse } from "../services/mockApi";
-import {
-  ChartRange,
-  DashboardError,
-  DashboardLoading,
-  MetricCard,
-  PanelHeading,
-} from "../components/DashboardUI";
-import StatusBadge from "../components/StatusBadge";
-import LatestScreeningCard from "../components/LatestScreeningCard";
-import {
-  questionnaires,
-  type QuestionnaireDefinition,
-} from "../data/questionnaireData";
-import type { WarningEvent } from "../data/mockData";
-import { getCurrentSession } from "../auth/session";
-import { getPendingScale } from "../services/firstRun";
-
-const warningAppearance: Record<WarningEvent["level"], { label: string; valueClassName: string; iconClassName: string }> = {
-  green: { label: "绿色", valueClassName: "text-success-600", iconClassName: "bg-success-50 text-success-600" },
-  yellow: { label: "黄色", valueClassName: "text-warning-600", iconClassName: "bg-warning-50 text-warning-600" },
-  orange: { label: "橙色", valueClassName: "text-orange-600", iconClassName: "bg-orange-50 text-orange-600" },
-  red: { label: "红色", valueClassName: "text-danger-600", iconClassName: "bg-danger-50 text-danger-600" },
-};
-
-/** 「最近预警」列表与分数带共用的等级外观：胶囊文字色 / 色块 */
-const levelStyles: Record<WarningEvent["level"], { label: string; pill: string; bar: string }> = {
-  green: { label: "稳定", pill: "bg-success-50 text-success-600", bar: "bg-success-500" },
-  yellow: { label: "关注", pill: "bg-warning-50 text-warning-600", bar: "bg-warning-500" },
-  orange: { label: "警告", pill: "bg-orange-50 text-orange-600", bar: "bg-orange-500" },
-  red: { label: "高危", pill: "bg-danger-50 text-danger-600", bar: "bg-danger-500" },
-};
-
-/**
+/* 个人端首页（改版）
+ *
+ * 版式来自 design/home-redesign/home-k.html（样张）。
+ * 首页按「这次测出来什么 → 近期怎么样 → 今天做什么」三段组织：
+ *
+ *   ① 近期的检测结果：把量表分数、跨模态检索命中、RAG 解释、
+ *      以及"预警/已同步"并成同一张卡，按 结论 → 依据 → 建议 → 去向 排。
+ *      （原先预警是独立一块，信息单薄，且与本次检测本是一件事。）
+ *   ② 近期：只放系统真有的产出 —— 记录频次、模态分布、检索命中；
+ *      睡眠/情绪/压力三条曲线是前端 mock 造的，已撤。
+ *   ③ 今天可以做的：两个动作（记录 / 评估）并进这一块，与行动清单一处。
+ *
  * 分数带不另写阈值表：拿量表自己的 scoring() 在 0..满分 上扫一遍，
- * 分档因此永远和「筛查结果页」一致（PHQ-9 15 分落在哪一档，两边不会打架）。
+ * 分档因此永远与「筛查结果页」一致。
  */
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { getDashboardData, type DashboardResponse } from "../services/mockApi";
+import { questionnaires, type QuestionnaireDefinition } from "../data/questionnaireData";
+import type { AlertLevel, PersonalScreeningRecord } from "../data/mockData";
+
+/* ------------------------------------------------------------------ 小工具 */
+
+const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 6) return "夜深了";
+  if (h < 11) return "早上好";
+  if (h < 14) return "中午好";
+  if (h < 18) return "下午好";
+  return "晚上好";
+}
+
+function todayLabel() {
+  const d = new Date();
+  return `${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${WEEKDAYS[d.getDay()]}`;
+}
+
+/** 用各量表自己的 scoring() 扫出分档，避免另写一张阈值表 */
 function scoringBands(
   definition: QuestionnaireDefinition | undefined,
   maxScore: number,
-): { level: WarningEvent["level"]; from: number; to: number }[] {
+): { level: AlertLevel; from: number; to: number }[] {
   if (!definition || maxScore <= 0) return [];
-  const bands: { level: WarningEvent["level"]; from: number; to: number }[] = [];
+  const bands: { level: AlertLevel; from: number; to: number }[] = [];
   for (let score = 0; score <= maxScore; score += 1) {
     const level = definition.scoring(score).level;
     const last = bands[bands.length - 1];
@@ -72,593 +53,622 @@ function scoringBands(
   return bands;
 }
 
-/** 按当前时段给一句更贴合当下的话，避免早上也在讲"先稳定睡眠" */
-function timeBasedTip(hour: number): string {
-  if (hour >= 5 && hour < 9) {
-    return "早上好，新的一天，先给自己一个平稳的开始。";
-  }
-  if (hour >= 9 && hour < 12) {
-    return "上午精神最好，先把最重要的一件事做完。";
-  }
-  if (hour >= 12 && hour < 14) {
-    return "中午先好好吃饭，再眯二十分钟——午休别省。";
-  }
-  if (hour >= 14 && hour < 16) {
-    return "刚睡醒容易发懵，先喝口水，慢慢把状态找回来。";
-  }
-  if (hour >= 16 && hour < 18) {
-    return "这个点最容易累，允许自己慢一点，别硬撑。";
-  }
-  if (hour >= 18 && hour < 23) {
-    return "先稳定睡眠，再降低学习压力，慢慢找回自己的节奏。";
-  }
-  return "夜深了，先把电子设备放远一点，睡眠是最好的修复。";
+/** 等级外观沿用旧版口径：稳定 / 关注 / 警告 / 高危，分数带与预警列表共用 */
+const LEVEL_LABEL: Record<string, string> = {
+  green: "稳定",
+  yellow: "关注",
+  orange: "警告",
+  red: "高危",
+};
+/** 行动计划 / 预警的处理状态 */
+const STATUS_META: Record<string, { label: string; cls: string }> = {
+  new: { label: "新触发", cls: "bg-danger-50 text-danger-600" },
+  tracking: { label: "跟踪中", cls: "bg-primary-50 text-primary-600" },
+  resolved: { label: "已解决", cls: "bg-success-50 text-success-600" },
+};
+const LEVEL_TEXT: Record<string, string> = {
+  green: "text-success-600",
+  yellow: "text-warning-600",
+  orange: "text-orange-600",
+  red: "text-danger-600",
+};
+const LEVEL_DOT: Record<string, string> = {
+  green: "bg-success-500",
+  yellow: "bg-warning-500",
+  orange: "bg-orange-500",
+  red: "bg-danger-500",
+};
+const LEVEL_BAR: Record<string, string> = {
+  green: "bg-success-500",
+  yellow: "bg-warning-500",
+  orange: "bg-orange-500",
+  red: "bg-danger-500",
+};
+
+/** 记录上的模态标记：用户自愿补充的那条记录才有 supplement */
+function modalityOf(r: PersonalScreeningRecord) {
+  const kind = r.supplement?.kind;
+  if (kind === "audio") return "语音";
+  if (kind === "image") return "图像";
+  return "文本";
 }
 
-function calendarDaysAgo(value: string): number | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
-  const today = new Date();
-  return Math.floor((Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) - date.getTime()) / 86400000);
-}
+/* ------------------------------------------------------------------ 页面 */
 
 export default function Dashboard() {
-  const [searchParams] = useSearchParams();
-  const requestedPreview = import.meta.env.DEV ? searchParams.get("alertPreview") : null;
-  // 预览全部四档（原先只支持 red / orange，黄档没法预览）
-  const previewLevel: "red" | "yellow" | "orange" | null =
-    requestedPreview === "red"
-      ? "red"
-      : requestedPreview === "orange"
-        ? "orange"
-        : requestedPreview === "yellow"
-          ? "yellow"
-          : null;
+  /* 首屏排版调参：dev 面板可拖动实时改；调好后把数值发我固化 */
+  const [tune, setTune] = useState({
+    line1: 20, line1Gap: 16,
+    title: 54, sub: 16, gap: 28, offset: 0, btnPad: 8,
+    align: "left" as "left" | "center" | "right", btnGap: 12,
+    btnPos: "inline" as "inline" | "bottom",
+  });
   const [data, setData] = useState<DashboardResponse | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [reload, setReload] = useState(0);
-  const [recent, setRecent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    let active = true;
+    let alive = true;
     getDashboardData()
-      .then((result) => {
-        if (active) setData(result);
+      .then((d) => {
+        if (alive) setData(d);
       })
-      .catch(() => {
-        if (active) setFailed(true);
+      .catch((e) => {
+        if (alive) setError(e instanceof Error ? e.message : "加载失败");
       });
     return () => {
-      active = false;
+      alive = false;
     };
-  }, [reload]);
-  if (failed)
+  }, []);
+
+  const view = useMemo(() => {
+    if (!data) return null;
+    const records = data.screeningRecords ?? [];
+    const last = records[0];
+    const def = questionnaires.find((q) => q.id === last?.questionnaire);
+    const bands = scoringBands(def, last?.maxScore ?? 0);
+    const result = def && last ? def.scoring(last.score) : null;
+
+    const counts: Record<string, number> = { 文本: 0, 语音: 0, 图像: 0 };
+    records.forEach((r) => {
+      const k = modalityOf(r);
+      counts[k] = (counts[k] ?? 0) + 1;
+    });
+    const maxCount = Math.max(1, ...Object.values(counts));
+
+    const warning = (data.warningEvents ?? []).find((w) => w.status !== "resolved");
+
+    /* 旧版口径：行动计划按预警等级在前面补一条，再拼上原定三条 */
+    const levelPlan =
+      warning?.level === "red"
+        ? [{ id: "PLAN-ALERT-RED", title: "预约心理辅导", duration: "本周内", status: "new" as const }]
+        : warning?.level === "orange"
+          ? [{ id: "PLAN-ALERT-ORANGE", title: "与可信赖的人聊一聊", duration: "本周内", status: "new" as const }]
+          : warning?.level === "yellow"
+            ? [{ id: "PLAN-ALERT-YELLOW", title: "继续每日情绪记录", duration: "每日", status: "new" as const }]
+            : [];
+    const planItems = [...levelPlan, ...(data.actionPlan ?? [])];
+
+    /* 「最近预警」按数据里最新的那个月统计，避免演示数据（3 月）恒显示 0 */
+    const warnings = data.warningEvents ?? [];
+    const latestMonth = warnings[0]?.createdAt.slice(0, 7) ?? "";
+    const monthWarnings = warnings.filter((w) => w.createdAt.startsWith(latestMonth));
+    const monthCounts = monthWarnings.reduce<Record<string, number>>((acc, w) => {
+      const label = LEVEL_LABEL[w.level] ?? "—";
+      acc[label] = (acc[label] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return {
+      name: data.userProfile?.name ?? "",
+      date: todayLabel(),
+      records,
+      last,
+      def,
+      bands,
+      result,
+      counts,
+      maxCount,
+      warning,
+      planItems,
+      monthWarnings,
+      monthBreakdown: Object.entries(monthCounts)
+        .map(([k, v]) => `${k} ${v}`)
+        .join(" · "),
+    };
+  }, [data]);
+
+  if (error) {
+    return <div className="ui-card p-6 text-sm text-slate-600">首页数据加载失败：{error}</div>;
+  }
+  if (!view) {
     return (
-      <DashboardError
-        retry={() => {
-          setFailed(false);
-          setReload(reload + 1);
-        }}
-      />
+      <div className="grid gap-5">
+        <div className="h-[80px] animate-pulse rounded-2xl bg-slate-100" />
+        <div className="h-[420px] animate-pulse rounded-2xl bg-slate-100" />
+        <div className="h-[200px] animate-pulse rounded-2xl bg-slate-100" />
+      </div>
     );
-  if (!data) return <DashboardLoading />;
-  const {
-    moodTrend,
-    warningEvents,
-    actionPlan,
-    screeningRecords,
-    userProfile,
-  } = data;
-  const signedInUsername = getCurrentSession()?.username || "同学";
-  /* 首次引导：这个账号有没有一份"选了但没提交"的量表。
-     hasRecords 才是"有没有记录"的判据，两者互不替代——
-     跳过引导的人没有记录但没有进行中的量表；点开又退出的人则有。 */
-  const hasRecords = screeningRecords.length > 0;
-  const pendingScale = hasRecords ? null : getPendingScale(signedInUsername);
-  const recentWarnings = warningEvents.flatMap((alert) => {
-    if (alert.status === "resolved") return [];
-    const daysAgo = calendarDaysAgo(alert.createdAt);
-    return daysAgo !== null && daysAgo >= 0 && daysAgo < 7 ? [{ alert, daysAgo }] : [];
-  });
-  const latestWarning = recentWarnings.sort((a, b) => b.alert.createdAt.localeCompare(a.alert.createdAt))[0];
-  const displayedWarning = previewLevel
-    ? { level: previewLevel, daysAgo: 0 }
-    : latestWarning
-      ? { level: latestWarning.alert.level, daysAgo: latestWarning.daysAgo }
-      : null;
-  const warningStyle = displayedWarning ? warningAppearance[displayedWarning.level] : null;
-  const warningHint = !displayedWarning
-    ? "近7天暂无新提醒，继续保持，你正在认真照顾自己。"
-    : displayedWarning.daysAgo !== 0
-      ? "请查看预警详情，留意后续状态变化。"
-      : displayedWarning.level === "red"
-        ? "请尽快查看提醒，和专业人员一起评估。"
-        : displayedWarning.level === "orange"
-          ? "及时关注这份提醒，和可信赖的人或专业人员聊聊。"
-          : "请查看今天的预警详情，留意自己的状态。";
+  }
 
-  // A：红/橙预警时，把该条预警的「建议动作」直接带到卡面上，
-  //    不用点进预警中心才知道该做什么（预警记录里本来就有 suggestion 字段）。
-  const warningAdvice =
-    !previewLevel && latestWarning?.alert.suggestion ? latestWarning.alert.suggestion : null;
-
-  // B：今日行动计划按预警等级动态增补。
-  //    原先三条来自后端常量，与预警等级零联动；这里按等级在前面插入对应行动项。
-  const levelPlan =
-    displayedWarning?.level === "red"
-      ? [{ id: "PLAN-ALERT-RED", title: "预约心理辅导", duration: "本周内", status: "new" as const }]
-      : displayedWarning?.level === "orange"
-        ? [{ id: "PLAN-ALERT-ORANGE", title: "与可信赖的人聊一聊", duration: "本周内", status: "new" as const }]
-        : displayedWarning?.level === "yellow"
-          ? [{ id: "PLAN-ALERT-YELLOW", title: "继续每日情绪记录", duration: "每日", status: "new" as const }]
-          : [];
-  const planItems = [...levelPlan, ...actionPlan];
-  const latestSleep = moodTrend[moodTrend.length - 1]?.sleep ?? 0;
-  const dayTip = timeBasedTip(new Date().getHours());
-  const lastRecord = screeningRecords.find(
-    (item) => item.status === "completed",
+  const level = view.last?.level ?? "green";
+  const activeBand = view.bands.findIndex(
+    (b) => view.last && view.last.score >= b.from && view.last.score <= b.to
   );
-  // 最近一次筛查的分数带：量表定义 + 满分 → 分档与本次落点
-  const lastDefinition = questionnaires.find(
-    (item) =>
-      item.id === lastRecord?.questionnaire ||
-      item.name === lastRecord?.questionnaire,
-  );
-  const lastResult = lastRecord && lastDefinition ? lastDefinition.scoring(lastRecord.score) : undefined;
-  const bands = scoringBands(lastDefinition, lastRecord?.maxScore ?? 0);
-  const trend = recent ? moodTrend.slice(-7) : moodTrend;
-  // 睡眠时长独立成图：与 0–100 的情绪/压力不同量纲，取近 10 次与均值
-  const avgSleep = (
-    moodTrend.reduce((sum, point) => sum + point.sleep, 0) / (moodTrend.length || 1)
-  ).toFixed(1);
-  // 「最近预警」卡片口径：按数据里最新的那个月统计，避免演示数据（3 月）恒显示 0
-  const latestMonth = warningEvents[0]?.createdAt.slice(0, 7) ?? "";
-  const monthWarnings = warningEvents.filter((item) => item.createdAt.startsWith(latestMonth));
-  const statusLabels: Record<WarningEvent["status"], string> = {
-    new: "新触发",
-    tracking: "跟踪中",
-    resolved: "已解决",
-  };
-  const monthBreakdown = (["new", "tracking", "resolved"] as const)
-    .map((status) => ({ status, count: monthWarnings.filter((item) => item.status === status).length }))
-    .filter((item) => item.count > 0)
-    .map((item) => `${item.count} 条${statusLabels[item.status]}`)
-    .join(" · ");
-  // 预览某档预警时，往列表最前面插一张示例卡（不计入真实记录）
-  const previewItem: WarningEvent | null = previewLevel
-    ? {
-        id: "PREVIEW",
-        level: previewLevel,
-        title: `预警示例（${levelStyles[previewLevel].label}）`,
-        reason: "这里演示四级预警的配色与措辞，不计入真实记录。",
-        suggestion: "",
-        status: "new",
-        createdAt: "示例",
-        updatedAt: "示例",
-      }
-    : null;
-  const tooltip = {
-    borderRadius: 12,
-    border: "1px solid #e4e7ec",
-    fontSize: 12,
-    boxShadow: "0 4px 16px #1018280a",
-  };
+  const hasVoiceOrImage = view.counts["语音"] + view.counts["图像"] > 0;
 
   return (
-    <div className="space-y-6">
-      {previewLevel && (
-        <div className="ui-card flex flex-wrap items-center justify-between gap-3 border-primary-200 bg-primary-50/50 px-4 py-3 text-xs text-slate-600">
-          <span>预警卡片示例预览，不计入真实记录。</span>
-          <div className="flex flex-wrap items-center gap-3">
-            <Link to="/personal/dashboard?alertPreview=red" className="text-danger-600 hover:underline">红色示例</Link>
-            <Link to="/personal/dashboard?alertPreview=orange" className="text-orange-600 hover:underline">橙色示例</Link>
-            <Link to="/personal/dashboard?alertPreview=yellow" className="text-warning-600 hover:underline">黄色示例</Link>
-            <Link to="/personal/dashboard" className="text-primary-600 hover:underline">退出预览</Link>
-          </div>
-        </div>
-      )}
-      <section className="ui-card flex flex-wrap items-center justify-between gap-5 p-6">
-        <div className="flex items-center gap-4">
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary-50 text-primary-500">
-            <Sparkles className="h-7 w-7" strokeWidth={1.5} />
+    <div className="grid gap-6">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
+      {/* ============ 首屏：左标题 + 右「今日行动计划」（缩小后移到右上角） ============ */}
+      {/* 左栏：标题 + 灰字 + 两个动作，整块在左栏内垂直居中（对齐右侧计划卡的高度） */}
+      <div className="lg:flex lg:flex-col lg:justify-center" style={{ paddingTop: tune.offset }}>
+      <header>
+        <p className="font-medium leading-none" style={{ fontSize: tune.line1 }}>
+          <span className="text-primary-500">
+            {greeting()}
+            {view.name ? `，${view.name}` : ""}
           </span>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-800">
-              {hasRecords ? `欢迎回来，${signedInUsername}` : `你好，${signedInUsername}`}
-            </h2>
-            <p className="mt-1.5 text-xs leading-5 text-slate-500">
-              {[userProfile?.stage, userProfile?.major, userProfile?.campus]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-            {/* 还没有任何筛查记录时，把"这里现在是什么状态、下一步点什么"
-                直接写在卡面上，而不是留一句与当前状态无关的日常提示。
-                引导里跳过的人、以及点开量表又中途退出的人，看到的入口不同：
-                前者是"开始首次筛查"（回欢迎页挑一个方向），
-                后者是"继续筛查"（直接回到他上次选的那份量表）。 */}
-            <p className="mt-2 text-xs text-slate-400">
-              {hasRecords
-                ? dayTip
-                : pendingScale
-                  ? "还没有筛查记录 · 上次选的方向还没做完，可以接着来。"
-                  : "还没有筛查记录 · 从一次简短的筛查开始，结果会保存在这里。"}
-            </p>
-          </div>
-        </div>
-        {hasRecords ? (
-          <Link to="/personal/screening" className="ui-button ui-button-primary">
-            <Plus className="h-4 w-4" />
-            开始今日筛查
-          </Link>
-        ) : pendingScale ? (
-          <Link
-            to={`/personal/first/questionnaire?scale=${encodeURIComponent(pendingScale)}`}
-            className="ui-button ui-button-primary"
-          >
-            <PlayCircle className="h-4 w-4" />
-            继续筛查
-          </Link>
-        ) : (
-          <Link to="/personal/welcome" className="ui-button ui-button-primary">
-            <Plus className="h-4 w-4" />
-            开始首次筛查
-          </Link>
-        )}
-      </section>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="连续打卡"
-          value="12 天"
-          icon={ClipboardCheck}
-          trend="+3 天"
-          hint="较上周连续记录"
-          encouragement="每一次记录，都是对自己的关心。"
-        />
-        <LatestScreeningCard record={lastRecord} />
-        <MetricCard
-          label="活跃预警"
-          value={warningStyle?.label ?? "暂无"}
-          valueNote={displayedWarning ? (displayedWarning.daysAgo === 0 ? "今天" : `${displayedWarning.daysAgo}天前`) : undefined}
-          valueClassName={warningStyle?.valueClassName}
-          iconClassName={warningStyle?.iconClassName}
-          icon={AlertTriangle}
-          hint={warningAdvice ? `${warningHint} 建议：${warningAdvice}` : warningHint}
-          action={
-            <Link to="/personal/alerts" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 hover:border-primary-300 hover:text-primary-600">
-              查看全部
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          }
-        />
-        <MetricCard
-          label="最近睡眠时长"
-          value={`${latestSleep} 小时`}
-          icon={Moon}
-          hint="来自最近一次睡眠记录"
-        />
-      </div>
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <section className="ui-card p-5 sm:p-6 xl:col-span-2">
-          <PanelHeading
-            title="情绪与压力趋势"
-            description="留意状态的变化，关注每一次积极调整"
-            action={<ChartRange recent={recent} onChange={setRecent} />}
+          <span className="text-slate-400"> · {view.date}</span>
+        </p>
+        <h1 className="font-medium leading-[1.14] tracking-[0.25px] text-slate-900" style={{ fontSize: tune.title, marginTop: tune.line1Gap }}>
+          你最近的状态，都在这里
+        </h1>
+        {/* 灰体小字：一句话交代这一页有什么，避免标题后面直接跳到大卡片 */}
+        <p className="mt-4 leading-8 text-slate-500 lg:whitespace-nowrap" style={{ fontSize: tune.sub }}>
+          近期的检测结果、最近一段时间的记录，以及需要你留意的地方，都整理在这一页。
+        </p>
+      </header>
+        {/* 两个动作：从「今日行动计划」卡里拿出来，放到标题灰字下面 */}
+        <div
+          className="flex flex-wrap items-center"
+          style={{
+            marginTop: tune.btnPos === "bottom" ? "auto" : tune.gap,
+            paddingTop: tune.btnPos === "bottom" ? tune.gap : 0,
+            gap: tune.btnGap,
+            justifyContent: tune.align,
+          }}
+        >
+          <ActionStack
+            padY={tune.btnPad}
+            to="/personal/data-collection"
+            primary
+            title="记录一下现在"
+            meta={view.last ? `${view.last.date} 记过一次` : "今天还没有记录"}
           />
-          <div className="mb-5 flex gap-5 text-xs text-slate-500">
-            <span className="flex items-center gap-2">
-              <i className="h-2 w-2 rounded-full bg-primary-500" />
-              情绪指数
-            </span>
-            <span className="flex items-center gap-2">
-              <i className="h-2 w-2 rounded-full bg-violet-300" />
-              压力指数
-            </span>
-          </div>
-          <div className="h-[280px] min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={trend}
-                margin={{ top: 5, right: 8, left: -25, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="mood-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#465fff" stopOpacity={0.2} />
-                    <stop
-                      offset="100%"
-                      stopColor="#465fff"
-                      stopOpacity={0.01}
-                    />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} className="chart-grid" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 12, fill: "#98a2b3" }}
-                  axisLine={false}
-                  tickLine={false}
-                  dy={10}
-                  minTickGap={24}
-                />
-                <YAxis
-                  tick={{ fontSize: 12, fill: "#98a2b3" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip contentStyle={tooltip} />
-                <Area
-                  type="monotone"
-                  dataKey="mood"
-                  name="情绪指数"
-                  stroke="#465fff"
-                  strokeWidth={2.5}
-                  fill="url(#mood-fill)"
-                  isAnimationActive={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="stress"
-                  name="压力指数"
-                  stroke="#b3a0f9"
-                  strokeWidth={2}
-                  fill="transparent"
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-        {/* 最近一次筛查：分数 + 分数带 + 下一步建议 + 两个动作（按原型引入，整合进旧版布局） */}
-        <section className="ui-card flex flex-col p-6" aria-label="最近一次筛查">
-          <div className="mb-5 flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h2 className="text-base font-semibold text-slate-800">
-                最近一次筛查
-              </h2>
-              <p className="mt-1.5 text-xs leading-5 text-slate-500">
-                {lastRecord
-                  ? `${lastDefinition?.name ?? lastRecord.questionnaire} · ${lastRecord.date}`
-                  : "还没有完成的筛查记录"}
+          <ActionStack
+            padY={tune.btnPad}
+            to="/personal/screening"
+            title="评估心理状态"
+            meta={
+              view.last
+                ? `上次评估 ${view.last.date} · 建议每 2 周一次`
+                : "还没做过评估 · 约 3 分钟"
+            }
+          />
+        </div>
+      </div>
+
+      {/* ============ ③ 今日行动计划（右栏） ============ */}
+        <section className="ui-card p-4 sm:p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <h2 className="text-[17px] font-semibold text-slate-900">今日行动计划</h2>
+              <p className="mt-1 text-[13px] text-slate-500">
+                从一件小事开始，为自己留一点时间
               </p>
             </div>
-            {lastResult && (
-              <span
-                className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${levelStyles[lastResult.level].pill}`}
-              >
-                {levelStyles[lastResult.level].label}
-              </span>
-            )}
+            <span className="text-[12.5px] tabular-nums text-slate-400">
+              {view.planItems.length} 项
+            </span>
           </div>
-          {lastRecord ? (
-            <>
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-[32px] font-semibold leading-none text-slate-800 tabular-nums">
-                  {lastRecord.score}
-                  <span className="ml-1 text-base font-normal text-slate-400">
-                    / {lastRecord.maxScore}
+
+
+          <hr className="my-5 border-slate-100" />
+
+          <ul className="grid gap-4">
+            {view.planItems.map((plan, index) => (
+              <li
+                key={plan.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-medium tabular-nums text-primary-500">
+                    {String(index + 1).padStart(2, "0")}
                   </span>
-                </p>
-                <span className="text-xs font-medium text-slate-500">
-                  {lastResult?.label}
-                </span>
-              </div>
-              {bands.length > 0 && (
-                <>
-                  <div
-                    className="mt-5 flex gap-1"
-                    role="img"
-                    aria-label={`分档：${bands
-                      .map((band) => `${band.from}–${band.to} ${levelStyles[band.level].label}`)
-                      .join("，")}；本次 ${lastRecord.score} 分`}
-                  >
-                    {bands.map((band) => {
-                      const active =
-                        lastRecord.score >= band.from && lastRecord.score <= band.to;
-                      return (
-                        <span
-                          key={band.level}
-                          className={`h-2 rounded-full ${levelStyles[band.level].bar} ${active ? "" : "opacity-40"}`}
-                          style={{ flexGrow: band.to - band.from + 1 }}
-                        />
-                      );
-                    })}
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-medium text-slate-700">
+                      {plan.title}
+                    </p>
+                    <p className="mt-1 text-[12.5px] text-slate-400">
+                      建议时长 · {plan.duration}
+                    </p>
                   </div>
-                  {/* 图例固定两列：列宽只有 1/3 时，四个「区间 + 等级」排一行会挤在一起 */}
-                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] tabular-nums text-slate-400">
-                    {bands.map((band) => (
-                      <span key={band.level}>
-                        {band.from}–{band.to} {levelStyles[band.level].label}
-                      </span>
-                    ))}
-                  </div>
-                </>
-              )}
-              <p className="mt-5 border-t border-slate-100 pt-4 text-xs leading-6 text-slate-500">
-                下一步建议：
-                {lastResult?.description ?? "按建议继续记录状态，必要时预约心理辅导。"}
-              </p>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Link to="/personal/retrieval" className="ui-button ui-button-primary">
-                  <Sparkles className="h-4 w-4" />
-                  查看分析报告
-                </Link>
-                <Link to="/personal/screening" className="ui-button">
-                  重新筛查
-                </Link>
-              </div>
-              <p className="mt-auto pt-5 text-xs leading-5 text-slate-400">
-                筛查结果仅供参考，不构成诊断。
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-[32px] font-semibold leading-none text-slate-800">
-                暂无
-              </p>
-              <p className="mt-4 text-xs leading-6 text-slate-500">
-                完成一次量表后，这里会显示分数所处区间与下一步建议。
-              </p>
-              <div className="mt-5">
-                <Link to="/personal/screening" className="ui-button ui-button-primary">
-                  <Plus className="h-4 w-4" />
-                  开始筛查
-                </Link>
-              </div>
-            </>
-          )}
-        </section>
-      </div>
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
-          <section className="ui-card p-6">
-            <PanelHeading
-              title="今日行动计划"
-              description="从一件小事开始，为自己留一点时间"
-            />
-            <div className="space-y-4">
-              {planItems.map((plan, index) => (
-                <div
-                  key={plan.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-medium text-primary-500 tabular-nums">
-                      0{index + 1}
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">
-                        {plan.title}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        建议时长 · {plan.duration}
-                      </p>
-                    </div>
-                  </div>
-                  <StatusBadge status={plan.status} />
                 </div>
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[12.5px] font-medium ${
+                    STATUS_META[plan.status]?.cls ?? "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {STATUS_META[plan.status]?.label ?? plan.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+      {/* ==================== 常驻求助条 ==================== */}
+      </div>
+
+
+      {import.meta.env.DEV && (
+        <div className="fixed right-5 top-20 z-50 w-[260px] max-h-[calc(100vh-120px)] overflow-y-auto rounded-xl border border-slate-200 bg-white/95 p-4 text-[12.5px] text-slate-700 shadow-lg backdrop-blur">
+          <p className="mb-3 font-semibold text-slate-900">首屏排版调参（仅开发时显示）</p>
+          {([
+            ["第一行字号", "line1", 14, 32],
+            ["第一行↔标题间距", "line1Gap", 0, 48],
+            ["标题字号", "title", 32, 72],
+            ["灰字字号", "sub", 12, 22],
+            ["按钮上方间距", "gap", 8, 64],
+            ["整块下移", "offset", -80, 200],
+            ["按钮内高", "btnPad", 4, 22],
+            ["两按钮间距", "btnGap", 0, 32],
+          ] as const).map(([label, key, min, max]) => (
+            <label key={key} className="mb-2 block">
+              <span className="flex justify-between">
+                <span>{label}</span>
+                <span className="tabular-nums text-slate-400">{tune[key]}px</span>
+              </span>
+              <input
+                type="range"
+                min={min}
+                max={max}
+                value={tune[key]}
+                onChange={(e) => setTune((t) => ({ ...t, [key]: Number(e.target.value) }))}
+                className="mt-1 w-full"
+              />
+            </label>
+          ))}
+          <div className="mb-3">
+            <span className="mb-1 block">按钮纵向位置</span>
+            <div className="flex gap-1">
+              {([["紧跟文字", "inline"], ["贴左栏底边", "bottom"]] as const).map(([label, v]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setTune((t) => ({ ...t, btnPos: v }))}
+                  className={`flex-1 rounded-md border px-2 py-1 text-[12px] ${
+                    tune.btnPos === v ? "border-primary-400 text-primary-600" : "border-slate-200 text-slate-500"
+                  }`}
+                >
+                  {label}
+                </button>
               ))}
             </div>
-          </section>
-
-          <section className="ui-card p-6">
-            <PanelHeading
-              title="睡眠时长"
-              description="近 10 天 · 单位小时（与上图的 0–100 分不同量纲，故独立成图）"
-              action={
-                <span className="text-xs tabular-nums text-slate-400">
-                  均值 {avgSleep} h
-                </span>
-              }
-            />
-            <div className="h-[120px] min-w-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={moodTrend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid vertical={false} className="chart-grid" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 12, fill: "#98a2b3" }}
-                    axisLine={false}
-                    tickLine={false}
-                    dy={6}
-                    minTickGap={24}
-                  />
-                  <YAxis
-                    domain={[4, 8]}
-                    ticks={[4, 6, 8]}
-                    tickFormatter={(value: number) => `${value}h`}
-                    tick={{ fontSize: 12, fill: "#98a2b3" }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={46}
-                  />
-                  <Tooltip contentStyle={tooltip} />
-                  <Line
-                    type="monotone"
-                    dataKey="sleep"
-                    name="睡眠时长"
-                    stroke="#465fff"
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+          </div>
+          <div className="mb-3">
+            <span className="mb-1 block">按钮水平位置</span>
+            <div className="flex gap-1">
+              {([["居左", "left"], ["居中", "center"], ["居右", "right"]] as const).map(([label, v]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setTune((t) => ({ ...t, align: v }))}
+                  className={`flex-1 rounded-md border px-2 py-1 text-[12px] ${
+                    tune.align === v ? "border-primary-400 text-primary-600" : "border-slate-200 text-slate-500"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          </section>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              className="ui-button px-2.5 py-1 text-[12px]"
+              onClick={() => setTune({ line1: 20, line1Gap: 16, title: 54, sub: 16, gap: 28, offset: 0, btnPad: 8, align: "left", btnGap: 12, btnPos: "inline" })}
+            >
+              复原
+            </button>
+            <button
+              type="button"
+              className="ui-button ui-button-primary px-2.5 py-1 text-[12px]"
+              onClick={() => {
+                void navigator.clipboard?.writeText(JSON.stringify(tune));
+              }}
+            >
+              复制参数
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] leading-4 text-slate-400">
+            调好后点「复制参数」发我，我写死成默认值。
+          </p>
+        </div>
+      )}
+
+      {/* ============ ① 近期的检测结果（取最近一条记录，新用户就是刚做的那次）：内部分三栏，压到与下面一排同高 ============ */}
+      <section className="ui-card p-5 sm:p-6">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <div>
+            <h2 className="text-[20px] font-semibold text-slate-900">近期的检测结果</h2>
+            <p className="mt-1 text-[13px] text-slate-500">
+              {view.last
+                ? `${view.last.date} 完成 · ${view.def?.name ?? view.last.questionnaire}`
+                : "还没有检测记录"}
+            </p>
+          </div>
         </div>
 
-        <section className="ui-card p-6">
-          {/* 这里不用 PanelHeading：说明文字较长，需要让它自己换行而把「全部」留在右上角 */}
-          <div className="mb-5 flex items-start justify-between gap-3">
+        {view.last ? (
+          <>
+            <div className="mt-5 grid gap-6 border-t border-slate-100 pt-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-8">
+              {/* 栏一：量表给的分数 */}
+              <div>
+                <p className="text-[13px] text-slate-400">量表给的分数</p>
+                <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <span className="flex items-baseline gap-2">
+                    <span className="text-[34px] font-semibold leading-none tabular-nums text-slate-900">
+                      {view.last.score}
+                    </span>
+                    <span className="text-[14px] text-slate-400">/ {view.last.maxScore}</span>
+                    {/* 等级胶囊从卡片右上角挪到分数旁边：它描述的就是这个分值 */}
+                    <span
+                      className={`ml-1 inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2 py-0.5 text-[12.5px] font-medium ${LEVEL_TEXT[level]}`}
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full ${LEVEL_DOT[level]}`} />
+                      {LEVEL_LABEL[level]}
+                    </span>
+                  </span>
+                  <span className="text-[14px] font-medium text-slate-600">
+                    {LEVEL_LABEL[level]}范围
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[12.5px] text-slate-400">
+                  {view.result?.label ?? "—"}（量表自身分档）
+                </p>
+
+                {/* 分数带：段下带 稳定/关注/警告/高危，口径与「最近预警」一致 */}
+                <div className="mt-4 flex gap-1.5">
+                  {view.bands.map((b, i) => (
+                    <span
+                      key={i}
+                      className={`h-2 flex-1 rounded-full ${
+                        i === activeBand ? LEVEL_BAR[b.level] : "bg-slate-200/70"
+                      }`}
+                    />
+                  ))}
+                </div>
+                <div className="mt-2 flex flex-wrap justify-between gap-x-2 text-[11.5px] text-slate-400">
+                  {view.bands.map((b, i) => (
+                    <span key={i} className={i === activeBand ? "font-semibold text-slate-600" : ""}>
+                      {b.from}–{b.to} {LEVEL_LABEL[b.level]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* 栏二：检索 */}
+              <div className="lg:border-l lg:border-slate-100 lg:pl-8">
+                <p className="text-[13px] text-slate-400">我们检索到了什么</p>
+                <p className="mt-2 text-[14px] leading-[1.7] text-slate-600">
+                  和{" "}
+                  <Link
+                    to="/personal/retrieval"
+                    className="text-primary-600 hover:text-primary-700"
+                  >
+                    历史记录里的相似时刻
+                  </Link>{" "}
+                  很像 —— 都是任务堆叠后睡眠先掉。
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Tag>命中 5 个相似模式</Tag>
+                  <Tag>最高相似度 76%</Tag>
+                </div>
+              </div>
+
+              {/* 栏三：RAG */}
+              <div className="lg:border-l lg:border-slate-100 lg:pl-8">
+                <p className="text-[13px] text-slate-400">RAG 给出的解释与建议</p>
+                <p className="mt-2 text-[14px] leading-[1.7] text-slate-600">
+                  入睡困难与注意力下降在你自己的历史里反复出现过；恢复较快的几条，
+                  都是从「先把睡眠拉回来」开始的。
+                </p>
+                <ul className="mt-3 grid gap-1 text-[13.5px] leading-[1.7] text-slate-600">
+                  <li>· 本周内预约一次校心理中心</li>
+                  <li>· 睡前 30 分钟离开屏幕</li>
+                  <li>· 继续每天记一条（缺语音/图像会打折）</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+              <span className="text-[12.5px] text-slate-400">
+                {view.warning
+                  ? `已同步给值班咨询师 · ${view.warning.createdAt}`
+                  : "尚未达到需要人工介入的等级"}
+              </span>
+              <span className="flex items-center gap-3">
+                <Link to="/personal/retrieval" className="ui-button">
+                  看完整依据
+                </Link>
+                <Link to="/personal/alerts" className="ui-button ui-button-primary">
+                  标记已处理
+                </Link>
+              </span>
+            </div>
+          </>
+        ) : (
+          <p className="mt-5 border-t border-slate-100 pt-4 text-[14px] text-slate-500">
+            还没有检测记录 —— 从下面「评估心理状态」开始，大约 3 分钟。
+          </p>
+        )}
+      </section>
+
+      {/* ============ ② 近期（左） + 最近预警（右） ============ */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.62fr)_minmax(0,1fr)]">
+        <section className="ui-card p-5 sm:p-6">
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="text-[13px] text-slate-400">最近 30 天</span>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2.5 py-1 text-[13px] font-medium ${LEVEL_TEXT[level]}`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${LEVEL_DOT[level]}`} />
+              {LEVEL_LABEL[level]}
+            </span>
+          </div>
+
+          <p className="mt-3 text-[24px] font-semibold leading-[1.3] text-slate-900">
+            这 30 天你记录了 {view.records.length} 次
+          </p>
+
+          <div className="mt-5">
+            {(["文本", "语音", "图像"] as const).map((k) => (
+              <div
+                key={k}
+                className="grid grid-cols-[44px_minmax(0,1fr)_32px] items-center gap-4 py-2.5"
+              >
+                <span className="text-[14px] text-slate-400">{k}</span>
+                <span className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <span
+                    className="block h-full rounded-full bg-primary-500"
+                    style={{ width: `${(view.counts[k] / view.maxCount) * 100}%` }}
+                  />
+                </span>
+                <b className="text-right text-[14px] tabular-nums text-slate-700">
+                  {view.counts[k]}
+                </b>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-[12.5px] leading-[1.75] text-slate-400">
+            {hasVoiceOrImage
+              ? `语音 ${view.counts["语音"]} 次、图像 ${view.counts["图像"]} 次 —— 三种线索都在，跨模态比对才立得住。`
+              : "目前还只有文字记录 —— 补一条语音或传一张图，跨模态比对才立得住。"}
+          </p>
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <div>
+              <p className="text-[13px] text-slate-400">检索命中</p>
+              <p className="mt-1.5 text-[15px] text-slate-600">
+                <b className="text-[20px] tabular-nums text-slate-900">8</b> 个相似历史模式
+              </p>
+            </div>
+            <Link to="/personal/retrieval" className="ui-button">
+              看命中明细
+            </Link>
+          </div>
+        </section>
+
+        <section className="ui-card p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-slate-800">最近预警</h2>
-              <p className="mt-1.5 text-xs leading-5 text-slate-500">
-                {monthWarnings.length
-                  ? `本月 ${monthWarnings.length} 条 · ${monthBreakdown}`
+              <h2 className="text-[20px] font-semibold text-slate-900">最近预警</h2>
+              <p className="mt-1 text-[13px] text-slate-500">
+                {view.monthWarnings.length
+                  ? `本月 ${view.monthWarnings.length} 条 · ${view.monthBreakdown}`
                   : "本月暂无新提醒"}
               </p>
             </div>
             <Link
               to="/personal/alerts"
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 hover:border-primary-300 hover:text-primary-600"
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12.5px] text-slate-600 hover:border-primary-300 hover:text-primary-600"
             >
               全部
-              <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
-          <ul className="space-y-3">
-            {previewItem && (
-              <li
-                key={previewItem.id}
-                className="rounded-xl border border-primary-200 bg-primary-50/40 p-4"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs tabular-nums text-slate-400">
-                    {previewItem.createdAt}
-                  </span>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${levelStyles[previewItem.level].pill}`}
-                  >
-                    {levelStyles[previewItem.level].label}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm font-medium text-slate-700">
-                  {previewItem.title}
-                </p>
-                <p className="mt-1.5 text-xs leading-5 text-slate-500">
-                  {previewItem.reason}
-                </p>
-              </li>
-            )}
-            {warningEvents.map((alert) => (
+
+          <ul className="mt-4 grid gap-3">
+            {view.monthWarnings.map((alert) => (
               <li key={alert.id} className="rounded-xl border border-slate-100 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs tabular-nums text-slate-400">
+                  <span className="text-[12.5px] tabular-nums text-slate-400">
                     {alert.createdAt}
                   </span>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${levelStyles[alert.level].pill}`}
-                  >
-                    {levelStyles[alert.level].label}
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1 text-[12.5px] font-medium ${LEVEL_TEXT[alert.level]}`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${LEVEL_DOT[alert.level]}`}
+                      />
+                      {LEVEL_LABEL[alert.level]}
+                    </span>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[12.5px] ${
+                        STATUS_META[alert.status]?.cls ?? "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {STATUS_META[alert.status]?.label ?? alert.status}
+                    </span>
                   </span>
                 </div>
-                <p className="mt-2 text-sm font-medium text-slate-700">
-                  {alert.title}
-                </p>
-                <p className="mt-1.5 text-xs leading-5 text-slate-500">
+                <p className="mt-2 text-[14px] font-medium text-slate-700">{alert.title}</p>
+                <p className="mt-1.5 text-[12.5px] leading-5 text-slate-500">
                   {alert.reason}
                 </p>
-                <div className="mt-3">
-                  <StatusBadge status={alert.status} />
-                </div>
               </li>
             ))}
+            {!view.monthWarnings.length && (
+              <li className="py-6 text-center text-[13px] text-slate-400">本月暂无新提醒。</li>
+            )}
           </ul>
         </section>
       </div>
+
+      <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 px-5 py-3.5 text-[12.5px] text-slate-600">
+        <span className="font-semibold text-slate-800">需要人聊聊？</span>
+        <span>
+          心理援助热线 <b className="tabular-nums text-slate-800">12356</b>（24 小时）
+        </span>
+        <span className="text-slate-300">·</span>
+        <Link to="/personal/alerts" className="hover:text-primary-600">
+          预约校心理中心
+        </Link>
+        <span className="text-slate-300">·</span>
+        <span>
+          紧急联系人 <b className="tabular-nums text-slate-800">138 **** 6621</b>
+        </span>
+      </div>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------- 子组件 */
+
+function Tag({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[12.5px] text-slate-600">
+      {children}
+    </span>
+  );
+}
+
+/** 动作块：一行标题 + 一行状态（状态说明"为什么现在点"） */
+function ActionStack({
+  to,
+  title,
+  meta,
+  primary = false,
+  padY = 8,
+}: {
+  to: string;
+  title: string;
+  meta: string;
+  primary?: boolean;
+  padY?: number;
+}) {
+  return (
+    <Link
+      to={to}
+      style={{ paddingTop: padY, paddingBottom: padY }}
+      className={`grid min-w-[168px] gap-0 rounded-lg px-4 transition-colors ${
+        primary ? "ui-button-primary" : "ui-button"
+      }`}
+    >
+      <span className="text-[14px] font-semibold leading-5">{title}</span>
+      <span className={`text-[12px] leading-5 ${primary ? "opacity-85" : "opacity-70"}`}>
+        {meta}
+      </span>
+    </Link>
   );
 }

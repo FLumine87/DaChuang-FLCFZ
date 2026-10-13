@@ -1650,6 +1650,17 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] svg.lucide {
   }
 }
 
+/* 首次引导 03 的「本次筛查报告卡」：桌面端长宽固定。
+   切换 结果摘要 / 分析依据 / 后续建议 时卡片尺寸必须不变（内容多就在卡内滚动），
+   否则短标签下卡片会"向上飘"。写在未分层区域，确保压得过任何工具类。 */
+@media (min-width: 1024px) {
+  .report-card {
+    width: 600px;
+    height: 600px;
+    flex: none;
+  }
+}
+
 /* 登录页左侧宣传区：细网格底纹 + 同心圆轨道（沿用旧版视觉） */
 /* 折线图的网格线与辅助线：用变量而非硬编码，深色下自动变暗 */
 .chart-grid {

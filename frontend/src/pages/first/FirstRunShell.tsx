@@ -28,6 +28,7 @@ export default function FirstRunShell({
   children,
   wide = false,
   alignTop = false,
+  stretch = false,
 }: {
   /** 2/3/4 显示「首次筛查 · n/4」；欢迎页不传，显示「首次使用」 */
   step?: 2 | 3 | 4;
@@ -45,6 +46,11 @@ export default function FirstRunShell({
   wide?: boolean;
   /** 左栏与右侧顶部对齐（03：避免"左边偏低、右边偏高"） */
   alignTop?: boolean;
+  /** 右侧卡片撑满整行高度（03 结果页）。
+      卡片高度原本跟着 tab 内容变：选「结果摘要」「后续建议」时内容短，
+      卡片就显矮、看着往上飘；选「分析依据」撑满了才不飘。
+      撑满 + 底部按钮吸底之后，切 tab 时卡片外框完全不动。 */
+  stretch?: boolean;
 }) {
   const { theme, toggleTheme } = useFirstRunTheme();
   const [mounted, setMounted] = useState(false);
@@ -118,7 +124,7 @@ export default function FirstRunShell({
         <div
           className={`relative z-10 mx-auto grid w-full gap-12 lg:justify-center lg:gap-[64px] ${
             alignTop ? "items-start" : "items-center"
-          } ${
+          } ${stretch ? "lg:items-stretch" : ""} ${
             wide
               ? /* 宽版（01 第 9 题、03 结果）：左栏仍要放得下 60px 的标题，
                    否则"接下来有方向。"会断成"接下来有方 / 向。"——与题干那处
@@ -163,8 +169,20 @@ export default function FirstRunShell({
             {steps && <StepProgress steps={steps} />}
           </div>
 
-          {/* 右：卡片 */}
-          <div className="relative z-10 w-full">{children}</div>
+          {/* 右：卡片 —— stretch 时让它撑满整行，且内部变成纵向 flex，
+              这样卡片里的底部操作条可以用 mt-auto 吸底。
+              lg:mt-14 把卡片整体下压：左栏是「眉标 + 大标题」，卡片默认
+              与眉标齐平，看上去比大标题高出一头；压 56px 后卡片顶边
+              与大标题字顶齐平（实测 517 vs 518）。 */}
+          <div
+            className={`relative z-10 w-full ${
+              stretch
+                ? "flex lg:mt-14 lg:[&>section]:h-full lg:[&>section]:max-h-[466px] lg:[&>section]:flex-col"
+                : ""
+            }`}
+          >
+            {children}
+          </div>
         </div>
       </section>
     </div>
