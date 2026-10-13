@@ -184,10 +184,10 @@ export default function LandingPage() {
     };
     glideRef.current = glideTo;
 
-    const nearestTop = () => {
+    const nearestTop = (from?: number) => {
       const els = screensOf();
       if (!els.length) return window.scrollY;
-      const y = window.scrollY;
+      const y = from ?? window.scrollY;
       let best = els[0];
       let bestGap = Infinity;
       els.forEach((el) => {
@@ -201,11 +201,47 @@ export default function LandingPage() {
       return Math.max(0, Math.min(max, best.offsetTop - NAV_H));
     };
 
+    /* 滚轮/触摸手势的落点判断。
+       原实现用 nearestTop()——"离哪屏近就落哪屏"，需要滚过半屏才会翻页，
+       于是常规一次滚动（4 格 ≈ 480px）会原地回弹，观感就是"上下滑动没反应"。
+       改为方向优先：本次手势累计滚过 28% 屏高就翻一屏，否则回到起点那一屏。 */
+    const SCROLL_TRIGGER = 0.28;
+    let gestureStartY = -1;
+
+    const topOf = (el: HTMLElement) =>
+      Math.max(
+        0,
+        Math.min(
+          document.documentElement.scrollHeight - window.innerHeight,
+          el.offsetTop - NAV_H,
+        ),
+      );
+
+    /* 从 from 位置按方向取相邻一屏 */
+    const stepFrom = (from: number, dir: number) => {
+      const tops = screensOf().map(topOf);
+      if (dir > 0) return tops.find((t) => t > from + 4) ?? tops[tops.length - 1];
+      const back = tops.filter((t) => t < from - 4);
+      return back.length ? back[back.length - 1] : tops[0];
+    };
+
+    const settleTarget = () => {
+      if (gestureStartY < 0) return nearestTop();
+      const delta = window.scrollY - gestureStartY;
+      const avail = window.innerHeight - NAV_H;
+      if (Math.abs(delta) > avail * SCROLL_TRIGGER) {
+        return stepFrom(gestureStartY, delta > 0 ? 1 : -1);
+      }
+      return nearestTop(gestureStartY);
+    };
+
     const scheduleSettle = () => {
       window.clearTimeout(settleTimer);
       settleTimer = window.setTimeout(() => {
         if (animating) return;
-        glideTo(nearestTop());
+        const target = settleTarget();
+        gestureStartY = -1;
+        glideTo(target);
       }, SETTLE_DELAY);
     };
 
@@ -269,6 +305,8 @@ export default function LandingPage() {
     };
 
     const onUserInput = () => {
+      /* 记下手势起点：落点按“滚过 28% 就翻页”判断（见 settleTarget） */
+      if (gestureStartY < 0) gestureStartY = window.scrollY;
       targetIdx = -1;
       cancelGlide();
       scheduleSettle();
@@ -377,9 +415,13 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <BrandLogo showSubtitle={false} />
             {/* 品牌 ｜ 当前页名：与腾讯云顶栏同一做法，让人一眼知道在哪一页 */}
-            <span className="text-[15px] font-medium text-primary-600">健康管理平台</span>
-            <span aria-hidden="true" className="h-5 w-px bg-slate-300/80" />
-            <span className="text-[15px] font-medium text-slate-700">{"主页"}</span>
+            {/* whitespace-nowrap 必须加：否则窄屏下 flex 会把中文逐字换行，
+                顶栏会出现"健/康/管/理/平/台"竖排的破版。产品线与页名在窄屏隐藏。 */}
+            <span className="hidden whitespace-nowrap text-[15px] font-medium text-primary-600 sm:inline">
+              健康管理平台
+            </span>
+            <span aria-hidden="true" className="hidden h-5 w-px bg-slate-300/80 sm:block" />
+            <span className="whitespace-nowrap text-[15px] font-medium text-slate-700">{"主页"}</span>
           </div>
 
           {/* 导航：对齐腾讯云的做法——14px、字重恒为 500（激活不加粗）、近黑文字，
@@ -441,7 +483,7 @@ export default function LandingPage() {
               aria-label="登录"
               className="group mr-1 inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-medium text-slate-500 transition-colors duration-200 hover:text-primary-600"
             >
-              登录
+              <span className="whitespace-nowrap">登录</span>
               <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
             </button>
             <button
@@ -526,7 +568,7 @@ export default function LandingPage() {
 
             {/* 四步链路：每格居中，正好落在下方图表的里程碑与纵向网格线上。
                 原来是绝对定位 + 右对齐，每个标签"右端贴线、左端参差"，看着就是没对齐。 */}
-            <div className="mt-6 grid grid-cols-4">
+            <div className="mt-6 grid grid-cols-2 gap-y-2 sm:grid-cols-4">
               {["三模态采集", "哈希检索", "RAG 报告", "分级预警"].map((step, index) => (
                 <span
                   key={step}

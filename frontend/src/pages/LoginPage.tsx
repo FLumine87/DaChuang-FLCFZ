@@ -187,9 +187,13 @@ export default function LoginPage() {
           <div className="flex items-center gap-3">
             <BrandLogo showSubtitle={false} />
             {/* 品牌 ｜ 当前页名：与腾讯云顶栏同一做法，让人一眼知道在哪一页 */}
-            <span className="text-[15px] font-medium text-primary-600">健康管理平台</span>
-            <span aria-hidden="true" className="h-5 w-px bg-slate-300/80" />
-            <span className="text-[15px] font-medium text-slate-700">{"登录"}</span>
+            {/* whitespace-nowrap 必须加：否则窄屏下 flex 会把中文逐字换行，
+                顶栏会出现"健/康/管/理/平/台"竖排的破版。产品线与页名在窄屏隐藏。 */}
+            <span className="hidden whitespace-nowrap text-[15px] font-medium text-primary-600 sm:inline">
+              健康管理平台
+            </span>
+            <span aria-hidden="true" className="hidden h-5 w-px bg-slate-300/80 sm:block" />
+            <span className="whitespace-nowrap text-[15px] font-medium text-slate-700">{"登录"}</span>
           </div>
             <div className="flex items-center gap-1.5">
               {/* 返回主页：纯文字链接。原先那个白底描边按钮放在浅色顶栏上太抢眼 */}
@@ -199,7 +203,7 @@ export default function LoginPage() {
                 className="group inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-medium text-slate-500 transition-colors duration-200 hover:text-primary-600"
               >
                 <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
-                返回主页
+                <span className="whitespace-nowrap">返回主页</span>
               </button>
               <button
                 type="button"

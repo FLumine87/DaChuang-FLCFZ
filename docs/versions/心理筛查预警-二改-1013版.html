@@ -139,17 +139,22 @@
         gap: 4px;
         max-width: 640px;
       }
+      /* 要点列表：用 flex 把勾做成首个 flex 项、顶部对齐——
+         多行条目时勾始终贴第一行（此前用绝对定位 + 外层 align-items:center，
+         多行时勾会被垂直居中、飘到中间行去）。 */
       .points li {
-        position: relative;
-        padding-left: 24px;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
         font-size: 14px;
         line-height: 20px;
         color: var(--slate-600);
       }
-      .points li::before {
+      /* 只给"没有自带图标"的条目生成勾：登录屏的列表是 .points 且自带 SVG 勾，
+         若不加 :not(:has(svg)) 就会出现"✓ ✓"双重勾。 */
+      .points li:not(:has(> svg))::before {
         content: "✓";
-        position: absolute;
-        left: 4px;
+        flex: 0 0 auto;
         color: var(--success-600, #12b76a);
         font-weight: 600;
       }
@@ -478,14 +483,7 @@
         border-top: 1px dashed var(--slate-200);
       }
 
-      .points li {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 15px;
-        line-height: 1.6;
-        color: var(--slate-600);
-      }
+      /* 与上面的 .points li 同一套（登录屏的列表自带 SVG 勾） */
 
       .points svg {
         flex: none;
@@ -1405,7 +1403,62 @@
           margin-top: 20px;
         }
       }
-    </style>
+    
+      /* ==========================================================================
+         移动端适配（与 React 版一致：单列、隐藏导航与页码点、字号下沉）
+         之前只有 min-width 断点，手机上等于把桌面双栏硬塞进 390px：
+         每屏内容高 1437~2124px（视口仅 844px），顶栏文字还会被逐字换行。
+         ========================================================================== */
+      @media (max-width: 1023px) {
+        /* 内容区左右留白收窄（原 24px） */
+        .auth-screen { padding-left: 16px; padding-right: 16px; }
+        header { padding-left: 16px; padding-right: 16px; }
+        /* 手机上不强制每屏一屏高：内容自然流式滚动，交给原生滚动 */
+        .auth-screen { min-height: 0; }
+      }
+
+      @media (max-width: 639px) {
+        /* 顶栏：必须禁止换行，否则 flex 会把中文逐字拆行（"健/康/管/理/平/台"竖排） */
+        .brand-name, .brand-page, .text-link, .brand-product { white-space: nowrap; }
+        /* 窄屏只留品牌 + 页名，产品线与竖线隐藏 */
+        .brand-product, .brand-divider { display: none; }
+
+        /* 字号下沉到手机尺度 */
+        .title { font-size: 34px; }
+        .section-title { font-size: 30px; }
+        .lede, .section-desc { font-size: 17px; line-height: 1.8; }
+        .eyebrow { font-size: 14px; }
+        .check-list li { font-size: 14px; }
+        .panel-label { font-size: 13px; }
+
+        /* 留白与圆角收窄 */
+        .auth-screen { padding-top: 40px; padding-bottom: 40px; }
+        .grid, .section-grid { gap: 28px; }
+        .panel { padding: 20px; border-radius: 22px; }
+        .card { padding: 20px; }
+
+        /* 四步链路：4 列在手机上每列仅约 85px，放不下 5 个汉字 → 改 2×2 */
+        .chart-labels { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 8px; }
+
+        /* 指标与三张卡片：单列堆叠 */
+        .metric-row, .metrics { grid-template-columns: minmax(0, 1fr); }
+
+        /* 图表在窄屏压扁，避免占满整屏 */
+        .chart { aspect-ratio: 2.2 / 1; }
+
+        /* 徽章区换行更紧凑 */
+        .chip-plain, .chip-primary, .chip-muted { font-size: 13px; }
+
+        /* 版本角标在手机上缩小并避让内容（桌面副本注入的元素） */
+        [style*="position:fixed;right:14px;bottom:14px"] {
+          right: 10px !important;
+          bottom: 10px !important;
+          padding: 5px 10px !important;
+          font-size: 13px !important;
+          opacity: .9;
+        }
+      }
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -1656,11 +1709,11 @@
               </ul>
 
               <div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:8px">
-                <span class="chip-primary" style="padding:6px 12px;font-size:12px">
+                <span class="chip-primary" style="padding:6px 12px;font-size:13px">
                   <span class="dot" style="background:var(--primary-500);margin-right:8px"></span>心理筛查与健康管理平台
                 </span>
-                <span class="chip-plain" style="padding:6px 12px;font-size:12px;border-color:var(--slate-200);background:var(--white)">国家级大创立项 · 2026-06</span>
-                <span class="chip-plain" style="padding:6px 12px;font-size:12px;border-color:var(--slate-200);background:var(--white)">金种子重点课题</span>
+                <span class="chip-plain" style="padding:6px 12px;font-size:13px;border-color:var(--slate-200);background:var(--white)">国家级大创立项 · 2026-06</span>
+                <span class="chip-plain" style="padding:6px 12px;font-size:13px;border-color:var(--slate-200);background:var(--white)">金种子重点课题</span>
               </div>
             </div>
 
@@ -1795,12 +1848,12 @@
                 </div>
 
                 <div style="margin-top:24px;border-top:1px dashed var(--slate-200);padding-top:20px">
-                  <p style="margin:0;font-size:12px;color:var(--slate-500)">同时纳入的标准化量表</p>
+                  <p style="margin:0;font-size:13px;color:var(--slate-500)">同时纳入的标准化量表</p>
                   <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
                     <span class="chip-muted">压力水平</span><span class="chip-muted">睡眠时长</span><span class="chip-muted">情绪趋势</span>
                     <span class="chip-muted">PHQ-9</span><span class="chip-muted">GAD-7</span><span class="chip-muted">ISI</span><span class="chip-muted">PSS-10</span>
                   </div>
-                  <p style="margin:16px 0 0;font-size:12px;line-height:1.7;color:var(--slate-500)">量表只作辅助校准，结论以三模态证据为主。</p>
+                  <p style="margin:16px 0 0;font-size:13px;line-height:1.7;color:var(--slate-500)">量表只作辅助校准，结论以三模态证据为主。</p>
                 </div>
               </div>
             </div>
@@ -2242,8 +2295,8 @@
             })(t0);
           }
 
-          function nearestTop() {
-            var y = window.scrollY;
+          function nearestTop(from) {
+            var y = (from === undefined) ? window.scrollY : from;
             var best = screens[0];
             var bestGap = Infinity;
             screens.forEach(function (el) {
@@ -2285,11 +2338,46 @@
             });
           }
 
+          /* 滚轮/触摸手势的落点：按"滚过 28% 屏高就翻一屏"判断方向，
+             而不是"离哪屏近就落哪屏"——后者要滚过半屏才翻页，
+             常规一次滚动会原地回弹，观感就是"上下滑动没反应"。 */
+          var SCROLL_TRIGGER = 0.28;
+          var gestureStartY = -1;
+
+          function topOf(el) {
+            return Math.max(0, Math.min(
+              document.documentElement.scrollHeight - window.innerHeight,
+              el.offsetTop - NAV_H
+            ));
+          }
+
+          function stepFrom(from, dir) {
+            var tops = screens.map(topOf);
+            if (dir > 0) {
+              for (var i = 0; i < tops.length; i++) if (tops[i] > from + 4) return tops[i];
+              return tops[tops.length - 1];
+            }
+            var back = tops.filter(function (t) { return t < from - 4; });
+            return back.length ? back[back.length - 1] : tops[0];
+          }
+
+          function settleTarget() {
+            if (gestureStartY < 0) return nearestTop();
+            var delta = window.scrollY - gestureStartY;
+            var avail = window.innerHeight - NAV_H;
+            if (Math.abs(delta) > avail * SCROLL_TRIGGER) {
+              return stepFrom(gestureStartY, delta > 0 ? 1 : -1);
+            }
+            return nearestTop(gestureStartY);
+          }
+
           function scheduleSettle() {
             window.clearTimeout(settleTimer);
             settleTimer = window.setTimeout(function () {
               if (animating) return;
-              glideTo(nearestTop());
+              var t = settleTarget();
+              gestureStartY = -1;
+              glideTo(t);
             }, SETTLE);
           }
 
@@ -2334,6 +2422,7 @@
             "wheel",
             function () {
               targetIdx = -1;
+              if (gestureStartY < 0) gestureStartY = window.scrollY;
               cancelGlide();
               scheduleSettle();
             },
@@ -2344,6 +2433,7 @@
               ev,
               function () {
                 targetIdx = -1;
+                if (gestureStartY < 0) gestureStartY = window.scrollY;
                 cancelGlide();
                 scheduleSettle();
               },
@@ -2366,6 +2456,7 @@
             if (!desktop.matches || !contentFits()) return;
             e.preventDefault();
             targetIdx = -1;
+            if (gestureStartY < 0) gestureStartY = window.scrollY;
             cancelGlide();
             goBy(down ? 1 : -1);
           });
@@ -2455,7 +2546,7 @@
     </script>
 
   
-  <div style="position:fixed;right:14px;bottom:14px;z-index:99999;display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:#067647;color:#fff;font:500 12px/1.4 -apple-system,'PingFang SC',sans-serif;box-shadow:0 8px 24px rgba(16,24,40,.3)">
+  <div style="position:fixed;right:14px;bottom:14px;z-index:99999;display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:#067647;color:#fff;font:500 13px/1.4 -apple-system,'PingFang SC',sans-serif;box-shadow:0 8px 24px rgba(16,24,40,.3)">
     <span style="font-weight:600">二改</span><span style="opacity:.75">10-13 版 · 主页 + 登录页拆分</span>
   </div>
 </body>

@@ -17,7 +17,7 @@ import sys, pathlib
 src, out, label, sub, color = sys.argv[1:6]
 html = pathlib.Path(src).read_text(encoding="utf-8")
 badge = f'''
-  <div style="position:fixed;right:14px;bottom:14px;z-index:99999;display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:{color};color:#fff;font:500 12px/1.4 -apple-system,'PingFang SC',sans-serif;box-shadow:0 8px 24px rgba(16,24,40,.3)">
+  <div style="position:fixed;right:14px;bottom:14px;z-index:99999;display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:{color};color:#fff;font:500 13px/1.4 -apple-system,'PingFang SC',sans-serif;box-shadow:0 8px 24px rgba(16,24,40,.3)">
     <span style="font-weight:600">{label}</span><span style="opacity:.75">{sub}</span>
   </div>
 </body>'''
@@ -42,7 +42,7 @@ import sys, pathlib
 src, out, label, sub, color = sys.argv[1:6]
 html = pathlib.Path(src).read_text(encoding="utf-8")
 badge = f"""
-  <div style="position:fixed;right:14px;bottom:14px;z-index:99999;display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:{color};color:#fff;font:500 12px/1.4 -apple-system,'PingFang SC',sans-serif;box-shadow:0 8px 24px rgba(16,24,40,.3)">
+  <div style="position:fixed;right:14px;bottom:14px;z-index:99999;display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:{color};color:#fff;font:500 13px/1.4 -apple-system,'PingFang SC',sans-serif;box-shadow:0 8px 24px rgba(16,24,40,.3)">
     <span style="font-weight:600">{label}</span><span style="opacity:.75">{sub}</span>
   </div>
 </body>"""
