@@ -146,10 +146,18 @@ export default function Screening() {
     if (activeQuestionnaire) {
       api.submitScaleScore(userId, activeQuestionnaire, score, true)
         .then((r) => {
-          if (r.inference_triggered && r.report) {
-            setKgSyncMsg(`已写入知识图谱，最新风险评估：${r.report.risk_label}（综合分 ${r.report.overall_score}）`);
-          } else if (r.written > 0) {
-            setKgSyncMsg('量表得分已写入个人知识图谱');
+          /* 「写入图谱」与「给出风险评估」是两件事：Neo4j 未连接时 written=0（确实没写进去），
+             但后端 mock 通路仍能返回一份模板报告。分开放两句话说，别混成一句"已写入"。 */
+          if (r.written > 0) {
+            setKgSyncMsg(
+              r.inference_triggered && r.report
+                ? `已写入知识图谱，最新风险评估：${r.report.risk_label}（综合分 ${r.report.overall_score}）`
+                : '量表得分已写入个人知识图谱',
+            );
+          } else if (r.inference_triggered && r.report) {
+            setKgSyncMsg(
+              `量表得分未写入知识图谱（Neo4j 未连接）；已按演示模板给出风险评估：${r.report.risk_label}`,
+            );
           }
         })
         .catch(() => setKgSyncMsg('量表得分写入知识图谱失败（Neo4j 未连接？），不影响本地记录'));
