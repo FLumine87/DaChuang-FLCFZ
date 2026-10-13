@@ -139,8 +139,14 @@
         position: sticky;
         top: 0;
         z-index: 40;
-        background: var(--header);
+        /* 毛玻璃：半透明 + 背景模糊，滚动时透出下层内容 */
+        background: color-mix(in srgb, var(--header) 76%, transparent);
+        backdrop-filter: blur(14px) saturate(170%);
+        -webkit-backdrop-filter: blur(14px) saturate(170%);
         padding: 0 24px;
+      }
+      @supports not (backdrop-filter: blur(1px)) {
+        header { background: var(--header); }
       }
 
       .header-inner {
@@ -609,18 +615,72 @@
       }
 
 
+
+      /* ==================== 动态背景「极光」（只在内容屏） ==================== */
+      .aurora {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .aurora span {
+        position: absolute;
+        display: block;
+        border-radius: 9999px;
+        will-change: transform;
+      }
+      .aurora span:nth-child(1) {
+        width: 52vw; height: 52vw; left: -14vw; top: -20vw;
+        background: radial-gradient(circle at 50% 50%,
+          rgba(117, 146, 255, 0.44) 0%, rgba(117, 146, 255, 0.15) 45%, transparent 70%);
+        animation: auroraDrift1 42s ease-in-out infinite;
+      }
+      .aurora span:nth-child(2) {
+        width: 44vw; height: 44vw; right: -12vw; top: -14vw;
+        background: radial-gradient(circle at 50% 50%,
+          rgba(127, 215, 255, 0.38) 0%, rgba(127, 215, 255, 0.13) 45%, transparent 70%);
+        animation: auroraDrift2 52s ease-in-out infinite;
+      }
+      .aurora span:nth-child(3) {
+        width: 46vw; height: 46vw; left: 24vw; bottom: -22vw;
+        background: radial-gradient(circle at 50% 50%,
+          rgba(194, 181, 255, 0.38) 0%, rgba(194, 181, 255, 0.13) 45%, transparent 70%);
+        animation: auroraDrift3 60s ease-in-out infinite;
+      }
+      @keyframes auroraDrift1 {
+        0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+        50% { transform: translate3d(6vw, 4vw, 0) scale(1.12); }
+      }
+      @keyframes auroraDrift2 {
+        0%, 100% { transform: translate3d(0, 0, 0) scale(1.08); }
+        50% { transform: translate3d(-5vw, 5vw, 0) scale(1); }
+      }
+      @keyframes auroraDrift3 {
+        0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+        50% { transform: translate3d(-6vw, -4vw, 0) scale(1.14); }
+      }
+      .dark .aurora span { opacity: 0.5; }
+      @media (prefers-reduced-motion: reduce) {
+        .aurora span { animation: none; }
+      }
+
       /* ==================== 整屏翻页（六屏一页到底） ==================== */
       .auth-snap {
         scroll-behavior: auto;
       }
 
       .auth-screen {
+        position: relative;
+        overflow: hidden;
         display: flex;
         align-items: center;
         padding: 64px 24px;
       }
 
       .section-grid {
+        position: relative;
+        z-index: 1;
         margin: 0 auto;
         width: 100%;
         max-width: 1440px;
@@ -1420,6 +1480,7 @@
 
         <!-- ============ 第 2 屏：作品简介 ============ -->
         <section class="auth-screen" id="top">
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
           <div class="section-grid">
             <div>
               <p class="eyebrow">作品概览</p>
@@ -1499,6 +1560,7 @@
 
         <!-- ============ 第 tech 屏 ============ -->
         <section class="auth-screen divider-top" id="tech">
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
           <div class="section-grid">
             <div>
               <p class="eyebrow">关键技术与方法</p>
@@ -1537,6 +1599,7 @@
 
         <!-- ============ 第 assess 屏 ============ -->
         <section class="auth-screen divider-top" id="assess">
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
           <div class="section-grid">
             <div>
               <p class="eyebrow">评估维度</p>
@@ -1576,6 +1639,7 @@
 
         <!-- ============ 第 alert 屏 ============ -->
         <section class="auth-screen divider-top" id="alert">
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
           <div class="section-grid">
             <div>
               <p class="eyebrow">预警机制</p>
@@ -1628,6 +1692,7 @@
 
         <!-- ============ 第 privacy 屏 ============ -->
         <section class="auth-screen divider-top" id="privacy">
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
           <div class="section-grid">
             <div>
               <p class="eyebrow">数据安全</p>

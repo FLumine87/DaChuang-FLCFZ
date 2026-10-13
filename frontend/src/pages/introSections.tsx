@@ -34,9 +34,10 @@ export function Section({
   return (
     <section
       id={id}
-      className="auth-screen flex items-center border-t border-slate-200/70 bg-white/60 px-6 sm:px-10 lg:px-12 xl:px-16"
+      className="auth-screen relative flex items-center overflow-hidden border-t border-slate-200/70 bg-white/60 px-6 sm:px-10 lg:px-12 xl:px-16"
     >
-      <div className="mx-auto grid w-full max-w-[1440px] items-center gap-12 py-16 lg:min-h-[calc(100svh-4rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16 lg:py-20">
+      <Aurora />
+      <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 py-16 lg:min-h-[calc(100svh-4rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16 lg:py-20">
         <div>
           <p className="text-[17px] font-semibold tracking-[0.2em] text-primary-500">
             {eyebrow}
@@ -52,6 +53,18 @@ export function Section({
         <div>{visual}</div>
       </div>
     </section>
+  );
+}
+
+/* 动态背景层「极光」：只在内容屏使用（登录屏刻意不放，保持干净）。
+   纯 CSS 动画，只动 transform；光斑颜色与透明度都写在 index.css 的 .aurora 里。 */
+export function Aurora() {
+  return (
+    <div className="aurora" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </div>
   );
 }
 

@@ -18,6 +18,7 @@ import { saveDisplayName, saveSessionToken } from "../auth/session";
 import {
   AlertVisual,
   AssessVisual,
+  Aurora,
   PrivacyVisual,
   Section,
   TechVisual,
@@ -396,7 +397,7 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen scroll-smooth bg-page text-slate-800">
       {/* ================= 顶部导航 ================= */}
-      <header className="sticky top-0 z-40 bg-header px-6 sm:px-10 lg:px-12 xl:px-16">
+      <header className="nav-blur sticky top-0 z-40 px-6 sm:px-10 lg:px-12 xl:px-16">
         <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center justify-between gap-4">
           <BrandLogo />
           <nav className="hidden items-center gap-1 lg:flex" aria-label="页面章节">
@@ -750,9 +751,10 @@ export default function AuthPage() {
       {/* ============ 第 2 屏：作品简介 ============ */}
       <section
         id="top"
-        className="auth-screen flex items-center px-6 py-16 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)] lg:py-20"
+        className="auth-screen relative flex items-center overflow-hidden px-6 py-16 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)] lg:py-20"
       >
-        <div className="mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
+        <Aurora />
+        <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
           <div>
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
               作品概览

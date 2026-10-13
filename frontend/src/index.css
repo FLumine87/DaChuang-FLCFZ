@@ -768,6 +768,111 @@ h3.text-2xl {
   padding-bottom: 0;
 }
 
+
+/* ==========================================================================
+   动态背景「极光」+ 顶栏毛玻璃
+   —— 灵感来自腾讯云首页的动态渐变，但做了两处克制：
+      1) 只动 transform（合成层，不触发重排/重绘），三个光斑 42~60s 缓慢漂移；
+      2) 低不透明度叠在浅底上，颜色全部取自项目品牌色（蓝 / 青 / 淡紫），
+         避免出现"彩色塑料感"。
+   登录屏刻意不放这一层（登录页保持干净），只有内容屏使用。
+   ========================================================================== */
+.aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.aurora span {
+  position: absolute;
+  display: block;
+  border-radius: 9999px;
+  will-change: transform;
+}
+
+.aurora span:nth-child(1) {
+  width: 52vw;
+  height: 52vw;
+  left: -14vw;
+  top: -20vw;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(117, 146, 255, 0.44) 0%,
+    rgba(117, 146, 255, 0.15) 45%,
+    transparent 70%
+  );
+  animation: aurora-drift-1 42s ease-in-out infinite;
+}
+
+.aurora span:nth-child(2) {
+  width: 44vw;
+  height: 44vw;
+  right: -12vw;
+  top: -14vw;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(127, 215, 255, 0.38) 0%,
+    rgba(127, 215, 255, 0.13) 45%,
+    transparent 70%
+  );
+  animation: aurora-drift-2 52s ease-in-out infinite;
+}
+
+.aurora span:nth-child(3) {
+  width: 46vw;
+  height: 46vw;
+  left: 24vw;
+  bottom: -22vw;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(194, 181, 255, 0.38) 0%,
+    rgba(194, 181, 255, 0.13) 45%,
+    transparent 70%
+  );
+  animation: aurora-drift-3 60s ease-in-out infinite;
+}
+
+@keyframes aurora-drift-1 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(6vw, 4vw, 0) scale(1.12); }
+}
+@keyframes aurora-drift-2 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.08); }
+  50% { transform: translate3d(-5vw, 5vw, 0) scale(1); }
+}
+@keyframes aurora-drift-3 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-6vw, -4vw, 0) scale(1.14); }
+}
+
+/* 深色下光斑压暗，避免在深底上"发光过强" */
+.dark .aurora span {
+  opacity: 0.5;
+}
+
+/* 尊重系统"减弱动态效果"设置：保留光斑但不漂移 */
+@media (prefers-reduced-motion: reduce) {
+  .aurora span {
+    animation: none;
+  }
+}
+
+/* 顶栏毛玻璃：半透明 + 背景模糊，滚动时能透出下层内容（对齐参考站的导航条） */
+.nav-blur {
+  background: color-mix(in srgb, var(--color-header) 76%, transparent);
+  backdrop-filter: blur(14px) saturate(170%);
+  -webkit-backdrop-filter: blur(14px) saturate(170%);
+}
+
+/* 浏览器不支持 backdrop-filter 时退回不透明底色，保证导航可读 */
+@supports not (backdrop-filter: blur(1px)) {
+  .nav-blur {
+    background: var(--color-header);
+  }
+}
+
 /* ==========================================================================
    登录页标题层级
    —— 上面针对 h1~h4 的全局规则写在 @layer 之外，会压过 Tailwind 的 text-*
