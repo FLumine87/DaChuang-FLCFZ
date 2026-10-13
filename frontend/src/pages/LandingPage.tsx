@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { navigateWithTransition } from "../utils/viewTransition";
-import { Check, LogIn, Moon, Sun } from "lucide-react";
+import { ArrowRight, Check, Moon, Sun } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
 import {
   AlertVisual,
@@ -429,14 +429,15 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             {/* 登录入口：用户端与管理员端合并为这一个按钮，
                 进登录页后再切换身份（登录页顶栏有「管理员登录」切换）。 */}
+            {/* 登录入口：与登录页的「← 返回主页」同一套纯文字样式（原来那个浅蓝胶囊偏重） */}
             <button
               type="button"
               onClick={() => navigateWithTransition(navigate, "/login")}
               aria-label="登录"
-              className="mr-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-50 px-3.5 text-sm font-medium text-primary-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-100 hover:shadow-md active:translate-y-0 active:scale-[0.97] active:bg-primary-200"
+              className="group mr-1 inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-medium text-slate-500 transition-colors duration-200 hover:text-primary-600"
             >
-              <LogIn className="h-4 w-4" />
               登录
+              <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
             </button>
             <button
               type="button"
