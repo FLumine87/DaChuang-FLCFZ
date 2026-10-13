@@ -3,8 +3,6 @@ import type { ReactElement } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import DashboardV2 from './pages/DashboardV2';
-/* 首页的另一版（情绪/睡眠/压力那版），仅供对照，不进侧栏导航 */
-import DashboardAlt from './pages/DashboardAlt';
 import Screening from './pages/Screening';
 import DataCollection from './pages/DataCollection';
 import Retrieval from './pages/Retrieval';
@@ -97,7 +95,6 @@ export default function App() {
         <Route index element={<Navigate to="/personal/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="dashboard-v2" element={<DashboardV2 />} />
-        <Route path="dashboard-alt" element={<DashboardAlt />} />
         <Route path="screening" element={<Screening />} />
         <Route path="data-collection" element={<DataCollection />} />
         <Route path="retrieval" element={<Retrieval />} />
