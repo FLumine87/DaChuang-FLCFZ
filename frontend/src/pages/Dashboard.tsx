@@ -484,11 +484,14 @@ export default function Dashboard() {
                   : "尚未达到需要人工介入的等级"}
               </span>
               <span className="flex items-center gap-3">
-                <Link to="/personal/retrieval" className="ui-button">
-                  看完整依据
+                {/* 两个入口与卡内三栏一一对应：
+                    「检索到了什么 / RAG 解释与建议」→ 检索与分析；
+                    「量表给的分数」→ 我的档案里的这条记录 */}
+                <Link to="/personal/retrieval" className="ui-button ui-button-primary">
+                  查看检索依据
                 </Link>
-                <Link to="/personal/alerts" className="ui-button ui-button-primary">
-                  标记已处理
+                <Link to="/personal/screening" className="ui-button">
+                  查看本次报告
                 </Link>
               </span>
             </div>
