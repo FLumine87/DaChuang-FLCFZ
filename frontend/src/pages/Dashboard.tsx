@@ -96,13 +96,13 @@ function modalityOf(r: PersonalScreeningRecord) {
 /* ------------------------------------------------------------------ 页面 */
 
 export default function Dashboard() {
-  /* 首屏排版调参：dev 面板可拖动实时改；调好后把数值发我固化 */
-  const [tune, setTune] = useState({
+  /* 首屏排版参数（已在调参面板里定稿，面板已移除） */
+  const tune = {
     line1: 20, line1Gap: 16,
     title: 54, sub: 16, gap: 28, offset: 0, btnPad: 8,
     align: "left" as "left" | "center" | "right", btnGap: 12,
     btnPos: "inline" as "inline" | "bottom",
-  });
+  } as const;
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -299,92 +299,6 @@ export default function Dashboard() {
       {/* ==================== 常驻求助条 ==================== */}
       </div>
 
-
-      {import.meta.env.DEV && (
-        <div className="fixed right-5 top-20 z-50 w-[260px] max-h-[calc(100vh-120px)] overflow-y-auto rounded-xl border border-slate-200 bg-white/95 p-4 text-[12.5px] text-slate-700 shadow-lg backdrop-blur">
-          <p className="mb-3 font-semibold text-slate-900">首屏排版调参（仅开发时显示）</p>
-          {([
-            ["第一行字号", "line1", 14, 32],
-            ["第一行↔标题间距", "line1Gap", 0, 48],
-            ["标题字号", "title", 32, 72],
-            ["灰字字号", "sub", 12, 22],
-            ["按钮上方间距", "gap", 8, 64],
-            ["整块下移", "offset", -80, 200],
-            ["按钮内高", "btnPad", 4, 22],
-            ["两按钮间距", "btnGap", 0, 32],
-          ] as const).map(([label, key, min, max]) => (
-            <label key={key} className="mb-2 block">
-              <span className="flex justify-between">
-                <span>{label}</span>
-                <span className="tabular-nums text-slate-400">{tune[key]}px</span>
-              </span>
-              <input
-                type="range"
-                min={min}
-                max={max}
-                value={tune[key]}
-                onChange={(e) => setTune((t) => ({ ...t, [key]: Number(e.target.value) }))}
-                className="mt-1 w-full"
-              />
-            </label>
-          ))}
-          <div className="mb-3">
-            <span className="mb-1 block">按钮纵向位置</span>
-            <div className="flex gap-1">
-              {([["紧跟文字", "inline"], ["贴左栏底边", "bottom"]] as const).map(([label, v]) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setTune((t) => ({ ...t, btnPos: v }))}
-                  className={`flex-1 rounded-md border px-2 py-1 text-[12px] ${
-                    tune.btnPos === v ? "border-primary-400 text-primary-600" : "border-slate-200 text-slate-500"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="mb-3">
-            <span className="mb-1 block">按钮水平位置</span>
-            <div className="flex gap-1">
-              {([["居左", "left"], ["居中", "center"], ["居右", "right"]] as const).map(([label, v]) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setTune((t) => ({ ...t, align: v }))}
-                  className={`flex-1 rounded-md border px-2 py-1 text-[12px] ${
-                    tune.align === v ? "border-primary-400 text-primary-600" : "border-slate-200 text-slate-500"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              className="ui-button px-2.5 py-1 text-[12px]"
-              onClick={() => setTune({ line1: 20, line1Gap: 16, title: 54, sub: 16, gap: 28, offset: 0, btnPad: 8, align: "left", btnGap: 12, btnPos: "inline" })}
-            >
-              复原
-            </button>
-            <button
-              type="button"
-              className="ui-button ui-button-primary px-2.5 py-1 text-[12px]"
-              onClick={() => {
-                void navigator.clipboard?.writeText(JSON.stringify(tune));
-              }}
-            >
-              复制参数
-            </button>
-          </div>
-          <p className="mt-2 text-[11px] leading-4 text-slate-400">
-            调好后点「复制参数」发我，我写死成默认值。
-          </p>
-        </div>
-      )}
 
       {/* ============ ① 近期的检测结果（取最近一条记录，新用户就是刚做的那次）：内部分三栏，压到与下面一排同高 ============ */}
       <section className="ui-card p-5 sm:p-6">
