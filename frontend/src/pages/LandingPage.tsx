@@ -26,6 +26,8 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
   const [active, setActive] = useState("top");
+    /* 供观察器读取当前屏（观察器只建一次，不随 active 重建） */
+    const activeRef = useRef(active);
   const glideRef = useRef<((target: number) => void) | null>(null);
   /* 滑动指示条：位置由目标按钮测量得出，悬停跟随、离开回到当前屏 */
   const navRef = useRef<HTMLElement>(null);
@@ -291,7 +293,9 @@ export default function LandingPage() {
     };
   }, []);
 
-  /* 进入视口的入场动画：所在屏加/去 .is-inview（离开后再回来会重播） */
+  /* 进入视口的入场动画：所在屏加/去 .is-inview（离开后再回来会重播）。
+     依赖刻意留空：观察器只建一次。否则每次切屏都会 disconnect + 重建，
+     连带把 html.reveal-ready 摘掉又加回，造成入场动画被截断。 */
   useEffect(() => {
     const targets = Array.from(document.querySelectorAll<HTMLElement>(".auth-screen"));
     if (!targets.length) return;
@@ -309,7 +313,7 @@ export default function LandingPage() {
         entries.forEach((entry) => {
           const el = entry.target as HTMLElement;
           if (entry.isIntersecting) mark(el, true);
-          else if (el.id !== active) mark(el, false);
+          else if (el.id !== activeRef.current) mark(el, false);
         });
       },
       { rootMargin: "-10% 0px -10% 0px", threshold: 0 },
@@ -321,10 +325,11 @@ export default function LandingPage() {
       observer.disconnect();
       document.documentElement.classList.remove("reveal-ready");
     };
-  }, [active]);
+  }, []);
 
   /* 当前屏确保已标记为可见（切屏时立即生效，不等相交回调） */
   useEffect(() => {
+    activeRef.current = active;
     const el = document.getElementById(active);
     if (el) el.classList.add("is-inview");
   }, [active]);
@@ -458,7 +463,7 @@ export default function LandingPage() {
       {/* ============ 第 2 屏：作品简介 ============ */}
       <section
         id="top"
-        className="auth-screen relative flex items-center overflow-hidden px-6 py-16 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)] lg:py-20"
+        className="auth-screen relative flex items-center overflow-hidden px-6 py-16 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)] lg:py-12"
       >
         <Aurora />
         <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
@@ -469,22 +474,29 @@ export default function LandingPage() {
             <h2 className="auth-section-title mt-6 max-w-[720px] text-balance tracking-tight text-slate-900">
               多模态心理筛查与分级预警系统
             </h2>
+            {/* 首屏讲"这个产品能做什么"，技术路线留给「核心技术」屏。
+                依据申报书「使用说明」：用户经三模态采集 → 自动生成预警报告 →
+                管理端完成预警处置与个案跟踪。 */}
             <p className="mt-8 max-w-[640px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
-              以
-              <strong className="font-medium text-slate-800">动态跨模态哈希检索</strong>
-              为核心，融合 RAG、知识图谱与联邦学习，支持文本、语音、图像三模态采集与特征编码，
-              输出可追溯的筛查报告，并按四级阈值触发预警与人工复核，形成从状态采集到干预处置的闭环。
+              面向校园、企业、社区的
+                <strong className="font-medium text-slate-800">心理筛查预警平台</strong>
+              。用户完成一次文本、语音、图像的三模态采集，系统即以
+                <strong className="font-medium text-slate-800">动态跨模态哈希检索</strong>
+              匹配相似案例，再由
+                <strong className="font-medium text-slate-800">RAG</strong>
+              结合心理知识库生成可追溯的筛查报告；管理端据此完成分级预警与个案跟踪。
             </p>
 
-            <ul className="mt-6 grid gap-1.5 border-t border-dashed border-slate-200 pt-5">
+            <ul className="mt-5 grid gap-1 border-t border-dashed border-slate-200 pt-4">
               {[
-                "适用于校园、企业等批量筛查场景",
-                "量表仅作辅助校准，不作独立判据",
-                "高风险个案进入人工研判",
+                "动态跨模态哈希检索：毫秒级匹配相似案例",
+                "RAG 报告生成：以检索样例与心理知识库为依据",
+                "三模态互补：文本、语音、图像同时进入评估",
+                "处置闭环：高风险自动进入人工复核并留痕",
               ].map((point) => (
                 <li
                   key={point}
-                  className="flex items-center gap-2.5 text-[15px] leading-6 text-slate-600"
+                  className="flex items-start gap-2 text-[14px] leading-5 text-slate-600"
                 >
                   <Check className="h-4 w-4 shrink-0 text-success-600" />
                   {point}
@@ -602,7 +614,13 @@ export default function LandingPage() {
         id="tech"
         eyebrow="关键技术与方法"
         title="动态跨模态哈希检索与 RAG 生成"
-        desc="针对动态心理数据环境下的概念漂移、哈希映射冲突与二值量化信息损失，系统采用多哈希表增量更新、查询自适应重排序与非对称距离度量，并在在线监督集体矩阵分解框架下引入半监督伪标签、类别敏感稀疏正则化与决策级融合，实现三模态联合检索。报告生成以检索命中的相似样例与心理知识库为依据，大语言模型仅承担语言组织，以降低事实性错误。"
+        desc="针对动态心理数据环境下的概念漂移与哈希映射冲突，系统采用多哈希表增量更新、查询自适应重排序、非对称距离度量与 Hadamard 矩阵，并在在线监督集体矩阵分解（OSCMFH）框架下引入半监督伪标签与决策级融合，实现图像、语音、文本的跨模态联合检索；报告由 RAG 以检索命中样例与心理知识库为依据生成，语言模型仅承担语言组织，以降低事实性错误。"
+        points={[
+          "基于多哈希表系统的增量式模态哈希",
+          "动态跨模态哈希检索优化：应对模态异构与类别不均衡",
+          "RAG 赋能大模型：输出有参考依据的结构化筛查报告",
+          "知识图谱：提升结果可解释性与报告关联性",
+        ]}
         visual={<TechVisual />}
       />
 
@@ -610,7 +628,13 @@ export default function LandingPage() {
         id="assess"
         eyebrow="评估维度"
         title="三模态线索与多维评估指标"
-        desc="文本通道提取认知模式与语言逻辑，音频通道提取语音语调、情绪波动与情感强度，视觉通道提取面部表情、绘画笔迹与情绪外露；在此基础上结合压力水平、睡眠时长、情绪趋势与标准化量表，形成可纵向比较的个体状态画像。量表用于辅助校准，不作为独立判据。"
+        desc="相比依赖人工访谈与单一量表的传统筛查，系统在同一时间轴上融合三条通道的线索，形成可纵向比较的个体状态画像；量表结果仅用于辅助校准，不作为独立判据。"
+        points={[
+          "文本通道：认知模式与语言逻辑",
+          "音频通道：语音语调、情绪波动与情感强度",
+          "视觉通道：面部表情、绘画笔迹与情绪外露",
+          "标准化量表：PHQ-9 / GAD-7 / ISI / PSS-10 辅助校准",
+        ]}
         visual={<AssessVisual />}
       />
 
@@ -619,6 +643,12 @@ export default function LandingPage() {
         eyebrow="预警机制"
         title="四级预警与人工复核闭环"
         desc="多模态信号持续偏离个体基线时，系统按四级阈值自动生成预警；达到高风险阈值的个案自动进入人工研判队列，由咨询师确认后转入个案跟踪与处置留痕。算法仅提供提示与风险排序，最终结论由专业人员确认，并可输出转介建议。"
+        points={[
+          "四级阈值：绿 / 黄 / 橙 / 红，按偏离基线程度自动分级",
+          "人工研判：高风险个案进入咨询师复核队列",
+          "个案跟踪：处置全过程留痕，可回溯",
+          "两端协同：Web 端与移动端同步处置进度",
+        ]}
         visual={<AlertVisual />}
       />
 
@@ -626,7 +656,13 @@ export default function LandingPage() {
         id="privacy"
         eyebrow="数据安全"
         title="联邦学习与「数据不出域」"
-        desc="心理数据属于敏感个人信息。系统采用联邦学习实现跨机构协同训练：各参与机构在本地完成模型训练，仅上行加密后的模型更新，原始数据不离开本地，在保持模型精度的同时满足隐私合规要求。"
+        desc="心理数据属于敏感个人信息。系统采用联邦学习实现跨机构模型协同训练而不直接共享原始敏感数据：各参与机构在本地完成模型训练，仅上行加密后的模型更新，原始数据不离开本地，在保持模型精度的同时满足隐私合规要求。"
+        points={[
+          "数据不出域：原始敏感数据不离开机构本地",
+          "加密上行：仅传输加密后的模型更新",
+          "协同形式：覆盖横向、纵向与联邦迁移",
+          "依据可溯：报告结论关联检索样例与知识库",
+        ]}
         visual={<PrivacyVisual />}
         footnote="心理筛查预警 · 健康管理平台　|　科学评估 · 隐私保护 · 人工复核"
       />

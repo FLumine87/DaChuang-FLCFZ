@@ -759,11 +759,13 @@ h3.text-2xl {
   scroll-snap-align: start;
 }
 
-/* 视口较矮（常见笔记本）时收紧章节上下留白，尽量保证一屏装得下 */
+/* 视口较矮（常见笔记本）时收紧章节上下留白，尽量保证一屏装得下。
+   2rem 而非 3rem：文案加了要点列表后，"核心技术"屏在 1280×800 下差 8px 装不下，
+   而 8px 之差就会触发兜底、把整屏翻页整个关掉——收紧留白比删内容更划算。 */
 @media (max-height: 900px) {
   .auth-snap .auth-screen > div {
-    padding-top: 3rem;
-    padding-bottom: 3rem;
+    padding-top: 2rem;
+    padding-bottom: 2rem;
   }
   /* 登录屏靠 flex 居中，不需要这层额外留白，否则矮屏会被顶高一屏 */
   .auth-snap #login > div {
@@ -934,35 +936,71 @@ h3.text-2xl {
 
 
 /* --------------------------------------------------------------------------
-   滚动进入视口的入场动画（对齐参考站的 motion-draw-in / motion-scale-in）
-   —— 观察参考站发现：它的"动态"主要来自元素进入视口时的渐显，
-      而不是背景（背景那张其实是静态 PNG，4 秒采样无任何变化）。
-      我们整屏翻页时正好一屏一触发。标记 data-reveal 的元素默认下沉+透明，
-      所在屏获得 .is-inview 时浮现；同屏第 2 个元素延迟 110ms 形成先后节奏。
+   滚动进入视口的渐入渐出（对齐腾讯/腾讯云：文字逐级上浮淡入、图标缩放淡入）
+   —— 观察参考站得出：它的"动态"主要来自元素进入视口时的渐显，
+      而非背景（背景那张其实是静态 PNG）。我们整屏翻页时正好一屏一触发。
+
+   实现要点：
+   1) 容器本身不再整体位移，改由"每个直接子元素"依次渐入：
+      眉标 → 标题 → 正文 → 要点 → 徽章，形成先后节奏；
+   2) 图标（lucide）单独缩放淡入，只作用于 svg.lucide——
+      不会碰到 Recharts 绘制的图表 SVG；
+   3) 隐藏态只挂在 html.reveal-ready 之下（JS 就绪后才加），
+      脚本没跑 / 观察器失效 / 提前截图时内容依然可见。
    -------------------------------------------------------------------------- */
-/* 注意：隐藏态只挂在 html.reveal-ready 之下（由 JS 在观察器就绪后才加上）。
-   这样一旦脚本没跑、观察器失效或提前截图，内容仍然是可见的——
-   入场动画再好看，也不能拿"内容可能整屏不显示"去换。 */
-html.reveal-ready .auth-screen [data-reveal] {
-  opacity: 0;
-  transform: translateY(22px) scale(0.985);
+/* 过渡属性常驻（不挂在 html.reveal-ready 之下）：
+   切屏时该门控类会被移除再加回，若过渡属性随之消失，
+   元素会瞬间跳到终态——动画就"从来没跑起来"。 */
+.auth-screen [data-reveal] > * {
   transition:
-    opacity 640ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 640ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 620ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, transform;
 }
 
-html.reveal-ready .auth-screen.is-inview [data-reveal] {
+html.reveal-ready .auth-screen [data-reveal] > * {
+  opacity: 0;
+  transform: translateY(18px);
+}
+
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * {
   opacity: 1;
   transform: none;
 }
 
-html.reveal-ready .auth-screen.is-inview [data-reveal]:nth-child(2) {
-  transition-delay: 110ms;
+/* 逐级延迟：同屏内相邻居块依次登场（每级 90ms） */
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(1) { transition-delay: 0ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(2) { transition-delay: 90ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(3) { transition-delay: 180ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(4) { transition-delay: 270ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(5) { transition-delay: 360ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(6) { transition-delay: 450ms; }
+
+/* 图标：轻微缩放 + 淡入，带一点回弹（腾讯系站点常见的图标入场） */
+.auth-screen [data-reveal] svg.lucide {
+  transition:
+    opacity 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 520ms cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
+html.reveal-ready .auth-screen [data-reveal] svg.lucide {
+  opacity: 0;
+  transform: scale(0.55);
+}
+
+html.reveal-ready .auth-screen.is-inview [data-reveal] svg.lucide {
+  opacity: 1;
+  transform: none;
+}
+
+/* 卡片类元素（面板里的分块）错开一点，避免整块同时出现 */
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(2) { transition-delay: 120ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(3) { transition-delay: 200ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(4) { transition-delay: 280ms; }
+
 @media (prefers-reduced-motion: reduce) {
-  html.reveal-ready .auth-screen [data-reveal] {
+  html.reveal-ready .auth-screen [data-reveal] > *,
+  html.reveal-ready .auth-screen [data-reveal] svg.lucide {
     opacity: 1;
     transform: none;
     transition: none;

@@ -20,6 +20,7 @@ export function Section({
   eyebrow,
   title,
   desc,
+  points,
   visual,
   footnote,
 }: {
@@ -27,6 +28,9 @@ export function Section({
   eyebrow: string;
   title: string;
   desc: string;
+  /* 要点列表：内容取自申报书（创新点 / 通道分工 / 处置流程 / 隐私手段），
+     与首屏的要点样式保持一致，便于逐条扫读。 */
+  points?: string[];
   visual: ReactNode;
   footnote?: string;
 }) {
@@ -37,7 +41,7 @@ export function Section({
       className="auth-screen relative flex items-center overflow-hidden border-t border-slate-200/70 bg-white/60 px-6 sm:px-10 lg:px-12 xl:px-16"
     >
       <Aurora />
-      <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 py-16 lg:min-h-[calc(100svh-4rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16 lg:py-20">
+      <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 py-16 lg:min-h-[calc(100svh-4rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16 lg:py-12">
         <div data-reveal>
           <p className="text-[17px] font-semibold tracking-[0.2em] text-primary-500">
             {eyebrow}
@@ -48,6 +52,19 @@ export function Section({
           <p className="mt-8 max-w-[640px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
             {desc}
           </p>
+          {points && points.length > 0 && (
+            <ul className="mt-5 grid max-w-[640px] gap-1 border-t border-dashed border-slate-200 pt-4">
+              {points.map((point) => (
+                <li
+                  key={point}
+                  className="flex items-start gap-2 text-[14px] leading-5 text-slate-600"
+                >
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-success-600" />
+                  {point}
+                </li>
+              ))}
+            </ul>
+          )}
           {footnote && <p className="mt-10 text-xs text-slate-400">{footnote}</p>}
         </div>
         <div data-reveal>{visual}</div>
