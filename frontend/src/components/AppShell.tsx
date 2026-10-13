@@ -614,10 +614,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           <div className="page-body page-enter" key={location.pathname}>
             <Outlet />
           </div>
-          <footer className="mt-10 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-5 text-xs text-slate-400">
-            <span>心理筛查与健康管理</span>
-            <span>让每一次关怀，都有所回应</span>
-          </footer>
+          
         </main>
       </div>
     </div>

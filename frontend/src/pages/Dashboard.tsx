@@ -29,6 +29,7 @@ import {
   type RetrievalResult,
 } from "../data/mockData";
 import { getDraft } from "../services/firstRun";
+import { getCurrentSession } from "../auth/session";
 import { USE_MOCK, clearToken } from "../services/http";
 
 /* ------------------------------------------------------------------ 小工具 */
@@ -208,7 +209,7 @@ export default function Dashboard() {
             : null;
 
     /* 检索结果：取相似度最高的一条，其余用「还有 N 条」带过（版面只放得下一条） */
-    const matched = [...retrievalResults].sort((a, b) => b.similarity - a.similarity);
+    const ranked = [...retrievalResults].sort((a, b) => b.similarity - a.similarity);
 
     /* 「查看检索依据」要带着这次的输入跳到检索页，否则用户到了那边还得再输一遍。
        没有补充文字时用「量表名 + 本次分档」兜底 —— 这是卡里确实显示过的内容，
@@ -221,9 +222,16 @@ export default function Dashboard() {
           : "";
 
     return {
-      name: data.userProfile?.name ?? "",
+      /* 首页问候用**登录用户名**，不用 userProfile.name。
+         两者不是一个来源：右上角头像用的是 token 里的 username，
+         而 userProfile.name 在演示数据里是"林晓"、真后端里是"本地演示用户" ——
+         同一屏出现两个名字，说的却是同一个人。
+         Cases.tsx 早就这么处理了（注释：避免演示资料中的姓名覆盖当前账号），
+         这里对齐同一口径。 */
+      name: getCurrentSession()?.username || data.userProfile?.name || "",
       input,
-      top: matched[0],
+      top: ranked[0],
+      second: ranked[1],
       date: todayLabel(),
       records,
       last,
@@ -249,6 +257,7 @@ export default function Dashboard() {
   const inputText = view?.input?.kind === "text" ? view.input.text.trim() : "";
   const [live, setLive] = useState<{
     top?: RetrievalResult;
+    second?: RetrievalResult;
     report?: SearchResponse<RetrievalResult>["report"];
     error?: string;
   } | null>(null);
@@ -265,7 +274,12 @@ export default function Dashboard() {
     if (inputText) {
       search(inputText)
         .then((res) => {
-          if (alive) setLive({ top: res.results?.[0], report: res.report });
+          if (alive)
+            setLive({
+              top: res.results?.[0],
+              second: res.results?.[1],
+              report: res.report,
+            });
         })
         .catch((e) => {
           if (alive) setLive({ error: e instanceof Error ? e.message : "检索失败" });
@@ -327,6 +341,8 @@ export default function Dashboard() {
   /* 真检索成功就用真结果，否则退回演示数据。
      后端返回的是 alert_level（snake_case），前端类型写的是 alertLevel，两边都认。 */
   const matched = live?.top ?? view.top;
+  /* 相似度第二高的一条，紧跟第一条展示 */
+  const matched2 = live?.top ? live.second : view.second;
   const matchedLevel = (raw: unknown): AlertLevel => {
     const r = raw as { alertLevel?: AlertLevel; alert_level?: AlertLevel } | undefined;
     return r?.alertLevel ?? r?.alert_level ?? "green";
@@ -453,9 +469,12 @@ export default function Dashboard() {
         {view.last ? (
           <>
             <div className="mt-5 grid gap-6 border-t border-slate-100 pt-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-8">
-              {/* 栏一：量表给的分数 */}
-              <div>
-                <p className="text-[13px] text-slate-400">量表给的分数</p>
+              {/* 栏一：量表给的分数
+                  表头固定在顶（三栏表头必须对齐），**只有下面的分数+分数带**
+                  在剩余高度里竖直居中 —— 这一栏内容比左右两栏矮，贴顶会显得上重下空。 */}
+              <div className="flex flex-col">
+                <p className="text-[15px] font-semibold text-slate-700">量表给的分数</p>
+                <div className="flex flex-1 flex-col justify-center">
                 <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                   <span className="flex items-baseline gap-2">
                     <span className="text-[34px] font-semibold leading-none tabular-nums text-slate-900">
@@ -496,11 +515,12 @@ export default function Dashboard() {
                     </span>
                   ))}
                 </div>
+                </div>
               </div>
 
               {/* 栏二：检索 */}
               <div className="lg:border-l lg:border-slate-100 lg:pl-8">
-                <p className="flex items-center gap-1.5 text-[13px] text-slate-400">
+                <p className="flex items-center gap-1.5 text-[15px] font-semibold text-slate-700">
                   最近一次输入
                   {(!view.input || view.input.kind !== "text") && (
                     <span className="rounded bg-slate-100 px-1 text-[11px] font-medium text-slate-400">
@@ -566,6 +586,32 @@ export default function Dashboard() {
                       <p className="mt-1.5 line-clamp-1 text-[13px] leading-[1.6] text-slate-600">
                         {matched.summary}
                       </p>
+
+                      {matched2 && (
+                        <>
+                          <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-t border-slate-100 pt-2.5">
+                            <span className="flex items-baseline gap-2">
+                              <span className="text-[13.5px] font-medium tabular-nums text-slate-700">
+                                {matched2.id}
+                              </span>
+                              <span className="text-[12px] text-slate-400">{matched2.date}</span>
+                            </span>
+                            <span className="flex items-baseline gap-2">
+                              <span
+                                className={`text-[12.5px] font-medium ${LEVEL_TEXT[matchedLevel(matched2)]}`}
+                              >
+                                {LEVEL_LABEL[matchedLevel(matched2)]}
+                              </span>
+                              <span className="text-[15px] font-semibold tabular-nums text-slate-900">
+                                {Math.round(matched2.similarity * 100)}%
+                              </span>
+                            </span>
+                          </div>
+                          <p className="mt-1.5 line-clamp-1 text-[13px] leading-[1.6] text-slate-600">
+                            {matched2.summary}
+                          </p>
+                        </>
+                      )}
                       {live?.error && (
                         <p className="mt-1 text-[11.5px] text-danger-600">
                           实时检索没跑成：{live.error}
@@ -578,7 +624,7 @@ export default function Dashboard() {
 
               {/* 栏三：RAG */}
               <div className="lg:border-l lg:border-slate-100 lg:pl-8">
-                <p className="flex items-center gap-1.5 text-[13px] text-slate-400">
+                <p className="flex items-center gap-1.5 text-[15px] font-semibold text-slate-700">
                   RAG 给出的解释与建议
                   {!USE_MOCK && live?.report && (
                     <span className="rounded bg-success-50 px-1 text-[11px] font-medium text-success-600">

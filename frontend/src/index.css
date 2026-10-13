@@ -1688,8 +1688,13 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] svg.lucide {
 @media (min-width: 1024px) {
   .report-card {
     width: 600px;
-    height: 600px;
+    /* 高度按视口自适应（上限 720px）：切换三个标签时尺寸仍然不变，
+       但展开「本次作答与补充」这类内容时不会被截断，也不用在小框里滚动。 */
+    height: min(78vh, 720px) !important;
     flex: none;
+    /* 整块略微上移：贴顶栏下沿一点，视觉重心不再偏下（用 translate 不占布局，
+       也就不会和其它 transform 工具类打架） */
+    translate: 0 -46px;
   }
 }
 

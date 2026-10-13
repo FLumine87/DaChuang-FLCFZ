@@ -123,7 +123,7 @@ export default function FirstRunShell({
 
         <div
           className={`relative z-10 mx-auto grid w-full gap-12 lg:justify-center lg:gap-[64px] ${
-            alignTop ? "items-start" : "items-center"
+            alignTop ? "items-start" : "items-center lg:pb-24"
           } ${stretch ? "lg:items-stretch" : ""} ${
             wide
               ? /* 宽版（01 第 9 题、03 结果）：左栏仍要放得下 60px 的标题，
@@ -177,7 +177,7 @@ export default function FirstRunShell({
           <div
             className={`relative z-10 w-full ${
               stretch
-                ? "flex lg:mt-14 lg:[&>section]:h-full lg:[&>section]:max-h-[466px] lg:[&>section]:flex-col"
+                ? "flex lg:mt-14 lg:[&>section]:h-full lg:[&>section]:max-h-[720px] lg:[&>section]:flex-col"
                 : ""
             }`}
           >
