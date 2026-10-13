@@ -16,6 +16,7 @@ __pycache__/
 *.log
 *.pid
 _inf_check.json
+.kg_seeded
 
 # 系统/编辑器
 .DS_Store
