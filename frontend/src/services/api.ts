@@ -1,7 +1,20 @@
 // 个人端 KG + Agent 服务 API 封装（阶段 3）
-// 所有请求指向后端 FastAPI 服务（默认 8001 端口，可用 VITE_API_BASE 覆盖）
+// 所有请求指向后端 FastAPI 服务。
+//
+// 基地址解析顺序（改这里是为了能用上仓库既有的开发代理，而不是绕开它）：
+//   1. VITE_API_BASE —— 团队原先的显式覆盖项，保留
+//   2. VITE_API_BASE_URL —— 与 http.ts / .env.local 同一套约定
+//   3. '' —— 走同源相对路径 /api/v1/...，由 vite.config.ts 的
+//      VITE_DEV_PROXY_TARGET（本机 127.0.0.1:8000）代理到 personal-backend。
+//      这样 personal-backend 跑在默认 8000 端口时无需改任何代码或 env；
+//      若它跑在别的端口（团队 README 写的是 8001），只改 VITE_DEV_PROXY_TARGET 即可。
+// 原先硬编码 http://localhost:8001 会让 .env.local 里的代理配置完全失效，
+// 且浏览器会跨源直连（localhost vs 127.0.0.1 也不同源）。
 
-const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8001';
+const BASE =
+  (import.meta.env.VITE_API_BASE as string | undefined) ??
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+  '';
 
 export interface Triple {
   subject: string;

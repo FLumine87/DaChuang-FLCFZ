@@ -3,24 +3,83 @@ import { Network, RefreshCw, AlertTriangle } from 'lucide-react';
 import { api, type GraphData } from '../../services/api';
 import { getCurrentSession } from '../../auth/session';
 
-// 标签 -> 颜色（与后端本体对应）
-const LABEL_COLOR: Record<string, string> = {
-  User: '#059669',
-  Interest: '#3b82f6',
-  Emotion: '#f59e0b',
-  Symptom: '#ef4444',
-  LifeEvent: '#8b5cf6',
-  Trigger: '#f97316',
-  Coping: '#10b981',
-  Disorder: '#dc2626',
-};
+/* 节点/分类配色。
+ *
+ * 为什么不能直接写死十六进制：SVG 的 fill / stroke 属性不解析 var()，
+ * 而 <html> 上的 .dark 会把整套 --color-* 令牌翻过来。所以这里在运行时
+ * 从 documentElement 上读令牌值，并监听 class 变化——主题一换，
+ * 色板跟着重算，深色下不会再出现浅色调的节点。
+ * 每个标签保留原本的色相语义（用户/兴趣/情绪/症状/生活事件/诱因/应对/障碍）。 */
+function readPalette() {
+  const s = typeof window === 'undefined' ? null : getComputedStyle(document.documentElement);
+  /* 第二个参数只是令牌读不到时的兜底（理论上不会用到）：真正的颜色一律来自
+     index.css 的 --color-*，深浅色由 html.dark 翻转，这里只负责把它们读出来。 */
+  const v = (name: string, fallback: string) => s?.getPropertyValue(name).trim() || fallback;
+  return {
+    user: v('--color-primary-500', '#465fff'),
+    interest: v('--color-slate-500', '#667085'),
+    emotion: v('--color-warning-500', '#f79009'),
+    symptom: v('--color-danger-500', '#f04438'),
+    lifeEvent: v('--color-primary-400', '#7592ff'),
+    trigger: v('--color-orange-500', '#fb6514'),
+    coping: v('--color-success-500', '#12b76a'),
+    disorder: v('--color-danger-600', '#d92d20'),
+    /* 兜底节点色与图的线条/文字 */
+    fallback: v('--color-slate-400', '#98a2b3'),
+    edge: v('--color-slate-300', '#d0d5dd'),
+    edgeLabel: v('--color-slate-400', '#98a2b3'),
+    nodeLabel: v('--color-slate-700', '#344054'),
+    nodeRing: v('--color-white', '#ffffff'),
+    /* 图谱底色：两端都用令牌，深色下是一块深底而不是刺眼的浅绿白 */
+    canvasFrom: v('--color-slate-50', '#f9fafb'),
+    canvasTo: v('--color-primary-50', '#ecf3ff'),
+  };
+}
+
+type Palette = ReturnType<typeof readPalette>;
+
+/** 跟随 html.dark 重算色板 */
+function usePalette(): Palette {
+  const [palette, setPalette] = useState<Palette>(readPalette);
+  useEffect(() => {
+    const observer = new MutationObserver(() => setPalette(readPalette()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+  return palette;
+}
+
+function labelColor(palette: Palette, label: string): string {
+  const map: Record<string, string> = {
+    User: palette.user,
+    Interest: palette.interest,
+    Emotion: palette.emotion,
+    Symptom: palette.symptom,
+    LifeEvent: palette.lifeEvent,
+    Trigger: palette.trigger,
+    Coping: palette.coping,
+    Disorder: palette.disorder,
+  };
+  return map[label] ?? palette.fallback;
+}
+
+/** Interest 的分类色：统一走令牌色相，不再是一组浅色专用的硬编码值 */
+function categoryColor(palette: Palette, category: string): string | undefined {
+  const map: Record<string, string> = {
+    音乐: palette.user,
+    体育赛事: palette.lifeEvent,
+    影视: palette.trigger,
+    游戏: palette.disorder,
+    运动: palette.coping,
+    美食: palette.emotion,
+    旅行: palette.interest,
+  };
+  return map[category];
+}
+
 const LABEL_NAME: Record<string, string> = {
   User: '用户', Interest: '兴趣', Emotion: '情绪', Symptom: '症状',
   LifeEvent: '生活事件', Trigger: '诱因', Coping: '应对方式', Disorder: '障碍',
-};
-const CATEGORY_COLOR: Record<string, string> = {
-  音乐: '#6366f1', 体育赛事: '#0ea5e9', 影视: '#a855f7', 游戏: '#f43f5e',
-  运动: '#22c55e', 美食: '#f59e0b', 旅行: '#14b8a6',
 };
 
 interface Pos { x: number; y: number }
@@ -36,6 +95,8 @@ export default function KgPage() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [, setRenderTick] = useState(0);
+  /* 主题感知的节点/线条配色（见文件顶部 readPalette 的说明） */
+  const palette = usePalette();
 
   const load = async () => {
     setLoading(true);
@@ -130,10 +191,10 @@ export default function KgPage() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center justify-between">
+      <div className="ui-card p-4 flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-            <Network className="w-4 h-4 text-emerald-600" /> 我的个人知识图谱
+            <Network className="w-4 h-4 text-primary-600" /> 我的个人知识图谱
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             用户 <span className="font-mono">{userId}</span> 的专属子图 · 点击节点查看详情
@@ -142,7 +203,7 @@ export default function KgPage() {
         <button
           onClick={load}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-sm font-medium hover:bg-emerald-100 disabled:opacity-50 cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-50 text-primary-600 text-sm font-medium hover:bg-primary-100 disabled:opacity-50 cursor-pointer"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> 刷新
         </button>
@@ -154,20 +215,20 @@ export default function KgPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="ui-card overflow-hidden">
         {!data || nodes.length === 0 ? (
           <div className="h-[520px] flex items-center justify-center text-sm text-slate-400">
             {loading ? '加载中…' : data ? '该用户暂无图谱数据，去对话页聊几句吧' : '无法加载图谱'}
           </div>
         ) : (
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto block" style={{ background: 'linear-gradient(135deg,#f8fafc,#f0fdf4)' }}>
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto block" style={{ background: `linear-gradient(135deg,${palette.canvasFrom},${palette.canvasTo})` }}>
             {/* 边 */}
             {links.map((l, i) => (
               <line
                 key={i}
                 x1={pos.get(l.source.id)?.x ?? 0} y1={pos.get(l.source.id)?.y ?? 0}
                 x2={pos.get(l.target.id)?.x ?? 0} y2={pos.get(l.target.id)?.y ?? 0}
-                stroke="#cbd5e1" strokeWidth={1.5} strokeOpacity={0.7}
+                stroke={palette.edge} strokeWidth={1.5} strokeOpacity={0.7}
               />
             ))}
             {/* 边标签 */}
@@ -175,7 +236,7 @@ export default function KgPage() {
               const x1 = pos.get(l.source.id)?.x ?? 0, y1 = pos.get(l.source.id)?.y ?? 0;
               const x2 = pos.get(l.target.id)?.x ?? 0, y2 = pos.get(l.target.id)?.y ?? 0;
               return (
-                <text key={`t${i}`} x={(x1 + x2) / 2} y={(y1 + y2) / 2} fontSize={9} fill="#94a3b8" textAnchor="middle">
+                <text key={`t${i}`} x={(x1 + x2) / 2} y={(y1 + y2) / 2} fontSize={9} fill={palette.edgeLabel} textAnchor="middle">
                   {l.relation}
                 </text>
               );
@@ -185,13 +246,15 @@ export default function KgPage() {
               const p = pos.get(n.id);
               if (!p) return null;
               const isUser = n.label === 'User';
-              const fill = isUser ? LABEL_COLOR.User : (n.category && CATEGORY_COLOR[n.category]) || LABEL_COLOR[n.label] || '#64748b';
+              const fill = isUser
+                ? palette.user
+                : (n.category ? categoryColor(palette, n.category) : undefined) ?? labelColor(palette, n.label);
               const r = isUser ? 22 : n.label === 'Disorder' ? 14 : 11;
               return (
                 <g key={n.id} transform={`translate(${p.x},${p.y})`} onClick={() => setSelected(n.id)} style={{ cursor: 'pointer' }}>
                   <circle r={r + 4} fill={fill} opacity={selected === n.id ? 0.25 : 0.12} />
-                  <circle r={r} fill={fill} stroke="#fff" strokeWidth={2} />
-                  <text y={r + 14} fontSize={11} textAnchor="middle" fill="#334155" fontWeight={isUser ? 700 : 400}>
+                  <circle r={r} fill={fill} stroke={palette.nodeRing} strokeWidth={2} />
+                  <text y={r + 14} fontSize={11} textAnchor="middle" fill={palette.nodeLabel} fontWeight={isUser ? 700 : 400}>
                     {n.name.length > 6 ? n.name.slice(0, 6) + '…' : n.name}
                   </text>
                 </g>
@@ -202,11 +265,11 @@ export default function KgPage() {
       </div>
 
       {/* 图例 */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-wrap gap-3 items-center">
+      <div className="ui-card p-4 flex flex-wrap gap-3 items-center">
         <span className="text-xs font-medium text-slate-500 mr-1">图例：</span>
         {Object.entries(LABEL_NAME).map(([k, v]) => (
           <span key={k} className="inline-flex items-center gap-1.5 text-xs text-slate-600">
-            <span className="w-3 h-3 rounded-full inline-block" style={{ background: LABEL_COLOR[k] }} />
+            <span className="w-3 h-3 rounded-full inline-block" style={{ background: labelColor(palette, k) }} />
             {v}
           </span>
         ))}
@@ -214,7 +277,7 @@ export default function KgPage() {
 
       {/* 选中详情 */}
       {selNode && (
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+        <div className="ui-card p-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-800">
               节点：{selNode.name}

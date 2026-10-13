@@ -118,9 +118,11 @@ export default function AgentWorkspaceV2() {
   const active = workspace?.tasks.filter(t => ['confirmed', 'modified'].includes(t.state)).length || 0;
 
   return <div className="aw">
-    <div className="aw-heading"><div><p className="aw-breadcrumb">Agent Workbench / 群体与个案协同研判</p>
-      <h2>让每一次关注，都有据可循。</h2><p>从群体变化发现线索，将个案复核落实为可跟踪的随访任务。</p></div>
-      <span className="aw-mode"><span />工作流预览 · AI 未接入</span></div>
+    {/* 页头不再重复渲染标题与面包屑：AppShell 已经为这条路由输出
+        眉标（管理端 · 智能分析）、页面标题「预警处置工作台」、说明与面包屑。
+        这一行只保留页面自己的状态指示——它必须留着，因为它是"当前并非真实 AI 接入"
+        的唯一提示。 */}
+    <div className="aw-heading"><span className="aw-mode"><span />工作流预览 · AI 未接入</span></div>
     <div className="aw-toolbar">
       <label>数据来源<select disabled={busy} value={scope} onChange={e => { setScope(e.target.value as Scope); setDepartment('all'); }}><option value="demo">合成演示数据</option><option value="live">本地业务数据</option></select></label>
       <label>观察窗口<select disabled={busy} value={days} onChange={e => setDays(Number(e.target.value))}><option value={7}>最近 7 天</option><option value={30}>最近 30 天</option><option value={90}>最近 90 天</option></select></label>

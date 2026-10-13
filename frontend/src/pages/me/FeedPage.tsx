@@ -52,10 +52,10 @@ export default function FeedPage() {
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto">
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center justify-between">
+      <div className="ui-card p-4 flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-            <Bell className="w-4 h-4 text-emerald-600" /> 个性化推送
+            <Bell className="w-4 h-4 text-primary-600" /> 个性化推送
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             基于你的心理状况评估 + 兴趣画像，为你定制缓解内容
@@ -64,7 +64,7 @@ export default function FeedPage() {
         <button
           onClick={load}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-sm font-medium hover:bg-emerald-100 disabled:opacity-50 cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-50 text-primary-600 text-sm font-medium hover:bg-primary-100 disabled:opacity-50 cursor-pointer"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> 刷新
         </button>
@@ -79,23 +79,23 @@ export default function FeedPage() {
       {/* 状态卡片 */}
       {feed && (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+          <div className="ui-card p-4">
             <p className="text-xs text-slate-500">当前状态</p>
             <p className={`text-lg font-bold mt-1 ${
-              feed.report.risk_level === 'red' ? 'text-red-600' :
+              feed.report.risk_level === 'red' ? 'text-danger-600' :
               feed.report.risk_level === 'orange' ? 'text-orange-600' :
-              feed.report.risk_level === 'yellow' ? 'text-yellow-600' : 'text-emerald-600'
+              feed.report.risk_level === 'yellow' ? 'text-warning-600' : 'text-success-600'
             }`}>{feed.report.risk_label}</p>
             <p className="text-xs text-slate-400 mt-1">综合分 {feed.report.overall_score}</p>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+          <div className="ui-card p-4">
             <p className="text-xs text-slate-500">本次更新</p>
             <p className="text-lg font-bold mt-1 text-slate-700">{feed.report.created_at.slice(5, 16)}</p>
             <p className="text-xs text-slate-400 mt-1">
               {feed.report.alert_created ? '已同步生成预警' : '未触发预警'}
             </p>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm col-span-2 md:col-span-1">
+          <div className="ui-card p-4 col-span-2 md:col-span-1">
             <p className="text-xs text-slate-500">累积预警</p>
             <p className="text-lg font-bold mt-1 text-slate-700">{alerts.length} 条</p>
             <p className="text-xs text-slate-400 mt-1">
@@ -129,22 +129,22 @@ export default function FeedPage() {
 
       {/* 缓解内容推送（按状态） */}
       {feed && activeTab === 'status' && feed.content_feed.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="text-sm font-semibold text-slate-800 mb-3">为你推荐</h3>
           <div className="space-y-3">
             {feed.content_feed.map((item, i) => {
               const Icon = CATEGORY_ICON[item.category ?? ''] ?? BookOpen;
               return (
-                <div key={i} className="flex gap-3 border border-slate-100 rounded-xl p-4 hover:border-emerald-200 transition-colors">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-                    <Icon className="w-4.5 h-4.5 text-emerald-600" />
+                <div key={i} className="flex gap-3 border border-slate-100 rounded-xl p-4 hover:border-primary-200 transition-colors">
+                  <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0">
+                    <Icon className="w-4.5 h-4.5 text-primary-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800">{item.name}</p>
                     {item.suggestion && (
                       <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap leading-relaxed">{item.suggestion}</p>
                     )}
-                    <p className="text-xs text-emerald-600 mt-2">{item.reason}</p>
+                    <p className="text-xs text-primary-600 mt-2">{item.reason}</p>
                   </div>
                 </div>
               );
@@ -155,7 +155,7 @@ export default function FeedPage() {
 
       {/* 纯兴趣推送（绿级稳定期） */}
       {activeTab === 'interest' && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="text-sm font-semibold text-slate-800 mb-3">兴趣推送</h3>
           {interestFeed.length === 0 ? (
             <p className="text-sm text-slate-400 py-4 text-center">
@@ -168,16 +168,16 @@ export default function FeedPage() {
               {interestFeed.map((item, i) => {
                 const Icon = CATEGORY_ICON[item.category ?? ''] ?? BookOpen;
                 return (
-                  <div key={i} className="flex gap-3 border border-slate-100 rounded-xl p-4 hover:border-emerald-200 transition-colors">
-                    <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-                      <Icon className="w-4.5 h-4.5 text-emerald-600" />
+                  <div key={i} className="flex gap-3 border border-slate-100 rounded-xl p-4 hover:border-primary-200 transition-colors">
+                    <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0">
+                      <Icon className="w-4.5 h-4.5 text-primary-600" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-800">{item.name}</p>
                       {item.suggestion && (
                         <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap leading-relaxed">{item.suggestion}</p>
                       )}
-                      <p className="text-xs text-emerald-600 mt-2">{item.reason}</p>
+                      <p className="text-xs text-primary-600 mt-2">{item.reason}</p>
                     </div>
                   </div>
                 );
@@ -189,22 +189,22 @@ export default function FeedPage() {
 
       {/* 预警记录 */}
       {alerts.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="text-sm font-semibold text-slate-800 mb-3">预警记录</h3>
           <div className="space-y-2">
             {alerts.map((a) => (
               <div key={a.id} className="flex items-center gap-3 border border-slate-100 rounded-xl px-4 py-3">
                 <span className={`px-2 py-1 rounded text-xs font-bold ${
-                  a.level === 'red' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                  a.level === 'red' ? 'bg-danger-50 text-danger-600' : 'bg-orange-50 text-orange-600'
                 }`}>{a.level === 'red' ? '红' : '橙'}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-slate-700 truncate">{a.title}</p>
                   <p className="text-xs text-slate-400 mt-0.5">{a.created_at.slice(0, 16)} · {a.reason ?? ''}</p>
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full ${
-                  a.status === 'pending' ? 'bg-yellow-50 text-yellow-700' :
+                  a.status === 'pending' ? 'bg-warning-50 text-warning-600' :
                   a.status === 'closed' ? 'bg-slate-100 text-slate-500' :
-                  'bg-blue-50 text-blue-700'
+                  'bg-primary-50 text-primary-600'
                 }`}>
                   {a.status === 'pending' ? '待确认' : a.status === 'confirmed' ? '已确认' :
                    a.status === 'processing' ? '跟进中' : '已关闭'}

@@ -66,10 +66,10 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-full max-w-3xl mx-auto">
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center justify-between">
+      <div className="ui-card p-4 flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-emerald-600" /> AI 心理陪伴对话
+            <Sparkles className="w-4 h-4 text-primary-600" /> AI 心理陪伴对话
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             你的话语会被抽取成知识图谱三元组 · 当前用户 <span className="font-mono">{userId}</span>
@@ -93,8 +93,8 @@ export default function ChatPage() {
             <div
               className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                 m.role === 'user'
-                  ? 'bg-emerald-600 text-white rounded-br-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 rounded-bl-sm shadow-sm'
+                  ? 'bg-primary-500 text-white rounded-br-sm'
+                  : 'ui-card text-slate-700 rounded-bl-sm'
               }`}
             >
               <p>{m.text}</p>
@@ -102,7 +102,7 @@ export default function ChatPage() {
                 <div className="mt-2 pt-2 border-t border-slate-100 space-y-1">
                   <p className="text-xs font-medium text-slate-400">已抽取 {m.extract.triples.length} 条入图谱：</p>
                   {m.extract.triples.slice(0, 4).map((t, i) => (
-                    <p key={i} className="text-xs text-emerald-700 font-mono">
+                    <p key={i} className="text-xs text-primary-600 font-mono">
                       ({t.relation}) {t.object}
                       {t.category ? ` · ${t.category}` : ''}
                     </p>
@@ -130,12 +130,12 @@ export default function ChatPage() {
           }}
           placeholder="聊聊你的状态、兴趣或烦恼…（Enter 发送，Shift+Enter 换行）"
           rows={2}
-          className="flex-1 resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+          className="flex-1 resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-300"
         />
         <button
           onClick={send}
           disabled={busy}
-          className="self-end inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+          className="self-end inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 disabled:opacity-50 cursor-pointer"
         >
           {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           发送
@@ -170,7 +170,7 @@ function DailyCheckinButton({ userId }: { userId: string }) {
       <button
         onClick={fetchCheckin}
         disabled={loading}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-sm font-medium hover:bg-emerald-100 disabled:opacity-50 cursor-pointer"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-50 text-primary-600 text-sm font-medium hover:bg-primary-100 disabled:opacity-50 cursor-pointer"
       >
         <MessageCircleHeart className={`w-4 h-4 ${loading ? 'animate-pulse' : ''}`} /> 今日问询
       </button>
@@ -178,16 +178,16 @@ function DailyCheckinButton({ userId }: { userId: string }) {
       {show && msg && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={() => setShow(false)}>
           <div
-            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+            className="ui-card max-w-md w-full p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.45)]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-                <MessageCircleHeart className="w-4 h-4 text-emerald-600" /> 今日关怀问询
+                <MessageCircleHeart className="w-4 h-4 text-primary-600" /> 今日关怀问询
               </h3>
               <button onClick={() => setShow(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">✕</button>
             </div>
-            <div className="bg-emerald-50 rounded-xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+            <div className="bg-primary-50 rounded-xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
               {msg.message}
             </div>
             <p className="text-xs text-slate-400 mt-3">回复后内容会自动整理进你的个人图谱</p>
@@ -222,7 +222,7 @@ function RunInferenceButton({ userId }: { userId: string }) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-sm font-medium hover:bg-emerald-100 cursor-pointer"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-50 text-primary-600 text-sm font-medium hover:bg-primary-100 cursor-pointer"
       >
         <RefreshCw className="w-4 h-4" /> 生成心理状况报告
       </button>
@@ -230,7 +230,7 @@ function RunInferenceButton({ userId }: { userId: string }) {
       {open && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={() => setOpen(false)}>
           <div
-            className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6"
+            className="ui-card max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.45)]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
@@ -246,7 +246,7 @@ function RunInferenceButton({ userId }: { userId: string }) {
                 {err && <p className="text-sm text-danger-600 mb-3">{err}</p>}
                 <button
                   onClick={run}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 cursor-pointer"
+                  className="px-6 py-2.5 rounded-xl bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 cursor-pointer"
                 >
                   开始推理
                 </button>
@@ -261,12 +261,12 @@ function RunInferenceButton({ userId }: { userId: string }) {
                   <span
                     className={`px-3 py-1.5 rounded-lg text-sm font-bold ${
                       result.report.risk_level === 'red'
-                        ? 'bg-red-100 text-red-700'
+                        ? 'bg-danger-50 text-danger-600'
                         : result.report.risk_level === 'orange'
-                        ? 'bg-orange-100 text-orange-700'
+                        ? 'bg-orange-50 text-orange-600'
                         : result.report.risk_level === 'yellow'
-                        ? 'bg-yellow-100 text-yellow-700'
-                        : 'bg-emerald-100 text-emerald-700'
+                        ? 'bg-warning-50 text-warning-600'
+                        : 'bg-success-50 text-success-600'
                     }`}
                   >
                     {result.report.risk_label}
@@ -291,7 +291,7 @@ function RunInferenceButton({ userId }: { userId: string }) {
                     <ul className="space-y-1">
                       {result.report.factors.map((f, i) => (
                         <li key={i} className="text-sm text-slate-600 flex gap-2">
-                          <span className="text-emerald-500">•</span> {f}
+                          <span className="text-primary-500">•</span> {f}
                         </li>
                       ))}
                     </ul>
@@ -303,12 +303,12 @@ function RunInferenceButton({ userId }: { userId: string }) {
                     <p className="text-sm font-semibold text-slate-700 mb-2">为你推荐的缓解内容</p>
                     <div className="space-y-2">
                       {result.content_feed.map((f, i) => (
-                        <div key={i} className="border border-slate-200 rounded-xl p-3">
+                        <div key={i} className="ui-card p-3">
                           <p className="text-sm font-medium text-slate-800">{f.name}</p>
                           {f.suggestion && (
                             <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{f.suggestion}</p>
                           )}
-                          <p className="text-xs text-emerald-600 mt-1">{f.reason}</p>
+                          <p className="text-xs text-primary-600 mt-1">{f.reason}</p>
                         </div>
                       ))}
                     </div>
