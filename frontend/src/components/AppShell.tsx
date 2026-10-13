@@ -104,27 +104,37 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       icon: Database,
       group: "工作空间",
     },
-    {
-      path: `${root}/me/chat`,
-      label: "AI 陪伴对话",
-      description: "随时说说此刻的感受，获得陪伴与回应。",
-      icon: MessageCircle,
-      group: "智能心理助手",
-    },
-    {
-      path: `${root}/me/kg`,
-      label: "我的知识图谱",
-      description: "把记录里的线索连成图，看清状态之间的关系。",
-      icon: Network,
-      group: "智能心理助手",
-    },
-    {
-      path: `${root}/me/feed`,
-      label: "个性化推送",
-      description: "按你的关注点，推送可执行的调适建议。",
-      icon: Rss,
-      group: "智能心理助手",
-    },
+    /* 「智能心理助手」三件套**只属于个人端**：
+       它们是"我的"视角（陪伴我 / 我的图谱 / 推给我），路径也只在
+       /personal 下注册过路由。之前这三条没做侧栏过滤，管理端也会渲染出来，
+       指向 /admin/me/* —— 全是坏链接。
+       管理端对应的是另外三件事（AI 辅助研判 / 个案关系图谱 / 干预方案与推送管理），
+       属于"研判 + 处置 + 留痕"，等实现后再挂到管理端的「智能研判」分组下。 */
+    ...(isAdmin
+      ? []
+      : [
+          {
+            path: `${root}/me/chat`,
+            label: "AI 陪伴对话",
+            description: "随时说说此刻的感受，获得陪伴与回应。",
+            icon: MessageCircle,
+            group: "智能心理助手",
+          },
+          {
+            path: `${root}/me/kg`,
+            label: "我的知识图谱",
+            description: "把记录里的线索连成图，看清状态之间的关系。",
+            icon: Network,
+            group: "智能心理助手",
+          },
+          {
+            path: `${root}/me/feed`,
+            label: "个性化推送",
+            description: "按你的关注点，推送可执行的调适建议。",
+            icon: Rss,
+            group: "智能心理助手",
+          },
+        ]),
     {
       path: `${root}/retrieval`,
       label: "检索与分析",
@@ -134,6 +144,13 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
     },
     ...(isAdmin
       ? [
+          {
+            path: `${root}/judgement`,
+            label: "智能研判台",
+            description: "以案为中心：结论、依据、处置与留痕在一页里走完。",
+            icon: BrainCircuit,
+            group: "智能分析",
+          },
           {
             path: `${root}/agent-workbench`,
             label: "预警处置工作台",
@@ -150,15 +167,19 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       icon: TriangleAlert,
       group: "健康管理",
     },
-    {
-      path: `${root}/cases`,
-      label: isAdmin ? "案例管理" : "我的档案",
-      description: isAdmin
-        ? "汇集案例资料，持续跟踪干预与恢复进展。"
-        : "把筛查、采集和行动记录，整理成你的健康档案。",
-      icon: FolderOpen,
-      group: "健康管理",
-    },
+    /* 管理端不需要「案例管理」（用户要求删除）；用户端保留「我的档案」——
+       那是筛查记录的入口，首次引导落库后要靠它回看。 */
+    ...(isAdmin
+      ? []
+      : [
+          {
+            path: `${root}/cases`,
+            label: "我的档案",
+            description: "把筛查、采集和行动记录，整理成你的健康档案。",
+            icon: FolderOpen,
+            group: "健康管理",
+          },
+        ]),
   ];
   const active =
     items.find(
