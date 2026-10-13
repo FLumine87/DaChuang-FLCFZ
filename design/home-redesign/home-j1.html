@@ -170,6 +170,50 @@ try {
   .btnstack--ghost:hover { background: var(--accent-tint); text-decoration: none; }
 
   /* ---------- 说明改造成"标题的下一句"：三层字号做变形 ---------- */
+  /* 灰色小字：字号同预警块时间戳（--fs-meta 12.5px），
+     行距与预警说明（图三）同一套 --lh-cjk 1.75；
+     标题到它的距离也用这同一个行高，形成均匀的竖排节奏。 */
+  .hero3__desc {
+    margin: calc(var(--fs-meta) * 1.75) 0 0 34px;
+    font-size: var(--fs-meta); font-weight: 400;
+    line-height: var(--lh-cjk); color: var(--txt-2);
+  }
+  .hero3__meta-line {
+    margin: 0 0 0 34px;
+    font-size: var(--fs-meta); line-height: var(--lh-cjk); color: var(--txt-3);
+  }
+
+  /* ---------- 两个动作一起放页头右侧 ---------- */
+  .hero3__row { display: flex; justify-content: space-between; align-items: flex-start; gap: 56px; }
+  .hero3__text { min-width: 0; }
+  .hero3__actions { flex: none; display: flex; gap: 32px; }
+  .hero3__actions--stack { display: grid; gap: 10px; justify-items: end; }
+
+  /* ---------- 动作区：与标题行对齐（不再跟眉标平齐）+ 状态贴近按钮 ---------- */
+  .hero3__row { display: flex; justify-content: space-between; align-items: flex-start; gap: 56px; }
+  .hero3__text { min-width: 0; }
+  .hero3__actions { flex: none; display: flex; gap: 28px; }
+  .act { display: grid; gap: 6px; justify-items: start; }
+  .act__meta { font-size: var(--fs-meta); color: var(--txt-3); padding-inline-start: 30px; }  /* 与按钮内文字左对齐 */
+  .act__meta--due { color: var(--accent); }
+
+  /* 两行按钮：状态做进按钮里 */
+  .btnstack {
+    display: grid; gap: 2px; justify-items: start; text-align: left;
+    padding: 10px 24px; border-radius: var(--r-control); border: 1px solid transparent;
+    line-height: 1.35; transition: background .18s ease, border-color .18s ease;
+  }
+  .btnstack__t { font-size: var(--fs-read); font-weight: 600; }
+  .btnstack__m { font-size: var(--fs-meta); }
+  .btnstack--primary { background: var(--accent); color: var(--text-on-accent); }
+  /* 跟模式无关：继承按钮文字色再降透明度（深色模式按钮字是深色、浅色模式是白色） */
+  .btnstack--primary .btnstack__m { color: inherit; opacity: 0.74; }
+  .btnstack--primary:hover { background: var(--accent-hover); text-decoration: none; }
+  .btnstack--ghost { border-color: var(--accent-border); color: var(--accent); }
+  .btnstack--ghost .btnstack__m { color: var(--txt-3); }
+  .btnstack--ghost:hover { background: var(--accent-tint); text-decoration: none; }
+
+  /* ---------- 说明改造成"标题的下一句"：三层字号做变形 ---------- */
   /* 说明与元信息：字号与预警块那行时间戳一致（--fs-meta 12.5px）；
      与标题、两行之间的间距都收紧 */
   .hero3__desc {
@@ -199,8 +243,7 @@ try {
             <div class="hero3__row">
               <div class="hero3__text">
                 <h1 class="hero3__title">今天，想说说自己吗？</h1>
-                <p class="hero3__desc">不用想好怎么说，先记下来就行。</p>
-            <p class="hero3__meta-line">大约 2–3 分钟 · 文字、语音、图片任选</p>
+                <p class="hero3__desc">不用想好怎么说，两三分钟记下来就行。</p>
               </div>
               <div class="hero3__actions">
                 <a class="btnstack btnstack--primary" href="personal-collect.html">
