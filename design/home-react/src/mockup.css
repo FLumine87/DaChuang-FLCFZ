@@ -1,0 +1,218 @@
+/* 从 design/home-redesign/home-j1.html 的局部样式原样搬过来，
+   保证 React 版与样张逐像素一致。落地到 frontend/ 时应拆进 index.css。 */
+/* 样张局部样式：眉标 + 品牌副标题独立成行 */
+  .brand__sub { display: block; }
+  /* 眉标：从「标签」改成「一行信息」—— 15px / 500 / 字距收到 0.02em / 次要色。
+     原来 13px + 600 + 0.06em + 主色蓝 四条叠一起，看着像标签不像问候。 */
+  .pagehead__eyebrow {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--txt-2);
+  }
+  /* 深色模式下靠字重分不开层级，颜色是唯一的分层手段：
+     问候拿品牌色（有温度的那半句），日期退到 --txt-3（纯信息），
+     这样眉标 / H1 / 说明行才是三档，而不是和说明行同色的两档。 */
+  .pagehead__eyebrow .pagehead__greet { color: var(--accent); }
+  .pagehead__date { color: var(--txt-3); }
+
+  /* ---------- 首屏：不用卡片容器，标题块直接落在页面上 ---------- */
+  /* 三级字号：说明 15 < 眉标 20 < 标题 40 */
+  /* 页头加一条底线：浅色下给这块一个"底"，不至于飘在大片留白里 */
+  .hero3 {
+    display: grid; gap: 44px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .hero3__act { display: flex; align-items: center; gap: var(--sp-6); flex-wrap: wrap; }
+  /* 悬挂眉标：眉标顶格，标题与说明一起缩进，形成层次 */
+  /* 与登录页/主页同一套规格（index.css:1348 .auth-hero-title）：
+     字重 500 + 极轻正字距 +0.25px + 行高 1.2。
+     原来用的 600 + −0.01em 正是那边注释里否掉的"又粗又挤"。 */
+  .hero3__title {
+    margin: 14px 0 0 34px;
+    font-size: 40px; font-weight: 500; line-height: 1.2; letter-spacing: 0.25px;
+  }
+  .hero3__desc {
+    margin: 16px 0 0 34px;
+    font-size: 1rem; line-height: 1.75; color: var(--txt-2);
+  }
+  .hero3__modes {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-5);
+  }
+  .hero3__mode {
+    display: flex; align-items: center; gap: var(--sp-5);
+    padding: 22px 22px;
+    border-radius: var(--r-card);
+    background: var(--bg-card);
+    transition: background .18s ease, transform .18s ease;
+  }
+  .hero3__mode:hover { background: var(--hover-surface); }
+  .hero3__icon {
+    display: grid; place-items: center; flex: none;
+    width: 38px; height: 38px; border-radius: var(--r-control);
+    background: var(--accent-tint); color: var(--accent);
+  }
+  .hero3__icon svg { width: 19px; height: 19px; }
+  .hero3__text { display: grid; gap: 3px; min-width: 0; }
+  /* 入口标题不用链接色（全局 a{color:accent} 会让三个标题都变蓝，首页颜色预算被抢走） */
+  .hero3__t { font-size: var(--fs-read); font-weight: 600; color: var(--txt-1); }
+  .hero3__m { font-size: var(--fs-meta); color: var(--txt-3); }
+  .hero3__meta { margin: 0; font-size: var(--fs-meta); color: var(--txt-3); }
+
+  /* ---------- 区块标题提一档：和 40px 的首屏标题拉开两级，而不是断崖 ---------- */
+  .card__title { font-size: 1.25rem; }
+
+  /* 抗锯齿：原型 base.css 里是 antialiased（灰度抗锯齿，中文小字发糊），
+     React 端 index.css:162 已改回 auto，这里跟上。 */
+  body { -webkit-font-smoothing: auto; -moz-osx-font-smoothing: auto; }
+
+  /* ---------- 预警块 ---------- */
+  .alertblock__title { margin: var(--sp-5) 0 0; font-size: var(--fs-title); font-weight: 700; }
+  .alertblock__desc { margin: var(--sp-3) 0 0; font-size: var(--fs-base); line-height: var(--lh-cjk); color: var(--txt-2); max-width: 62ch; }
+
+  /* ---------- 你的最近 ---------- */
+  .recent__conclusion { margin: var(--sp-5) 0 0; font-size: 1.5rem; font-weight: 600; line-height: 1.3; }
+  .mrows { margin-top: var(--sp-6); }
+  .mrow {
+    display: grid; grid-template-columns: 52px 96px 1fr auto;
+    align-items: center; gap: var(--sp-6);
+    padding: 13px 0; border-top: 1px solid var(--line);
+  }
+  .mrow:first-child { border-top: 0; }
+  .mrow__name { font-size: var(--fs-base); color: var(--txt-3); }
+  .mrow__spark { width: 96px; height: 26px; display: block; }
+  .mrow__val { font-size: var(--fs-base); font-weight: 600; }
+  .mrow__delta { font-size: var(--fs-meta); color: var(--txt-3); white-space: nowrap; }
+  .mrow__delta--good { color: var(--state-green-text); }
+  .mrow__delta--bad { color: var(--state-orange-text); }
+  .recent__similar {
+    margin: var(--sp-6) 0 0; padding-top: var(--sp-5);
+    border-top: 1px solid var(--line);
+    font-size: var(--fs-base); line-height: var(--lh-cjk); color: var(--txt-2);
+  }
+  .reclist { list-style: none; margin: var(--sp-4) 0 0; padding: 0; }
+  .reclist li {
+    display: grid; grid-template-columns: 52px 40px minmax(0, 1fr) auto;
+    align-items: center; gap: var(--sp-4);
+    padding: 12px 0; border-top: 1px solid var(--line);
+    font-size: var(--fs-base);
+  }
+  .reclist li:first-child { border-top: 0; }
+  .reclist__mod { font-size: var(--fs-meta); color: var(--txt-3); }
+  .reclist__sum { color: var(--txt-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- 常驻求助条 ---------- */
+  .helpbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5);
+    margin-top: var(--sp-8); padding: 14px 20px;
+    border: 1px solid var(--line); border-radius: var(--r-card);
+    background: var(--bg-raised);
+    font-size: var(--fs-meta); color: var(--txt-2);
+  }
+  .helpbar__label { font-weight: 600; color: var(--txt-1); }
+  .helpbar__sep { color: var(--txt-3); }
+
+  /* ---------- 两个动作：各带一行状态，说明"为什么现在点" ---------- */
+  .hero3__act { display: flex; align-items: flex-start; gap: 40px; flex-wrap: wrap; }
+  .act { display: grid; gap: 10px; justify-items: start; }
+  .act__meta { font-size: var(--fs-meta); color: var(--txt-3); }
+  .act__meta--due { color: var(--accent); }
+  .act__meta--invite { color: var(--txt-2); }
+  .btn--invite { border-color: var(--accent-border); color: var(--accent); }
+
+  /* ---------- 两个动作一起放页头右侧 ---------- */
+  .hero3__row { display: flex; justify-content: space-between; align-items: flex-start; gap: 56px; }
+  .hero3__text { min-width: 0; }
+  .hero3__actions { flex: none; display: flex; gap: 32px; }
+  .hero3__actions--stack { display: grid; gap: 10px; justify-items: end; }
+
+  /* ---------- 动作区：与标题行对齐（不再跟眉标平齐）+ 状态贴近按钮 ---------- */
+  .hero3__row { display: flex; justify-content: space-between; align-items: flex-start; gap: 56px; }
+  .hero3__text { min-width: 0; }
+  .hero3__actions { flex: none; display: flex; gap: 28px; }
+  .act { display: grid; gap: 6px; justify-items: start; }
+  .act__meta { font-size: var(--fs-meta); color: var(--txt-3); padding-inline-start: 30px; }  /* 与按钮内文字左对齐 */
+  .act__meta--due { color: var(--accent); }
+
+  /* 两行按钮：状态做进按钮里 */
+  .btnstack {
+    display: grid; gap: 2px; justify-items: start; text-align: left;
+    padding: 10px 24px; border-radius: var(--r-control); border: 1px solid transparent;
+    line-height: 1.35; transition: background .18s ease, border-color .18s ease;
+  }
+  .btnstack__t { font-size: var(--fs-read); font-weight: 600; }
+  .btnstack__m { font-size: var(--fs-meta); }
+  .btnstack--primary { background: var(--accent); color: var(--text-on-accent); }
+  /* 跟模式无关：继承按钮文字色再降透明度（深色模式按钮字是深色、浅色模式是白色） */
+  .btnstack--primary .btnstack__m { color: inherit; opacity: 0.74; }
+  .btnstack--primary:hover { background: var(--accent-hover); text-decoration: none; }
+  /* 次按钮原来只有一道 accent-border 描边、没有底色，在页面底上几乎看不见。
+     补上卡面底色 + 深一档描边 + 一点投影，读起来才像按钮。 */
+  .btnstack--ghost {
+    border-color: var(--accent-border); color: var(--accent);
+    background: var(--bg-card);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  }
+  .btnstack--ghost:hover { background: var(--accent-tint); }
+  .btnstack--ghost .btnstack__m { color: var(--txt-3); }
+  .btnstack--ghost:hover { background: var(--accent-tint); text-decoration: none; }
+
+  /* ---------- 说明改造成"标题的下一句"：三层字号做变形 ---------- */
+  /* 灰色小字：字号同预警块时间戳（--fs-meta 12.5px），
+     行距与预警说明（图三）同一套 --lh-cjk 1.75；
+     标题到它的距离也用这同一个行高，形成均匀的竖排节奏。 */
+  .hero3__desc {
+    margin: 13px 0 0 56px;
+    font-size: var(--fs-meta); font-weight: 400;
+    line-height: var(--lh-cjk); color: var(--txt-2);
+  }
+  .hero3__meta-line {
+    margin: 0 0 0 34px;
+    font-size: var(--fs-meta); line-height: var(--lh-cjk); color: var(--txt-3);
+  }
+
+  /* ---------- 两个动作一起放页头右侧 ---------- */
+  .hero3__row { display: flex; justify-content: space-between; align-items: flex-start; gap: 56px; }
+  .hero3__text { min-width: 0; }
+  .hero3__actions { flex: none; display: flex; gap: 32px; }
+  .hero3__actions--stack { display: grid; gap: 10px; justify-items: end; }
+
+  /* ---------- 动作区：与标题行对齐（不再跟眉标平齐）+ 状态贴近按钮 ---------- */
+  .hero3__row { display: flex; justify-content: space-between; align-items: flex-start; gap: 56px; }
+  .hero3__text { min-width: 0; }
+  .hero3__actions { flex: none; display: flex; gap: 28px; }
+  .act { display: grid; gap: 6px; justify-items: start; }
+  .act__meta { font-size: var(--fs-meta); color: var(--txt-3); padding-inline-start: 30px; }  /* 与按钮内文字左对齐 */
+  .act__meta--due { color: var(--accent); }
+
+  /* 两行按钮：状态做进按钮里 */
+  .btnstack {
+    display: grid; gap: 2px; justify-items: start; text-align: left;
+    padding: 10px 24px; border-radius: var(--r-control); border: 1px solid transparent;
+    line-height: 1.35; transition: background .18s ease, border-color .18s ease;
+  }
+  .btnstack__t { font-size: var(--fs-read); font-weight: 600; }
+  .btnstack__m { font-size: var(--fs-meta); }
+  .btnstack--primary { background: var(--accent); color: var(--text-on-accent); }
+  /* 跟模式无关：继承按钮文字色再降透明度（深色模式按钮字是深色、浅色模式是白色） */
+  .btnstack--primary .btnstack__m { color: inherit; opacity: 0.74; }
+  .btnstack--primary:hover { background: var(--accent-hover); text-decoration: none; }
+  .btnstack--ghost { border-color: var(--accent-border); color: var(--accent); }
+  .btnstack--ghost .btnstack__m { color: var(--txt-3); }
+  .btnstack--ghost:hover { background: var(--accent-tint); text-decoration: none; }
+
+  /* ---------- 说明改造成"标题的下一句"：三层字号做变形 ---------- */
+  /* 说明与元信息：字号与预警块那行时间戳一致（--fs-meta 12.5px）；
+     与标题、两行之间的间距都收紧 */
+  .hero3__desc {
+    margin: 8px 0 0 34px;
+    font-size: var(--fs-meta); font-weight: 400; line-height: 1.7; color: var(--txt-2);
+  }
+  .hero3__desc b { font-weight: 600; color: var(--txt-1); }
+  .hero3__meta-line {
+    margin: 2px 0 0 34px;
+    font-size: var(--fs-meta); line-height: 1.7; color: var(--txt-3);
+  }

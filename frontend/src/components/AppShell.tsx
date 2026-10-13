@@ -144,7 +144,14 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
     ) || items[0];
   const isDashboard =
     location.pathname === `${root}/dashboard` ||
-    location.pathname === `${root}/dashboard-v2`;
+    location.pathname === `${root}/dashboard-v2` ||
+    /* 首页的另一版（对照用），同样自带 hero */
+    location.pathname === `${root}/dashboard-alt`;
+  /* 个人端首页自带整块 hero（眉标 + 场景标题 + 一句话），
+     外壳这一层如果照旧渲染「个人端 · 工作空间 / 个人首页 / …」，
+     页名就会在一屏里出现两遍 —— 这正是评审提过的重复。
+     管理端首页没做改造，所以只管个人端。 */
+  const hasOwnHero = isDashboard && !isAdmin;
   const results = items.filter((item) =>
     `${item.label}${item.description}`.includes(query.trim()),
   );
@@ -521,7 +528,9 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         <main className="app-content" id="main-content" tabIndex={-1}>
           {/* 页面头：与登录页卡片同一套层级——眉标（13px / 字距 .16em / 主色）
               + 标题 + 说明。原先只有 h1 + 说明，看起来是"后台模板"，
-              加上眉标后两端页面与登录页的阅读节奏一致了。 */}
+              加上眉标后两端页面与登录页的阅读节奏一致了。
+              个人端首页自带 hero，这里整块让位（见 hasOwnHero）。 */}
+          {!hasOwnHero && (
           <div className="mb-7">
             <p className="app-page-eyebrow">
               {isAdmin ? "管理端" : "个人端"} · {active.group}
@@ -554,6 +563,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               )}
             </div>
           </div>
+          )}
           {/* key 跟着路由走：每次换页重放一次 260ms 的淡入上浮，
               与登录页 ↔ 主页的转场是同一段动画（.page-enter）。 */}
           <div className="page-body page-enter" key={location.pathname}>

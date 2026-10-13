@@ -38,7 +38,7 @@ try {
   /* 页头加一条底线：浅色下给这块一个"底"，不至于飘在大片留白里 */
   .hero3 {
     display: grid; gap: 44px;
-    padding-bottom: 28px;
+    padding-bottom: 18px;
     border-bottom: 1px solid var(--line);
   }
   .hero3__act { display: flex; align-items: center; gap: var(--sp-6); flex-wrap: wrap; }
@@ -165,7 +165,14 @@ try {
   /* 跟模式无关：继承按钮文字色再降透明度（深色模式按钮字是深色、浅色模式是白色） */
   .btnstack--primary .btnstack__m { color: inherit; opacity: 0.74; }
   .btnstack--primary:hover { background: var(--accent-hover); text-decoration: none; }
-  .btnstack--ghost { border-color: var(--accent-border); color: var(--accent); }
+  /* 次按钮原来只有一道 accent-border 描边、没有底色，在页面底上几乎看不见。
+     补上卡面底色 + 深一档描边 + 一点投影，读起来才像按钮。 */
+  .btnstack--ghost {
+    border-color: var(--accent-border); color: var(--accent);
+    background: var(--bg-card);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  }
+  .btnstack--ghost:hover { background: var(--accent-tint); }
   .btnstack--ghost .btnstack__m { color: var(--txt-3); }
   .btnstack--ghost:hover { background: var(--accent-tint); text-decoration: none; }
 
@@ -174,7 +181,7 @@ try {
      行距与预警说明（图三）同一套 --lh-cjk 1.75；
      标题到它的距离也用这同一个行高，形成均匀的竖排节奏。 */
   .hero3__desc {
-    margin: calc(var(--fs-meta) * 1.75) 0 0 34px;
+    margin: 13px 0 0 56px;
     font-size: var(--fs-meta); font-weight: 400;
     line-height: var(--lh-cjk); color: var(--txt-2);
   }
@@ -260,7 +267,7 @@ try {
         </div>
 
         <!-- ============ 需要你处理（有预警才出现） ============ -->
-        <section class="card alertblock" style="margin-top:44px">
+        <section class="card alertblock" style="margin-top:24px">
           <div class="spread" style="align-items:flex-start;gap:var(--sp-6)">
             <div style="flex:1;min-width:0">
               <div class="inline" style="gap:var(--sp-4)">

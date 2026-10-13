@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>个人首页改版 · React 预览</title>
+    <link rel="stylesheet" href="/tokens.css" />
+    <link rel="stylesheet" href="/base.css" />
+    <link rel="stylesheet" href="/shell.css" />
+    <script>
+      /* 与样张同一套模式规则：#light / #dark 强制，其次本机存储，默认浅色 */
+      (function () {
+        var m = /(^|[,#])(light|dark)([,#]|$)/.exec(location.hash || "");
+        var stored = null;
+        try { stored = localStorage.getItem("proto-mode"); } catch (e) {}
+        document.documentElement.setAttribute("data-mode", (m && m[2]) || stored || "light");
+      })();
+    </script>
+  </head>
+  <body>
+    <!-- 外壳结构与 prototype 的多文件版完全一致：shell.js 负责注入侧栏与顶栏 -->
+    <div class="app" data-shell='{"surface":"personal","active":"home","crumb":"个人首页"}'>
+      <aside class="sidebar" data-shell-sidebar></aside>
+      <div class="main">
+        <header class="topbar" data-shell-topbar></header>
+        <main class="content">
+          <div id="root" class="content__inner"></div>
+        </main>
+      </div>
+    </div>
+    <script src="/shell.js"></script>
+    <script src="/app.js"></script>
+    <script>
+      /* 方案 A：顶栏从「死文字」改成可点的位置面包屑，品牌副标题去掉「· 原型」。
+         shell.js 同步注入，所以这里能直接改到它刚写进去的节点。 */
+      (function () {
+        var nav = document.querySelector(".crumbs");
+        if (nav) {
+          nav.innerHTML =
+            '<a href="#">我的空间</a>' +
+            '<span class="crumbs__sep" aria-hidden="true">›</span>' +
+            '<span class="crumbs__now">个人首页</span>';
+        }
+        var sub = document.querySelector(".brand__sub");
+        if (sub) sub.textContent = "个人健康空间";
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
