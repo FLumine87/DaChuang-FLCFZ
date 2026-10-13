@@ -62,8 +62,9 @@
         --page: #f7f9fe;
         --header: #e7ecff;
 
-        --font-sans: "Outfit", "Inter", "PingFang SC", "Microsoft YaHei",
-          system-ui, -apple-system, sans-serif;
+        /* 与 React 版同源：Latin 用新怪诞体（对齐腾讯 Haas Grot 血统），中文回退 PingFang SC */
+        --font-sans: -apple-system, "Helvetica Neue", "Inter", "PingFang SC",
+          "Microsoft YaHei", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
         --shadow-card: 0 24px 70px -36px rgba(16, 24, 40, 0.35);
       }
 
@@ -305,9 +306,9 @@
         margin: 24px 0 0;
         max-width: 720px;
         font-size: 50px;
-        line-height: 1.15;
-        font-weight: 700;
-        letter-spacing: -0.02em;
+        line-height: 1.16;
+        font-weight: 500; /* 方案 B：与腾讯同向——中轻字重 + 极轻正字距 */
+        letter-spacing: 0.01em;
         color: var(--slate-900);
         text-wrap: balance;
       }
@@ -638,9 +639,9 @@
         margin: 24px 0 0;
         max-width: 720px;
         font-size: 38px;
-        line-height: 1.15;
-        font-weight: 700;
-        letter-spacing: -0.02em;
+        line-height: 1.16;
+        font-weight: 500;
+        letter-spacing: 0.01em;
         color: var(--slate-900);
         text-wrap: balance;
       }
@@ -751,7 +752,7 @@
 
       .metric-value {
         font-size: 26px;
-        font-weight: 800;
+        font-weight: 500;
         line-height: 1;
         font-variant-numeric: tabular-nums;
         color: var(--primary-600);

@@ -861,7 +861,7 @@ export default function AuthPage() {
                 { value: "4", label: "级预警阈值" },
               ].map((item) => (
                 <span key={item.label} className="flex items-baseline gap-2">
-                  <b className="text-[22px] font-extrabold leading-none tabular-nums text-primary-600">
+                  <b className="text-[22px] font-medium leading-none tabular-nums text-primary-600">
                     {item.value}
                   </b>
                   <span className="text-[13px] text-slate-500">{item.label}</span>

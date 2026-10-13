@@ -6,8 +6,13 @@
 
 /* TailAdmin Free design tokens. See THIRD_PARTY_NOTICES.md. */
 @theme {
+  /* 字体栈对齐腾讯官网：Latin 用新怪诞体（Haas Grot 血统），中文回退 PingFang SC。
+     原栈首位的 Outfit / Inter 既没加载 webfont 也没在本机安装，实际一直由
+     PingFang SC 兜底——等于两个"死项"；换成本机自带的 -apple-system / Helvetica Neue
+     后 Latin 与数字的质感才真正接近腾讯。 */
   --font-sans:
-    "Outfit", "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    -apple-system, "Helvetica Neue", "Inter", "PingFang SC", "Microsoft YaHei",
+    system-ui, "Segoe UI", Roboto, Arial, sans-serif;
   --color-primary-50: #ecf3ff;
   --color-primary-100: #dde9ff;
   --color-primary-200: #c2d6ff;
@@ -769,15 +774,21 @@ h3.text-2xl {
       工具类（无层级样式优先于分层样式），所以这里必须同样用无层级规则覆盖，
       否则落地页标题会被锁在 h1=26px / h2=17px。
    ========================================================================== */
+/* 字重与字距对齐腾讯官网实测值：主力 600、字距 normal~微正。
+   本项目取方案 B——大标题 500 + 极轻正字距（+0.01em）：不挤压字面，
+   笔画留白更多，观感更"清新"。原先的 700 + tracking-tight（−0.025em）
+   是"又粗又挤"，与清新相反。 */
 .auth-snap .auth-hero-title {
   font-size: 2.125rem; /* 34px */
-  line-height: 1.2;
-  font-weight: 700;
+  line-height: 1.16;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 .auth-snap .auth-section-title {
   font-size: 2.375rem; /* 38px */
-  line-height: 1.14;
-  font-weight: 700;
+  line-height: 1.16;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 @media (min-width: 640px) {
   .auth-snap .auth-hero-title {

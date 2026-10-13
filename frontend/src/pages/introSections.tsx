@@ -100,7 +100,7 @@ export function TechVisual() {
               <item.icon className="h-5 w-5" />
             </span>
             <div className="min-w-0">
-              <p className="text-[26px] font-extrabold leading-none tabular-nums text-primary-600">
+              <p className="text-[26px] font-medium leading-none tabular-nums text-primary-600">
                 {item.value}
               </p>
               <p className="mt-2 text-[13px] leading-5 text-slate-500">{item.label}</p>
@@ -233,7 +233,7 @@ export function AlertVisual() {
           { value: "全程", label: "处置流程留痕可追溯" },
         ].map((item) => (
           <span key={item.label} className="flex items-baseline gap-2">
-            <b className="text-[22px] font-extrabold leading-none tabular-nums text-primary-600">
+            <b className="text-[22px] font-medium leading-none tabular-nums text-primary-600">
               {item.value}
             </b>
             <span className="text-[13px] text-slate-500">{item.label}</span>
