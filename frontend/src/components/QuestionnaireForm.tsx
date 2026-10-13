@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { questionnaires } from "../data/questionnaireData";
 import type { QuestionnaireDefinition } from "../data/questionnaireData";
@@ -7,10 +7,13 @@ import AlertBadge from "./AlertBadge";
 interface Props {
   questionnaireId: string;
   onClose: () => void;
+  /* 合并要点：团队 main 加了第 4 个参数 answers —— 逐题作答要跟着分数一起落库，
+     分析依据里的检索才能拿到具体作答。我们这版的一屏一题布局与保存文案都保留。 */
   onComplete: (
     score: number,
     maxScore: number,
     level: "green" | "yellow" | "orange" | "red",
+    answers: Record<string, number>,
   ) => Promise<void>;
 }
 
@@ -28,6 +31,9 @@ export default function QuestionnaireForm({
   const [saveError, setSaveError] = useState('');
   // 一屏一题：当前题序号（原先 9 道题一长列，第 9 题问自伤念头，需要更稳的节奏）
   const [current, setCurrent] = useState(0);
+  /* 团队 main 的重复提交闸门（连点两次不会写两条记录）：我们原先靠 saving 状态拦，
+     这里把两套都收下 —— ref 负责"同一帧内连点"，saving 负责按钮禁用与文案。 */
+  const submitRef = useRef(false);
 
   if (!qDef) {
     return (
@@ -55,15 +61,20 @@ export default function QuestionnaireForm({
   const result = qDef.scoring(totalScore);
 
   const handleSubmit = async () => {
-    if (saving || !allAnswered) return;
+    if (submitRef.current || saving || !allAnswered) return;
+    submitRef.current = true;
     setSaving(true);
     setSaveError('');
     try {
-      await onComplete(totalScore, maxScore, result.level);
+      await onComplete(totalScore, maxScore, result.level, answers);
       setSubmitted(true);
-    } catch {
-      setSaveError('保存失败，你的作答仍保留在页面上，请重试。');
+    } catch (reason) {
+      /* 后端可能给出具体原因（如"量表名不在支持列表"），有就透出来，没有再用这句兜底 */
+      setSaveError(reason instanceof Error && reason.message
+        ? reason.message
+        : '保存失败，你的作答仍保留在页面上，请重试。');
     } finally {
+      submitRef.current = false;
       setSaving(false);
     }
   };

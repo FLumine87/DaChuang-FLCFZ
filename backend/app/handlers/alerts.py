@@ -55,7 +55,7 @@ async def get_alert(ctx: RequestContext, alert_id: int):
 
 
 async def update_alert(ctx: RequestContext, alert_id: int):
-    alert = await alert_service.update_alert(alert_id, ctx.body)
+    alert = await alert_service.update_alert(alert_id, ctx.body, int(ctx.user["sub"]))
     if not alert:
         raise HttpError(404, "预警记录不存在")
     return success_response(data=alert)
@@ -63,7 +63,7 @@ async def update_alert(ctx: RequestContext, alert_id: int):
 
 async def resolve_alert(ctx: RequestContext, alert_id: int):
     notes = ctx.query_params.get("notes", "") or ""
-    alert = await alert_service.resolve_alert(alert_id, notes)
+    alert = await alert_service.resolve_alert(alert_id, notes, int(ctx.user["sub"]))
     if not alert:
         raise HttpError(404, "预警记录不存在")
     return success_response(data=alert)

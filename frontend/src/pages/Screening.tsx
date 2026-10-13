@@ -18,6 +18,8 @@ import {
 import { questionnaireCatalog, type PersonalScreeningRecord } from '../data/mockData';
 import { questionnaires } from '../data/questionnaireData';
 import { getScreeningRecords, submitScreening } from '../services/mockApi';
+import { api } from '../services/api';
+import { getCurrentSession } from '../auth/session';
 import AlertBadge from '../components/AlertBadge';
 import StatusBadge from '../components/StatusBadge';
 import QuestionnaireForm from '../components/QuestionnaireForm';
@@ -37,6 +39,8 @@ export default function Screening() {
   const [infoQuestionnaire, setInfoQuestionnaire] = useState<string | null>(null);
   const [localRecords, setLocalRecords] = useState<PersonalScreeningRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [kgSyncMsg, setKgSyncMsg] = useState<string | null>(null);
+  const userId = getCurrentSession()?.username ?? 'demo_user';
 
   const fetchRecords = useCallback(async () => {
     try {
@@ -88,13 +92,22 @@ export default function Screening() {
       (filterLevel === 'all' || record.level === filterLevel)
   );
 
-  const handleComplete = async (score: number, maxScore: number, level: AlertLevel) => {
+  /* 合并要点：团队 main 给 onComplete 加了第 4 个参数 answers（答卷逐题得分要一起落库，
+     供分析依据里的检索用），我们这版则负责"提交成功先本地存一份再跳详情"。
+     两边都留：answers 透传给 submitScreening，保存与跳转逻辑仍走我们这版。 */
+  const handleComplete = async (
+    score: number,
+    maxScore: number,
+    level: AlertLevel,
+    answers: Record<string, number>,
+  ) => {
     try {
       const response = await submitScreening({
         questionnaire: activeQuestionnaire!,
         score,
         maxScore,
         level,
+        answers,
       });
       if (response.status !== 'success') throw new Error('筛查尚未保存，请重试');
       setSavedRecord({ id: response.id, questionnaire: activeQuestionnaire!, score, maxScore, level, status: 'completed', moodTag: '已完成', date: new Date().toLocaleDateString('sv-SE') });
@@ -106,6 +119,20 @@ export default function Screening() {
     setActiveQuestionnaire(null);
     // 重新从后端拉取（真实模式下后端会生成筛查记录与分级预警）
     await fetchRecords();
+
+    // 量表得分自动回写个人 KG（失败静默，不阻塞 UI）
+    if (activeQuestionnaire) {
+      api.submitScaleScore(userId, activeQuestionnaire, score, true)
+        .then((r) => {
+          if (r.inference_triggered && r.report) {
+            setKgSyncMsg(`已写入知识图谱，最新风险评估：${r.report.risk_label}（综合分 ${r.report.overall_score}）`);
+          } else if (r.written > 0) {
+            setKgSyncMsg('量表得分已写入个人知识图谱');
+          }
+        })
+        .catch(() => setKgSyncMsg('量表得分写入知识图谱失败（Neo4j 未连接？），不影响本地记录'));
+      setTimeout(() => setKgSyncMsg(null), 8000);
+    }
   };
 
   if (activeQuestionnaire) {
@@ -131,6 +158,13 @@ export default function Screening() {
 
   return (
     <div className="space-y-6">
+      {/* 量表回写知识图谱的结果提示（团队 main 的功能）：容器换成 .ui-card，
+          内层配色改走令牌，深色下不再是一块固定的浅绿。 */}
+      {kgSyncMsg && (
+        <div className="ui-card flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600">
+          <ClipboardCheck className="w-3.5 h-3.5 shrink-0 text-primary-500" /> {kgSyncMsg}
+        </div>
+      )}
       <div className="ui-card p-5">
         <h3 className="text-base font-semibold text-slate-800">筛查说明</h3>
         <p className="text-sm text-slate-500 mt-2 leading-6">

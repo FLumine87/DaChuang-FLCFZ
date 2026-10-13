@@ -1,10 +1,12 @@
 """个人端接口 handler（保留前端响应字段结构，async）。"""
 from datetime import datetime, timedelta
+import json
 
 from app.core.responses import success_response
+from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
 from app.db import database as db
-from app.services import screening_service
+from app.services import screening_service, case_service
 from app.engines import get_rag_engine
 from app.handlers.retrieval import perform_search, to_frontend_hit
 
@@ -14,7 +16,8 @@ def _fmt(v, fmt="%Y-%m-%d"):
 
 
 def _warning_dict(a: dict) -> dict:
-    status = a.get("status") if a.get("status") in ("new", "tracking", "resolved") else "new"
+    status = {"pending": "new", "processing": "tracking", "resolved": "resolved",
+              "closed": "resolved"}.get(a.get("status"), "new")
     return {
         "id": a.get("alert_id"),
         "level": a.get("level"),
@@ -62,7 +65,10 @@ async def _current_user_name(ctx: RequestContext):
 
 
 async def get_personal_screenings(ctx: RequestContext):
-    rows = await db.query_a("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 100")
+    user_id = int(ctx.user["sub"])
+    rows = await db.query_a(
+        "SELECT * FROM screenings WHERE user_id = ? ORDER BY screening_date DESC, id DESC LIMIT 100",
+        (user_id,))
     items = []
     for s in rows:
         qn = await _qn_name(s["questionnaire_id"])
@@ -72,22 +78,46 @@ async def get_personal_screenings(ctx: RequestContext):
 
 async def submit_personal_screening(ctx: RequestContext):
     data = ctx.body
+    user_id = int(ctx.user["sub"])
+    user = await db.query_one_a("SELECT name FROM users WHERE id = ?", (user_id,))
     q = await db.query_one_a("SELECT * FROM questionnaires WHERE code = ?", (data.get("questionnaire", ""),))
     if not q:
-        return success_response(data={"id": "unknown", "status": "error"}, message="问卷不存在")
-    alert_level = data.get("level", "green")
+        raise HttpError(400, "问卷不存在")
+    # 自助筛查以原始作答为准，不能相信浏览器上传的总分或风险等级。
+    scale = {
+        "PHQ-9": (9, 3, (4, 9, 14)),
+        "GAD-7": (7, 3, (4, 9, 14)),
+        "ISI": (7, 4, (7, 14, 21)),
+        "PSS-10": (10, 4, (13, 26, 33)),
+    }.get(q["code"])
+    if not scale:
+        raise HttpError(400, "该量表暂不支持个人自助提交")
+    answers = data.get("answers")
+    question_count, option_max, thresholds = scale
+    if not isinstance(answers, dict) or set(answers) != {str(i) for i in range(1, question_count + 1)}:
+        raise HttpError(400, "问卷答案不完整")
+    if any(type(value) is not int or value < 0 or value > option_max for value in answers.values()):
+        raise HttpError(400, "问卷答案无效")
+    score = sum(answers.values())
+    alert_level = next((level for limit, level in zip(thresholds, ("green", "yellow", "orange"))
+                        if score <= limit), "red")
     row = await screening_service.create_screening({
-        "name": data.get("name", "匿名用户"),
+        "user_id": user_id,
+        "name": user["name"] if user else "用户",
         "age": data.get("age"),
         "gender": data.get("gender"),
         "department": data.get("department"),
         "questionnaire_id": q["id"],
-        "score": data.get("score", 0),
-        "answers": data.get("answers"),
+        "score": score,
+        "answers": json.dumps(answers, ensure_ascii=False, sort_keys=True),
         "status": "completed",
         "alert_level": alert_level,
         "screening_date": datetime.now(),
     })
+    await case_service.sync_personal_case(user_id, row)
+    if alert_level in ("orange", "red"):
+        await screening_service._create_alert_if_needed(
+            await screening_service.get_screening_by_id(row["id"]))
     return success_response(data={
         "id": row.get("screening_id"),
         "status": "success",
@@ -96,6 +126,7 @@ async def submit_personal_screening(ctx: RequestContext):
 
 
 async def get_personal_dashboard(ctx: RequestContext):
+    user_id = int(ctx.user["sub"])
     questionnaires = await db.query_a("SELECT * FROM questionnaires WHERE is_active = 1")
     questionnaire_catalog = [
         {
@@ -106,28 +137,26 @@ async def get_personal_dashboard(ctx: RequestContext):
         for q in questionnaires
     ]
 
-    screenings = await db.query_a("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 10")
+    screenings = await db.query_a(
+        "SELECT * FROM screenings WHERE user_id = ? ORDER BY screening_date DESC, id DESC LIMIT 10",
+        (user_id,))
     screening_records = []
     for s in screenings:
         qn = await _qn_name(s["questionnaire_id"])
         screening_records.append(_screening_item(s, qn))
 
-    alerts = await db.query_a("SELECT * FROM alerts ORDER BY created_at DESC, id DESC LIMIT 5")
+    alerts = await db.query_a(
+        "SELECT a.* FROM alerts a JOIN screenings s ON a.screening_id = s.id "
+        "WHERE s.user_id = ? ORDER BY a.created_at DESC, a.id DESC LIMIT 5", (user_id,))
     warning_events = [_warning_dict(a) for a in alerts]
 
     mood_trend = []
-    for i in range(10, 0, -1):
-        date = datetime.now() - timedelta(days=i)
-        mood_trend.append({
-            "date": date.strftime("%m-%d"),
-            "mood": 60 + (i % 4) * 5,
-            "stress": 50 + (i % 3) * 10,
-            "sleep": 6.5 + (i % 3) * 0.5,
-        })
 
     dist = {}
     for level in ("green", "yellow", "orange", "red"):
-        row = await db.query_one_a("SELECT COUNT(*) AS c FROM alerts WHERE level = ?", (level,))
+        row = await db.query_one_a(
+            "SELECT COUNT(*) AS c FROM alerts a JOIN screenings s ON a.screening_id = s.id "
+            "WHERE s.user_id = ? AND a.level = ?", (user_id, level))
         dist[level] = row["c"] if row else 0
     warning_distribution = [
         {"name": "稳定", "value": dist.get("green", 0), "color": "#22c55e"},
@@ -136,13 +165,9 @@ async def get_personal_dashboard(ctx: RequestContext):
         {"name": "高危", "value": dist.get("red", 0), "color": "#ef4444"},
     ]
 
-    action_plan = [
-        {"id": "PLAN-1", "title": "定期筛查", "duration": "每周", "status": "tracking"},
-        {"id": "PLAN-2", "title": "心理辅导", "duration": "每月", "status": "new"},
-        {"id": "PLAN-3", "title": "情绪记录", "duration": "每日", "status": "resolved"},
-    ]
+    action_plan = []
 
-    timeline_query = await db.query_a("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 5")
+    timeline_query = screenings[:5]
     personal_timeline = []
     for s in timeline_query:
         qn = await _qn_name(s["questionnaire_id"])
@@ -153,7 +178,8 @@ async def get_personal_dashboard(ctx: RequestContext):
             "detail": f"得分{s.get('score')}分，风险等级:{s.get('alert_level')}",
         })
 
-    user_profile = {"name": "用户", "age": 0, "gender": "", "campus": "",
+    user = await db.query_one_a("SELECT name FROM users WHERE id = ?", (user_id,))
+    user_profile = {"name": user["name"] if user else "用户", "age": 0, "gender": "", "campus": "",
                     "major": "", "stage": "", "emergencyContact": ""}
     # 显示名以 users 表为准（筛查记录仅作兜底），否则新账号永远显示「用户」
     profile_name = await _current_user_name(ctx)
@@ -176,21 +202,30 @@ async def get_personal_dashboard(ctx: RequestContext):
 
 
 async def get_personal_warnings(ctx: RequestContext):
-    alerts = await db.query_a("SELECT * FROM alerts ORDER BY created_at DESC, id DESC LIMIT 100")
+    alerts = await db.query_a(
+        "SELECT a.* FROM alerts a JOIN screenings s ON a.screening_id = s.id "
+        "WHERE s.user_id = ? ORDER BY a.created_at DESC, a.id DESC LIMIT 100",
+        (int(ctx.user["sub"]),))
     return success_response(data=[_warning_dict(a) for a in alerts])
 
 
 async def get_personal_profile(ctx: RequestContext):
-    screenings = await db.query_a("SELECT * FROM screenings ORDER BY screening_date DESC, id DESC LIMIT 10")
+    user_id = int(ctx.user["sub"])
+    screenings = await db.query_a(
+        "SELECT * FROM screenings WHERE user_id = ? ORDER BY screening_date DESC, id DESC LIMIT 10",
+        (user_id,))
     screening_records = []
     for s in screenings:
         qn = await _qn_name(s["questionnaire_id"])
         screening_records.append(_screening_item(s, qn))
 
-    alerts = await db.query_a("SELECT * FROM alerts ORDER BY created_at DESC, id DESC LIMIT 10")
+    alerts = await db.query_a(
+        "SELECT a.* FROM alerts a JOIN screenings s ON a.screening_id = s.id "
+        "WHERE s.user_id = ? ORDER BY a.created_at DESC, a.id DESC LIMIT 10", (user_id,))
     warning_events = [_warning_dict(a) for a in alerts]
 
-    user_profile = {"name": "用户", "age": 0, "gender": "", "campus": "",
+    user = await db.query_one_a("SELECT name FROM users WHERE id = ?", (user_id,))
+    user_profile = {"name": user["name"] if user else "用户", "age": 0, "gender": "", "campus": "",
                     "major": "", "stage": "", "emergencyContact": ""}
     # 显示名以 users 表为准（筛查记录仅作兜底），否则新账号永远显示「用户」
     profile_name = await _current_user_name(ctx)
@@ -226,7 +261,10 @@ async def personal_search(ctx: RequestContext):
     """
     data = ctx.body or {}
     raw_results, info, modality, mf = await perform_search(data)
-    results = [to_frontend_hit(r) for r in raw_results]
+    # 本地检索引擎还可能包含真实筛查、预警和案例。个人端只展示语料命中。
+    private_prefixes = ("scr-", "alt-", "case-")
+    results = [to_frontend_hit(r) for r in raw_results
+               if not str(r.get("record_id") or r.get("id") or "").lower().startswith(private_prefixes)]
 
     rag_engine = get_rag_engine()
     report = await rag_engine.generate_report({

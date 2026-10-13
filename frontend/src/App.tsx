@@ -16,13 +16,18 @@ import AdminDataCollection from './admin/pages/AdminDataCollection';
 import AdminRetrieval from './admin/pages/AdminRetrieval';
 import AdminAlerts from './admin/pages/AdminAlerts';
 import AdminCases from './admin/pages/AdminCases';
-import AdminAgentWorkbench from './admin/pages/AdminAgentWorkbench';
+/* 管理端「预警处置工作台」：团队 main 用 AgentWorkspaceV2 取代了旧的
+   AdminAgentWorkbench（旧文件已随本合并删除），这里指向 V2，路由地址不变。 */
+import AdminAgentWorkspace from './admin/pages/AgentWorkspaceV2';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import WelcomePage from './pages/WelcomePage';
 import FirstRunQuestionnaire from './pages/first/FirstRunQuestionnaire';
 import FirstRunSupplement from './pages/first/FirstRunSupplement';
 import FirstRunResult from './pages/first/FirstRunResult';
+import ChatPage from './pages/me/ChatPage';
+import KgPage from './pages/me/KgPage';
+import FeedPage from './pages/me/FeedPage';
 import { getCurrentSession } from './auth/session';
 
 function RequireRole({ role, children }: { role: 'admin' | 'user'; children: ReactElement }) {
@@ -95,6 +100,10 @@ export default function App() {
         <Route path="retrieval" element={<Retrieval />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="cases" element={<Cases />} />
+        {/* 智能心理助手（个人端 Agent + 知识图谱） */}
+        <Route path="me/chat" element={<ChatPage />} />
+        <Route path="me/kg" element={<KgPage />} />
+        <Route path="me/feed" element={<FeedPage />} />
         <Route path="*" element={<Navigate to="/personal/dashboard" replace />} />
       </Route>
 
@@ -106,7 +115,7 @@ export default function App() {
         <Route path="retrieval" element={<AdminRetrieval />} />
         <Route path="alerts" element={<AdminAlerts />} />
         <Route path="cases" element={<AdminCases />} />
-        <Route path="agent-workbench" element={<AdminAgentWorkbench />} />
+        <Route path="agent-workbench" element={<AdminAgentWorkspace />} />
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 

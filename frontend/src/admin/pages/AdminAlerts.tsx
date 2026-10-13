@@ -1,138 +1,218 @@
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { type AlertRecord } from '../data/adminMockData';
-import { getAdminAlerts } from '../../services/mockApi';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Search } from 'lucide-react';
+import {
+  getAdminAlert, listAdminAlerts, listAdminAssignees, updateAdminAlert, USE_MOCK,
+  type AdminAlertDetail, type Assignee, type Page,
+} from '../../services/adminApi';
+import type { AlertRecord } from '../data/adminMockData';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import AdminStatusBadge from '../components/AdminStatusBadge';
 
-/** 状态筛选。取值必须与 AlertRecord['status'] 一致：
- *  'pending' | 'processing' | 'resolved' | 'closed'（标签见 AdminStatusBadge）。
- * 值本身同时用于网址参数，便于从其它页面直接跳进某个筛选视图。 */
-const STATUS_FILTERS = [
-  { value: 'all', label: '全部' },
-  { value: 'pending', label: '待处理' },
-  { value: 'processing', label: '处理中' },
-  { value: 'resolved', label: '已解决' },
-  { value: 'closed', label: '已关闭' },
-] as const;
-
-type StatusFilter = (typeof STATUS_FILTERS)[number]['value'];
+const nextStatus: Record<AlertRecord['status'], AlertRecord['status'] | null> = {
+  pending: 'processing', processing: 'resolved', resolved: 'closed', closed: null,
+};
+const statusLabel: Record<AlertRecord['status'], string> = {
+  pending: '待处理', processing: '处理中', resolved: '已解决', closed: '已关闭',
+};
+const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-100';
 
 export default function AdminAlerts() {
-  // 筛选写进网址（?status=pending）：管理端概览的「处理待处理预警」按钮可直接跳进来
-  const [params, setParams] = useSearchParams();
-  const raw = params.get('status');
-  const statusFilter: StatusFilter = STATUS_FILTERS.some((f) => f.value === raw)
-    ? (raw as StatusFilter)
-    : 'all';
-
+  const [keyword, setKeyword] = useState('');
+  const [level, setLevel] = useState('');
+  const [status, setStatus] = useState('');
+  const [page, setPage] = useState(1);
+  const [reload, setReload] = useState(0);
+  const [result, setResult] = useState<Page<AlertRecord> | null>(null);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [alertRecords, setAlertRecords] = useState<AlertRecord[]>([]);
-  const [, setLoading] = useState(false);
+  const [detail, setDetail] = useState<AdminAlertDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [assigneeError, setAssigneeError] = useState('');
+  const [editStatus, setEditStatus] = useState<AlertRecord['status']>('pending');
+  const [assigneeId, setAssigneeId] = useState<number | null>(null);
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [notice, setNotice] = useState('');
+  const savingRef = useRef(false);
 
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const data = await getAdminAlerts();
-        setAlertRecords(data);
-      } catch (e) {
-        console.error('加载预警失败', e);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    let active = true;
+    listAdminAssignees().then((items) => { if (active) setAssignees(items); })
+      .catch((reason: unknown) => { if (active) setAssigneeError(reason instanceof Error ? reason.message : '加载处理人失败'); });
+    return () => { active = false; };
   }, []);
 
-  const filtered = alertRecords.filter(
-    (a) => statusFilter === 'all' || a.status === statusFilter
-  );
-  // 详情面板：优先看当前筛选里的记录，其次回退到全部（避免切换筛选后详情突然空掉）
-  const selected =
-    filtered.find((a) => a.id === selectedId) ?? alertRecords.find((a) => a.id === selectedId);
+  useEffect(() => {
+    let active = true;
+    listAdminAlerts({ keyword: keyword.trim(), level, status, page })
+      .then((items) => { if (active) { setResult(items); setListError(''); } })
+      .catch((reason: unknown) => { if (active) { setResult(null); setListError(reason instanceof Error ? reason.message : '加载失败'); } })
+      .finally(() => { if (active) setListLoading(false); });
+    return () => { active = false; };
+  }, [keyword, level, status, page, reload]);
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {STATUS_FILTERS.map((f) => {
-          const active = statusFilter === f.value;
-          const count =
-            f.value === 'all'
-              ? alertRecords.length
-              : alertRecords.filter((a) => a.status === f.value).length;
-          return (
-            <button
-              key={f.value}
-              aria-pressed={active}
-              onClick={() => {
-                setSelectedId(null);
-                setParams(f.value === 'all' ? {} : { status: f.value }, { replace: true });
-              }}
-              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
-                active
-                  ? 'border-primary-500 bg-primary-50 font-medium text-primary-600'
-                  : 'border-slate-200 text-slate-600 hover:border-primary-300 hover:text-primary-600'
-              }`}
-            >
-              {f.label}
-              <span className="text-xs tabular-nums text-slate-400">{count}</span>
-            </button>
-          );
-        })}
-      </div>
+  useEffect(() => {
+    if (!selectedId) { setDetail(null); return; }
+    let active = true;
+    getAdminAlert(selectedId).then((item) => {
+      if (!active) return;
+      setDetail(item); setEditStatus(item.status); setAssigneeId(item.assigneeId);
+      setNote(''); setDetailError(''); setSaveError('');
+    }).catch((reason: unknown) => {
+      if (active) { setDetail(null); setDetailError(reason instanceof Error ? reason.message : '详情加载失败'); }
+    }).finally(() => { if (active) setDetailLoading(false); });
+    return () => { active = false; };
+  }, [selectedId, reload]);
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-3">
-          {filtered.length === 0 && (
-            <div className="ui-card text-center py-12 text-sm text-slate-400">
-              {alertRecords.length === 0
-                ? '还没有预警记录。当学生出现分级预警时，会在这里显示并等待处置。'
-                : '当前筛选下没有预警记录，切换到「全部」可查看其它状态。'}
-            </div>
-          )}
-          {filtered.map((alert) => (
-            <div
-              key={alert.id}
-              onClick={() => setSelectedId(alert.id)}
-              className={`bg-white rounded-2xl border p-5 cursor-pointer transition-colors ${
-                selectedId === alert.id ? 'border-primary-500 ring-1 ring-primary-200' : 'border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <AdminAlertBadge level={alert.level} />
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">{alert.name}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{alert.id} · {alert.screeningId}</p>
-                  </div>
-                </div>
-                <AdminStatusBadge status={alert.status} />
-              </div>
-              <p className="text-sm text-slate-600">{alert.description}</p>
-            </div>
-          ))}
-        </div>
+  function choose(id: string) {
+    setSelectedId(id); setDetail(null); setDetailLoading(true); setNotice(''); setSaveError('');
+  }
 
-        <div className="ui-card p-5 h-fit">
-          {selected ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-slate-800">{selected.id}</h3>
-                <AdminAlertBadge level={selected.level} />
-              </div>
-              <p className="text-sm text-slate-600">{selected.trigger}</p>
-              <p className="text-sm text-slate-600">{selected.description}</p>
-              <div className="text-xs text-slate-400 space-y-1">
-                <p>创建：{selected.createdAt}</p>
-                <p>更新：{selected.updatedAt}</p>
-                <p>处理人：{selected.assignee}</p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400">选择一条预警查看详情</p>
-          )}
-        </div>
-      </div>
+  function cancel() {
+    if (!detail) return;
+    setEditStatus(detail.status); setAssigneeId(detail.assigneeId); setNote('');
+    setSaveError(''); setNotice('已取消未保存的修改');
+  }
+
+  async function save() {
+    if (!detail || savingRef.current) return;
+    savingRef.current = true; setSaving(true); setSaveError(''); setNotice('');
+    try {
+      const updated = await updateAdminAlert(detail.id, {
+        status: editStatus, assignee_id: assigneeId, follow_up_notes: note.trim(),
+      });
+      setDetail(updated); setEditStatus(updated.status); setAssigneeId(updated.assigneeId);
+      setNote(''); setNotice('预警处置已保存');
+      setListLoading(true); setReload((value) => value + 1);
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : '保存失败，请稍后重试');
+    } finally {
+      savingRef.current = false; setSaving(false);
+    }
+  }
+
+  const dirty = detail && (editStatus !== detail.status || assigneeId !== detail.assigneeId || note.trim().length > 0);
+  const hasMore = result ? page * result.pageSize < result.total : false;
+
+  return <div className="space-y-5">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h2 className="text-2xl font-bold text-slate-900">预警管理</h2>
+        <p className="mt-1 text-sm text-slate-500">查询预警、分配处理人并记录处置过程。</p></div>
+      {USE_MOCK && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">演示数据，操作仅在本页有效</span>}
     </div>
-  );
+    <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3">
+      <label className="relative">
+        <span className="sr-only">搜索姓名或预警编号</span>
+        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+        <input className={inputClass + ' pl-9'} value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); setListLoading(true); }}
+          placeholder="搜索姓名或预警编号" />
+      </label>
+      <label><span className="sr-only">风险等级</span><select className={inputClass} value={level}
+        onChange={(event) => { setLevel(event.target.value); setPage(1); setListLoading(true); }}>
+        <option value="">全部风险等级</option><option value="red">红色</option><option value="orange">橙色</option>
+        <option value="yellow">黄色</option><option value="green">绿色</option>
+      </select></label>
+      <label><span className="sr-only">处理状态</span><select className={inputClass} value={status}
+        onChange={(event) => { setStatus(event.target.value); setPage(1); setListLoading(true); }}>
+        <option value="">全部处理状态</option>{Object.entries(statusLabel).map(([value, label]) =>
+          <option key={value} value={value}>{label}</option>)}
+      </select></label>
+    </div>
+    {listError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+      预警列表加载失败：{listError} <button type="button" className="ml-2 underline"
+        onClick={() => { setListLoading(true); setReload((value) => value + 1); }}>重试</button>
+    </div>}
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
+      <div className="space-y-3">
+        {listLoading && <p role="status" className="text-sm text-slate-500">正在加载预警…</p>}
+        {!listLoading && result?.items.length === 0 &&
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">当前条件下没有预警记录。</div>}
+        {!listLoading && result?.items.map((alert) =>
+          <button type="button" key={alert.id} onClick={() => choose(alert.id)}
+            aria-pressed={selectedId === alert.id}
+            className={'w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:border-sky-300 ' +
+              (selectedId === alert.id ? 'border-sky-500 ring-2 ring-sky-100' : 'border-slate-200')}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="flex items-center gap-2"><AdminAlertBadge level={alert.level} />
+                <div><p className="font-medium text-slate-900">{alert.name || '未填写姓名'}</p>
+                  <p className="text-xs text-slate-500">{alert.id} · {alert.screeningId || '无关联筛查'}</p></div></div>
+              <AdminStatusBadge status={alert.status} />
+            </div>
+            <p className="mt-3 text-sm text-slate-600">{alert.trigger || alert.description || '无触发说明'}</p>
+            <p className="mt-2 text-xs text-slate-400">{alert.createdAt} · {alert.assignee}</p>
+          </button>)}
+        {!listLoading && result && result.total > 0 && <div className="flex items-center justify-between text-sm text-slate-500">
+          <span>共 {result.total} 条 · 第 {page} 页</span>
+          <div className="flex gap-2">
+            <button type="button" disabled={page <= 1} onClick={() => { setPage((value) => value - 1); setListLoading(true); }}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1 disabled:opacity-40">上一页</button>
+            <button type="button" disabled={!hasMore} onClick={() => { setPage((value) => value + 1); setListLoading(true); }}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1 disabled:opacity-40">下一页</button>
+          </div>
+        </div>}
+      </div>
+      <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {!selectedId && <p className="text-sm text-slate-500">选择一条预警查看详情并处理。</p>}
+        {selectedId && <button type="button" onClick={() => { setSelectedId(null); setDetail(null); }}
+          className="mb-4 inline-flex items-center gap-1 text-sm text-sky-700 hover:underline"><ArrowLeft className="h-4 w-4" /> 返回列表</button>}
+        {detailLoading && <p role="status" className="text-sm text-slate-500">正在加载详情…</p>}
+        {detailError && <p role="alert" className="text-sm text-rose-700">详情加载失败：{detailError}</p>}
+        {detail && !detailLoading && <>
+          <div className="flex items-start justify-between gap-2"><div><h3 className="font-semibold text-slate-900">{detail.id}</h3>
+            <p className="text-sm text-slate-500">{detail.name} · {detail.screeningId || '无关联筛查'}</p></div>
+            <AdminAlertBadge level={detail.level} /></div>
+          <div className="mt-4 space-y-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+            <p><span className="text-slate-500">触发原因：</span>{detail.trigger || '未填写'}</p>
+            <p><span className="text-slate-500">描述：</span>{detail.description || '未填写'}</p>
+            <p><span className="text-slate-500">量表：</span>{detail.questionnaire || '无关联量表'}</p>
+            <p><span className="text-slate-500">得分：</span>{detail.score == null ? '暂无' : detail.score + ' / ' + (detail.maxScore ?? '—')}</p>
+            <p><span className="text-slate-500">创建时间：</span>{detail.createdAt}</p>
+          </div>
+          <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
+            <h4 className="font-medium text-slate-900">处置记录</h4>
+            {detail.followUpNotes && <p className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-600">{detail.followUpNotes}</p>}
+            <label className="block text-sm text-slate-600">处理状态
+              <select className={inputClass + ' mt-1'} value={editStatus}
+                onChange={(event) => setEditStatus(event.target.value as AlertRecord['status'])}>
+                <option value={detail.status}>{statusLabel[detail.status]}</option>
+                {nextStatus[detail.status] &&
+                  <option value={nextStatus[detail.status]!}>{statusLabel[nextStatus[detail.status]!]}</option>}
+              </select></label>
+            <label className="block text-sm text-slate-600">处理人
+              <select className={inputClass + ' mt-1'} value={assigneeId ?? ''}
+                onChange={(event) => setAssigneeId(event.target.value ? Number(event.target.value) : null)}>
+                <option value="">未分配</option>{assignees.map((person) =>
+                  <option key={person.id} value={person.id}>{person.name}（{person.role}）</option>)}
+              </select></label>
+            {assigneeError && <p role="alert" className="text-xs text-rose-700">处理人列表加载失败：{assigneeError}</p>}
+            <label className="block text-sm text-slate-600">本次跟进备注
+              <textarea className={inputClass + ' mt-1 min-h-24'} value={note} onChange={(event) => setNote(event.target.value)}
+                placeholder="记录本次处置；标记已解决时必须填写" /></label>
+            {saveError && <p role="alert" className="text-sm text-rose-700">{saveError}</p>}
+            {notice && <p role="status" className="text-sm text-emerald-700">{notice}</p>}
+            <div className="flex gap-2">
+              <button type="button" onClick={save} disabled={!dirty || saving}
+                className="rounded-lg bg-sky-700 px-4 py-2 text-sm text-white hover:bg-sky-800 disabled:opacity-40">
+                {saving ? '保存中…' : '保存处置'}</button>
+              <button type="button" onClick={cancel} disabled={!dirty || saving}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 disabled:opacity-40">取消修改</button>
+            </div>
+          </div>
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            <h4 className="font-medium text-slate-900">处理历史</h4>
+            {detail.history.length === 0 ? <p className="mt-2 text-sm text-slate-500">暂无处理记录。</p> :
+              <ol className="mt-3 space-y-3">{detail.history.map((event) =>
+                <li key={event.id} className="border-l-2 border-sky-200 pl-3 text-xs text-slate-600">
+                  <p className="font-medium text-slate-800">{statusLabel[event.toStatus as AlertRecord['status']] || event.toStatus} · {event.actor}</p>
+                  <p>{event.createdAt}</p>{event.note && <p className="mt-1 whitespace-pre-wrap">{event.note}</p>}
+                </li>)}</ol>}
+          </div>
+        </>}
+      </aside>
+    </div>
+  </div>;
 }

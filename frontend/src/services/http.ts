@@ -114,6 +114,8 @@ http.interceptors.response.use(
       clearToken();
       // 项目用 HashRouter：登录路由在 hash 里；线上又部署在仓库子路径下，
       // 所以必须带上 BASE_URL，否则 GitHub Pages 上会跳到不存在的 /auth 而 404。
+      // （团队 main 也改成判 hash，但他们用 location.hash = '#/auth'，会丢掉子路径；
+      //   这里保留我们这版带 BASE_URL 的写法，语义一致且线上不会 404。）
       if (!location.hash.startsWith('#/auth')) {
         const base = import.meta.env.BASE_URL || '/';
         location.href = `${base}#/auth`;

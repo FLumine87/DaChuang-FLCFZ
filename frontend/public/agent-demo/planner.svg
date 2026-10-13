@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="260" viewBox="0 0 720 260">
+<rect width="720" height="260" rx="12" fill="#edf3fb"/>
+<rect x="35" y="22" width="650" height="216" rx="9" fill="white"/>
+<g font-family="Microsoft YaHei, sans-serif" fill="#294363">
+<text x="65" y="61" font-size="19" font-weight="bold">一周学习与生活记录</text>
+<text x="495" y="60" font-size="12" fill="#8799b1">项目原创 · 合成演示材料</text>
+<g font-size="13"><text x="66" y="111">周一  整理课程计划</text><text x="390" y="111">周三  和同学一起复习</text>
+<text x="66" y="162">周五  完成学习记录</text><text x="390" y="162">周末  散步与休息</text></g>
+<path d="M65 128H652M65 182H652" stroke="#e3ebf5"/>
+<text x="65" y="214" font-size="11" fill="#8799b1">仅验证图像材料展示流程，不作为心理判断依据。</text>
+</g></svg>
