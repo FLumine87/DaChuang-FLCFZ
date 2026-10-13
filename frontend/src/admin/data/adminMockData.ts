@@ -28,7 +28,7 @@ export interface AlertRecord {
 export interface CaseRecord {
   id: string;
   name: string;
-  age: number;
+  age: number | null;
   gender: string;
   department: string;
   tags: string[];

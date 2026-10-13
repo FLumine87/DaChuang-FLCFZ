@@ -91,8 +91,8 @@ http.interceptors.response.use(
     const isAuthEntry = /\/api\/auth\/(login|register)$/.test(error.config?.url ?? '');
     if (error.response?.status === 401 && !isAuthEntry) {
       clearToken();
-      if (!location.pathname.startsWith('/auth')) {
-        location.href = '/auth';
+      if (!location.hash.startsWith('#/auth')) {
+        location.hash = '#/auth';
       }
       return Promise.reject(new Error('登录已过期，请重新登录'));
     }

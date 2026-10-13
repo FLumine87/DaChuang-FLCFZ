@@ -200,6 +200,7 @@ DaChuang-FLCFZ/
 | 2026-09-30 | **前后端检索接口打通**：后端 `perform_search` 支持图像/语音 base64 查询（`media_base64` + `media_name`，兼容 `media`），异常路径也清理临时文件；`search` 返回 `index` 过程信息（查询码、命中主题、候选数、探测桶、`data_source`、`dataset`）；前端检索页启用图像/语音上传、本地预览、结果媒体缩略图与「真实数据」来源标识 | backend/app/handlers/retrieval.py、backend/app/handlers/{personal,admin}.py、frontend/src/pages/Retrieval.tsx、frontend/src/services/mockApi.ts、frontend/src/data/mockData.ts | 学生端/管理端/分析端共用 `to_frontend_hit()` 统一 camelCase 返回契约 |
 | 2026-09-30 | **评测脚本适配真实语料**：`eval_retrieval.py` 新增 T3（跨模态类别一致率 vs 先验）与查询模态分析，区分 T1（同一被试，数据集不可辨识）/ T2（主题相似）/ T3（跨模态类别一致性）三类指标。实测（300 记录 / 120 查询）：T2 mAP@10 0.945（随机基线 0.782，提升 1.21×）；T3 跨模态类别一致率 0.70 vs 先验 0.498（提升 1.40×）；平均检索 13.3ms、p95 65.4ms | backend/scripts/eval_retrieval.py、backend/data/hashing/eval_report.json | 结论只用于链路验证与相对比较（相关性由主题重叠定义），非论文绝对指标 |
 | 2026-09-30 | **文档与配置更新**：README 新增「动态跨模态哈希检索（真实数据集）」章节（三档体验、语料构建、指标复现、索引行为）；`.env.example` 补充 `HASHING_BALANCE_MODALITIES` / `HASHING_CORPUS_DB` / `HASHING_FALLBACK_CORPUS_DB` 说明 | README.md、DEVELOP.md、backend/.env.example | 三档：档0 合成语料开箱即用 / 档1 真实语料跨模态 / 档2 指标复现；真实数据不入库，引擎缺失时自动回退 |
+| 2026-10-07 | **管理端仪表盘、预警、案例闭环**：统计由数据库聚合；预警支持筛选、分页、详情、分配、顺序处置与审计；案例按账号关联筛查/预警并生成时间线，可更新状态和记录跟进；个人自助作答由服务端复算；修复公开注册提权、跨用户数据可见与异步漏 await；前端补加载、空态、错误、演示数据标识及重复提交防护 | backend/app/{db,handlers,services}、backend/worker/seed、frontend/src/{admin,components,pages,services}、backend/scripts/test_admin_workflow.py、docs/ADMIN_CONSOLE_GUIDE.md | 仅本地隔离分支与临时数据库验证，尚未推送/部署；既有 D1 须先执行一次 003 迁移，旧记录 user_id 为空时不按姓名强行关联 |
 
 ---
 

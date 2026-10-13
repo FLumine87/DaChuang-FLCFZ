@@ -10,7 +10,6 @@ import {
   Menu,
   X,
   Brain,
-  Bell,
   User,
   LogOut,
 } from 'lucide-react';
@@ -114,14 +113,7 @@ export default function AdminLayout() {
                 location.pathname.startsWith(item.path + '/')
             )?.label || '仪表盘'}
           </h1>
-          <div className="flex items-center gap-4">
-            <button className="relative text-cyan-300 hover:text-cyan-100 cursor-pointer">
-              <Bell className="w-5 h-5" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-danger-500 text-white text-xs rounded-full flex items-center justify-center">
-                3
-              </span>
-            </button>
-          </div>
+          <span className="text-xs text-slate-400">管理工作台</span>
         </header>
 
         <main className="flex-1 overflow-auto p-6 bg-slate-100">

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Lock, ShieldCheck, UserRound, UserPlus, Loader2 } from 'lucide-react';
 import { apiLogin, apiRegister } from '../services/mockApi';
 import { saveSessionToken } from '../auth/session';
+import { USE_MOCK } from '../services/http';
 
 type AuthTab = 'login' | 'register';
 
@@ -94,7 +95,7 @@ export default function AuthPage() {
           </p>
           <h1 className="text-3xl font-bold text-white mt-5">心理筛查预警系统</h1>
           <p className="text-slate-300 mt-3 leading-7">
-            支持管理端与个人端双系统。使用管理账号 <code>admin/admin123</code> 登录将进入管理系统，
+            支持管理端与个人端双系统。使用{USE_MOCK ? '演示管理账号 ' : '管理账号 '}<code>{USE_MOCK ? 'adminer/admin' : 'admin/admin123'}</code> 登录将进入管理系统，
             其他账号将进入个人系统。
           </p>
 
@@ -245,7 +246,7 @@ export default function AuthPage() {
           </div>
 
           <p className="text-xs text-slate-400 mt-5 leading-5">
-            规则：仅 <code>admin/admin123</code> 进入管理端；其余账号（包括注册账号）均进入个人端。
+            规则：仅 <code>{USE_MOCK ? 'adminer/admin' : 'admin/admin123'}</code> 进入管理端；其余账号（包括注册账号）均进入个人端。
           </p>
         </div>
       </div>

@@ -2,8 +2,10 @@
 from datetime import datetime, timedelta
 
 from app.core.responses import success_response
+from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
 from app.db import database as db
+from app.services import alert_service
 from app.engines import get_rag_engine
 from app.handlers.retrieval import perform_search, to_frontend_hit
 
@@ -25,6 +27,24 @@ async def test_admin(ctx: RequestContext):
 
 async def get_admin_dashboard(ctx: RequestContext):
     # 优化：合并统计查询，减少 D1 调用次数（免费计划 CPU 10ms 限制）
+
+    month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    counts = await db.query_one_a(
+        "SELECT COUNT(*) AS total, "
+        "SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS monthly, "
+        "SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed, "
+        "SUM(CASE WHEN screening_id LIKE 'SEED-%' THEN 1 ELSE 0 END) AS seeded "
+        "FROM screenings", (month_start,)) or {}
+    pending = await db.query_one_a(
+        "SELECT COUNT(*) AS c FROM alerts WHERE status IN ('pending', 'processing')")
+    total = counts.get("total") or 0
+    stats = {
+        "totalScreenings": total,
+        "monthlyScreenings": counts.get("monthly") or 0,
+        "openAlerts": pending["c"] if pending else 0,
+        "completionRate": round((counts.get("completed") or 0) / total * 100, 1) if total else 0,
+        "seedRecords": counts.get("seeded") or 0,
+    }
 
     # 12 天筛查/预警趋势：按天 GROUP BY 一次查出
     start = datetime.now() - timedelta(days=11)
@@ -63,7 +83,7 @@ async def get_admin_dashboard(ctx: RequestContext):
         "SELECT a.*, s.screening_id AS scr_id, u.name AS assignee_name "
         "FROM alerts a "
         "LEFT JOIN screenings s ON a.screening_id = s.id "
-        "LEFT JOIN users u ON s.counselor_id = u.id "
+        "LEFT JOIN users u ON a.assignee_id = u.id "
         "ORDER BY a.created_at DESC, a.id DESC LIMIT 10")
     alert_records = [{
         "id": a.get("alert_id"),
@@ -114,6 +134,7 @@ async def get_admin_dashboard(ctx: RequestContext):
     } for c in cases]
 
     return success_response(data={
+        "stats": stats,
         "trendData": trend_data,
         "alertDistribution": alert_distribution,
         "alertRecords": alert_records,
@@ -145,43 +166,233 @@ async def get_admin_screenings(ctx: RequestContext):
 
 
 async def get_admin_alerts(ctx: RequestContext):
-    alerts = await db.query_a("SELECT * FROM alerts ORDER BY created_at DESC, id DESC LIMIT 100")
-    items = []
-    for a in alerts:
-        screening = await db.query_one_a("SELECT * FROM screenings WHERE id = ?", (a.get("screening_id"),))
-        counselor = await _counselor_name(screening.get("counselor_id") if screening else None)
-        items.append({
-            "id": a.get("alert_id"),
-            "screeningId": screening.get("screening_id") if screening else "",
-            "name": a.get("name"),
-            "level": a.get("level"),
-            "trigger": a.get("trigger") or "",
-            "description": a.get("description") or "",
-            "status": a.get("status"),
-            "assignee": counselor or "未分配",
-            "createdAt": _fmt(a.get("created_at"), "%Y-%m-%d %H:%M"),
-            "updatedAt": _fmt(a.get("updated_at"), "%Y-%m-%d %H:%M"),
-        })
-    return success_response(data=items)
+    q = ctx.query_params
+    where, params = [], []
+    if q.get("level") in ("green", "yellow", "orange", "red"):
+        where.append("a.level = ?")
+        params.append(q["level"])
+    if q.get("status") in ("pending", "processing", "resolved", "closed"):
+        where.append("a.status = ?")
+        params.append(q["status"])
+    if q.get("keyword"):
+        where.append("(a.name LIKE ? OR a.alert_id LIKE ?)")
+        term = f"%{str(q['keyword']).strip()}%"
+        params.extend((term, term))
+    clause = " WHERE " + " AND ".join(where) if where else ""
+    try:
+        page = max(1, int(q.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
+    total_row = await db.query_one_a("SELECT COUNT(*) AS c FROM alerts a" + clause, params)
+    rows = await db.query_a(
+        "SELECT a.*, s.screening_id AS public_screening_id, u.name AS assignee_name "
+        "FROM alerts a LEFT JOIN screenings s ON a.screening_id = s.id "
+        "LEFT JOIN users u ON a.assignee_id = u.id" + clause +
+        " ORDER BY a.created_at DESC, a.id DESC LIMIT 50 OFFSET ?", params + [(page - 1) * 50])
+    return success_response(data={
+        "items": [_admin_alert_dict(a) for a in rows],
+        "total": total_row["c"] if total_row else 0,
+        "page": page,
+        "pageSize": 50,
+    })
+
+
+def _admin_alert_dict(a: dict) -> dict:
+    return {
+        "id": a.get("alert_id"),
+        "screeningId": a.get("public_screening_id") or "",
+        "name": a.get("name") or "",
+        "level": a.get("level") or "green",
+        "trigger": a.get("trigger") or "",
+        "description": a.get("description") or "",
+        "status": a.get("status") or "pending",
+        "assignee": a.get("assignee_name") or "未分配",
+        "assigneeId": a.get("assignee_id"),
+        "followUpNotes": a.get("follow_up_notes") or "",
+        "createdAt": _fmt(a.get("created_at"), "%Y-%m-%d %H:%M"),
+        "updatedAt": _fmt(a.get("updated_at"), "%Y-%m-%d %H:%M"),
+    }
+
+
+async def get_admin_alert_detail(ctx: RequestContext, alert_id: str):
+    row = await db.query_one_a(
+        "SELECT a.*, s.screening_id AS public_screening_id, s.score, s.max_score, "
+        "q.name AS questionnaire_name, u.name AS assignee_name "
+        "FROM alerts a LEFT JOIN screenings s ON a.screening_id = s.id "
+        "LEFT JOIN questionnaires q ON s.questionnaire_id = q.id "
+        "LEFT JOIN users u ON a.assignee_id = u.id WHERE a.alert_id = ?", (alert_id,))
+    if not row:
+        raise HttpError(404, "预警不存在")
+    history = await db.query_a(
+        "SELECT e.id, e.from_status, e.to_status, e.note, e.created_at, "
+        "u.name AS actor_name FROM alert_events e "
+        "LEFT JOIN users u ON e.actor_id = u.id WHERE e.alert_id = ? "
+        "ORDER BY e.created_at DESC, e.id DESC", (row["id"],))
+    return success_response(data={
+        **_admin_alert_dict(row),
+        "score": row.get("score"), "maxScore": row.get("max_score"),
+        "questionnaire": row.get("questionnaire_name") or "",
+        "history": [{
+            "id": event["id"], "fromStatus": event.get("from_status"),
+            "toStatus": event["to_status"], "note": event.get("note") or "",
+            "actor": event.get("actor_name") or "未知账号",
+            "createdAt": _fmt(event.get("created_at"), "%Y-%m-%d %H:%M"),
+        } for event in history],
+    })
+
+
+async def update_admin_alert(ctx: RequestContext, alert_id: str):
+    row = await db.query_one_a("SELECT id FROM alerts WHERE alert_id = ?", (alert_id,))
+    if not row:
+        raise HttpError(404, "预警不存在")
+    await alert_service.update_alert(row["id"], ctx.body, int(ctx.user["sub"]))
+    return await get_admin_alert_detail(ctx, alert_id)
+
+
+async def get_admin_assignees(ctx: RequestContext):
+    rows = await db.query_a(
+        "SELECT id, name, role FROM users WHERE is_active = 1 "
+        "AND role IN ('admin', 'counselor') ORDER BY name, id")
+    return success_response(data=rows)
 
 
 async def get_admin_cases(ctx: RequestContext):
-    cases = await db.query_a("SELECT * FROM cases ORDER BY created_at DESC, id DESC LIMIT 100")
-    items = []
-    for c in cases:
-        items.append({
-            "id": c.get("case_id"),
-            "name": c.get("name"),
-            "age": c.get("age") or 0,
-            "gender": c.get("gender") or "",
-            "department": c.get("department") or "",
-            "tags": [],
-            "screeningCount": c.get("screening_count") or 0,
-            "lastScreening": _fmt(c.get("last_screening_date")),
-            "alertLevel": c.get("alert_level"),
-            "status": c.get("status"),
-        })
-    return success_response(data=items)
+    q = ctx.query_params
+    where, params = [], []
+    if q.get("status") in ("active", "monitoring", "closed"):
+        where.append("c.status = ?")
+        params.append(q["status"])
+    if q.get("keyword"):
+        where.append("(c.name LIKE ? OR c.case_id LIKE ?)")
+        term = f"%{str(q['keyword']).strip()}%"
+        params.extend((term, term))
+    clause = " WHERE " + " AND ".join(where) if where else ""
+    try:
+        page = max(1, int(q.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
+    total_row = await db.query_one_a("SELECT COUNT(*) AS c FROM cases c" + clause, params)
+    rows = await db.query_a(
+        "SELECT c.* FROM cases c" + clause +
+        " ORDER BY c.updated_at DESC, c.id DESC LIMIT 50 OFFSET ?", params + [(page - 1) * 50])
+    tags_by_case = {case["id"]: [] for case in rows}
+    if rows:
+        placeholders = ",".join("?" for _ in rows)
+        tags = await db.query_a(
+            "SELECT a.case_id, t.name FROM case_tags_association a "
+            "JOIN case_tag_master t ON a.tag_id = t.id "
+            f"WHERE a.case_id IN ({placeholders}) ORDER BY t.name",
+            [case["id"] for case in rows])
+        for tag in tags:
+            tags_by_case[tag["case_id"]].append(tag["name"])
+    return success_response(data={
+        "items": [await _admin_case_dict(c, tags_by_case[c["id"]]) for c in rows],
+        "total": total_row["c"] if total_row else 0, "page": page, "pageSize": 50,
+    })
+
+
+async def _admin_case_dict(c: dict, tags: list = None) -> dict:
+    if tags is None:
+        tag_rows = await db.query_a(
+            "SELECT t.name FROM case_tags_association a "
+            "JOIN case_tag_master t ON a.tag_id = t.id WHERE a.case_id = ? ORDER BY t.name",
+            (c["id"],))
+        tags = [tag["name"] for tag in tag_rows]
+    return {
+        "id": c["case_id"], "userId": c.get("user_id"),
+        "name": c.get("name") or "", "age": c.get("age"),
+        "gender": c.get("gender") or "", "department": c.get("department") or "",
+        "tags": tags,
+        "screeningCount": c.get("screening_count") or 0,
+        "lastScreening": _fmt(c.get("last_screening_date")),
+        "alertLevel": c.get("alert_level") or "green",
+        "status": c.get("status") or "active",
+        "notes": c.get("notes") or "",
+    }
+
+
+async def get_admin_case_detail(ctx: RequestContext, case_id: str):
+    case = await db.query_one_a("SELECT * FROM cases WHERE case_id = ?", (case_id,))
+    if not case:
+        raise HttpError(404, "案例不存在")
+    user_id = case.get("user_id")
+    screenings, alerts = [], []
+    if user_id is not None:
+        screenings = await db.query_a(
+            "SELECT s.screening_id AS id, s.score, s.max_score AS maxScore, "
+            "s.alert_level AS alertLevel, s.screening_date AS date, q.name AS questionnaire "
+            "FROM screenings s LEFT JOIN questionnaires q ON s.questionnaire_id = q.id "
+            "WHERE s.user_id = ? ORDER BY s.created_at DESC LIMIT 50", (user_id,))
+        alerts = await db.query_a(
+            "SELECT a.alert_id AS id, a.level, a.status, a.created_at AS createdAt "
+            "FROM alerts a JOIN screenings s ON a.screening_id = s.id "
+            "WHERE s.user_id = ? ORDER BY a.created_at DESC LIMIT 50", (user_id,))
+    follow_ups = await db.query_a(
+        "SELECT id, event_type AS type, title, description, event_date AS date "
+        "FROM case_timeline WHERE case_id = ? ORDER BY event_date DESC, id DESC", (case["id"],))
+    level_labels = {"green": "绿色", "yellow": "黄色", "orange": "橙色", "red": "红色"}
+    timeline = [{**event, "date": _fmt(event.get("date"), "%Y-%m-%d %H:%M")}
+                for event in follow_ups]
+    timeline.extend({
+        "id": f"screening:{item['id']}", "type": "screening",
+        "title": f"完成{item.get('questionnaire') or '量表'}筛查",
+        "description": f"得分 {item.get('score')} / {item.get('maxScore')}",
+        "date": _fmt(item.get("date"), "%Y-%m-%d %H:%M"),
+    } for item in screenings)
+    timeline.extend({
+        "id": f"alert:{item['id']}", "type": "alert",
+        "title": f"产生{level_labels.get(item.get('level'), '未知等级')}预警",
+        "description": f"预警编号 {item['id']}",
+        "date": _fmt(item.get("createdAt"), "%Y-%m-%d %H:%M"),
+    } for item in alerts)
+    timeline.sort(key=lambda event: event.get("date") or "", reverse=True)
+    return success_response(data={
+        **(await _admin_case_dict(case)),
+        "screenings": screenings, "alerts": alerts, "timeline": timeline,
+    })
+
+
+async def update_admin_case(ctx: RequestContext, case_id: str):
+    case = await db.query_one_a("SELECT id FROM cases WHERE case_id = ?", (case_id,))
+    if not case:
+        raise HttpError(404, "案例不存在")
+    data = ctx.body
+    if set(data) - {"status", "notes"}:
+        raise HttpError(400, "只允许更新案例状态和备注")
+    status = data.get("status")
+    if status is not None and status not in ("active", "monitoring", "closed"):
+        raise HttpError(400, "无效的案例状态")
+    if status is not None:
+        previous = await db.query_one_a("SELECT status FROM cases WHERE id = ?", (case["id"],))
+        await db.execute_a(
+            "UPDATE cases SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (status, case["id"]))
+        if previous and previous["status"] != status:
+            labels = {"active": "进行中", "monitoring": "持续观察", "closed": "已结案"}
+            await db.execute_a(
+                "INSERT INTO case_timeline (case_id, event_type, title, description, event_date) "
+                "VALUES (?, 'status', ?, ?, CURRENT_TIMESTAMP)",
+                (case["id"], "案例状态更新", f"{labels.get(previous['status'], previous['status'])} → {labels[status]}"))
+    if "notes" in data:
+        await db.execute_a(
+            "UPDATE cases SET notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (str(data["notes"]).strip(), case["id"]))
+    return await get_admin_case_detail(ctx, case_id)
+
+
+async def add_admin_case_event(ctx: RequestContext, case_id: str):
+    case = await db.query_one_a("SELECT id FROM cases WHERE case_id = ?", (case_id,))
+    if not case:
+        raise HttpError(404, "案例不存在")
+    title = str(ctx.body.get("title") or "").strip()
+    description = str(ctx.body.get("description") or "").strip()
+    if not title or not description:
+        raise HttpError(400, "跟进标题和内容不能为空")
+    await db.execute_a(
+        "INSERT INTO case_timeline (case_id, event_type, title, description, event_date) "
+        "VALUES (?, 'follow_up', ?, ?, CURRENT_TIMESTAMP)",
+        (case["id"], title, description))
+    return await get_admin_case_detail(ctx, case_id)
 
 
 async def admin_search(ctx: RequestContext):
