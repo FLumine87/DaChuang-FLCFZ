@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Network, RefreshCw, AlertTriangle, HardDrive, MessageCircleHeart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, type GraphData } from '../../services/api';
+import { briefErrorMessage } from '../../services/http';
 import { getCurrentSession } from '../../auth/session';
 import { localGraph, mergeGraphs } from '../../services/localKg';
 
@@ -97,7 +98,6 @@ export default function KgPage() {
   const [serverNodes, setServerNodes] = useState(0);
   const [serverNotice, setServerNotice] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [, setRenderTick] = useState(0);
   /* 主题感知的节点/线条配色（见文件顶部 readPalette 的说明） */
@@ -107,18 +107,25 @@ export default function KgPage() {
      基础数据源。服务端（Neo4j）能给出数据时以它为主，本机只补充缺的部分。 */
   const load = async () => {
     setLoading(true);
-    setError('');
     setServerNotice('');
     const local = localGraph(userId);
     try {
       const server = await api.getGraph(userId);
       setServerNodes(Math.max(0, server.nodes.length - 1));
       setData(mergeGraphs(server, local));
-      if (server.mock) setServerNotice('服务端处于演示模式：图谱接口未连接图数据库。');
+      /* 说明文案在这里就写成完整句子（不是把后端字段拼进去）：
+         mock 是"服务端能用但没连图数据库"，catch 才是"取不到"。 */
+      if (server.mock) {
+        setServerNotice('服务端处于演示模式 · 未连接图数据库，当前显示本机记录。');
+      }
     } catch (e) {
-      /* 后端不可用不该让页面空掉：本机三元组照样画出来，失败只在顶部如实说明 */
+      /* 后端不可用不该让页面空掉：本机三元组照样画出来，失败只在顶部如实说明。
+         注意 briefErrorMessage：axios 的消息里可能带着原始响应体（裸 JSON），
+         直接上屏就是"把后端返回体糊在用户脸上"——这正是 2026-10-14 那个 bug。 */
       setServerNodes(0);
-      setServerNotice(e instanceof Error ? e.message : '图谱服务暂时取不到');
+      setServerNotice(
+        `知识图谱服务暂时取不到（${briefErrorMessage(e, '未连接到服务端')}），当前显示本机记录。`,
+      );
       setData(local.nodes.length > 1 ? local : null);
     } finally {
       setLoading(false);
@@ -229,22 +236,16 @@ export default function KgPage() {
         </button>
       </div>
 
-      {/* 服务端图谱取不到时的如实说明：不再把 503 的 JSON 糊在页面上 */}
+      {/* 服务端图谱取不到时的如实说明：只说人话，不放原始响应体 */}
       {serverNotice && (
         <div className="flex items-center gap-2 text-sm text-slate-600 ui-card px-3 py-2">
           <AlertTriangle className="w-4 h-4 shrink-0 text-warning-500" />
-          <span>知识图谱服务暂时取不到（{serverNotice}），当前显示本机记录。</span>
-        </div>
-      )}
-
-      {error && (
-        <div className="flex items-center gap-2 text-sm text-danger-600 bg-danger-50 border border-danger-200 rounded-lg px-3 py-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
+          <span>{serverNotice}</span>
         </div>
       )}
 
       <div className="ui-card overflow-hidden">
-        {!data || nodes.length === 0 ? (
+        {!data || nodes.length === 0 || links.length === 0 ? (
           <div className="h-[520px] flex flex-col items-center justify-center gap-3 text-sm text-slate-400">
             {loading ? (
               '加载中…'

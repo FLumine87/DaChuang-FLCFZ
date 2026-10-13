@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
   BookOpen,
-  ChevronDown,
   ClipboardList,
   Info,
   Loader2,
@@ -27,6 +26,7 @@ import {
   type FirstRunEvidence,
 } from "../../services/firstRunRetrieval";
 import { getCurrentSession } from "../../auth/session";
+import ScrollArea from "../../components/ScrollArea";
 import FirstRunShell from "./FirstRunShell";
 import { firstRunSteps } from "./firstRunSteps";
 
@@ -113,6 +113,13 @@ export default function FirstRunResult() {
       </FirstRunShell>
     );
   }
+
+  /* 四项（含只在有补充文字时出现的知识关联）的状态：摘要与徽标只算一次，
+     与下面的内容用同一判据，避免"摘要说没检索到、内容说服务挂了"这种自相矛盾 */
+  const hashState = hashRetrievalState(evidence, evidenceLoading);
+  const ragState = ragReferenceState(evidence, evidenceLoading);
+  const linkState = knowledgeLinkState(evidence, evidenceLoading);
+  const showLinks = ready && Boolean(supplementText);
 
   const score = draft.score ?? 0;
   const maxScore = draft.maxScore ?? 0;
@@ -222,7 +229,13 @@ export default function FirstRunResult() {
             子元素用 my-auto 垂直居中：矮内容（结果摘要）不再贴着标签栏顶、
             把空白全堆在按钮上方；内容超高时 auto 外边距归零，从顶部开始滚动，
             不会裁掉第一行。 */}
-        <div className="app-scrollbar mt-5 flex min-h-0 flex-1 flex-col overflow-y-auto pr-1 [&>*]:my-auto">
+        <div
+          className={`mt-5 flex min-h-0 flex-1 flex-col pr-1 ${
+            tab === "evidence"
+              ? "overflow-hidden" /* 分析依据：四项连排，滚动交给里面那个 ScrollArea */
+              : "app-scrollbar overflow-y-auto [&>*]:my-auto"
+          }`}
+        >
           {tab === "summary" && (
             <div className="grid gap-3">
               {/* 结论与免责声明必须拉开层级：原来两句都是 14/12px 的灰字，
@@ -242,11 +255,18 @@ export default function FirstRunResult() {
           )}
 
           {tab === "evidence" && (
-            <div className="grid gap-3">
-              <EvidenceItem
+            /* 四项内容连成一个整体（用户 2026-10-14："能不能去掉导航栏，四个塞在一起"）：
+               不再有左边的来源导航列表，也不折叠/点选 —— 往下滚依次看到
+               本次作答与补充 → 动态跨模态哈希检索 → RAG 参考资料 →（有补充时的）知识关联，
+               每项只留小标题 + 状态徽标 + 一行摘要，用细分隔线分开，同样面积放更多文字。
+               滚动交给 ScrollArea：滚动条可见 + 底部渐隐与「向下滚动查看更多」提示。 */
+            <ScrollArea
+              className="min-h-[300px] flex-1"
+              innerClassName="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white px-4 text-[13.5px] leading-[1.75] text-slate-600"
+            >
+              <EvidenceSection
                 icon={ClipboardList}
                 title="本次作答与补充"
-                defaultOpen={hasSupplement}
                 summary={`${definition.id} 共 ${definition.questions.length} 题${
                   hasSupplement ? "，并补充了一条记录" : "，未补充其他内容"
                 }`}
@@ -254,7 +274,7 @@ export default function FirstRunResult() {
                 <p>
                   量表：{definition.name}（{definition.instructions}）
                 </p>
-                <p className="mt-1.5">
+                <p className="mt-1">
                   补充内容：
                   {supplementText
                     ? `「${supplementText}」`
@@ -264,28 +284,48 @@ export default function FirstRunResult() {
                         }）`
                       : "本次未补充"}
                 </p>
-              </EvidenceItem>
+              </EvidenceSection>
 
-              <HashRetrievalItem
-                evidence={evidence}
+              <EvidenceSection
+                icon={Network}
+                title="动态跨模态哈希检索"
+                summary={hashState.summary}
+                badge={hashState.badge}
                 loading={evidenceLoading}
-                enabled={ready}
-              />
+              >
+                <HashRetrievalContent
+                  evidence={evidence}
+                  loading={evidenceLoading}
+                  enabled={ready}
+                />
+              </EvidenceSection>
 
-              <RagReferenceItem
-                evidence={evidence}
+              <EvidenceSection
+                icon={BookOpen}
+                title="RAG 参考资料"
+                summary={ragState.summary}
+                badge={ragState.badge}
                 loading={evidenceLoading}
-                enabled={ready}
-              />
+              >
+                <RagReferenceContent
+                  evidence={evidence}
+                  loading={evidenceLoading}
+                  enabled={ready}
+                />
+              </EvidenceSection>
 
-              {/* 有补充文字时才会走到这里：后端从这段文字抽出的实体/关系。
-                  没补充、或后端没给结果，这个条目就不出现（不留空壳）。 */}
-              <KnowledgeLinkItem
-                evidence={evidence}
-                loading={evidenceLoading}
-                enabled={ready && Boolean(supplementText)}
-              />
-            </div>
+              {/* 有补充文字时才会出现：后端从这段文字抽出的实体/关系（没补充就不留空壳） */}
+              {showLinks && (
+                <EvidenceSection
+                  icon={Sparkles}
+                  title="知识关联"
+                  summary={linkState.summary}
+                  loading={evidenceLoading}
+                >
+                  <KnowledgeLinkContent evidence={evidence} loading={evidenceLoading} />
+                </EvidenceSection>
+              )}
+            </ScrollArea>
           )}
 
           {tab === "advice" && (
@@ -333,74 +373,7 @@ export default function FirstRunResult() {
 
 /* ---------------------------------------------------------------- 子组件 */
 
-/** 「分析依据」里的一条可展开条目 */
-function EvidenceItem({
-  icon: Icon,
-  title,
-  summary,
-  pending = false,
-  badge,
-  loading = false,
-  defaultOpen = false,
-  children,
-}: {
-  icon: typeof Info;
-  title: string;
-  summary: string;
-  pending?: boolean;
-  /** 非 live 模式右上角那个小标记的文案；默认「了解分析技术」，演示模式传 MOCK_BADGE */
-  badge?: string;
-  /** 拉取中：标题右侧给一个克制的转圈，不改动整页 */
-  loading?: boolean;
-  /** 有内容可看时默认展开：用户补充过东西，就该一眼看到它被用上了 */
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/60">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-3 px-3.5 py-3 text-left"
-      >
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-primary-500">
-          <Icon className="h-4 w-4" strokeWidth={1.7} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-[14px] font-medium text-slate-800">{title}</span>
-            {pending && (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
-                {badge ?? "了解分析技术"}
-              </span>
-            )}
-          </span>
-          <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-slate-500">
-            {loading && (
-              <Loader2
-                className="h-3 w-3 shrink-0 animate-spin text-slate-400"
-                aria-hidden="true"
-              />
-            )}
-            {summary}
-          </span>
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-      {open && (
-        <div className="border-t border-slate-200 px-3.5 py-3 text-[12px] leading-6 text-slate-600">
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------- 分析依据：三条真实数据条目 */
+/* ---------------------------------------- 分析依据：左来源列表 / 右全文（左右分栏） */
 
 /**
  * 演示模式的统一标注（用户 2026-10-14 明确要求这个说法）。
@@ -408,6 +381,48 @@ function EvidenceItem({
  * 不是真实检索/大模型输出，界面上必须一眼看得出来。
  */
 const MOCK_BADGE = "演示模式 · 模板生成";
+
+/**
+ * 「分析依据」里的一项：轻量小标题 + 状态徽标 + 一行摘要 + 内容。
+ *
+ * 刻意不做成可点的大卡片（用户 2026-10-14 明确要求去掉来源导航列表）：
+ * 四项连排、细分隔线分开，同样的面积里能放更多文字；也就没有展开/收起这回事。
+ */
+function EvidenceSection({
+  icon: Icon,
+  title,
+  summary,
+  badge,
+  loading = false,
+  children,
+}: {
+  icon: typeof Info;
+  title: string;
+  summary: string;
+  /** 状态徽标（如「演示模式 · 模板生成」），沿用原来那套克制的灰底胶囊 */
+  badge?: string;
+  loading?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section className="py-3.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Icon className="h-3.5 w-3.5 shrink-0 text-primary-500" strokeWidth={1.7} />
+        <h3 className="text-[13.5px] font-medium text-slate-800">{title}</h3>
+        {badge && (
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+            {badge}
+          </span>
+        )}
+        {loading && (
+          <Loader2 className="h-3 w-3 shrink-0 animate-spin text-slate-400" aria-hidden="true" />
+        )}
+      </div>
+      <p className="mt-0.5 text-[12px] leading-5 text-slate-500">{summary}</p>
+      <div className="mt-2">{children}</div>
+    </section>
+  );
+}
 
 /** 只在这里统一三态文案，避免每条各写一遍 */
 function ModeNotice({ evidence }: { evidence: FirstRunEvidence }) {
@@ -449,25 +464,11 @@ function UnavailableNotice({
   );
 }
 
-/**
- * 动态跨模态哈希检索。
- * 命中的相似线索 = 后端 matched_disorders（按 score 降序），只展示摘要字段：
- * 名称、匹配到的症状/诱因、相似度评分、覆盖率。接口没有的字段一律不显示。
- */
-function HashRetrievalItem({
-  evidence,
-  loading,
-  enabled,
-}: {
-  evidence: FirstRunEvidence | null;
-  loading: boolean;
-  enabled: boolean;
-}) {
+/* 三条来源的状态：摘要与徽标在这里算一次，左栏与右栏共用同一套判据，
+   绝不能出现"摘要说没检索到、右栏说服务挂了"这种自相矛盾。 */
+
+function hashRetrievalState(evidence: FirstRunEvidence | null, loading: boolean) {
   const rows = topMatched(evidence?.report, MAX_ROWS);
-  /* 摘要必须和展开后的结论一致，顺序也和渲染分支一致：
-     有数据 → 命中数；服务出错 → 暂不可用；真实检索但没命中 → 未检索到；
-     演示模式 → 未连接图谱（如实说没查，不说"没查到"）；未接入 → 技术名。
-     绝不能出现"摘要说没检索到、展开说服务挂了"这种自相矛盾。 */
   const summary = loading
     ? "正在检索…"
     : rows.length
@@ -479,22 +480,75 @@ function HashRetrievalItem({
           : evidence?.mode === "mock"
             ? "演示模式 · 未连接图谱，无相似线索"
             : "多模态线索的相似模式匹配";
+  const badge =
+    evidence?.mode === "mock"
+      ? MOCK_BADGE
+      : !loading && evidence?.mode !== "live"
+        ? "了解分析技术"
+        : undefined;
+  return { rows, summary, badge };
+}
+
+function ragReferenceState(evidence: FirstRunEvidence | null, loading: boolean) {
+  const factors = (evidence?.report?.factors ?? []).slice(0, MAX_FACTORS);
+  const recs = (evidence?.report?.recommendations ?? []).slice(0, MAX_ROWS);
+  /** 报告正文（后端返回的 summary；演示模式下就是模板文案，界面另有标注） */
+  const reportSummary = evidence?.report?.summary?.trim() ?? "";
+  const hasAny = Boolean(reportSummary) || factors.length > 0 || recs.length > 0;
+  const summary = loading
+    ? "正在整理…"
+    : hasAny
+      ? `${factors.length} 条风险因素 · ${recs.length} 条建议依据`
+      : evidence?.mode === "live" && evidence.inferenceError
+        ? "检索服务暂不可用"
+        : evidence?.mode === "live"
+          ? "本次未返回知识依据"
+          : "结合心理知识库组织解释与建议";
+  const badge =
+    evidence?.mode === "mock"
+      ? MOCK_BADGE
+      : !loading && evidence?.mode !== "live"
+        ? "了解分析技术"
+        : undefined;
+  return { factors, recs, reportSummary, hasAny, summary, badge };
+}
+
+function knowledgeLinkState(evidence: FirstRunEvidence | null, loading: boolean) {
+  const triples = (evidence?.triples?.triples ?? []).slice(0, MAX_TRIPLES);
+  const total = evidence?.triples?.triples.length ?? 0;
+  const summary = loading
+    ? "正在抽取…"
+    : evidence?.triplesError
+      ? "抽取服务暂不可用"
+      : total
+        ? `抽取到 ${total} 条实体关系`
+        : evidence?.triples
+          ? "本次未抽取到实体关系"
+          : "从补充文字中抽取实体与关系";
+  return { triples, total, summary };
+}
+
+/**
+ * 动态跨模态哈希检索（右栏内容）。
+ * 命中的相似线索 = 后端 matched_disorders（按 score 降序），只展示摘要字段：
+ * 名称、匹配到的症状/诱因、相似度评分、覆盖率。接口没有的字段一律不显示。
+ */
+function HashRetrievalContent({
+  evidence,
+  loading,
+  enabled,
+}: {
+  evidence: FirstRunEvidence | null;
+  loading: boolean;
+  enabled: boolean;
+}) {
+  const { rows } = hashRetrievalState(evidence, loading);
 
   return (
-    <EvidenceItem
-      icon={Network}
-      title="动态跨模态哈希检索"
-      summary={summary}
-      pending={!loading && evidence?.mode !== "live"}
-      badge={evidence?.mode === "mock" ? MOCK_BADGE : undefined}
-      loading={loading}
-      defaultOpen={!loading && rows.length > 0}
-    >
+    <div className="grid gap-2.5">
       {loading && <p className="text-slate-500">正在比对本次线索…</p>}
 
-      {!loading && !enabled && (
-        <p>本次没有可用的筛查记录，未发起检索。</p>
-      )}
+      {!loading && !enabled && <p>本次没有可用的筛查记录，未发起检索。</p>}
 
       {!loading && enabled && evidence && evidence.mode !== "live" && (
         <ModeNotice evidence={evidence} />
@@ -515,10 +569,10 @@ function HashRetrievalItem({
           {rows.map((row) => (
             <div
               key={row.name}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5"
+              className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5"
             >
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-[13px] font-medium text-slate-800">{row.name}</span>
+                <span className="text-[13.5px] font-medium text-slate-800">{row.name}</span>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
                   相似度 {row.score}
                 </span>
@@ -527,12 +581,12 @@ function HashRetrievalItem({
                 </span>
               </div>
               {row.matched_symptoms.length > 0 && (
-                <p className="mt-1.5 text-[12px] leading-5 text-slate-500">
+                <p className="mt-1.5 text-[13px] leading-[1.7] text-slate-500">
                   匹配症状：{row.matched_symptoms.join("、")}
                 </p>
               )}
               {row.matched_triggers.length > 0 && (
-                <p className="mt-0.5 text-[12px] leading-5 text-slate-500">
+                <p className="mt-0.5 text-[13px] leading-[1.7] text-slate-500">
                   匹配诱因：{row.matched_triggers.join("、")}
                 </p>
               )}
@@ -548,17 +602,18 @@ function HashRetrievalItem({
           </p>
         </div>
       )}
-    </EvidenceItem>
+    </div>
   );
 }
 
 /**
- * RAG 参考资料。
+ * RAG 参考资料（右栏内容）。
  * 接口没有"sources / references"这类字段，所以不硬凑一份假的文献列表：
  * 这里展示的是后端报告里**本来就是从知识图谱取出来的**两类内容 ——
- * factors（可解释风险因素）与 recommendations[].reason（该建议的由来）。
+ * factors（可解释风险因素）与 recommendations[].reason（该建议的由来），
+ * 外加后端返回的报告正文 summary。
  */
-function RagReferenceItem({
+function RagReferenceContent({
   evidence,
   loading,
   enabled,
@@ -567,32 +622,10 @@ function RagReferenceItem({
   loading: boolean;
   enabled: boolean;
 }) {
-  const factors = (evidence?.report?.factors ?? []).slice(0, MAX_FACTORS);
-  const recs = (evidence?.report?.recommendations ?? []).slice(0, MAX_ROWS);
-  /** 报告正文（后端返回的 summary；演示模式下就是模板文案，界面另有标注） */
-  const reportSummary = evidence?.report?.summary?.trim() ?? "";
-  const hasAny = Boolean(reportSummary) || factors.length > 0 || recs.length > 0;
-  /* 同哈希条目：摘要与展开后的结论保持一致，出错时不说"本次未返回"。 */
-  const summary = loading
-    ? "正在整理…"
-    : hasAny
-      ? `${factors.length} 条风险因素 · ${recs.length} 条建议依据`
-      : evidence?.mode === "live" && evidence.inferenceError
-        ? "检索服务暂不可用"
-        : evidence?.mode === "live"
-          ? "本次未返回知识依据"
-          : "结合心理知识库组织解释与建议";
+  const { factors, recs, reportSummary, hasAny } = ragReferenceState(evidence, loading);
 
   return (
-    <EvidenceItem
-      icon={BookOpen}
-      title="RAG 参考资料"
-      summary={summary}
-      pending={!loading && evidence?.mode !== "live"}
-      badge={evidence?.mode === "mock" ? MOCK_BADGE : undefined}
-      loading={loading}
-      defaultOpen={!loading && hasAny}
-    >
+    <div className="grid gap-3">
       {loading && <p className="text-slate-500">正在整理知识依据…</p>}
 
       {!loading && !enabled && <p>本次没有可用的筛查记录，未发起检索。</p>}
@@ -615,8 +648,8 @@ function RagReferenceItem({
           {/* 报告正文：后端返回的 summary 原样展示（接口给什么就显示什么） */}
           {reportSummary && (
             <div>
-              <p className="text-[12px] font-medium text-slate-700">报告正文</p>
-              <p className="mt-1 whitespace-pre-wrap text-[12px] leading-5 text-slate-500">
+              <p className="text-[13px] font-medium text-slate-700">报告正文</p>
+              <p className="mt-1 whitespace-pre-wrap text-[13.5px] leading-[1.75] text-slate-600">
                 {reportSummary}
               </p>
             </div>
@@ -624,10 +657,10 @@ function RagReferenceItem({
 
           {factors.length > 0 && (
             <div>
-              <p className="text-[12px] font-medium text-slate-700">风险因素</p>
+              <p className="text-[13px] font-medium text-slate-700">风险因素</p>
               <ul className="mt-1 grid gap-1">
                 {factors.map((factor) => (
-                  <li key={factor} className="flex gap-1.5 text-[12px] text-slate-500">
+                  <li key={factor} className="flex gap-1.5 text-[13.5px] leading-[1.7] text-slate-600">
                     <span className="text-slate-300">·</span>
                     <span className="min-w-0">{factor}</span>
                   </li>
@@ -643,17 +676,17 @@ function RagReferenceItem({
 
           {recs.length > 0 && (
             <div>
-              <p className="text-[12px] font-medium text-slate-700">建议的知识依据</p>
+              <p className="text-[13px] font-medium text-slate-700">建议的知识依据</p>
               <div className="mt-1 grid gap-1.5">
                 {recs.map((rec) => (
-                  <div key={`${rec.name}-${rec.reason}`} className="text-[12px] leading-5">
+                  <div key={`${rec.name}-${rec.reason}`} className="text-[13.5px] leading-[1.7]">
                     <span className="font-medium text-slate-800">{rec.name}</span>
                     {rec.category && (
                       <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">
                         {rec.category}
                       </span>
                     )}
-                    <span className="mt-0.5 block text-slate-500">{rec.reason}</span>
+                    <span className="mt-0.5 block text-slate-600">{rec.reason}</span>
                   </div>
                 ))}
               </div>
@@ -661,47 +694,28 @@ function RagReferenceItem({
           )}
 
           {evidence?.report?.disclaimer && (
-            <p className="border-t border-slate-200 pt-2 text-[11px] leading-5 text-slate-400">
+            <p className="border-t border-slate-200 pt-2 text-[11.5px] leading-5 text-slate-400">
               {evidence.report.disclaimer}
             </p>
           )}
         </div>
       )}
-    </EvidenceItem>
+    </div>
   );
 }
 
-/** 知识关联：仅在有补充文字时出现，展示后端抽取到的实体与关系 */
-function KnowledgeLinkItem({
+/** 知识关联（右栏内容）：仅在有补充文字时出现，展示后端抽取到的实体与关系 */
+function KnowledgeLinkContent({
   evidence,
   loading,
-  enabled,
 }: {
   evidence: FirstRunEvidence | null;
   loading: boolean;
-  enabled: boolean;
 }) {
-  if (!enabled) return null;
-  const triples = (evidence?.triples?.triples ?? []).slice(0, MAX_TRIPLES);
-  const total = evidence?.triples?.triples.length ?? 0;
-  const summary = loading
-    ? "正在抽取…"
-    : evidence?.triplesError
-      ? "抽取服务暂不可用"
-      : total
-        ? `抽取到 ${total} 条实体关系`
-        : evidence?.triples
-          ? "本次未抽取到实体关系"
-          : "从补充文字中抽取实体与关系";
+  const { triples, total } = knowledgeLinkState(evidence, loading);
 
   return (
-    <EvidenceItem
-      icon={Sparkles}
-      title="知识关联"
-      summary={summary}
-      loading={loading}
-      defaultOpen={!loading && triples.length > 0}
-    >
+    <div className="grid gap-1.5">
       {loading && <p className="text-slate-500">正在从补充文字中抽取…</p>}
 
       {!loading && evidence?.triplesError && (
@@ -718,7 +732,7 @@ function KnowledgeLinkItem({
             {triples.map((triple, index) => (
               <li
                 key={`${triple.relation}-${triple.object}-${index}`}
-                className="flex flex-wrap items-center gap-1.5 text-[12px]"
+                className="flex flex-wrap items-center gap-1.5 text-[13px]"
               >
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
                   {relationLabel(triple.relation)}
@@ -742,10 +756,9 @@ function KnowledgeLinkItem({
           </p>
         </div>
       )}
-    </EvidenceItem>
+    </div>
   );
 }
-
 /** PSS-10 的得分展示：不做临床分级，只给量表范围与一条定位刻度 */
 function PssScore({ score, maxScore }: { score: number; maxScore: number }) {
   const percent = maxScore > 0 ? Math.min(100, Math.max(0, (score / maxScore) * 100)) : 0;

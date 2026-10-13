@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Bell, RefreshCw, AlertTriangle, Music, Trophy, BookOpen, Film, UtensilsCrossed, Heart, HardDrive } from 'lucide-react';
 import { api, type AlertItem, type InferenceRunResult, type CopingRecommendation } from '../../services/api';
 import { getCurrentSession } from '../../auth/session';
+import { briefErrorMessage } from '../../services/http';
 import { buildLocalFeed, buildLocalReport, collectLocalSignals, type LocalAdvice } from '../../services/localKg';
 
 const CATEGORY_ICON: Record<string, typeof Music> = {
@@ -53,7 +54,8 @@ export default function FeedPage() {
       /* 服务端推理不可用：用本机记录组装一份同结构的报告，页面结构照旧 */
       setFeed(buildLocalReport(userId, signals) as unknown as InferenceRunResult);
       setSource('local');
-      setError(feedResult.reason instanceof Error ? feedResult.reason.message : '服务端推理暂不可用');
+      /* 只放一句人话：axios 的消息可能带着原始响应体（裸 JSON），不能直接展示 */
+      setError(briefErrorMessage(feedResult.reason, '未连接到服务端'));
     }
     setAlerts(alertResult.status === 'fulfilled' ? alertResult.value : []);
 

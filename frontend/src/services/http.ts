@@ -80,6 +80,28 @@ export function isDemoToken(): boolean {
   }
 }
 
+/**
+ * 把后端 / 网络的错误收敛成一句能直接上屏的短句。
+ *
+ * 为什么必须有它：axios 抛出的消息可能是 `请求失败 500: {"detail":"…"}` 这种
+ * **带着原始响应体**的字符串。2026-10-14 干净 profile 实测（后端没起时）：
+ * 「我的知识图谱」「个性化推送」两页就是把这句话原样渲染出来，用户看到的是裸 JSON。
+ * 规则：
+ *   · 传输层错误（请求失败 5xx / 超时 / 连不上）→ 用调用方给的通用说法；
+ *   · 任何看起来像 JSON 片段（{ 或 [ 后跟引号）→ 同样用通用说法，绝不透出原始响应体；
+ *   · 后端本来就说人话的（如"登录已过期，请重新登录"）→ 原样沿用；
+ *   · 其余过长的一律截断，别让堆栈占满一行。
+ */
+export function briefErrorMessage(reason: unknown, fallback = '服务暂时不可用'): string {
+  const raw = (reason instanceof Error ? reason.message : String(reason ?? '')).trim();
+  if (!raw) return fallback;
+  if (/^请求失败\s*\d{3}/.test(raw)) return fallback;
+  if (/Network Error|Failed to fetch|ECONNREFUSED|timeout/i.test(raw)) return fallback;
+  if (/[{[]\s*"/.test(raw)) return fallback;
+  if (raw.length > 120) return `${raw.slice(0, 120)}…`;
+  return raw;
+}
+
 const http: AxiosInstance = axios.create({
   baseURL: BASE_URL || '/',
   timeout: 15000,

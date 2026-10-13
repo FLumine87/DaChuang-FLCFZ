@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Send, Sparkles, RefreshCw, AlertTriangle, MessageCircleHeart, HardDrive } from 'lucide-react';
 import { api, type ExtractResult, type InferenceRunResult, type CheckinMessage } from '../../services/api';
 import { getCurrentSession } from '../../auth/session';
+import { briefErrorMessage } from '../../services/http';
 import {
   appendLocalTriples,
   buildLocalCheckin,
@@ -76,7 +77,7 @@ export default function ChatPage() {
          抽取到的三元组同样写进 localStorage（图谱页会把它画出来）。 */
       const triples = triplesFromText(text);
       if (triples.length) setLocalCount(appendLocalTriples(userId, triples).triples.length);
-      setError(e instanceof Error ? e.message : '未连接到服务端');
+      setError(briefErrorMessage(e, '未连接到服务端'));
       setMessages((prev) => [
         ...prev,
         {
@@ -210,7 +211,7 @@ function DailyCheckinButton({ userId }: { userId: string }) {
       setShow(true);
     } catch (e) {
       /* 服务端拿不到也照样给一句：用本机已有数据（兴趣/记录）挑一条问询，并注明来源 */
-      setErr(e instanceof Error ? e.message : '获取问询失败');
+      setErr(briefErrorMessage(e, '未连接到服务端'));
       setMsg(null);
       const signals = await collectLocalSignals(userId);
       setLocal(buildLocalCheckin(signals));
@@ -276,7 +277,7 @@ function RunInferenceButton({ userId }: { userId: string }) {
       setSource('server');
     } catch (e) {
       /* 服务端推理拿不到就用地本机数据组装一份（结构相同），并在标题上标注来源 */
-      setErr(e instanceof Error ? e.message : '推理失败');
+      setErr(briefErrorMessage(e, '未连接到服务端'));
       const signals = await collectLocalSignals(userId);
       setResult(buildLocalReport(userId, signals) as unknown as InferenceRunResult);
       setSource('local');

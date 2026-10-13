@@ -519,6 +519,38 @@ html.theme-switching *::after {
     scrollbar-width: thin;
     scrollbar-color: var(--color-slate-200) transparent;
   }
+  /* 卡片内的滚动容器（配合 components/ScrollArea.tsx）。
+     用户 2026-10-14 反馈："这个导航栏有点太隐蔽，都不知道下面还有内容"——
+     指的就是报告卡里那根几乎看不见的细条。这里换成 8px、圆角、slate-300/400
+     令牌取色，hover 再加深一档；firefox（scrollbar-width/scrollbar-color）与
+     webkit（::-webkit-scrollbar）双写，深浅色两套都跟着令牌走。 */
+  .scroll-visible {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-300) transparent;
+  }
+  .scroll-visible::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-visible::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scroll-visible::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-300);
+    border-radius: 9999px;
+  }
+  .scroll-visible:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-400);
+  }
+  .dark .scroll-visible {
+    scrollbar-color: var(--color-slate-500) transparent;
+  }
+  .dark .scroll-visible::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-500);
+  }
+  .dark .scroll-visible:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-400);
+  }
   /* 细网格底纹层（内容屏的"纸面"质感）。
      网格本身由下面的 .app-grid::before 画——那条规则原先挂在 .auth-shell 上，
      但全项目没有任何组件用过这个类名，属于拆登录页时留下的死代码；
