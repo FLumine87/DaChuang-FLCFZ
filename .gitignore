@@ -105,8 +105,9 @@ distribution/
 output/
 tmp/
 
-# 开发过程截图归档（图片已被上面的 *.png/*.jpg 规则忽略，这里连目录一起挡掉）
-docs/screenshots/
+# 开发过程截图归档：目录本身要入库（只放各批次的 索引.md 与 README），
+# 图片文件已被上面的 *.png/*.jpg 全局规则忽略，因此这里不再整目录忽略。
+# docs/screenshots/
 
 # 本机专用脚本：内含本机绝对路径 / 用于把 token 写进本机钥匙串，不入库
 存储token.command
