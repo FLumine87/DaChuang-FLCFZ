@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#465fff" />
+    <title>[一改] 登录 · 心理筛查预警 · 健康管理平台</title>
+    <script>
+      // 首帧前应用主题 + color-scheme，避免刷新闪白与滚动条先浅后深
+      (function () {
+        var stored = null;
+        try {
+          stored = localStorage.getItem("psych_theme");
+        } catch (e) {}
+        document.documentElement.style.colorScheme =
+          stored === "dark" ? "dark" : "light";
+        if (stored === "dark") {
+          document.documentElement.classList.add("dark");
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute("content", "#0b1120");
+        }
+      })();
+    </script>
+    <style>
+      /* ===================================================================
+         设计令牌：与 React 版 frontend/src/index.css 完全同源
+         .dark 覆盖同名变量即可整体翻转，JSX 结构不需要额外分支
+         =================================================================== */
+      :root {
+        --primary-50: #ecf3ff;
+        --primary-100: #dde9ff;
+        --primary-200: #c2d6ff;
+        --primary-400: #7592ff;
+        --primary-500: #465fff;
+        --primary-600: #3641f5;
+        --primary-700: #2a31d8;
+        --success-600: #039855;
+        --danger-50: #fef3f2;
+        --danger-100: #fee4e2;
+        --danger-600: #d92d20;
+        --success-50: #ecfdf3;
+        --success-100: #d1fadf;
+
+        --white: #ffffff;
+        --slate-50: #f9fafb;
+        --slate-100: #f2f4f7;
+        --slate-200: #e4e7ec;
+        --slate-300: #d0d5dd;
+        --slate-400: #98a2b3;
+        --slate-500: #667085;
+        --slate-600: #475467;
+        --slate-700: #344054;
+        --slate-800: #1d2939;
+        --slate-900: #101828;
+
+        /* 语义化表面色：浅色下是本项目的浅蓝底与淡紫蓝顶栏 */
+        --page: #f7f9fe;
+        --header: #e7ecff;
+
+        --font-sans: "Outfit", "Inter", "PingFang SC", "Microsoft YaHei",
+          system-ui, -apple-system, sans-serif;
+        --shadow-card: 0 24px 70px -36px rgba(16, 24, 40, 0.35);
+      }
+
+      .dark {
+        --white: #151d2c;
+        --slate-50: #0b1120;
+        --slate-100: #1b2333;
+        --slate-200: #232d3f;
+        --slate-300: #313c50;
+        --slate-400: #7c899b;
+        --slate-500: #9aa7b8;
+        --slate-600: #b7c3d2;
+        --slate-700: #d4dce6;
+        --slate-800: #e9eef4;
+        --slate-900: #f6f8fb;
+        --page: #0b1120;
+        --header: #131b2b;
+        --primary-50: #1a2340;
+        --primary-100: #20294a;
+        --primary-200: #2c3a63;
+        --success-50: #10281f;
+        --success-100: #123027;
+        --danger-50: #2b1717;
+        --danger-100: #3a1d1d;
+        --shadow-card: 0 24px 70px -36px rgba(0, 0, 0, 0.75);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* color-scheme 决定滚动条与原生控件的明暗，不声明会在深色下透白 */
+      html {
+        color-scheme: light;
+        background: var(--slate-50);
+      }
+      .dark {
+        color-scheme: dark;
+      }
+
+      /* 切换主题的 ~260ms 内挂上，让颜色渐变而不是硬切 */
+      html.theme-switching,
+      html.theme-switching *,
+      html.theme-switching *::before,
+      html.theme-switching *::after {
+        transition:
+          background-color 200ms ease,
+          border-color 200ms ease,
+          color 200ms ease,
+          fill 200ms ease,
+          stroke 200ms ease !important;
+        transition-delay: 0ms !important;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background: var(--page);
+        color: var(--slate-800);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .wrap {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* ============================ 顶栏 ============================ */
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        background: var(--header);
+        padding: 0 24px;
+      }
+
+      .header-inner {
+        margin: 0 auto;
+        height: 64px;
+        width: 100%;
+        max-width: 1440px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .brand-mark {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: var(--primary-500);
+        display: grid;
+        place-items: center;
+        color: #fff;
+        flex: none;
+      }
+
+      .brand-name {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: var(--slate-900);
+        line-height: 1.2;
+      }
+
+      .brand-sub {
+        font-size: 12px;
+        color: var(--slate-500);
+        line-height: 1.4;
+      }
+
+      nav.sections {
+        display: none;
+        align-items: center;
+        gap: 4px;
+      }
+
+      nav.sections button {
+        position: relative;
+        border: 0;
+        background: none;
+        padding: 8px 14px;
+        font: inherit;
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--slate-500);
+        cursor: pointer;
+        transition: color 200ms ease;
+      }
+
+      nav.sections button::after {
+        content: "";
+        position: absolute;
+        left: 14px;
+        right: 14px;
+        bottom: 4px;
+        height: 2px;
+        border-radius: 999px;
+        background: var(--primary-600);
+        transform: scaleX(0);
+        transition: transform 200ms ease-out;
+      }
+
+      nav.sections button:hover {
+        color: var(--primary-700);
+      }
+      nav.sections button:hover::after,
+      nav.sections button.is-active::after {
+        transform: scaleX(1);
+      }
+      nav.sections button.is-active {
+        font-weight: 700;
+        color: var(--primary-700);
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .link-btn {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 0;
+        background: none;
+        padding: 8px;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--slate-500);
+        cursor: pointer;
+        transition: color 200ms ease;
+      }
+
+      .link-btn:hover {
+        color: var(--primary-700);
+      }
+
+      .icon-btn {
+        width: 36px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        color: var(--slate-500);
+        cursor: pointer;
+        transition: all 200ms ease;
+      }
+
+      .icon-btn:hover {
+        background: color-mix(in srgb, var(--white) 80%, transparent);
+        color: var(--primary-700);
+      }
+      .icon-btn:active {
+        transform: scale(0.9);
+      }
+
+      /* ============================ 首屏 ============================ */
+      .screen {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        padding: 24px;
+      }
+
+      .grid {
+        margin: 0 auto;
+        width: 100%;
+        max-width: 1440px;
+        display: grid;
+        align-items: center;
+        gap: 48px;
+      }
+
+      /* 左栏：与作品简介屏同一套文字规格 */
+      .eyebrow {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.2em;
+        color: var(--primary-500);
+      }
+
+      .title {
+        margin: 24px 0 0;
+        max-width: 720px;
+        font-size: 50px;
+        line-height: 1.15;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--slate-900);
+        text-wrap: balance;
+      }
+
+      .lede {
+        margin: 32px 0 0;
+        max-width: 600px;
+        font-size: 20px;
+        line-height: 2.1;
+        color: var(--slate-500);
+      }
+
+      .points {
+        margin: 24px 0 0;
+        padding: 20px 0 0;
+        list-style: none;
+        display: grid;
+        gap: 6px;
+        border-top: 1px dashed var(--slate-200);
+      }
+
+      .points li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--slate-600);
+      }
+
+      .points svg {
+        flex: none;
+        color: var(--success-600);
+      }
+
+      /* 登录卡 */
+      .card {
+        margin: 0 auto;
+        width: 100%;
+        max-width: 450px;
+        border: 1px solid var(--slate-200);
+        border-radius: 24px;
+        background: var(--white);
+        padding: 28px;
+        box-shadow: var(--shadow-card);
+      }
+
+      .card-eyebrow {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.16em;
+        color: var(--primary-500);
+      }
+      .card-eyebrow.is-admin {
+        color: var(--success-600);
+      }
+
+      .card-title {
+        margin: 12px 0 0;
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--slate-900);
+      }
+
+      .card-desc {
+        margin: 8px 0 0;
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--slate-500);
+      }
+
+      .tabs {
+        margin: 20px 0 0;
+        display: flex;
+        padding: 4px;
+        border-radius: 12px;
+        background: var(--slate-100);
+      }
+
+      .tabs button {
+        flex: 1;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        padding: 10px;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--slate-500);
+        cursor: pointer;
+        transition: all 200ms ease;
+      }
+
+      .tabs button[aria-selected="true"] {
+        background: var(--white);
+        color: var(--slate-900);
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+      }
+
+      form {
+        margin-top: 16px;
+        display: grid;
+        gap: 16px;
+      }
+
+      label.field-label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--slate-700);
+      }
+
+      input.text {
+        width: 100%;
+        height: 48px;
+        border: 1px solid var(--slate-300);
+        border-radius: 12px;
+        background: var(--white);
+        padding: 0 16px;
+        font: inherit;
+        font-size: 14px;
+        color: var(--slate-800);
+        outline: none;
+        transition: border-color 150ms ease, box-shadow 150ms ease;
+      }
+
+      input.text::placeholder {
+        color: var(--slate-400);
+      }
+      input.text:focus {
+        border-color: var(--primary-400);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-500) 15%, transparent);
+      }
+
+      .password-field {
+        position: relative;
+      }
+      .password-field input {
+        padding-right: 48px;
+      }
+      .password-field button {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        border: 0;
+        background: none;
+        padding: 4px;
+        color: var(--slate-400);
+        cursor: pointer;
+      }
+      .password-field button:hover {
+        color: var(--slate-700);
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .check {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        color: var(--slate-600);
+        cursor: pointer;
+      }
+      .check input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--primary-500);
+      }
+
+      .safe {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        color: var(--slate-400);
+      }
+      .safe svg {
+        color: var(--success-600);
+      }
+
+      .strength-bar {
+        height: 6px;
+        margin-top: 8px;
+        border-radius: 999px;
+        background: var(--slate-100);
+        overflow: hidden;
+      }
+      .strength-bar span {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: 999px;
+        transition: width 200ms ease, background-color 200ms ease;
+      }
+
+      .submit {
+        margin-top: 4px;
+        height: 48px;
+        width: 100%;
+        border: 0;
+        border-radius: 12px;
+        background: var(--primary-500);
+        color: #fff;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: all 200ms ease;
+      }
+      .submit:hover {
+        background: var(--primary-600);
+      }
+      .submit:active {
+        transform: scale(0.99);
+      }
+      .submit:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .demo {
+        margin-top: 16px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border: 1px solid var(--slate-200);
+        border-radius: 12px;
+        background: var(--white);
+        padding: 10px 16px;
+        font: inherit;
+        font-size: 12px;
+        color: var(--slate-500);
+        cursor: pointer;
+        transition: all 150ms ease;
+      }
+      .demo:hover {
+        border-color: var(--primary-200);
+        color: var(--slate-700);
+      }
+      .demo code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: var(--slate-800);
+      }
+
+      .note {
+        margin: 16px 0 0;
+        padding-top: 16px;
+        border-top: 1px solid var(--slate-100);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        line-height: 1.6;
+        color: var(--slate-400);
+      }
+      .note svg {
+        flex: none;
+      }
+
+      .alert {
+        margin: 0;
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-size: 14px;
+        display: none;
+      }
+      .alert.is-error {
+        display: block;
+        border: 1px solid var(--danger-100);
+        background: var(--danger-50);
+        color: var(--danger-600);
+      }
+      .alert.is-ok {
+        display: block;
+        border: 1px solid var(--success-100);
+        background: var(--success-50);
+        color: var(--success-600);
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      /* ============================ 响应式 ============================ */
+      @media (min-width: 640px) {
+        header {
+          padding: 0 40px;
+        }
+        .screen {
+          padding: 32px 40px;
+        }
+        .card {
+          padding: 28px;
+        }
+      }
+
+      @media (min-width: 1024px) {
+        header {
+          padding: 0 48px;
+        }
+        .screen {
+          padding: 32px 48px;
+          min-height: calc(100vh - 64px);
+        }
+        nav.sections {
+          display: flex;
+        }
+        /* 两栏定宽 + 整组居中：左右留白相等，中间不留空洞 */
+        .grid {
+          grid-template-columns: minmax(0, 620px) minmax(0, 450px);
+          justify-content: center;
+          gap: 72px;
+        }
+      }
+
+      @media (min-width: 1280px) {
+        header {
+          padding: 0 64px;
+        }
+        .screen {
+          padding: 32px 64px;
+        }
+      }
+
+      @media (min-width: 1536px) {
+        .grid {
+          grid-template-columns: minmax(0, 720px) minmax(0, 500px);
+          gap: 96px;
+        }
+        .title {
+          font-size: 60px;
+        }
+        .card {
+          max-width: 500px;
+        }
+      }
+
+      @media (max-height: 820px) and (min-width: 1024px) {
+        .title {
+          font-size: 42px;
+        }
+        .lede {
+          margin-top: 24px;
+          font-size: 18px;
+          line-height: 1.95;
+        }
+        .points {
+          margin-top: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <!-- ============================ 顶栏 ============================ -->
+      <header>
+        <div class="header-inner">
+          <div class="brand">
+            <span class="brand-mark">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M3 12h3l2.5-6 3 12L15.5 9l1.8 3H21"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span>
+              <span class="brand-name">心理筛查预警</span>
+              <span class="brand-sub" style="display: block">心理筛查与健康管理</span>
+            </span>
+          </div>
+
+          <nav class="sections" aria-label="页面章节">
+            <button type="button" class="is-active">作品简介</button>
+            <button type="button">核心技术</button>
+            <button type="button">状态评估</button>
+            <button type="button">预警处置</button>
+            <button type="button">隐私安全</button>
+          </nav>
+
+          <div class="header-actions">
+            <button type="button" class="link-btn" id="adminToggle" aria-pressed="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <span id="adminToggleText">管理员登录</span>
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              id="themeToggle"
+              aria-label="切换到深色模式"
+              title="深色模式"
+            >
+              <svg id="iconMoon" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <svg id="iconSun" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2" />
+                <path
+                  d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- ============================ 主区 ============================ -->
+      <main class="screen">
+        <div class="grid">
+          <!-- 左：主张与要点 -->
+          <div>
+            <p class="eyebrow">关注状态 · 看见变化</p>
+            <h2 class="title">从了解自己开始，照顾好每一天。</h2>
+            <p class="lede">
+              连接筛查、记录与分析，让每一份关注都能得到回应；<br />
+              登录后可查看筛查记录、状态趋势与评估报告。
+            </p>
+            <ul class="points">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                三模态采集：文本、语音、图像
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                持续记录：状态趋势与量表同步归档
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                分级预警：高风险进入人工复核
+              </li>
+            </ul>
+          </div>
+
+          <!-- 右：登录卡 -->
+          <div>
+            <div class="card">
+              <p class="card-eyebrow" id="cardEyebrow">WELCOME BACK</p>
+              <h3 class="card-title" id="cardTitle">欢迎回来</h3>
+              <p class="card-desc" id="cardDesc">登录后可查看筛查记录、状态趋势与评估报告。</p>
+
+              <div class="tabs" role="tablist" aria-label="登录或注册" id="tabs">
+                <button type="button" role="tab" aria-selected="true" data-tab="login">登录</button>
+                <button type="button" role="tab" aria-selected="false" data-tab="register">注册</button>
+              </div>
+
+              <form id="form" novalidate>
+                <div>
+                  <label class="field-label" for="username" id="usernameLabel">用户名</label>
+                  <input
+                    class="text"
+                    id="username"
+                    name="username"
+                    autocomplete="username"
+                    placeholder="请输入用户名"
+                  />
+                </div>
+
+                <div class="hidden" id="nameField">
+                  <label class="field-label" for="name">姓名</label>
+                  <input class="text" id="name" name="name" autocomplete="name" placeholder="请输入姓名" />
+                </div>
+
+                <div>
+                  <label class="field-label" for="password">密码</label>
+                  <div class="password-field">
+                    <input
+                      class="text"
+                      id="password"
+                      name="password"
+                      type="password"
+                      autocomplete="current-password"
+                      placeholder="请输入密码"
+                    />
+                    <button type="button" id="togglePassword" aria-label="显示密码">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" stroke="currentColor" stroke-width="2" />
+                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="hidden" id="strengthField">
+                  <div class="row">
+                    <span style="font-size: 12px; color: var(--slate-500)">密码强度</span>
+                    <span id="strengthText" style="font-size: 12px; color: var(--slate-400)">未输入</span>
+                  </div>
+                  <div class="strength-bar"><span id="strengthFill"></span></div>
+                </div>
+
+                <div class="hidden" id="confirmField">
+                  <label class="field-label" for="confirm">确认密码</label>
+                  <input class="text" id="confirm" type="password" autocomplete="new-password" placeholder="请再次输入密码" />
+                </div>
+
+                <div class="row">
+                  <label class="check">
+                    <input type="checkbox" id="remember" checked />
+                    <span id="rememberText">记住我</span>
+                  </label>
+                  <span class="safe">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    安全登录
+                  </span>
+                </div>
+
+                <p class="alert" id="alert" role="alert"></p>
+
+                <button class="submit" type="submit" id="submit">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="4" y="10" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2" />
+                    <path d="M8 10V7a4 4 0 018 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  </svg>
+                  <span id="submitText">登录并进入系统</span>
+                </button>
+              </form>
+
+              <button type="button" class="demo" id="demo">
+                <span id="demoLabel">演示账号</span>
+                <code id="demoValue">xiaoyu / 123456</code>
+              </button>
+
+              <p class="note">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <span id="noteText">记录仅用于心理健康评估与服务支持，高风险进入人工复核</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      /* =====================================================================
+         纯静态交互层：主题切换、登录/注册切换、管理员面板、密码显隐与强度。
+         没有后端，提交后只做本地校验与提示（与 React 版的演示账号保持一致）。
+         ===================================================================== */
+      (function () {
+        var KEY = "psych_theme";
+        var root = document.documentElement;
+
+        /* ---------- 主题 ---------- */
+        function applyTheme(dark, animate) {
+          if (animate) {
+            root.classList.add("theme-switching");
+            window.setTimeout(function () {
+              root.classList.remove("theme-switching");
+            }, 260);
+          }
+          root.classList.toggle("dark", dark);
+          root.style.colorScheme = dark ? "dark" : "light";
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute("content", dark ? "#0b1120" : "#465fff");
+          document.getElementById("iconMoon").classList.toggle("hidden", dark);
+          document.getElementById("iconSun").classList.toggle("hidden", !dark);
+          var btn = document.getElementById("themeToggle");
+          btn.setAttribute("aria-label", dark ? "切换到浅色模式" : "切换到深色模式");
+          btn.setAttribute("title", dark ? "浅色模式" : "深色模式");
+          try {
+            localStorage.setItem(KEY, dark ? "dark" : "light");
+          } catch (e) {}
+        }
+
+        var isDark = root.classList.contains("dark");
+        applyTheme(isDark, false);
+
+        document.getElementById("themeToggle").addEventListener("click", function () {
+          isDark = !isDark;
+          applyTheme(isDark, true);
+        });
+
+        /* ---------- 状态 ---------- */
+        var tab = "login";
+        var panel = "user";
+        var strength = 0;
+
+        function $(id) {
+          return document.getElementById(id);
+        }
+
+        function setText(id, text) {
+          $(id).textContent = text;
+        }
+
+        function showAlert(text, kind) {
+          var el = $("alert");
+          el.textContent = text;
+          el.className = "alert " + (kind === "ok" ? "is-ok" : "is-error");
+        }
+
+        function clearAlert() {
+          var el = $("alert");
+          el.textContent = "";
+          el.className = "alert";
+        }
+
+        /* 密码强度：长度 / 大小写 / 数字 / 符号，四档计分 */
+        function scorePassword(v) {
+          var s = 0;
+          if (v.length >= 8) s++;
+          if (/[A-Z]/.test(v) && /[a-z]/.test(v)) s++;
+          if (/\d/.test(v)) s++;
+          if (/[^A-Za-z0-9]/.test(v)) s++;
+          return s;
+        }
+
+        function renderStrength(v) {
+          var fill = $("strengthFill");
+          var text = $("strengthText");
+          if (!v) {
+            fill.style.width = "0";
+            text.textContent = "未输入";
+            text.style.color = "var(--slate-400)";
+            return;
+          }
+          strength = scorePassword(v);
+          if (strength <= 1) {
+            fill.style.width = "33%";
+            fill.style.background = "var(--danger-600)";
+            text.textContent = "弱";
+            text.style.color = "var(--danger-600)";
+          } else if (strength <= 3) {
+            fill.style.width = "66%";
+            fill.style.background = "#f79009";
+            text.textContent = "中";
+            text.style.color = "#f79009";
+          } else {
+            fill.style.width = "100%";
+            fill.style.background = "var(--success-600)";
+            text.textContent = "强";
+            text.style.color = "var(--success-600)";
+          }
+        }
+
+        /* 根据当前 tab / panel 重排卡片 */
+        function render() {
+          var admin = panel === "admin";
+          clearAlert();
+
+          $("tabs").classList.toggle("hidden", admin);
+          $("nameField").classList.toggle("hidden", admin || tab !== "register");
+          $("strengthField").classList.toggle("hidden", admin || tab !== "register");
+          $("confirmField").classList.toggle("hidden", admin || tab !== "register");
+
+          setText("cardEyebrow", admin ? "STAFF ACCESS" : tab === "login" ? "WELCOME BACK" : "CREATE ACCOUNT");
+          $("cardEyebrow").className = "card-eyebrow" + (admin ? " is-admin" : "");
+          setText("cardTitle", admin ? "管理员登录" : tab === "login" ? "欢迎回来" : "创建个人账号");
+          setText(
+            "cardDesc",
+            admin
+              ? "咨询师与管理人员入口，用于预警研判、个案跟踪与数据维护。"
+              : tab === "login"
+                ? "登录后可查看筛查记录、状态趋势与评估报告。"
+                : "建立属于你的健康档案，开始持续记录。"
+          );
+          setText("usernameLabel", admin ? "管理员账号" : "用户名");
+          $("username").placeholder = admin ? "请输入管理员账号" : "请输入用户名";
+          setText("rememberText", admin ? "在本机保持登录" : "记住我");
+          setText("submitText", admin ? "进入管理端" : tab === "login" ? "登录并进入系统" : "创建个人账号");
+          setText("demoLabel", admin ? "管理端 · 咨询师" : "演示账号");
+          setText("demoValue", admin ? "adminer / admin" : "xiaoyu / 123456");
+          setText(
+            "noteText",
+            admin
+              ? "仅限授权人员使用，研判与处置操作均留痕"
+              : "记录仅用于心理健康评估与服务支持，高风险进入人工复核"
+          );
+          setText("adminToggleText", admin ? "返回用户登录" : "管理员登录");
+          $("adminToggle").setAttribute("aria-pressed", String(admin));
+
+          Array.prototype.forEach.call($("tabs").querySelectorAll("button"), function (b) {
+            b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+          });
+
+          document.getElementById("username").autocomplete = "username";
+          document.getElementById("password").autocomplete =
+            admin || tab === "login" ? "current-password" : "new-password";
+        }
+
+        $("tabs").addEventListener("click", function (e) {
+          var b = e.target.closest("button[data-tab]");
+          if (!b) return;
+          tab = b.dataset.tab;
+          $("password").type = "password";
+          render();
+        });
+
+        $("adminToggle").addEventListener("click", function () {
+          panel = panel === "admin" ? "user" : "admin";
+          tab = "login";
+          $("username").value = panel === "admin" ? "adminer" : "";
+          $("password").value = panel === "admin" ? "admin" : "";
+          render();
+        });
+
+        $("togglePassword").addEventListener("click", function () {
+          var input = $("password");
+          var show = input.type === "password";
+          input.type = show ? "text" : "password";
+          this.setAttribute("aria-label", show ? "隐藏密码" : "显示密码");
+        });
+
+        $("password").addEventListener("input", function () {
+          if (panel === "user" && tab === "register") renderStrength(this.value);
+        });
+
+        $("demo").addEventListener("click", function () {
+          var admin = panel === "admin";
+          $("username").value = admin ? "adminer" : "xiaoyu";
+          $("password").value = admin ? "admin" : "123456";
+          if (tab === "register") renderStrength($("password").value);
+          clearAlert();
+        });
+
+        /* 提交：本地校验 + 模拟登录（无后端） */
+        $("form").addEventListener("submit", function (e) {
+          e.preventDefault();
+          var user = $("username").value.trim();
+          var pass = $("password").value;
+          var admin = panel === "admin";
+
+          if (!user) return showAlert(admin ? "请输入管理员账号" : "请输入用户名");
+          if (!pass) return showAlert("请输入密码");
+
+          if (!admin && tab === "register") {
+            if (!$("name").value.trim()) return showAlert("请输入姓名");
+            if (pass !== $("confirm").value) return showAlert("两次输入的密码不一致");
+            showAlert("注册成功，请使用新账号登录", "ok");
+            tab = "login";
+            $("password").value = "";
+            $("confirm").value = "";
+            render();
+            showAlert("注册成功，请使用新账号登录", "ok");
+            return;
+          }
+
+          var ok = admin
+            ? user === "adminer" && pass === "admin"
+            : user === "xiaoyu" && pass === "123456";
+          if (!ok) return showAlert("账号或密码不正确，可用下方演示账号");
+
+          var btn = $("submit");
+          btn.disabled = true;
+          setText("submitText", "登录中…");
+          window.setTimeout(function () {
+            btn.disabled = false;
+            setText("submitText", admin ? "进入管理端" : "登录并进入系统");
+            showAlert("登录成功（静态演示页，未接入后端）", "ok");
+          }, 600);
+        });
+
+        render();
+      })();
+    </script>
+  
+  <div style="position:fixed;right:14px;bottom:14px;z-index:99999;display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:#b42318;color:#fff;font:500 12px/1.4 -apple-system,'PingFang SC',sans-serif;box-shadow:0 8px 24px rgba(16,24,40,.3)">
+    <span style="font-weight:600">一改</span><span style="opacity:.75">10-12 版 · 登录页初版</span>
+  </div>
+</body>
+</html>

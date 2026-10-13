@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 把最新的静态镜像页同步到桌面（含版本角标），保持与 React 版一致。
+# 同步静态镜像页：最新版放桌面，一改/二改归档到 docs/versions/。
 # 用法：bash scripts/sync-html-to-desktop.sh
 set -euo pipefail
 
@@ -37,7 +37,7 @@ SYNC_OLD="yes"
 if [ "${SKIP_OLD:-no}" = "yes" ]; then SYNC_OLD="no"; fi
 if [ "$SYNC_OLD" = "yes" ]; then
   git -C "$ROOT" show "${OLD_COMMIT:-0ec5bf5}:frontend/public/login.html" > /tmp/_old_login.html 2>/dev/null \
-    && { python3 - /tmp/_old_login.html "$DESK/心理筛查预警-一改-1012版.html" "一改" "10-12 版 · 登录页初版" "#b42318" <<'PY'
+    && { python3 - /tmp/_old_login.html "$ROOT/docs/versions/心理筛查预警-一改-1012版.html" "一改" "10-12 版 · 登录页初版" "#b42318" <<'PY'
 import sys, pathlib
 src, out, label, sub, color = sys.argv[1:6]
 html = pathlib.Path(src).read_text(encoding="utf-8")
@@ -49,13 +49,10 @@ badge = f"""
 html = html.replace("</body>", badge, 1).replace("<title>", f"<title>[{label}] ", 1)
 pathlib.Path(out).write_text(html, encoding="utf-8")
 PY
-      printf "  ✅ %-44s %s\n" "心理筛查预警-一改-1012版.html" "$(du -h "$DESK/心理筛查预警-一改-1012版.html" | cut -f1)"; } \
+      printf "  ✅ %-44s %s\n" "docs/versions/心理筛查预警-一改-1012版.html" "$(du -h "$ROOT/docs/versions/心理筛查预警-一改-1012版.html" | cut -f1)"; } \
     || echo "  ⚠️ 一改版恢复失败（git 取不到 0ec5bf5），已跳过"
 fi
 
-sync_one "$DESK/心理筛查预警-二改-1013版.html"  "二改" "10-13 版 · 主页 + 登录页拆分" "#067647" "yes"
+sync_one "$ROOT/docs/versions/心理筛查预警-二改-1013版.html" "二改" "10-13 版 · 主页 + 登录页拆分" "#067647" "yes"
 sync_one "$DESK/心理筛查预警-最新版.html"        "最新" "$(date +%m-%d) 版 · 与仓库同步"  "#465fff" "yes"
-# 早先给老师的文件名，保持同步（无角标）
-cp "$SRC" "$DESK/心理筛查预警-登录页.html"
-printf "  ✅ %-44s %s\n" "心理筛查预警-登录页.html" "$(du -h "$DESK/心理筛查预警-登录页.html" | cut -f1)"
-echo "  完成"
+echo "  桌面只保留最新版；一改/二改已归档到 docs/versions/"

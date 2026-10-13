@@ -1,0 +1,2402 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#465fff" />
+    <title>[二改] 登录 · 心理筛查预警 · 健康管理平台</title>
+    <script>
+      // 首帧前应用主题 + color-scheme，避免刷新闪白与滚动条先浅后深
+      (function () {
+        var stored = null;
+        try {
+          stored = localStorage.getItem("psych_theme");
+        } catch (e) {}
+        document.documentElement.style.colorScheme =
+          stored === "dark" ? "dark" : "light";
+        if (stored === "dark") {
+          document.documentElement.classList.add("dark");
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute("content", "#0b1120");
+        }
+
+      })();
+    </script>
+    <style>
+      /* ===================================================================
+         设计令牌：与 React 版 frontend/src/index.css 完全同源
+         .dark 覆盖同名变量即可整体翻转，JSX 结构不需要额外分支
+         =================================================================== */
+      :root {
+        --primary-50: #ecf3ff;
+        --primary-100: #dde9ff;
+        --primary-200: #c2d6ff;
+        --primary-400: #7592ff;
+        --primary-500: #465fff;
+        --primary-600: #3641f5;
+        --primary-700: #2a31d8;
+        --success-500: #12b76a;
+        --success-600: #039855;
+        --orange-50: #fff6ed;
+        --orange-500: #fb6514;
+        --orange-600: #ec4a0a;
+        --warning-500: #f79009;
+        --danger-50: #fef3f2;
+        --danger-100: #fee4e2;
+        --danger-600: #d92d20;
+        --success-50: #ecfdf3;
+        --success-100: #d1fadf;
+
+        --white: #ffffff;
+        --slate-50: #f9fafb;
+        --slate-100: #f2f4f7;
+        --slate-200: #e4e7ec;
+        --slate-300: #d0d5dd;
+        --slate-400: #98a2b3;
+        --slate-500: #667085;
+        --slate-600: #475467;
+        --slate-700: #344054;
+        --slate-800: #1d2939;
+        --slate-900: #101828;
+
+        /* 语义化表面色：浅色下是本项目的浅蓝底与淡紫蓝顶栏 */
+        --page: #f7f9fe;
+        --header: #e7ecff;
+
+  
+
+      /* 玻璃形态背景（与 React 版 index.css 的 .glass 同一套参数） */
+      .aurora .glass {
+        position: absolute; display: block;
+        border: 1px solid rgba(255, 255, 255, 0.55);
+        background: linear-gradient(135deg, rgba(255,255,255,.72) 0%, rgba(186,214,255,.42) 46%, rgba(122,168,255,.26) 100%);
+        box-shadow: inset 0 -30px 70px -30px rgba(78,128,255,.28), 0 30px 90px -50px rgba(70,120,255,.4);
+        will-change: transform;
+      }
+      .aurora .glass-1 { width:58vw; height:42vw; right:-14vw; top:-10vw; border-radius:62% 38% 46% 54% / 55% 52% 48% 45%; transform:rotate(-12deg); animation:glass-drift-1 48s ease-in-out infinite; }
+      .aurora .glass-2 {
+        width:40vw; height:30vw; right:6vw; top:16vw;
+        border-radius:44% 56% 62% 38% / 40% 58% 42% 60%;
+        background-image:radial-gradient(rgba(255,255,255,.55) 1px, transparent 1px),
+                         linear-gradient(120deg, rgba(255,255,255,.6) 0%, rgba(168,205,255,.34) 50%, rgba(110,160,255,.22) 100%);
+        background-size:9px 9px, 100% 100%; opacity:.85; transform:rotate(8deg); animation:glass-drift-2 62s ease-in-out infinite;
+      }
+      .aurora .glass-3 { width:34vw; height:26vw; left:-10vw; bottom:-12vw; border-radius:52% 48% 40% 60% / 58% 42% 58% 42%; background:linear-gradient(140deg, rgba(255,255,255,.66) 0%, rgba(196,220,255,.34) 55%, rgba(150,190,255,.18) 100%); transform:rotate(-6deg); animation:glass-drift-3 56s ease-in-out infinite; }
+      @keyframes glass-drift-1 { 0%,100%{transform:translate3d(0,0,0) rotate(-12deg) scale(1)} 50%{transform:translate3d(-3vw,2vw,0) rotate(-7deg) scale(1.05)} }
+      @keyframes glass-drift-2 { 0%,100%{transform:translate3d(0,0,0) rotate(8deg) scale(1.02)} 50%{transform:translate3d(-4vw,-3vw,0) rotate(13deg) scale(1)} }
+      @keyframes glass-drift-3 { 0%,100%{transform:translate3d(0,0,0) rotate(-6deg) scale(1)} 50%{transform:translate3d(3vw,-2vw,0) rotate(-2deg) scale(1.06)} }
+      /* 深色模式：整体换成"暗色玻璃"（只降透明度不够，白色玻璃会盖住正文） */
+      .dark .aurora .glass {
+        opacity:.5; border-color:rgba(146,178,255,.14);
+        background:linear-gradient(135deg, rgba(120,160,255,.18) 0%, rgba(74,112,210,.13) 48%, rgba(38,66,140,.1) 100%);
+        box-shadow:inset 0 -30px 70px -30px rgba(24,48,110,.45), 0 30px 90px -50px rgba(10,22,60,.6);
+      }
+      .dark .aurora .glass-2 {
+        background-image:radial-gradient(rgba(146,178,255,.16) 1px, transparent 1px),
+                         linear-gradient(120deg, rgba(120,160,255,.16) 0%, rgba(70,106,200,.12) 50%, rgba(34,60,130,.1) 100%);
+        background-size:9px 9px, 100% 100%;
+      }
+      .dark .aurora::after {
+        background:linear-gradient(100deg, rgba(11,17,32,.94) 0%, rgba(15,23,42,.82) 26%, rgba(22,34,62,.6) 55%, rgba(30,46,82,.44) 100%);
+      }
+
+      /* 与 React 版同源（index.css 的 --font-sans） */
+        --font-sans: -apple-system, "Helvetica Neue", "Inter", "PingFang SC",
+          "Microsoft YaHei", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+        --shadow-card: 0 24px 70px -36px rgba(16, 24, 40, 0.35);
+      }
+      /* 要点列表（与 React 版同一套规格） */
+      .points {
+        margin: 20px 0 0;
+        padding: 16px 0 0;
+        border-top: 1px dashed var(--slate-200);
+        list-style: none;
+        display: grid;
+        gap: 4px;
+        max-width: 640px;
+      }
+      .points li {
+        position: relative;
+        padding-left: 24px;
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--slate-600);
+      }
+      .points li::before {
+        content: "✓";
+        position: absolute;
+        left: 4px;
+        color: var(--success-600, #12b76a);
+        font-weight: 600;
+      }
+
+      /* 进入视口的逐级渐入（对齐腾讯/腾讯云）：文字上浮淡入 + 图标缩放淡入 */
+      .auth-screen [data-reveal] > * {
+        transition: opacity 620ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .reveal-ready .auth-screen [data-reveal] > * { opacity: 0; transform: translateY(18px); }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * { opacity: 1; transform: none; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(2) { transition-delay: 90ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(3) { transition-delay: 180ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(4) { transition-delay: 270ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(5) { transition-delay: 360ms; }
+      /* 卡片"框"本身也渐入，且与框内首个元素同时起——否则框会先落地、内容再填进去 */
+      .auth-screen [data-visual] {
+        transition: opacity 560ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .reveal-ready .auth-screen [data-visual] { opacity: 0; transform: translateY(18px); }
+      .reveal-ready .auth-screen.is-inview [data-visual] { opacity: 1; transform: none; }
+
+      /* 第二层：面板内部（链路 / 指标行 / 图表 / 信息卡）跟在文字之后浮现 */
+      .auth-screen [data-reveal] > * > *:not(strong):not(em) {
+        transition: opacity 560ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em) { opacity: 0; transform: translateY(12px); }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:not(strong):not(em) { opacity: 1; transform: none; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(1) { transition-delay: 260ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(2) { transition-delay: 330ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(3) { transition-delay: 400ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(4) { transition-delay: 470ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(5) { transition-delay: 540ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(6) { transition-delay: 610ms; }
+
+      /* 第三层：要点条目 / 指标卡 / 链路步骤各自浮现 */
+      .auth-screen [data-reveal] > * > * > *:not(strong):not(em) {
+        transition: opacity 520ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em) { opacity: 0; transform: translateY(10px); }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:not(strong):not(em) { opacity: 1; transform: none; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(1) { transition-delay: 380ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(2) { transition-delay: 430ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(3) { transition-delay: 480ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(4) { transition-delay: 530ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(5) { transition-delay: 580ms; }
+      .reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(6) { transition-delay: 630ms; }
+
+      .reveal-ready .auth-screen [data-reveal] svg.lucide {
+        transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 520ms cubic-bezier(0.34, 1.4, 0.64, 1);
+      }
+      .reveal-ready .auth-screen [data-reveal] svg.lucide { opacity: 0; transform: scale(0.55); }
+      .reveal-ready .auth-screen.is-inview [data-reveal] svg.lucide { opacity: 1; transform: none; }
+
+
+      .dark {
+        --white: #151d2c;
+        --slate-50: #0b1120;
+        --slate-100: #1b2333;
+        --slate-200: #232d3f;
+        --slate-300: #313c50;
+        --slate-400: #7c899b;
+        --slate-500: #9aa7b8;
+        --slate-600: #b7c3d2;
+        --slate-700: #d4dce6;
+        --slate-800: #e9eef4;
+        --slate-900: #f6f8fb;
+        --page: #0b1120;
+        --header: #131b2b;
+        --primary-50: #1a2340;
+        --primary-100: #20294a;
+        --primary-200: #2c3a63;
+        --success-50: #10281f;
+        --success-100: #123027;
+        --danger-50: #2b1717;
+        --danger-100: #3a1d1d;
+        --shadow-card: 0 24px 70px -36px rgba(0, 0, 0, 0.75);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* color-scheme 决定滚动条与原生控件的明暗，不声明会在深色下透白 */
+      html {
+        color-scheme: light;
+        background: var(--slate-50);
+      }
+      .dark {
+        color-scheme: dark;
+      }
+
+      /* 切换主题的 ~260ms 内挂上，让颜色渐变而不是硬切 */
+      html.theme-switching,
+      html.theme-switching *,
+      html.theme-switching *::before,
+      html.theme-switching *::after {
+        transition:
+          background-color 200ms ease,
+          border-color 200ms ease,
+          color 200ms ease,
+          fill 200ms ease,
+          stroke 200ms ease !important;
+        transition-delay: 0ms !important;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background: var(--page);
+        color: var(--slate-800);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: auto;
+      }
+
+      .wrap {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* ============================ 顶栏 ============================ */
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        /* 与页面共用同一个背景：顶栏不加自己的底色，只做模糊，
+           避免出现一条与下方割裂的"色带" */
+        background: transparent;
+        backdrop-filter: blur(14px) saturate(180%);
+        -webkit-backdrop-filter: blur(14px) saturate(180%);
+        padding: 0 24px;
+      }
+      @supports not (backdrop-filter: blur(1px)) {
+        header { background: color-mix(in srgb, var(--page) 88%, transparent); }
+      }
+
+      .header-inner {
+        margin: 0 auto;
+        height: 64px;
+        width: 100%;
+        max-width: 1440px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .brand-mark {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: var(--primary-500);
+        display: grid;
+        place-items: center;
+        color: #fff;
+        flex: none;
+      }
+
+      .brand-name {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: var(--slate-900);
+        line-height: 1.2;
+      }
+
+      .brand-sub {
+        font-size: 12px;
+        color: var(--slate-500);
+        line-height: 1.4;
+      }
+
+      nav.sections {
+        display: none;
+        align-items: center;
+        gap: 4px;
+      }
+
+      nav.sections button {
+        position: relative;
+        border: 0;
+        background: none;
+        padding: 4px 20px;
+        font: inherit;
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--slate-500);
+        cursor: pointer;
+        transition: color 200ms ease;
+      }
+
+      nav.sections button::after {
+        content: "";
+        position: absolute;
+        left: 14px;
+        right: 14px;
+        bottom: 4px;
+        height: 2px;
+        border-radius: 999px;
+        background: var(--primary-600);
+        transform: scaleX(0);
+        transition: transform 200ms ease-out;
+      }
+
+      nav.sections button:hover {
+        color: var(--primary-700);
+      }
+      nav.sections button:hover::after,
+      nav.sections button.is-active::after {
+        transform: scaleX(1);
+      }
+      nav.sections button.is-active {
+        font-weight: 700;
+        color: var(--primary-700);
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .link-btn {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 0;
+        background: none;
+        padding: 8px;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--slate-500);
+        cursor: pointer;
+        transition: color 200ms ease;
+      }
+
+      .link-btn:hover {
+        color: var(--primary-700);
+      }
+
+      .icon-btn {
+        width: 36px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        color: var(--slate-500);
+        cursor: pointer;
+        transition: all 200ms ease;
+      }
+
+      .icon-btn:hover {
+        background: color-mix(in srgb, var(--white) 80%, transparent);
+        color: var(--primary-700);
+      }
+      .icon-btn:active {
+        transform: scale(0.9);
+      }
+
+      /* ============================ 首屏 ============================ */
+      .screen {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        padding: 24px;
+      }
+
+      .grid {
+        margin: 0 auto;
+        width: 100%;
+        max-width: 1440px;
+        display: grid;
+        align-items: center;
+        gap: 48px;
+      }
+
+      /* 左栏：与作品简介屏同一套文字规格 */
+      .eyebrow {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.2em;
+        color: var(--primary-500);
+      }
+
+      .title {
+        margin: 24px 0 0;
+        max-width: 720px;
+        font-size: 50px;
+        line-height: 1.2;
+        font-weight: 600;
+        letter-spacing: 0.25px;
+        color: var(--slate-900);
+        text-wrap: balance;
+      }
+
+      .lede {
+        margin: 32px 0 0;
+        max-width: 600px;
+        font-size: 20px;
+        line-height: 2.1;
+        color: var(--slate-600);
+      }
+
+      .points {
+        margin: 24px 0 0;
+        padding: 20px 0 0;
+        list-style: none;
+        display: grid;
+        gap: 6px;
+        border-top: 1px dashed var(--slate-200);
+      }
+
+      .points li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--slate-600);
+      }
+
+      .points svg {
+        flex: none;
+        color: var(--success-600);
+      }
+
+      /* 登录卡 */
+      .card {
+        margin: 0 auto;
+        width: 100%;
+        max-width: 450px;
+        border: 1px solid var(--slate-200);
+        border-radius: 24px;
+        background: var(--white);
+        padding: 28px;
+        box-shadow: var(--shadow-card);
+      }
+
+      .card-eyebrow {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.16em;
+        color: var(--primary-500);
+      }
+      .card-eyebrow.is-admin {
+        color: var(--success-600);
+      }
+
+      .card-title {
+        margin: 12px 0 0;
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--slate-900);
+      }
+
+      .card-desc {
+        margin: 8px 0 0;
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--slate-500);
+      }
+
+      .tabs {
+        margin: 20px 0 0;
+        display: flex;
+        padding: 4px;
+        border-radius: 12px;
+        background: var(--slate-100);
+      }
+
+      .tabs button {
+        flex: 1;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        padding: 10px;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--slate-500);
+        cursor: pointer;
+        transition: all 200ms ease;
+      }
+
+      .tabs button[aria-selected="true"] {
+        background: var(--white);
+        color: var(--slate-900);
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+      }
+
+      form {
+        margin-top: 16px;
+        display: grid;
+        gap: 16px;
+      }
+
+      label.field-label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--slate-700);
+      }
+
+      input.text {
+        width: 100%;
+        height: 48px;
+        border: 1px solid var(--slate-300);
+        border-radius: 12px;
+        background: var(--white);
+        padding: 0 16px;
+        font: inherit;
+        font-size: 14px;
+        color: var(--slate-800);
+        outline: none;
+        transition: border-color 150ms ease, box-shadow 150ms ease;
+      }
+
+      input.text::placeholder {
+        color: var(--slate-400);
+      }
+      input.text:focus {
+        border-color: var(--primary-400);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-500) 15%, transparent);
+      }
+
+      .password-field {
+        position: relative;
+      }
+      .password-field input {
+        padding-right: 48px;
+      }
+      .password-field button {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        border: 0;
+        background: none;
+        padding: 4px;
+        color: var(--slate-400);
+        cursor: pointer;
+      }
+      .password-field button:hover {
+        color: var(--slate-700);
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .check {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        color: var(--slate-600);
+        cursor: pointer;
+      }
+      .check input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--primary-500);
+      }
+
+      .safe {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        color: var(--slate-400);
+      }
+      .safe svg {
+        color: var(--success-600);
+      }
+
+      .strength-bar {
+        height: 6px;
+        margin-top: 8px;
+        border-radius: 999px;
+        background: var(--slate-100);
+        overflow: hidden;
+      }
+      .strength-bar span {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: 999px;
+        transition: width 200ms ease, background-color 200ms ease;
+      }
+
+      .submit {
+        margin-top: 4px;
+        height: 48px;
+        width: 100%;
+        border: 0;
+        border-radius: 12px;
+        background: var(--primary-500);
+        color: #fff;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: all 200ms ease;
+      }
+      .submit:hover {
+        background: var(--primary-600);
+      }
+      .submit:active {
+        transform: scale(0.99);
+      }
+      .submit:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .demo {
+        margin-top: 16px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border: 1px solid var(--slate-200);
+        border-radius: 12px;
+        background: var(--white);
+        padding: 10px 16px;
+        font: inherit;
+        font-size: 12px;
+        color: var(--slate-500);
+        cursor: pointer;
+        transition: all 150ms ease;
+      }
+      .demo:hover {
+        border-color: var(--primary-200);
+        color: var(--slate-700);
+      }
+      .demo code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: var(--slate-800);
+      }
+
+      .note {
+        margin: 16px 0 0;
+        padding-top: 16px;
+        border-top: 1px solid var(--slate-100);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        line-height: 1.6;
+        color: var(--slate-400);
+      }
+      .note svg {
+        flex: none;
+      }
+
+      .alert {
+        margin: 0;
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-size: 14px;
+        display: none;
+      }
+      .alert.is-error {
+        display: block;
+        border: 1px solid var(--danger-100);
+        background: var(--danger-50);
+        color: var(--danger-600);
+      }
+      .alert.is-ok {
+        display: block;
+        border: 1px solid var(--success-100);
+        background: var(--success-50);
+        color: var(--success-600);
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+
+
+      /* ==================== 动态背景「极光」（只在内容屏） ==================== */
+      .aurora {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .aurora span {
+        position: absolute;
+        display: block;
+        border-radius: 9999px;
+        will-change: transform;
+      }
+      .aurora span:nth-child(1) {
+        width: 52vw; height: 52vw; left: -14vw; top: -20vw;
+        background: radial-gradient(circle at 50% 50%,
+          rgba(117, 146, 255, 0.44) 0%, rgba(117, 146, 255, 0.15) 45%, transparent 70%);
+        animation: auroraDrift1 42s ease-in-out infinite;
+      }
+      .aurora span:nth-child(2) {
+        width: 44vw; height: 44vw; right: -12vw; top: -14vw;
+        background: radial-gradient(circle at 50% 50%,
+          rgba(127, 215, 255, 0.38) 0%, rgba(127, 215, 255, 0.13) 45%, transparent 70%);
+        animation: auroraDrift2 52s ease-in-out infinite;
+      }
+      .aurora span:nth-child(3) {
+        width: 46vw; height: 46vw; left: 24vw; bottom: -22vw;
+        background: radial-gradient(circle at 50% 50%,
+          rgba(194, 181, 255, 0.38) 0%, rgba(194, 181, 255, 0.13) 45%, transparent 70%);
+        animation: auroraDrift3 60s ease-in-out infinite;
+      }
+      @keyframes auroraDrift1 {
+        0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+        50% { transform: translate3d(6vw, 4vw, 0) scale(1.12); }
+      }
+      @keyframes auroraDrift2 {
+        0%, 100% { transform: translate3d(0, 0, 0) scale(1.08); }
+        50% { transform: translate3d(-5vw, 5vw, 0) scale(1); }
+      }
+      @keyframes auroraDrift3 {
+        0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+        50% { transform: translate3d(-6vw, -4vw, 0) scale(1.14); }
+      }
+      .dark .aurora span { opacity: 0.5; }
+      @media (prefers-reduced-motion: reduce) {
+        .aurora span { animation: none; }
+      }
+
+      /* ==================== 整屏翻页（六屏一页到底） ==================== */
+      .auth-snap {
+        scroll-behavior: auto;
+      }
+
+      .auth-screen {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        padding: 64px 24px;
+      }
+
+      .section-grid {
+        position: relative;
+        z-index: 1;
+        margin: 0 auto;
+        width: 100%;
+        max-width: 1440px;
+        display: grid;
+        align-items: center;
+        gap: 48px;
+      }
+
+      .divider-top {
+        border-top: 1px solid color-mix(in srgb, var(--slate-200) 70%, transparent);
+        background: color-mix(in srgb, var(--white) 60%, transparent);
+      }
+
+      /* 章节标题：与 React 版同一档字号（h2 用类规则避免被全局 h2 压倒） */
+      .section-title {
+        margin: 24px 0 0;
+        max-width: 720px;
+        font-size: 38px;
+        line-height: 1.2;
+        font-weight: 500;
+        letter-spacing: 0.25px;
+        color: var(--slate-900);
+        text-wrap: balance;
+      }
+
+      .section-desc {
+        margin: 32px 0 0;
+        max-width: 640px;
+        font-size: 20px;
+        line-height: 2.1;
+        color: var(--slate-600);
+      }
+
+      .footnote {
+        margin: 40px 0 0;
+        font-size: 12px;
+        color: var(--slate-400);
+      }
+
+      /* ==================== 右侧示意图卡片 ==================== */
+      .panel {
+        border: 1px solid var(--slate-200);
+        border-radius: 30px;
+        background: var(--white);
+        padding: 36px;
+        box-shadow: 0 26px 64px -44px rgba(16, 24, 40, 0.5);
+      }
+
+      .panel-label {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.18em;
+        color: var(--slate-400);
+      }
+
+      .panel-body {
+        margin-top: 24px;
+      }
+
+      .chain {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .chain .arrow {
+        color: var(--slate-300);
+      }
+
+      .chip-primary {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--primary-200);
+        border-radius: 999px;
+        background: var(--primary-50);
+        padding: 8px 16px;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--primary-600);
+      }
+
+      .chip-plain {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--slate-200);
+        border-radius: 999px;
+        padding: 10px 20px;
+        font-size: 15px;
+        color: var(--slate-600);
+      }
+
+      .chip-muted {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        background: var(--slate-100);
+        padding: 8px 16px;
+        font-size: 13px;
+        color: var(--slate-600);
+      }
+
+      .metrics {
+        display: grid;
+        gap: 14px;
+        margin-top: 24px;
+      }
+
+      .metric-card {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        border-radius: 16px;
+        background: var(--slate-50);
+        padding: 20px;
+      }
+
+      .metric-icon {
+        width: 40px;
+        height: 40px;
+        flex: none;
+        display: grid;
+        place-items: center;
+        border-radius: 12px;
+        background: var(--white);
+        color: var(--primary-500);
+      }
+
+      .metric-value {
+        font-size: 26px;
+        font-weight: 600;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        color: var(--primary-600);
+      }
+
+      .metric-label {
+        margin: 8px 0 0;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--slate-500);
+      }
+
+      .check-list {
+        margin: 24px 0 0;
+        padding: 24px 0 0;
+        list-style: none;
+        display: grid;
+        gap: 12px;
+        border-top: 1px dashed var(--slate-200);
+      }
+
+      .check-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        font-size: 15px;
+        line-height: 1.75;
+        color: var(--slate-600);
+      }
+
+      .check-list svg {
+        flex: none;
+        margin-top: 5px;
+        color: var(--success-600);
+      }
+
+      .groups {
+        display: grid;
+        gap: 16px;
+      }
+
+      .group {
+        border: 1px solid var(--slate-100);
+        border-radius: 16px;
+        padding: 24px;
+      }
+
+      .group-tag {
+        display: inline-block;
+        border-radius: 12px;
+        padding: 8px 14px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .group-tag.is-audio {
+        background: var(--primary-50);
+        color: var(--primary-600);
+      }
+      .group-tag.is-text {
+        background: var(--success-50);
+        color: var(--success-600);
+      }
+      .group-tag.is-visual {
+        background: var(--orange-50);
+        color: var(--orange-600);
+      }
+
+      .group ul {
+        margin: 16px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 10px;
+      }
+
+      .group li p:first-child {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--slate-700);
+      }
+
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        flex: none;
+      }
+      .dot.is-text {
+        background: var(--success-500);
+      }
+      .dot.is-audio {
+        background: var(--primary-500);
+      }
+      .dot.is-visual {
+        background: var(--orange-500);
+      }
+
+      .group li p:last-child {
+        margin: 4px 0 0 16px;
+        font-size: 13px;
+        color: var(--slate-400);
+      }
+
+      .levels {
+        display: grid;
+        gap: 20px;
+      }
+
+      .level {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .level-name {
+        width: 96px;
+        flex: none;
+        font-size: 15px;
+        color: var(--slate-600);
+      }
+
+      .level-track {
+        flex: 1;
+        height: 14px;
+        border-radius: 999px;
+        background: var(--slate-100);
+        overflow: hidden;
+      }
+
+      .level-fill {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+      }
+
+      .level-note {
+        width: 144px;
+        flex: none;
+        text-align: right;
+        font-size: 13px;
+        color: var(--slate-400);
+      }
+
+      .nodes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .node {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        border: 1px solid var(--slate-100);
+        border-radius: 16px;
+        background: var(--slate-50);
+        padding: 20px;
+      }
+
+      .node-title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--slate-700);
+      }
+
+      .node-note {
+        margin: 4px 0 0;
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--slate-400);
+      }
+
+      .link-line {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 20px 0;
+        font-size: 12px;
+        color: var(--slate-500);
+      }
+
+      .link-line .rule {
+        flex: 1;
+        height: 1px;
+        background: var(--slate-200);
+      }
+
+      /* 作品简介屏：四个环节文字右对齐到各自节点 */
+      .chart-labels {
+        position: relative;
+        height: 24px;
+        margin-top: 24px;
+      }
+
+      .chart-labels span {
+        position: absolute;
+        top: 0;
+        white-space: nowrap;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--slate-800);
+      }
+
+      .chart-labels .to {
+        margin-left: 8px;
+        font-size: 12px;
+        color: var(--slate-300);
+        vertical-align: middle;
+      }
+
+      .chart {
+        display: block;
+        width: 100%;
+        aspect-ratio: 4.4 / 1;
+        margin-top: 12px;
+      }
+
+      .chart-grid {
+        stroke: var(--slate-100);
+      }
+      .chart-guide {
+        stroke: var(--slate-200);
+      }
+      .chart-line {
+        stroke: var(--primary-500);
+      }
+      .chart-node {
+        fill: var(--white);
+        stroke: var(--primary-500);
+      }
+
+      /* 页码点 */
+      .dots {
+        position: fixed;
+        right: 16px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 30;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .dots button {
+        width: 8px;
+        height: 8px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--slate-300);
+        padding: 0;
+        cursor: pointer;
+        transition: all 200ms ease;
+      }
+
+      .dots button:hover {
+        background: var(--slate-400);
+      }
+      .dots button.is-active {
+        width: 8px;
+        height: 24px;
+        background: var(--primary-500);
+      }
+
+      /* 首屏底部居中：下滑引导 */
+      .scroll-hint {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 20px;
+        display: none;
+        justify-content: center;
+        pointer-events: none;
+      }
+
+      .scroll-hint button {
+        pointer-events: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--slate-200);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--white) 85%, transparent);
+        padding: 8px 16px;
+        font: inherit;
+        font-size: 12px;
+        color: var(--slate-500);
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+        transition: all 150ms ease;
+      }
+
+      .scroll-hint button:hover {
+        border-color: var(--primary-200);
+        color: var(--primary-600);
+      }
+
+      .scroll-hint svg {
+        animation: bounce 1.4s infinite;
+      }
+
+      @keyframes bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(3px);
+        }
+      }
+
+      .relative {
+        position: relative;
+      }
+
+      /* ==================== 宽屏适配 ==================== */
+      @media (min-width: 1024px) {
+        .auth-screen {
+          min-height: calc(100svh - 64px);
+          padding: 80px 48px;
+        }
+        .section-grid {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+          gap: 64px;
+        }
+        .metrics {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .check-list.is-two {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .groups {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .section-title {
+          font-size: 60px;
+        }
+        .dots {
+          display: flex;
+        }
+        .scroll-hint {
+          display: flex;
+        }
+      }
+
+      @media (min-width: 1280px) {
+        .auth-screen {
+          padding: 80px 64px;
+        }
+      }
+
+      @media (min-width: 1536px) {
+        .section-title {
+          font-size: 68px;
+        }
+        .chart {
+          aspect-ratio: 5.2 / 1;
+        }
+      }
+
+      @media (max-height: 900px) {
+        .section-grid {
+          padding-top: 48px;
+          padding-bottom: 48px;
+        }
+      }
+
+      /* ============================ 响应式 ============================ */
+      @media (min-width: 640px) {
+        header {
+          padding: 0 40px;
+        }
+        .screen {
+          padding: 32px 40px;
+        }
+        .card {
+          padding: 28px;
+        }
+      }
+
+      @media (min-width: 1024px) {
+        header {
+          padding: 0 48px;
+        }
+        .screen {
+          padding: 32px 48px;
+          min-height: calc(100vh - 64px);
+        }
+        nav.sections {
+          display: flex;
+        }
+        /* 两栏定宽 + 整组居中：左右留白相等，中间不留空洞 */
+        .grid {
+          grid-template-columns: minmax(0, 620px) minmax(0, 450px);
+          justify-content: center;
+          gap: 72px;
+        }
+      }
+
+      @media (min-width: 1280px) {
+        header {
+          padding: 0 64px;
+        }
+        .screen {
+          padding: 32px 64px;
+        }
+      }
+
+      @media (min-width: 1536px) {
+        .grid {
+          grid-template-columns: minmax(0, 720px) minmax(0, 500px);
+          gap: 96px;
+        }
+        .title {
+          font-size: 60px;
+        }
+        .card {
+          max-width: 500px;
+        }
+      }
+
+      @media (max-height: 820px) and (min-width: 1024px) {
+        .title {
+          font-size: 42px;
+        }
+        .lede {
+          margin-top: 24px;
+          font-size: 18px;
+          line-height: 1.95;
+        }
+        .points {
+          margin-top: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <!-- ============================ 顶栏 ============================ -->
+      <header>
+        <div class="header-inner">
+          <div class="brand">
+            <span class="brand-mark">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M3 12h3l2.5-6 3 12L15.5 9l1.8 3H21"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span>
+              <span class="brand-name">心理筛查预警</span>
+              <span class="brand-sub" style="display: block">心理筛查与健康管理</span>
+            </span>
+          </div>
+
+          <nav class="sections" aria-label="页面章节">
+            <button type="button" class="is-active">作品简介</button>
+            <button type="button">核心技术</button>
+            <button type="button">状态评估</button>
+            <button type="button">预警处置</button>
+            <button type="button">隐私安全</button>
+          </nav>
+
+          <div class="header-actions">
+            <button type="button" class="link-btn" id="adminToggle" aria-pressed="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <span id="adminToggleText">管理员登录</span>
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              id="themeToggle"
+              aria-label="切换到深色模式"
+              title="深色模式"
+            >
+              <svg id="iconMoon" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <svg id="iconSun" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2" />
+                <path
+                  d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- ============================ 主区 ============================ -->
+      <main id="screens">
+        <!-- ============ 第 1 屏：登录 ============ -->
+        <section class="auth-screen relative" id="login">
+        <div class="grid">
+          <!-- 左：主张与要点 -->
+          <div data-reveal>
+            <p class="eyebrow">关注状态 · 看见变化</p>
+            <h2 class="title">从了解自己开始，照顾好每一天。</h2>
+            <p class="lede">
+              连接筛查、记录与分析，让每一份关注都能得到回应；<br />
+              登录后可查看筛查记录、状态趋势与评估报告。
+            </p>
+            <ul class="points">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                三模态采集：文本、语音、图像
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                持续记录：状态趋势与量表同步归档
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                分级预警：高风险进入人工复核
+              </li>
+            </ul>
+          </div>
+
+          <!-- 右：登录卡 -->
+          <div>
+            <div class="card">
+              <p class="card-eyebrow" id="cardEyebrow">WELCOME BACK</p>
+              <h3 class="card-title" id="cardTitle">欢迎回来</h3>
+              <p class="card-desc" id="cardDesc">登录后可查看筛查记录、状态趋势与评估报告。</p>
+
+              <div class="tabs" role="tablist" aria-label="登录或注册" id="tabs">
+                <button type="button" role="tab" aria-selected="true" data-tab="login">登录</button>
+                <button type="button" role="tab" aria-selected="false" data-tab="register">注册</button>
+              </div>
+
+              <form id="form" novalidate>
+                <div>
+                  <label class="field-label" for="username" id="usernameLabel">用户名</label>
+                  <input
+                    class="text"
+                    id="username"
+                    name="username"
+                    autocomplete="username"
+                    placeholder="请输入用户名"
+                  />
+                </div>
+
+                <div class="hidden" id="nameField">
+                  <label class="field-label" for="name">姓名</label>
+                  <input class="text" id="name" name="name" autocomplete="name" placeholder="请输入姓名" />
+                </div>
+
+                <div>
+                  <label class="field-label" for="password">密码</label>
+                  <div class="password-field">
+                    <input
+                      class="text"
+                      id="password"
+                      name="password"
+                      type="password"
+                      autocomplete="current-password"
+                      placeholder="请输入密码"
+                    />
+                    <button type="button" id="togglePassword" aria-label="显示密码">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" stroke="currentColor" stroke-width="2" />
+                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="hidden" id="strengthField">
+                  <div class="row">
+                    <span style="font-size: 12px; color: var(--slate-500)">密码强度</span>
+                    <span id="strengthText" style="font-size: 12px; color: var(--slate-400)">未输入</span>
+                  </div>
+                  <div class="strength-bar"><span id="strengthFill"></span></div>
+                </div>
+
+                <div class="hidden" id="confirmField">
+                  <label class="field-label" for="confirm">确认密码</label>
+                  <input class="text" id="confirm" type="password" autocomplete="new-password" placeholder="请再次输入密码" />
+                </div>
+
+                <div class="row">
+                  <label class="check">
+                    <input type="checkbox" id="remember" checked />
+                    <span id="rememberText">记住我</span>
+                  </label>
+                  <span class="safe">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    安全登录
+                  </span>
+                </div>
+
+                <p class="alert" id="formAlert" role="alert"></p>
+
+                <button class="submit" type="submit" id="submit">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="4" y="10" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2" />
+                    <path d="M8 10V7a4 4 0 018 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  </svg>
+                  <span id="submitText">登录并进入系统</span>
+                </button>
+              </form>
+
+              <button type="button" class="demo" id="demo">
+                <span id="demoLabel">演示账号</span>
+                <code id="demoValue">xiaoyu / 123456</code>
+              </button>
+
+              <p class="note">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <span id="noteText">记录仅用于心理健康评估与服务支持，高风险进入人工复核</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+          <div class="scroll-hint">
+            <button type="button" data-goto="top">
+              继续了解作品
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
+        </section>
+
+        <!-- ============ 第 2 屏：作品简介 ============ -->
+        <section class="auth-screen" id="top">
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span><i class="glass glass-1"></i><i class="glass glass-2"></i><i class="glass glass-3"></i></div>
+          <div class="section-grid">
+            <div data-reveal>
+              <p class="eyebrow">作品概览</p>
+              <h2 class="section-title">多模态心理筛查与分级预警系统</h2>
+              <p class="section-desc">
+                面向校园、企业、社区的<strong style="font-weight:500;color:var(--slate-800)">心理筛查预警平台</strong>。
+                用户完成一次文本、语音、图像的三模态采集，系统即以
+                <strong style="font-weight:500;color:var(--slate-800)">动态跨模态哈希检索</strong>匹配相似案例，再由
+                <strong style="font-weight:500;color:var(--slate-800)">RAG</strong>结合心理知识库生成可追溯的筛查报告；
+                管理端据此完成分级预警与个案跟踪。
+              </p>
+
+              <ul class="check-list" style="gap:6px;padding-top:20px;margin-top:24px">
+                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" ><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>个体与批量筛查：适用于校园、企业、社区场景</li>
+                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" ><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>三模态互补：文本、语音、图像同时进入评估</li>
+                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" ><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>处置闭环：高风险自动进入人工复核并留痕</li>
+              </ul>
+
+              <div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:8px">
+                <span class="chip-primary" style="padding:6px 12px;font-size:12px">
+                  <span class="dot" style="background:var(--primary-500);margin-right:8px"></span>心理筛查与健康管理平台
+                </span>
+                <span class="chip-plain" style="padding:6px 12px;font-size:12px;border-color:var(--slate-200);background:var(--white)">国家级大创立项 · 2026-06</span>
+                <span class="chip-plain" style="padding:6px 12px;font-size:12px;border-color:var(--slate-200);background:var(--white)">金种子重点课题</span>
+              </div>
+            </div>
+
+            <div class="panel" data-reveal data-visual>
+              <p class="panel-label">评估链路</p>
+
+              <div class="chart-labels">
+                <span style="right:87.5%">三模态采集<span class="to">→</span></span>
+                <span style="right:62.5%">哈希检索<span class="to">→</span></span>
+                <span style="right:37.5%">RAG 报告<span class="to">→</span></span>
+                <span style="right:12.5%">分级预警</span>
+              </div>
+
+              <svg class="chart" viewBox="0 0 900 240" preserveAspectRatio="none" role="img"
+                   aria-label="三模态采集、哈希检索、RAG 报告、分级预警四个环节的状态演进示意">
+                <defs>
+                  <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--primary-500)" stop-opacity="0.2" />
+                    <stop offset="100%" stop-color="var(--primary-500)" stop-opacity="0" />
+                  </linearGradient>
+                </defs>
+                <path class="chart-grid" d="M0 70H900M0 135H900M0 200H900" fill="none" stroke-width="1" />
+                <g class="chart-guide" stroke-width="1" stroke-dasharray="4 6">
+                  <line x1="112.5" y1="10" x2="112.5" y2="216" />
+                  <line x1="337.5" y1="10" x2="337.5" y2="216" />
+                  <line x1="562.5" y1="10" x2="562.5" y2="216" />
+                  <line x1="787.5" y1="10" x2="787.5" y2="216" />
+                </g>
+                <path d="M0 172C37.5 172 75 156 112.5 156C150 156 262.5 118 337.5 118C412.5 118 487.5 92 562.5 92C637.5 92 712.5 58 787.5 58C830 58 870 40 900 40V240H0Z"
+                      fill="url(#chartFill)" />
+                <path class="chart-line" d="M0 172C37.5 172 75 156 112.5 156C150 156 262.5 118 337.5 118C412.5 118 487.5 92 562.5 92C637.5 92 712.5 58 787.5 58C830 58 870 40 900 40"
+                      fill="none" stroke-width="3" stroke-linecap="round" />
+                <g class="chart-node" stroke-width="3">
+                  <circle cx="112.5" cy="156" r="5" />
+                  <circle cx="337.5" cy="118" r="5" />
+                  <circle cx="562.5" cy="92" r="5" />
+                  <circle cx="787.5" cy="58" r="5" />
+                </g>
+              </svg>
+
+              <div style="margin-top:24px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 32px;border-top:1px dashed var(--slate-200);padding-top:20px">
+                <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">3</b><span class="metric-label" style="margin:0">模态 · 9 类特征</span></span>
+                <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">毫秒级</b><span class="metric-label" style="margin:0">相似样例检索</span></span>
+                <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">4</b><span class="metric-label" style="margin:0">级预警阈值</span></span>
+              </div>
+
+              <div class="metrics" style="margin-top:24px;border-top:1px dashed var(--slate-200);padding-top:20px">
+                <div><p style="margin:0;font-size:13px;font-weight:600;color:var(--slate-800)">文本记录</p><p style="margin:2px 0 0;font-size:11px;line-height:1.5;color:var(--slate-500)">认知模式与语言逻辑</p></div>
+                <div><p style="margin:0;font-size:13px;font-weight:600;color:var(--slate-800)">语音采样</p><p style="margin:2px 0 0;font-size:11px;line-height:1.5;color:var(--slate-500)">语音语调与情绪波动</p></div>
+                <div><p style="margin:0;font-size:13px;font-weight:600;color:var(--slate-800)">图像采集</p><p style="margin:2px 0 0;font-size:11px;line-height:1.5;color:var(--slate-500)">面部表情与绘画笔迹</p></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 第 tech 屏 ============ -->
+        <section class="auth-screen divider-top" id="tech">
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span><i class="glass glass-1"></i><i class="glass glass-2"></i><i class="glass glass-3"></i></div>
+          <div class="section-grid">
+            <div data-reveal>
+              <p class="eyebrow">关键技术与方法</p>
+              <h2 class="section-title">动态跨模态哈希检索与 RAG 生成</h2>
+              <p class="section-desc">针对动态心理数据环境下的概念漂移与哈希映射冲突，系统采用多哈希表增量更新、查询自适应重排序、非对称距离度量与 Hadamard 矩阵，并在在线监督集体矩阵分解（OSCMFH）框架下引入半监督伪标签与决策级融合，实现图像、语音、文本的跨模态联合检索；报告由 RAG 以检索命中样例与心理知识库为依据生成，语言模型仅承担语言组织，以降低事实性错误。</p>
+              <ul class="points">
+                  <li>基于多哈希表系统的增量式模态哈希</li>
+                  <li>动态跨模态哈希检索优化：应对模态异构与类别不均衡</li>
+                  <li>RAG 赋能大模型：输出有参考依据的结构化筛查报告</li>
+                  <li>知识图谱：提升结果可解释性与报告关联性</li>
+              </ul>
+            </div>
+            <div class="panel" data-reveal data-visual>
+              <p class="panel-label">技术链路</p>
+              <div class="panel-body">
+                <div class="chain">
+                  <span class="chip-primary">三模态输入</span>
+                  <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-primary">哈希编码</span>
+                  <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-primary">跨模态检索</span>
+                  <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-primary">RAG 报告</span>
+                </div>
+
+                <div class="metrics">
+                  <div class="metric-card"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h4l2-7 4 14 2-7h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><p class="metric-value">毫秒级</p><p class="metric-label">相似案例检索响应</p></div></div>
+                  <div class="metric-card"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><p class="metric-value">亿级</p><p class="metric-label">汉明距离检索规模</p></div></div>
+                  <div class="metric-card"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8zM14 3v5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><p class="metric-value">双依据</p><p class="metric-label">检索样例 + 专业知识库</p></div></div>
+                </div>
+
+                <ul class="check-list is-two">
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>多哈希表增量更新，适应样本分布变化</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>查询自适应重排序与非对称距离度量</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>半监督伪标签与类别敏感稀疏正则化</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>知识图谱关联支撑报告依据可追溯</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 第 assess 屏 ============ -->
+        <section class="auth-screen divider-top" id="assess">
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span><i class="glass glass-1"></i><i class="glass glass-2"></i><i class="glass glass-3"></i></div>
+          <div class="section-grid">
+            <div data-reveal>
+              <p class="eyebrow">评估维度</p>
+              <h2 class="section-title">三模态线索与多维评估指标</h2>
+              <p class="section-desc">相比依赖人工访谈与单一量表的传统筛查，系统在同一时间轴上融合三条通道的线索，形成可纵向比较的个体状态画像；量表结果仅用于辅助校准，不作为独立判据。</p>
+              <ul class="points">
+                  <li>文本通道：认知模式与语言逻辑</li>
+                  <li>音频通道：语音语调、情绪波动与情感强度</li>
+                  <li>视觉通道：面部表情、绘画笔迹与情绪外露</li>
+                  <li>标准化量表：PHQ-9 / GAD-7 / ISI / PSS-10 辅助校准</li>
+              </ul>
+            </div>
+            <div class="panel" data-reveal data-visual>
+              <p class="panel-label">三模态 × 多维度</p>
+              <div class="panel-body">
+                <div class="groups">
+                  <div class="group">
+                  <span class="group-tag is-text">文本</span>
+                  <ul><li><p><span class="dot is-text"></span>量表答案</p><p>标准化条目作答</p></li><li><p><span class="dot is-text"></span>认知模式</p><p>用词与归因倾向</p></li><li><p><span class="dot is-text"></span>语言逻辑</p><p>语义连贯性</p></li></ul>
+                </div>
+                  <div class="group">
+                  <span class="group-tag is-audio">音频</span>
+                  <ul><li><p><span class="dot is-audio"></span>语音语调</p><p>音高与能量分布</p></li><li><p><span class="dot is-audio"></span>情绪波动</p><p>短时起伏幅度</p></li><li><p><span class="dot is-audio"></span>情感强度</p><p>情感表达力度</p></li></ul>
+                </div>
+                  <div class="group">
+                  <span class="group-tag is-visual">视觉</span>
+                  <ul><li><p><span class="dot is-visual"></span>面部表情</p><p>表情张力与效价</p></li><li><p><span class="dot is-visual"></span>绘画笔迹</p><p>线条与用色特征</p></li><li><p><span class="dot is-visual"></span>情绪外露</p><p>画面整体氛围</p></li></ul>
+                </div>
+                </div>
+
+                <div style="margin-top:24px;border-top:1px dashed var(--slate-200);padding-top:20px">
+                  <p style="margin:0;font-size:12px;color:var(--slate-400)">同时纳入的标准化量表</p>
+                  <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+                    <span class="chip-muted">压力水平</span><span class="chip-muted">睡眠时长</span><span class="chip-muted">情绪趋势</span>
+                    <span class="chip-muted">PHQ-9</span><span class="chip-muted">GAD-7</span><span class="chip-muted">ISI</span><span class="chip-muted">PSS-10</span>
+                  </div>
+                  <p style="margin:16px 0 0;font-size:12px;line-height:1.7;color:var(--slate-400)">量表只作辅助校准，结论以三模态证据为主。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 第 alert 屏 ============ -->
+        <section class="auth-screen divider-top" id="alert">
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span><i class="glass glass-1"></i><i class="glass glass-2"></i><i class="glass glass-3"></i></div>
+          <div class="section-grid">
+            <div data-reveal>
+              <p class="eyebrow">预警机制</p>
+              <h2 class="section-title">四级预警与人工复核闭环</h2>
+              <p class="section-desc">多模态信号持续偏离个体基线时，系统按四级阈值自动生成预警；达到高风险阈值的个案自动进入人工研判队列，由咨询师确认后转入个案跟踪与处置留痕。算法仅提供提示与风险排序，最终结论由专业人员确认，并可输出转介建议。</p>
+              <ul class="points">
+                  <li>四级阈值：绿 / 黄 / 橙 / 红，按偏离基线程度自动分级</li>
+                  <li>人工研判：高风险个案进入咨询师复核队列</li>
+                  <li>个案跟踪：处置全过程留痕，可回溯</li>
+                  <li>两端协同：Web 端与移动端同步处置进度</li>
+              </ul>
+            </div>
+            <div class="panel" data-reveal data-visual>
+              <p class="panel-label">四级预警 · 处置闭环</p>
+              <div class="panel-body">
+                <div class="levels"><div class="level">
+                    <span class="level-name">状态平稳</span>
+                    <span class="level-track"><span class="level-fill" style="width:25%;background:#12b76a"></span></span>
+                    <span class="level-note">维持常规记录</span>
+                  </div><div class="level">
+                    <span class="level-name">建议留意</span>
+                    <span class="level-track"><span class="level-fill" style="width:50%;background:#f79009"></span></span>
+                    <span class="level-note">推送自助建议</span>
+                  </div><div class="level">
+                    <span class="level-name">需要关注</span>
+                    <span class="level-track"><span class="level-fill" style="width:75%;background:#fb6514"></span></span>
+                    <span class="level-note">纳入观察名单</span>
+                  </div><div class="level">
+                    <span class="level-name">优先照顾</span>
+                    <span class="level-track"><span class="level-fill" style="width:100%;background:#f04438"></span></span>
+                    <span class="level-note">进入人工研判</span>
+                  </div>
+                </div>
+
+                <div class="chain" style="margin-top:24px;border-top:1px dashed var(--slate-200);padding-top:24px">
+                  <span class="chip-plain">自动预警</span><svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-plain">人工研判</span><svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-plain">个案跟踪</span><svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-plain">处置留痕</span>
+                </div>
+
+                <div style="margin-top:24px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 32px;border-top:1px dashed var(--slate-200);padding-top:20px">
+                  <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">4</b><span class="metric-label" style="margin:0">级预警阈值</span></span>
+                  <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">100%</b><span class="metric-label" style="margin:0">高风险个案人工复核</span></span>
+                  <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">全程</b><span class="metric-label" style="margin:0">处置流程留痕可追溯</span></span>
+                </div>
+
+                <ul class="check-list" style="gap:10px">
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>高风险个案自动进入人工研判队列，不交由算法独立判定</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>咨询师确认后转入个案跟踪，处置过程全程留痕、可回溯</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 第 privacy 屏 ============ -->
+        <section class="auth-screen divider-top" id="privacy">
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span><i class="glass glass-1"></i><i class="glass glass-2"></i><i class="glass glass-3"></i></div>
+          <div class="section-grid">
+            <div data-reveal>
+              <p class="eyebrow">数据安全</p>
+              <h2 class="section-title">联邦学习与「数据不出域」</h2>
+              <p class="section-desc">心理数据属于敏感个人信息。系统采用联邦学习实现跨机构模型协同训练而不直接共享原始敏感数据：各参与机构在本地完成模型训练，仅上行加密后的模型更新，原始数据不离开本地，在保持模型精度的同时满足隐私合规要求。</p>
+              <ul class="points">
+                  <li>数据不出域：原始敏感数据不离开机构本地</li>
+                  <li>加密上行：仅传输加密后的模型更新</li>
+                  <li>协同形式：覆盖横向、纵向与联邦迁移</li>
+                  <li>依据可溯：报告结论关联检索样例与知识库</li>
+              </ul>
+              <p class="footnote">心理筛查预警 · 健康管理平台　|　科学评估 · 隐私保护 · 人工复核</p>
+            </div>
+            <div class="panel" data-reveal data-visual>
+              <p class="panel-label">联邦学习架构</p>
+              <div class="panel-body">
+                <div class="nodes">
+                  <div class="node"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16v6H4zM4 13h16v6H4z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><p class="node-title">学校 A</p><p class="node-note">本地训练 · 原始数据留存本地</p></div></div>
+                  <div class="node"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16v6H4zM4 13h16v6H4z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><p class="node-title">学校 B</p><p class="node-note">本地训练 · 原始数据留存本地</p></div></div>
+                </div>
+
+                <div class="link-line">
+                  <span class="rule"></span>
+                  <span class="chip-primary"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 11h14v9H5zM8 11V8a4 4 0 018 0v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>只交换加密模型更新</span>
+                  <span class="rule"></span>
+                </div>
+
+                <div class="node" style="background:var(--slate-50)">
+                  <span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                  <div><p class="node-title">全局模型</p><p class="node-note">数据不出域 · 兼顾模型精度与隐私合规</p></div>
+                </div>
+
+                <ul class="check-list is-two">
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>横向联邦：同构机构间协同建模</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>纵向联邦：同一人群的多源特征联合</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>联邦迁移：小样本机构亦可参与</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>仅上行加密模型更新，原始数据不出域</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <nav class="dots" aria-label="页面进度">
+        <button type="button" data-goto="login" title="登录" aria-label="登录"></button>
+        <button type="button" data-goto="top" title="作品简介" aria-label="作品简介" class="is-active"></button>
+        <button type="button" data-goto="tech" title="核心技术" aria-label="核心技术"></button>
+        <button type="button" data-goto="assess" title="状态评估" aria-label="状态评估"></button>
+        <button type="button" data-goto="alert" title="预警处置" aria-label="预警处置"></button>
+        <button type="button" data-goto="privacy" title="隐私安全" aria-label="隐私安全"></button>
+      </nav>
+    </div>
+
+    <script>
+      /* =====================================================================
+         纯静态交互层：主题切换、登录/注册切换、管理员面板、密码显隐与强度。
+         没有后端，提交后只做本地校验与提示（与 React 版的演示账号保持一致）。
+         ===================================================================== */
+      (function () {
+        var KEY = "psych_theme";
+        var root = document.documentElement;
+
+        /* ---------- 主题 ---------- */
+        function applyTheme(dark, animate) {
+          if (animate) {
+            root.classList.add("theme-switching");
+            window.setTimeout(function () {
+              root.classList.remove("theme-switching");
+            }, 260);
+          }
+          root.classList.toggle("dark", dark);
+          root.style.colorScheme = dark ? "dark" : "light";
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute("content", dark ? "#0b1120" : "#465fff");
+          document.getElementById("iconMoon").classList.toggle("hidden", dark);
+          document.getElementById("iconSun").classList.toggle("hidden", !dark);
+          var btn = document.getElementById("themeToggle");
+          btn.setAttribute("aria-label", dark ? "切换到浅色模式" : "切换到深色模式");
+          btn.setAttribute("title", dark ? "浅色模式" : "深色模式");
+          try {
+            localStorage.setItem(KEY, dark ? "dark" : "light");
+          } catch (e) {}
+        }
+
+        var isDark = root.classList.contains("dark");
+        applyTheme(isDark, false);
+
+        document.getElementById("themeToggle").addEventListener("click", function () {
+          isDark = !isDark;
+          applyTheme(isDark, true);
+        });
+
+        /* ---------- 状态 ---------- */
+        var tab = "login";
+        var panel = "user";
+        var strength = 0;
+
+        function $(id) {
+          return document.getElementById(id);
+        }
+
+        function setText(id, text) {
+          $(id).textContent = text;
+        }
+
+        function showAlert(text, kind) {
+          var el = $("formAlert");
+          el.textContent = text;
+          el.className = "alert " + (kind === "ok" ? "is-ok" : "is-error");
+        }
+
+        function clearAlert() {
+          var el = $("formAlert");
+          el.textContent = "";
+          el.className = "alert";
+        }
+
+        /* 密码强度：长度 / 大小写 / 数字 / 符号，四档计分 */
+        function scorePassword(v) {
+          var s = 0;
+          if (v.length >= 8) s++;
+          if (/[A-Z]/.test(v) && /[a-z]/.test(v)) s++;
+          if (/\d/.test(v)) s++;
+          if (/[^A-Za-z0-9]/.test(v)) s++;
+          return s;
+        }
+
+        function renderStrength(v) {
+          var fill = $("strengthFill");
+          var text = $("strengthText");
+          if (!v) {
+            fill.style.width = "0";
+            text.textContent = "未输入";
+            text.style.color = "var(--slate-400)";
+            return;
+          }
+          strength = scorePassword(v);
+          if (strength <= 1) {
+            fill.style.width = "33%";
+            fill.style.background = "var(--danger-600)";
+            text.textContent = "弱";
+            text.style.color = "var(--danger-600)";
+          } else if (strength <= 3) {
+            fill.style.width = "66%";
+            fill.style.background = "#f79009";
+            text.textContent = "中";
+            text.style.color = "#f79009";
+          } else {
+            fill.style.width = "100%";
+            fill.style.background = "var(--success-600)";
+            text.textContent = "强";
+            text.style.color = "var(--success-600)";
+          }
+        }
+
+        /* 根据当前 tab / panel 重排卡片 */
+        function render() {
+          var admin = panel === "admin";
+          clearAlert();
+
+          $("tabs").classList.toggle("hidden", admin);
+          $("nameField").classList.toggle("hidden", admin || tab !== "register");
+          $("strengthField").classList.toggle("hidden", admin || tab !== "register");
+          $("confirmField").classList.toggle("hidden", admin || tab !== "register");
+
+          setText("cardEyebrow", admin ? "STAFF ACCESS" : tab === "login" ? "WELCOME BACK" : "CREATE ACCOUNT");
+          $("cardEyebrow").className = "card-eyebrow" + (admin ? " is-admin" : "");
+          setText("cardTitle", admin ? "管理员登录" : tab === "login" ? "欢迎回来" : "创建个人账号");
+          setText(
+            "cardDesc",
+            admin
+              ? "咨询师与管理人员入口，用于预警研判、个案跟踪与数据维护。"
+              : tab === "login"
+                ? "登录后可查看筛查记录、状态趋势与评估报告。"
+                : "建立属于你的健康档案，开始持续记录。"
+          );
+          setText("usernameLabel", admin ? "管理员账号" : "用户名");
+          $("username").placeholder = admin ? "请输入管理员账号" : "请输入用户名";
+          setText("rememberText", admin ? "在本机保持登录" : "记住我");
+          setText("submitText", admin ? "进入管理端" : tab === "login" ? "登录并进入系统" : "创建个人账号");
+          setText("demoLabel", admin ? "管理端 · 咨询师" : "演示账号");
+          setText("demoValue", admin ? "adminer / admin" : "xiaoyu / 123456");
+          setText(
+            "noteText",
+            admin
+              ? "仅限授权人员使用，研判与处置操作均留痕"
+              : "记录仅用于心理健康评估与服务支持，高风险进入人工复核"
+          );
+          setText("adminToggleText", admin ? "返回用户登录" : "管理员登录");
+          $("adminToggle").setAttribute("aria-pressed", String(admin));
+
+          Array.prototype.forEach.call($("tabs").querySelectorAll("button"), function (b) {
+            b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+          });
+
+          document.getElementById("username").autocomplete = "username";
+          document.getElementById("password").autocomplete =
+            admin || tab === "login" ? "current-password" : "new-password";
+        }
+
+        $("tabs").addEventListener("click", function (e) {
+          var b = e.target.closest("button[data-tab]");
+          if (!b) return;
+          tab = b.dataset.tab;
+          $("password").type = "password";
+          render();
+        });
+
+        $("adminToggle").addEventListener("click", function () {
+          panel = panel === "admin" ? "user" : "admin";
+          tab = "login";
+          $("username").value = panel === "admin" ? "adminer" : "";
+          $("password").value = panel === "admin" ? "admin" : "";
+          render();
+        });
+
+        $("togglePassword").addEventListener("click", function () {
+          var input = $("password");
+          var show = input.type === "password";
+          input.type = show ? "text" : "password";
+          this.setAttribute("aria-label", show ? "隐藏密码" : "显示密码");
+        });
+
+        $("password").addEventListener("input", function () {
+          if (panel === "user" && tab === "register") renderStrength(this.value);
+        });
+
+        $("demo").addEventListener("click", function () {
+          var admin = panel === "admin";
+          $("username").value = admin ? "adminer" : "xiaoyu";
+          $("password").value = admin ? "admin" : "123456";
+          if (tab === "register") renderStrength($("password").value);
+          clearAlert();
+        });
+
+        /* 提交：本地校验 + 模拟登录（无后端） */
+        $("form").addEventListener("submit", function (e) {
+          e.preventDefault();
+          var user = $("username").value.trim();
+          var pass = $("password").value;
+          var admin = panel === "admin";
+
+          if (!user) return showAlert(admin ? "请输入管理员账号" : "请输入用户名");
+          if (!pass) return showAlert("请输入密码");
+
+          if (!admin && tab === "register") {
+            if (!$("name").value.trim()) return showAlert("请输入姓名");
+            if (pass !== $("confirm").value) return showAlert("两次输入的密码不一致");
+            showAlert("注册成功，请使用新账号登录", "ok");
+            tab = "login";
+            $("password").value = "";
+            $("confirm").value = "";
+            render();
+            showAlert("注册成功，请使用新账号登录", "ok");
+            return;
+          }
+
+          var ok = admin
+            ? user === "adminer" && pass === "admin"
+            : user === "xiaoyu" && pass === "123456";
+          if (!ok) return showAlert("账号或密码不正确，可用下方演示账号");
+
+          var btn = $("submit");
+          btn.disabled = true;
+          setText("submitText", "登录中…");
+          window.setTimeout(function () {
+            btn.disabled = false;
+            setText("submitText", admin ? "进入管理端" : "登录并进入系统");
+            showAlert("登录成功（静态演示页，未接入后端）", "ok");
+          }, 600);
+        });
+
+        render();
+
+        /* ===================================================================
+           整屏翻页：原生滚动 + 停手后缓动落到整屏
+           —— 不拦截滚轮（保留系统惯性），只在手势停下后校正到整屏；
+              任何新的滚轮/触摸/按键输入立刻取消进行中的滑行。
+           —— 任一屏装不下一屏时自动退回普通滚动（contentFits 兜底）。
+           =================================================================== */
+        (function () {
+          var NAV_H = 64;
+          var DURATION = 550;
+          var FAST = 320;
+          var SETTLE = 180;
+          var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+          var desktop = window.matchMedia("(min-width: 1024px) and (min-height: 720px)");
+
+          var screens = Array.prototype.slice.call(
+            document.querySelectorAll(".auth-screen")
+          );
+          var dots = Array.prototype.slice.call(
+            document.querySelectorAll(".dots button")
+          );
+          var navButtons = Array.prototype.slice.call(
+            document.querySelectorAll("nav.sections button")
+          );
+          var raf = 0;
+          var settleTimer;
+          var animating = false;
+          var targetIdx = -1;
+
+          function ease(t) {
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+          }
+
+          function posOf(el) {
+            var max =
+              document.documentElement.scrollHeight - window.innerHeight;
+            return Math.max(0, Math.min(max, el.offsetTop - NAV_H));
+          }
+
+          function actualIndex() {
+            var y = window.scrollY + NAV_H + 4;
+            var idx = 0;
+            screens.forEach(function (el, i) {
+              if (el.offsetTop <= y) idx = i;
+            });
+            return idx;
+          }
+
+          function cancelGlide() {
+            if (raf) cancelAnimationFrame(raf);
+            raf = 0;
+            animating = false;
+          }
+
+          function glideTo(target, msOverride) {
+            cancelGlide();
+            var best = 0;
+            var bestGap = Infinity;
+            screens.forEach(function (el, i) {
+              var gap = Math.abs(posOf(el) - target);
+              if (gap < bestGap) {
+                bestGap = gap;
+                best = i;
+              }
+            });
+            targetIdx = best;
+
+            var startY = window.scrollY;
+            var delta = target - startY;
+            var ms = reduce.matches ? 0 : msOverride || DURATION;
+            if (Math.abs(delta) < 2) return;
+            if (!ms) {
+              window.scrollTo(0, target);
+              return;
+            }
+            var t0 = performance.now();
+            animating = true;
+            (function step(now) {
+              var p = Math.min(1, (now - t0) / ms);
+              window.scrollTo(0, startY + delta * ease(p));
+              if (p < 1) {
+                raf = requestAnimationFrame(step);
+              } else {
+                animating = false;
+                raf = 0;
+              }
+            })(t0);
+          }
+
+          function nearestTop() {
+            var y = window.scrollY;
+            var best = screens[0];
+            var bestGap = Infinity;
+            screens.forEach(function (el) {
+              var gap = Math.abs(el.offsetTop - NAV_H - y);
+              if (gap < bestGap) {
+                bestGap = gap;
+                best = el;
+              }
+            });
+            var max =
+              document.documentElement.scrollHeight - window.innerHeight;
+            return Math.max(0, Math.min(max, best.offsetTop - NAV_H));
+          }
+
+          function contentFits() {
+            var avail = window.innerHeight - NAV_H;
+            return screens.every(function (el) {
+              var row = el.firstElementChild;
+              if (!row) return true;
+              var kids = Array.prototype.filter.call(
+                row.children,
+                function (k) {
+                  var pos = getComputedStyle(k).position;
+                  return pos !== "absolute" && pos !== "fixed";
+                }
+              );
+              var tallest = kids.length
+                ? Math.max.apply(
+                    null,
+                    kids.map(function (k) {
+                      return k.getBoundingClientRect().height;
+                    })
+                  )
+                : row.getBoundingClientRect().height;
+              var cs = getComputedStyle(row);
+              var pad =
+                parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+              return tallest + pad <= avail + 4;
+            });
+          }
+
+          function scheduleSettle() {
+            window.clearTimeout(settleTimer);
+            settleTimer = window.setTimeout(function () {
+              if (animating) return;
+              glideTo(nearestTop());
+            }, SETTLE);
+          }
+
+          function setActive(id) {
+            dots.forEach(function (b) {
+              b.classList.toggle("is-active", b.dataset.goto === id);
+            });
+            navButtons.forEach(function (b) {
+              b.classList.toggle("is-active", b.dataset.goto === id);
+            });
+          }
+
+          function goTo(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            setActive(id);
+            glideTo(Math.max(0, el.offsetTop - NAV_H));
+          }
+
+          function goBy(dir) {
+            var base = targetIdx >= 0 ? targetIdx : actualIndex();
+            var to = Math.min(screens.length - 1, Math.max(0, base + dir));
+            if (to === base) return;
+            glideTo(posOf(screens[to]), animating ? FAST : undefined);
+          }
+
+          /* 滚轮：不 preventDefault，靠 settle 校正 */
+          window.addEventListener(
+            "wheel",
+            function () {
+              targetIdx = -1;
+              cancelGlide();
+              scheduleSettle();
+            },
+            { passive: true }
+          );
+          ["touchstart", "touchmove"].forEach(function (ev) {
+            window.addEventListener(
+              ev,
+              function () {
+                targetIdx = -1;
+                cancelGlide();
+                scheduleSettle();
+              },
+              { passive: true }
+            );
+          });
+
+          /* 键盘：↑↓ / PageUp / PageDown / 空格 */
+          window.addEventListener("keydown", function (e) {
+            var el = e.target;
+            var tag = el && el.tagName;
+            if (tag === "INPUT" || tag === "TEXTAREA" || (el && el.isContentEditable))
+              return;
+            var space = e.key === " " || e.key === "Spacebar";
+            if (space && (tag === "BUTTON" || tag === "A")) return;
+            var down =
+              e.key === "ArrowDown" || e.key === "PageDown" || space;
+            var up = e.key === "ArrowUp" || e.key === "PageUp";
+            if (!down && !up) return;
+            if (!desktop.matches || !contentFits()) return;
+            e.preventDefault();
+            targetIdx = -1;
+            cancelGlide();
+            goBy(down ? 1 : -1);
+          });
+
+          window.addEventListener(
+            "scroll",
+            function () {
+              if (!desktop.matches || animating || !contentFits()) return;
+              scheduleSettle();
+            },
+            { passive: true }
+          );
+          window.addEventListener("resize", function () {
+            if (!desktop.matches || animating || !contentFits()) return;
+            scheduleSettle();
+          });
+
+          /* 页码点与顶栏导航、下滑引导 */
+          document.addEventListener("click", function (e) {
+            var b = e.target.closest("[data-goto]");
+            if (!b) return;
+            goTo(b.dataset.goto);
+          });
+
+          /* 顶栏导航项绑定 data-goto */
+          var order = ["top", "tech", "assess", "alert", "privacy"];
+          navButtons.forEach(function (b, i) {
+            b.dataset.goto = order[i];
+          });
+
+          /* 滚动到哪一屏，导航与页码点高亮哪一个 */
+          if ("IntersectionObserver" in window) {
+            var io = new IntersectionObserver(
+              function (entries) {
+                var visible = entries
+                  .filter(function (en) {
+                    return en.isIntersecting;
+                  })
+                  .sort(function (a, b) {
+                    return b.intersectionRatio - a.intersectionRatio;
+                  })[0];
+                if (visible) setActive(visible.target.id);
+              },
+              { rootMargin: "-45% 0px -50% 0px", threshold: [0, 0.2, 0.5, 1] }
+            );
+            screens.forEach(function (el) {
+              io.observe(el);
+            });
+          }
+
+          document.documentElement.classList.add("auth-snap");
+        })();
+      })();
+    </script>
+    <script>
+      /* 进入视口的逐级渐入：所在屏加/去 .is-inview（与 React 版同一套逻辑）。
+         隐藏态只挂在 html.reveal-ready 之下 —— 脚本没跑时内容照样可见。 */
+      (function () {
+        var screens = document.querySelectorAll(".auth-screen");
+        if (!screens.length) return;
+        if (!("IntersectionObserver" in window)) return;
+
+        var activeId = "";
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (en) {
+              var el = en.target;
+              if (en.isIntersecting) el.classList.add("is-inview");
+              else if (el.id !== activeId) el.classList.remove("is-inview");
+            });
+          },
+          { rootMargin: "-10% 0px -10% 0px", threshold: 0 }
+        );
+        Array.prototype.forEach.call(screens, function (el) {
+          io.observe(el);
+        });
+        document.documentElement.classList.add("reveal-ready");
+
+        /* 当前屏（导航高亮的那一屏）始终可见，不等相交回调 */
+        window.addEventListener("hashchange", function () {
+          var id = (location.hash || "").replace("#", "");
+          if (id) activeId = id;
+        });
+        var hash = (location.hash || "").replace("#", "");
+        if (hash) activeId = hash;
+      })();
+    </script>
+
+  
+  <div style="position:fixed;right:14px;bottom:14px;z-index:99999;display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:#067647;color:#fff;font:500 12px/1.4 -apple-system,'PingFang SC',sans-serif;box-shadow:0 8px 24px rgba(16,24,40,.3)">
+    <span style="font-weight:600">二改</span><span style="opacity:.75">10-13 版 · 主页 + 登录页拆分</span>
+  </div>
+</body>
+</html>
