@@ -260,7 +260,7 @@ export default function LoginPage() {
             <div className="mx-auto w-full max-w-[450px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)] sm:p-7 2xl:max-w-[500px]">
               <div className="mb-5">
                 <p
-                  className={`text-xs font-medium tracking-[0.16em] ${
+                  className={`text-[13px] font-medium tracking-[0.16em] ${
                     isAdmin ? "text-success-600" : "text-primary-500"
                   }`}
                 >
@@ -387,7 +387,7 @@ export default function LoginPage() {
                 {!isAdmin && tab === "register" && (
                   <>
                     <div>
-                      <div className="flex justify-between text-xs text-slate-500">
+                      <div className="flex justify-between text-[13px] text-slate-500">
                         <span>密码强度</span>
                         <span className={password ? strength.color : "text-slate-400"}>
                           {password ? strength.label : "未输入"}
@@ -438,7 +438,7 @@ export default function LoginPage() {
                     />
                     {isAdmin ? "在本机保持登录" : "记住我"}
                   </label>
-                  <span className="inline-flex items-center gap-1 text-xs text-slate-400">
+                  <span className="inline-flex items-center gap-1 text-[13px] text-slate-400">
                     <Check className="h-3.5 w-3.5 text-success-600" />
                     安全登录
                   </span>
@@ -488,7 +488,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => fillDemo(isAdmin ? "admin" : "user")}
-                className="mt-4 flex w-full items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-500 transition-colors hover:border-primary-200 hover:text-slate-700"
+                className="mt-4 flex w-full items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[13px] text-slate-500 transition-colors hover:border-primary-200 hover:text-slate-700"
               >
                 <span>{isAdmin ? "管理端 · 咨询师" : "演示账号"}</span>
                 <code className="font-mono text-slate-800">
@@ -501,13 +501,13 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => switchPanel(isAdmin ? "user" : "admin")}
                 aria-pressed={isAdmin}
-                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium text-slate-400 transition-colors duration-200 hover:bg-slate-50 hover:text-primary-600"
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium text-slate-400 transition-colors duration-200 hover:bg-slate-50 hover:text-primary-600"
               >
                 <ShieldCheck className="h-3.5 w-3.5" />
                 {isAdmin ? "返回用户登录" : "管理员 / 咨询师入口"}
               </button>
 
-              <p className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-4 text-[11px] leading-5 text-slate-400">
+              <p className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-4 text-[13px] leading-5 text-slate-400">
                 <ShieldCheck className="h-4 w-4 shrink-0" />
                 {isAdmin
                   ? "仅限授权人员使用，研判与处置操作均留痕"

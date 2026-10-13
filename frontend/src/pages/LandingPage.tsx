@@ -505,14 +505,14 @@ export default function LandingPage() {
             </ul>
 
             <div className="mt-5 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1.5 text-xs font-medium text-primary-600">
+              <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary-600">
                 <span className="h-1.5 w-1.5 rounded-full bg-primary-500" />
                 心理筛查与健康管理平台
               </span>
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-500">
                 国家级大创立项 · 2026-06
               </span>
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-500">
                 金种子重点课题
               </span>
             </div>
@@ -522,18 +522,18 @@ export default function LandingPage() {
               否则框会瞬间出现、内容再逐条浮现，看着像"空盒子先落地"。 */}
           <div data-reveal data-visual>
             <div className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-9">
-            <p className="text-xs font-medium tracking-[0.18em] text-slate-400">评估链路</p>
+            <p className="text-[13px] font-medium tracking-[0.18em] text-slate-400">评估链路</p>
 
             <div className="relative mt-6 h-6">
               {["三模态采集", "哈希检索", "RAG 报告", "分级预警"].map((step, index) => (
                 <span
                   key={step}
-                  className="absolute top-0 whitespace-nowrap text-[13px] font-semibold text-slate-800 sm:text-[14px]"
+                  className="absolute top-0 whitespace-nowrap text-[14px] font-semibold text-slate-800 sm:text-[15px]"
                   style={{ right: `${(1 - (index + 0.5) / 4) * 100}%` }}
                 >
                   {step}
                   {index < 3 && (
-                    <span className="ml-2 align-middle text-xs text-slate-300">→</span>
+                    <span className="ml-2 align-middle text-[13px] text-slate-300">→</span>
                   )}
                 </span>
               ))}
@@ -588,7 +588,7 @@ export default function LandingPage() {
                   <b className="text-[22px] font-medium leading-none tabular-nums text-primary-600">
                     {item.value}
                   </b>
-                  <span className="text-[13px] text-slate-500">{item.label}</span>
+                  <span className="text-[14px] text-slate-500">{item.label}</span>
                 </span>
               ))}
             </div>
@@ -600,8 +600,8 @@ export default function LandingPage() {
                 { title: "图像采集", note: "面部表情与绘画笔迹" },
               ].map((item) => (
                 <div key={item.title} className="min-w-0">
-                  <p className="text-[13px] font-semibold text-slate-800">{item.title}</p>
-                  <p className="mt-0.5 text-[11px] leading-4 text-slate-500">{item.note}</p>
+                  <p className="text-[15px] font-semibold text-slate-800">{item.title}</p>
+                  <p className="mt-1 text-[13px] leading-5 text-slate-500">{item.note}</p>
                 </div>
               ))}
             </div>
