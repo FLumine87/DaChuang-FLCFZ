@@ -55,4 +55,7 @@ fi
 
 sync_one "$DESK/心理筛查预警-二改-1013版.html"  "二改" "10-13 版 · 主页 + 登录页拆分" "#067647" "yes"
 sync_one "$DESK/心理筛查预警-最新版.html"        "最新" "$(date +%m-%d) 版 · 与仓库同步"  "#465fff" "yes"
+# 早先给老师的文件名，保持同步（无角标）
+cp "$SRC" "$DESK/心理筛查预警-登录页.html"
+printf "  ✅ %-44s %s\n" "心理筛查预警-登录页.html" "$(du -h "$DESK/心理筛查预警-登录页.html" | cut -f1)"
 echo "  完成"
