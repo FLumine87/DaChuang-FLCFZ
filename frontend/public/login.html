@@ -100,6 +100,30 @@
         background:linear-gradient(100deg, rgba(11,17,32,.94) 0%, rgba(15,23,42,.82) 26%, rgba(22,34,62,.6) 55%, rgba(30,46,82,.44) 100%);
       }
 
+
+      /* 顶栏品牌：单行品牌名 + 产品线（品牌蓝）+ 竖线 + 当前页名（与 React 版一致） */
+      .brand-name { font-size: 17px; font-weight: 600; letter-spacing: 0.25px; color: var(--slate-900); }
+      .brand-product { margin-left: 10px; font-size: 15px; font-weight: 500; color: var(--primary-600); }
+      .brand-divider { width: 1px; height: 20px; margin: 0 12px; background: var(--slate-300); opacity: .8; }
+      .brand-page { font-size: 15px; font-weight: 500; color: var(--slate-700); }
+      .text-link {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 8px 10px; border: 0; background: none;
+        font: inherit; font-size: 14px; font-weight: 500; color: var(--slate-500);
+        cursor: pointer; transition: color 200ms ease;
+      }
+      .text-link:hover { color: var(--primary-600); }
+      .text-link svg { transition: transform 200ms ease; }
+      .text-link:hover svg { transform: translateX(-2px); }
+      .admin-entry {
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+        width: 100%; margin-top: 12px; padding: 8px;
+        border: 0; border-radius: 12px; background: none;
+        font: inherit; font-size: 13px; font-weight: 500; color: var(--slate-500);
+        cursor: pointer; transition: background 200ms ease, color 200ms ease;
+      }
+      .admin-entry:hover { background: var(--slate-50); color: var(--primary-600); }
+
       /* 与 React 版同源（index.css 的 --font-sans） */
         --font-sans: -apple-system, "Helvetica Neue", "Inter", "PingFang SC",
           "Microsoft YaHei", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
@@ -1400,10 +1424,10 @@
                 />
               </svg>
             </span>
-            <span>
-              <span class="brand-name">心理筛查预警</span>
-              <span class="brand-sub" style="display: block">心理筛查与健康管理</span>
-            </span>
+            <span class="brand-name">心理筛查预警</span>
+            <span class="brand-product">健康管理平台</span>
+            <span class="brand-divider" aria-hidden="true"></span>
+            <span class="brand-page" id="pageLabel">登录</span>
           </div>
 
           <nav class="sections" aria-label="页面章节">
@@ -1415,16 +1439,12 @@
           </nav>
 
           <div class="header-actions">
-            <button type="button" class="link-btn" id="adminToggle" aria-pressed="false">
+            <button type="button" class="text-link" id="backHome">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  d="M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linejoin="round"
-                />
+                <path d="M19 12H5M11 18l-6-6 6-6" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round" />
               </svg>
-              <span id="adminToggleText">管理员登录</span>
+              返回主页
             </button>
             <button
               type="button"
@@ -1579,6 +1599,14 @@
               <button type="button" class="demo" id="demo">
                 <span id="demoLabel">演示账号</span>
                 <code id="demoValue">xiaoyu / 123456</code>
+              </button>
+
+              <button type="button" class="admin-entry" id="adminToggle" aria-pressed="false">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"
+                        stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                </svg>
+                <span id="adminToggleText">管理员 / 咨询师入口</span>
               </button>
 
               <p class="note">
@@ -2031,7 +2059,7 @@
               ? "仅限授权人员使用，研判与处置操作均留痕"
               : "记录仅用于心理健康评估与服务支持，高风险进入人工复核"
           );
-          setText("adminToggleText", admin ? "返回用户登录" : "管理员登录");
+          setText("adminToggleText", admin ? "返回用户登录" : "管理员 / 咨询师入口");
           $("adminToggle").setAttribute("aria-pressed", String(admin));
 
           Array.prototype.forEach.call($("tabs").querySelectorAll("button"), function (b) {
@@ -2049,6 +2077,15 @@
           tab = b.dataset.tab;
           $("password").type = "password";
           render();
+        });
+
+        /* 返回主页：不直接调 goTo（它在分页脚本的 IIFE 里，本作用域取不到），
+           改为点击同一个目标按钮，复用既有的翻页逻辑；找不到按钮时退回原生滚动。 */
+        $("backHome").addEventListener("click", function () {
+          var btn = document.querySelector('nav.sections button[data-goto="top"]');
+          if (btn) { btn.click(); return; }
+          var el = document.getElementById("top");
+          if (el) window.scrollTo({ top: Math.max(0, el.offsetTop - 64), behavior: "smooth" });
         });
 
         $("adminToggle").addEventListener("click", function () {
@@ -2256,6 +2293,16 @@
             }, SETTLE);
           }
 
+          /* 顶栏页名：与 React 版一致，随所在屏更新 */
+          var pageLabels = {
+            login: "登录",
+            top: "主页",
+            tech: "核心技术",
+            assess: "状态评估",
+            alert: "预警处置",
+            privacy: "隐私安全",
+          };
+
           function setActive(id) {
             dots.forEach(function (b) {
               b.classList.toggle("is-active", b.dataset.goto === id);
@@ -2263,6 +2310,9 @@
             navButtons.forEach(function (b) {
               b.classList.toggle("is-active", b.dataset.goto === id);
             });
+            var label = pageLabels[id];
+            var pl = document.getElementById("pageLabel");
+            if (label && pl) pl.textContent = label;
           }
 
           function goTo(id) {
