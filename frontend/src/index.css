@@ -138,7 +138,11 @@ html.theme-switching *::after {
     background: var(--color-slate-50);
     color: var(--color-slate-800);
     font-family: var(--font-sans);
-    -webkit-font-smoothing: antialiased;
+    /* 刻意不设 -webkit-font-smoothing: antialiased：
+       它会把 macOS 的次像素抗锯齿换成灰度抗锯齿，笔画变细、观感发糊。
+       腾讯官网保持系统默认（auto），中文小字明显更锐利。 */
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: auto;
     -moz-osx-font-smoothing: grayscale;
   }
   #root {
@@ -769,6 +773,222 @@ h3.text-2xl {
 }
 
 
+
+
+/* --------------------------------------------------------------------------
+   首屏"玻璃"形状层
+   —— 参考腾讯云首屏的视觉语言（左侧偏白、右侧偏蓝 + 大片半透明形状），
+      但形状、配色与动效全部自己生成：一是避免使用别家的美术资产，
+      二是做成矢量+CSS 动画后可以真正"动起来"（参考站那张其实是静态 PNG）。
+   -------------------------------------------------------------------------- */
+.aurora .glass {
+  position: absolute;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.72) 0%,
+      rgba(186, 214, 255, 0.42) 46%,
+      rgba(122, 168, 255, 0.26) 100%
+    );
+  box-shadow:
+    inset 0 -30px 70px -30px rgba(78, 128, 255, 0.28),
+    0 30px 90px -50px rgba(70, 120, 255, 0.4);
+  will-change: transform;
+}
+
+/* 大片有机形状：用八值 border-radius 做出不规则轮廓 */
+.aurora .glass-1 {
+  width: 58vw;
+  height: 42vw;
+  right: -14vw;
+  top: -10vw;
+  border-radius: 62% 38% 46% 54% / 55% 52% 48% 45%;
+  transform: rotate(-12deg);
+  animation: glass-drift-1 48s ease-in-out infinite;
+}
+
+.aurora .glass-2 {
+  width: 40vw;
+  height: 30vw;
+  right: 6vw;
+  top: 16vw;
+  border-radius: 44% 56% 62% 38% / 40% 58% 42% 60%;
+  /* 半透明 + 细点阵纹理，模拟参考图里那片带颗粒的曲面 */
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.55) 1px, transparent 1px),
+    linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0.6) 0%,
+      rgba(168, 205, 255, 0.34) 50%,
+      rgba(110, 160, 255, 0.22) 100%
+    );
+  background-size: 9px 9px, 100% 100%;
+  opacity: 0.85;
+  transform: rotate(8deg);
+  animation: glass-drift-2 62s ease-in-out infinite;
+}
+
+.aurora .glass-3 {
+  width: 34vw;
+  height: 26vw;
+  left: -10vw;
+  bottom: -12vw;
+  border-radius: 52% 48% 40% 60% / 58% 42% 58% 42%;
+  background: linear-gradient(
+    140deg,
+    rgba(255, 255, 255, 0.66) 0%,
+    rgba(196, 220, 255, 0.34) 55%,
+    rgba(150, 190, 255, 0.18) 100%
+  );
+  transform: rotate(-6deg);
+  animation: glass-drift-3 56s ease-in-out infinite;
+}
+
+@keyframes glass-drift-1 {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-12deg) scale(1); }
+  50% { transform: translate3d(-3vw, 2vw, 0) rotate(-7deg) scale(1.05); }
+}
+@keyframes glass-drift-2 {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(8deg) scale(1.02); }
+  50% { transform: translate3d(-4vw, -3vw, 0) rotate(13deg) scale(1); }
+}
+@keyframes glass-drift-3 {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-6deg) scale(1); }
+  50% { transform: translate3d(3vw, -2vw, 0) rotate(-2deg) scale(1.06); }
+}
+
+/* 深色模式下压暗，避免大片白色发亮 */
+.dark .aurora .glass {
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora .glass {
+    animation: none;
+  }
+}
+
+/* 顶部到底部的柔和过渡：左侧偏白、右侧偏蓝（参考站基调 rgb(224,239,255)） */
+.aurora::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(247, 250, 255, 0.72) 26%,
+    rgba(228, 240, 255, 0.45) 55%,
+    rgba(205, 228, 255, 0.36) 100%
+  );
+  pointer-events: none;
+}
+
+
+/* --------------------------------------------------------------------------
+   滚动进入视口的入场动画（对齐参考站的 motion-draw-in / motion-scale-in）
+   —— 观察参考站发现：它的"动态"主要来自元素进入视口时的渐显，
+      而不是背景（背景那张其实是静态 PNG，4 秒采样无任何变化）。
+      我们整屏翻页时正好一屏一触发。标记 data-reveal 的元素默认下沉+透明，
+      所在屏获得 .is-inview 时浮现；同屏第 2 个元素延迟 110ms 形成先后节奏。
+   -------------------------------------------------------------------------- */
+/* 注意：隐藏态只挂在 html.reveal-ready 之下（由 JS 在观察器就绪后才加上）。
+   这样一旦脚本没跑、观察器失效或提前截图，内容仍然是可见的——
+   入场动画再好看，也不能拿"内容可能整屏不显示"去换。 */
+html.reveal-ready .auth-screen [data-reveal] {
+  opacity: 0;
+  transform: translateY(22px) scale(0.985);
+  transition:
+    opacity 640ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 640ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+html.reveal-ready .auth-screen.is-inview [data-reveal] {
+  opacity: 1;
+  transform: none;
+}
+
+html.reveal-ready .auth-screen.is-inview [data-reveal]:nth-child(2) {
+  transition-delay: 110ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.reveal-ready .auth-screen [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   页面转场（View Transitions API，Chrome 111+）
+   —— 之前的 .page-enter 只有新页面淡入，旧页面是"啪"一下消失，所以切换感很硬。
+      这里用原生转场：旧页面向左滑出、新页面从右滑入，同时交叉淡化；
+      顶栏单独命名（app-nav），转场时保持静止，只有内容在动。
+   -------------------------------------------------------------------------- */
+::view-transition-old(root) {
+  animation: vt-page-out 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+::view-transition-new(root) {
+  animation: vt-page-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes vt-page-out {
+  to {
+    opacity: 0;
+    transform: translateX(-2.5%);
+  }
+}
+
+@keyframes vt-page-in {
+  from {
+    opacity: 0;
+    transform: translateX(3.5%);
+  }
+}
+
+/* 顶栏在转场中保持不动（否则整页位移会带着导航一起晃） */
+.nav-blur {
+  view-transition-name: app-nav;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   路由切换的进场动画（主页 ↔ 登录页）
+   —— 之前是 React Router 直接换组件，视觉上是"啪"一下就切了，没有过渡。
+      这里给页面根节点一个 260ms 的淡入 + 轻微上浮；只动 opacity/transform，
+      走合成层；尊重系统"减弱动态效果"设置。
+   ========================================================================== */
+.page-enter {
+  animation: page-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
+}
+
 /* ==========================================================================
    动态背景「极光」+ 顶栏毛玻璃
    —— 灵感来自腾讯云首页的动态渐变，但做了两处克制：
@@ -859,17 +1079,21 @@ h3.text-2xl {
   }
 }
 
-/* 顶栏毛玻璃：半透明 + 背景模糊，滚动时能透出下层内容（对齐参考站的导航条） */
+/* 顶栏：不再有自己的底色。
+   之前给顶栏一块淡紫蓝（--color-header），与页面底色（--color-page）不是同一个色，
+   视觉上就成了横在顶部的一条"色带"，和下方背景割裂。
+   现在与页面共用同一个背景——顶栏只做模糊，像腾讯云那样"同一张背景、模糊度不同"。 */
 .nav-blur {
-  background: color-mix(in srgb, var(--color-header) 76%, transparent);
-  backdrop-filter: blur(14px) saturate(170%);
-  -webkit-backdrop-filter: blur(14px) saturate(170%);
+  background: transparent;
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
 }
 
-/* 浏览器不支持 backdrop-filter 时退回不透明底色，保证导航可读 */
+/* 浏览器不支持 backdrop-filter 时，给一层极淡的底色兜住可读性
+   （仍然取自页面底色，不引入第二种颜色） */
 @supports not (backdrop-filter: blur(1px)) {
   .nav-blur {
-    background: var(--color-header);
+    background: color-mix(in srgb, var(--color-page) 88%, transparent);
   }
 }
 
@@ -885,15 +1109,15 @@ h3.text-2xl {
    是"又粗又挤"，与清新相反。 */
 .auth-snap .auth-hero-title {
   font-size: 2.125rem; /* 34px */
-  line-height: 1.16;
-  font-weight: 500;
-  letter-spacing: 0.01em;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.25px;
 }
 .auth-snap .auth-section-title {
   font-size: 2.375rem; /* 38px */
-  line-height: 1.16;
-  font-weight: 500;
-  letter-spacing: 0.01em;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.25px;
 }
 @media (min-width: 640px) {
   .auth-snap .auth-hero-title {

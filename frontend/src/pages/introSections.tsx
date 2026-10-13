@@ -38,19 +38,19 @@ export function Section({
     >
       <Aurora />
       <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 py-16 lg:min-h-[calc(100svh-4rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16 lg:py-20">
-        <div>
+        <div data-reveal>
           <p className="text-[17px] font-semibold tracking-[0.2em] text-primary-500">
             {eyebrow}
           </p>
           <h2 className="auth-section-title mt-6 max-w-[720px] text-balance tracking-tight text-slate-900">
             {title}
           </h2>
-          <p className="mt-8 max-w-[640px] text-[18px] leading-9 text-slate-500 sm:text-[20px] sm:leading-[2.1]">
+          <p className="mt-8 max-w-[640px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
             {desc}
           </p>
           {footnote && <p className="mt-10 text-xs text-slate-400">{footnote}</p>}
         </div>
-        <div>{visual}</div>
+        <div data-reveal>{visual}</div>
       </div>
     </section>
   );
@@ -64,6 +64,10 @@ export function Aurora() {
       <span />
       <span />
       <span />
+      {/* 大片半透明"玻璃"形状：自己生成，缓慢漂移（比参考站的静态图更"动"） */}
+      <i className="glass glass-1" />
+      <i className="glass glass-2" />
+      <i className="glass glass-3" />
     </div>
   );
 }

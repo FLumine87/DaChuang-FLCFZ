@@ -5,9 +5,13 @@ import { Activity } from "lucide-react";
 export default function BrandLogo({
   compact = false,
   tone = "dark",
+  showSubtitle = true,
 }: {
   compact?: boolean;
   tone?: "dark" | "light";
+  /* 顶栏用「品牌 ｜ 页面名」时只要单行品牌名，关掉副标题；
+     侧边栏默认保留副标题。 */
+  showSubtitle?: boolean;
 }) {
   const light = tone === "light";
   return (
@@ -28,13 +32,15 @@ export default function BrandLogo({
           >
             心理筛查预警
           </span>
-          <span
-            className={`block text-[11px] tracking-wide ${
-              light ? "text-white/70" : "text-slate-400"
-            }`}
-          >
-            心理筛查与健康管理
-          </span>
+          {showSubtitle && (
+            <span
+              className={`block text-[11px] tracking-wide ${
+                light ? "text-white/70" : "text-slate-400"
+              }`}
+            >
+              心理筛查与健康管理
+            </span>
+          )}
         </div>
       )}
     </div>
