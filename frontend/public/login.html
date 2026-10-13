@@ -64,6 +64,42 @@
         --header: #e7ecff;
 
   
+
+      /* 玻璃形态背景（与 React 版 index.css 的 .glass 同一套参数） */
+      .aurora .glass {
+        position: absolute; display: block;
+        border: 1px solid rgba(255, 255, 255, 0.55);
+        background: linear-gradient(135deg, rgba(255,255,255,.72) 0%, rgba(186,214,255,.42) 46%, rgba(122,168,255,.26) 100%);
+        box-shadow: inset 0 -30px 70px -30px rgba(78,128,255,.28), 0 30px 90px -50px rgba(70,120,255,.4);
+        will-change: transform;
+      }
+      .aurora .glass-1 { width:58vw; height:42vw; right:-14vw; top:-10vw; border-radius:62% 38% 46% 54% / 55% 52% 48% 45%; transform:rotate(-12deg); animation:glass-drift-1 48s ease-in-out infinite; }
+      .aurora .glass-2 {
+        width:40vw; height:30vw; right:6vw; top:16vw;
+        border-radius:44% 56% 62% 38% / 40% 58% 42% 60%;
+        background-image:radial-gradient(rgba(255,255,255,.55) 1px, transparent 1px),
+                         linear-gradient(120deg, rgba(255,255,255,.6) 0%, rgba(168,205,255,.34) 50%, rgba(110,160,255,.22) 100%);
+        background-size:9px 9px, 100% 100%; opacity:.85; transform:rotate(8deg); animation:glass-drift-2 62s ease-in-out infinite;
+      }
+      .aurora .glass-3 { width:34vw; height:26vw; left:-10vw; bottom:-12vw; border-radius:52% 48% 40% 60% / 58% 42% 58% 42%; background:linear-gradient(140deg, rgba(255,255,255,.66) 0%, rgba(196,220,255,.34) 55%, rgba(150,190,255,.18) 100%); transform:rotate(-6deg); animation:glass-drift-3 56s ease-in-out infinite; }
+      @keyframes glass-drift-1 { 0%,100%{transform:translate3d(0,0,0) rotate(-12deg) scale(1)} 50%{transform:translate3d(-3vw,2vw,0) rotate(-7deg) scale(1.05)} }
+      @keyframes glass-drift-2 { 0%,100%{transform:translate3d(0,0,0) rotate(8deg) scale(1.02)} 50%{transform:translate3d(-4vw,-3vw,0) rotate(13deg) scale(1)} }
+      @keyframes glass-drift-3 { 0%,100%{transform:translate3d(0,0,0) rotate(-6deg) scale(1)} 50%{transform:translate3d(3vw,-2vw,0) rotate(-2deg) scale(1.06)} }
+      /* 深色模式：整体换成"暗色玻璃"（只降透明度不够，白色玻璃会盖住正文） */
+      .dark .aurora .glass {
+        opacity:.5; border-color:rgba(146,178,255,.14);
+        background:linear-gradient(135deg, rgba(120,160,255,.18) 0%, rgba(74,112,210,.13) 48%, rgba(38,66,140,.1) 100%);
+        box-shadow:inset 0 -30px 70px -30px rgba(24,48,110,.45), 0 30px 90px -50px rgba(10,22,60,.6);
+      }
+      .dark .aurora .glass-2 {
+        background-image:radial-gradient(rgba(146,178,255,.16) 1px, transparent 1px),
+                         linear-gradient(120deg, rgba(120,160,255,.16) 0%, rgba(70,106,200,.12) 50%, rgba(34,60,130,.1) 100%);
+        background-size:9px 9px, 100% 100%;
+      }
+      .dark .aurora::after {
+        background:linear-gradient(100deg, rgba(11,17,32,.94) 0%, rgba(15,23,42,.82) 26%, rgba(22,34,62,.6) 55%, rgba(30,46,82,.44) 100%);
+      }
+
       /* 与 React 版同源（index.css 的 --font-sans） */
         --font-sans: -apple-system, "Helvetica Neue", "Inter", "PingFang SC",
           "Microsoft YaHei", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
@@ -206,7 +242,7 @@
         background: var(--page);
         color: var(--slate-800);
         font-family: var(--font-sans);
-        -webkit-font-smoothing: antialiased;
+        -webkit-font-smoothing: auto;
       }
 
       .wrap {
@@ -283,9 +319,9 @@
         position: relative;
         border: 0;
         background: none;
-        padding: 8px 14px;
+        padding: 4px 20px;
         font: inherit;
-        font-size: 15px;
+        font-size: 16px;
         font-weight: 500;
         color: var(--slate-500);
         cursor: pointer;
@@ -1562,7 +1598,7 @@
 
         <!-- ============ 第 2 屏：作品简介 ============ -->
         <section class="auth-screen" id="top">
-          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span><i class="glass glass-1"></i><i class="glass glass-2"></i><i class="glass glass-3"></i></div>
           <div class="section-grid">
             <div data-reveal>
               <p class="eyebrow">作品概览</p>
@@ -1644,7 +1680,7 @@
 
         <!-- ============ 第 tech 屏 ============ -->
         <section class="auth-screen divider-top" id="tech">
-          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span><i class="glass glass-1"></i><i class="glass glass-2"></i><i class="glass glass-3"></i></div>
           <div class="section-grid">
             <div data-reveal>
               <p class="eyebrow">关键技术与方法</p>
@@ -1689,7 +1725,7 @@
 
         <!-- ============ 第 assess 屏 ============ -->
         <section class="auth-screen divider-top" id="assess">
-          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span><i class="glass glass-1"></i><i class="glass glass-2"></i><i class="glass glass-3"></i></div>
           <div class="section-grid">
             <div data-reveal>
               <p class="eyebrow">评估维度</p>
@@ -1735,7 +1771,7 @@
 
         <!-- ============ 第 alert 屏 ============ -->
         <section class="auth-screen divider-top" id="alert">
-          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span><i class="glass glass-1"></i><i class="glass glass-2"></i><i class="glass glass-3"></i></div>
           <div class="section-grid">
             <div data-reveal>
               <p class="eyebrow">预警机制</p>
@@ -1794,7 +1830,7 @@
 
         <!-- ============ 第 privacy 屏 ============ -->
         <section class="auth-screen divider-top" id="privacy">
-          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="aurora" aria-hidden="true"><span></span><span></span><span></span><i class="glass glass-1"></i><i class="glass glass-2"></i><i class="glass glass-3"></i></div>
           <div class="section-grid">
             <div data-reveal>
               <p class="eyebrow">数据安全</p>
