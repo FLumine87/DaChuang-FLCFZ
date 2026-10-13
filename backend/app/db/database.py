@@ -248,6 +248,21 @@ async def query_one_a(sql: str, params=()):
     return rows[0] if rows else None
 
 
+async def mutate_returning_a(sql: str, params=()):
+    """Atomic mutation with RETURNING; local results are committed before return."""
+    if runtime.is_worker():
+        return await query_one_a(sql, params)
+    with _local_lock:
+        conn = _get_local_conn()
+        try:
+            rows = conn.execute(sql, list(_norm_params(params))).fetchall()
+            conn.commit()
+            return dict(rows[0]) if rows else None
+        except Exception:
+            conn.rollback()
+            raise
+
+
 async def execute_a(sql: str, params=()) -> int:
     """INSERT/UPDATE/DELETE，返回 last_rowid（INSERT）或 rowcount。"""
     if runtime.is_worker():

@@ -15,7 +15,7 @@ import AdminDataCollection from './admin/pages/AdminDataCollection';
 import AdminRetrieval from './admin/pages/AdminRetrieval';
 import AdminAlerts from './admin/pages/AdminAlerts';
 import AdminCases from './admin/pages/AdminCases';
-import AdminAgentWorkbench from './admin/pages/AdminAgentWorkbench';
+import AdminAgentWorkbench from './admin/pages/AgentWorkspaceV2';
 import AuthPage from './pages/AuthPage';
 import { getCurrentSession } from './auth/session';
 

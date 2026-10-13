@@ -29,7 +29,7 @@ const navItems = [
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 900);
   const session = getCurrentSession();
   const username = session?.username || 'adminer';
 
@@ -51,6 +51,7 @@ export default function AdminLayout() {
             <span className="ml-3 font-bold text-lg text-white whitespace-nowrap">心理筛查预警</span>
           )}
           <button
+            aria-label={sidebarOpen ? '收起导航' : '展开导航'}
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="ml-auto text-slate-400 hover:text-white cursor-pointer"
           >
@@ -66,6 +67,7 @@ export default function AdminLayout() {
             const Icon = item.icon;
             return (
               <Link
+                aria-label={item.label}
                 key={item.path}
                 to={item.path}
                 className={`flex items-center px-3 py-2.5 rounded-lg transition-colors ${
@@ -103,7 +105,7 @@ export default function AdminLayout() {
         )}
       </aside>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <header className="h-16 bg-slate-900/80 border-b border-slate-700 flex items-center justify-between px-6 shadow-sm backdrop-blur">
           <h1 className="text-lg font-semibold text-white">
             {navItems.find(

@@ -3,9 +3,14 @@
 auth_level: None=公开 / 'user'=需登录 / 'admin'=需管理员
 """
 from app.handlers import (auth, screening, alerts, cases, retrieval, upload,
-                          dashboard, personal, admin, knowledge_graph, warning_agent)
+                          dashboard, personal, admin, knowledge_graph, warning_agent, agent_workspace)
 
 ROUTES = [
+    ("POST", "/api/agent-workspace/cases/{case_id}/runs", agent_workspace.run_case, "admin"),
+    ("GET", "/api/agent-workspace", agent_workspace.overview, "admin"),
+    ("POST", "/api/agent-workspace/runs", agent_workspace.run, "admin"),
+    ("GET", "/api/agent-workspace/cases/{case_id}", agent_workspace.case_detail, "admin"),
+    ("PUT", "/api/agent-workspace/tasks/{task_id}", agent_workspace.update_task, "admin"),
     # ---- 认证（公开）----
     ("POST", "/api/auth/login", auth.login, None),
     ("POST", "/api/auth/register", auth.register, None),
