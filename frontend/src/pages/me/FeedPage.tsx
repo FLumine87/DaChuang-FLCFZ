@@ -48,7 +48,9 @@ export default function FeedPage() {
       setFeed(feedResult.value);
       setSource('server');
       if (feedResult.value.report.mock) {
-        setNotice('服务端处于演示模式 · 模板生成：未连接个人知识图谱，报告由后端模板组装。');
+        /* 只描述真实状态：mock_mode 现在是"没有真实大模型 Key，正文走模板"，
+           与图谱是否连接无关（Neo4j 已接通，不能再写"未连接个人知识图谱"）。 */
+        setNotice('服务端处于演示模式 · 模板生成：报告正文由后端模板组装（尚未配置大模型 Key）。');
       }
     } else {
       /* 服务端推理不可用：用本机记录组装一份同结构的报告，页面结构照旧 */

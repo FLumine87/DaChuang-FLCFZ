@@ -429,8 +429,10 @@ function ModeNotice({ evidence }: { evidence: FirstRunEvidence }) {
   if (evidence.mode === "mock") {
     return (
       <p>
-        当前为{MOCK_BADGE}：后端未连接个人知识图谱（Neo4j），本次没有图谱相似线索；
-        下面的解释与建议由后端内置模板整理，不是真实检索或大模型输出。
+        当前为{MOCK_BADGE}：报告正文由后端模板整理（尚未配置大模型 Key），不是大模型输出。
+        {evidence.neo4jConnected
+          ? "本次没有匹配到图谱里的相似线索。"
+          : "后端未连接个人知识图谱（Neo4j），本次没有图谱相似线索。"}
       </p>
     );
   }
@@ -478,7 +480,9 @@ function hashRetrievalState(evidence: FirstRunEvidence | null, loading: boolean)
         : evidence?.mode === "live"
           ? "本次未检索到高相似线索"
           : evidence?.mode === "mock"
-            ? "演示模式 · 未连接图谱，无相似线索"
+            ? evidence.neo4jConnected
+              ? "本次未检索到高相似线索"
+              : "演示模式 · 未连接图谱，无相似线索"
             : "多模态线索的相似模式匹配";
   const badge =
     evidence?.mode === "mock"
@@ -751,7 +755,9 @@ function KnowledgeLinkContent({
           <p className="text-[11px] leading-5 text-slate-400">
             {evidence?.triples?.written
               ? `已写入个人知识图谱 ${evidence.triples.written} 条。`
-              : "本次未写入个人知识图谱（图数据库未连接）。"}
+              : evidence?.triples?.neo4jConnected
+                ? "已连接个人知识图谱，本次没有可写入的实体关系。"
+                : "本次未写入个人知识图谱（图数据库未连接）。"}
             {evidence?.triples?.mock ? "抽取走演示引擎（内置关键词），非大模型输出。" : ""}
           </p>
         </div>

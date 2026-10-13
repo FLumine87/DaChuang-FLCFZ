@@ -292,9 +292,11 @@ export async function collectLocalSignals(username: string): Promise<LocalSignal
  * 两条都没有的记录直接跳过 —— 宁可少列，也不凭空造一条"我的输入"。
  */
 export interface RetrievableInput {
-  /** 记录 id（同一条记录只出一项） */
+  /** 记录 id + 模态（同一条记录的文字/语音/图片各算一项） */
   id: string;
-  /** 实际拿去检索的文本 */
+  /** 这条输入来自哪种模态：检索页按模态过滤时用 */
+  modality: 'text' | 'audio' | 'image';
+  /** 实际拿去检索的文本（语音/图片是文件名/描述，可读且不编造） */
   text: string;
   /** 展示用来源：量表名 + 补充记录/逐题作答 */
   source: string;
@@ -309,12 +311,27 @@ export function myRetrievableInputs(records: PersonalScreeningRecord[]): Retriev
     const definition = questionnaires.find(
       (q) => q.id === record.questionnaire || q.name === record.questionnaire,
     );
-    const supplementText = record.supplement?.text?.trim();
+    const scale = definition?.id ?? record.questionnaire;
+    /* 语音 / 图片补充：没有原始文字，就用文件名说清"这是我的哪一次上传"（不编内容） */
+    const supplement = record.supplement;
+    if (supplement?.kind === 'audio' || supplement?.kind === 'image') {
+      out.push({
+        id: `${record.id}-${supplement.kind}`,
+        modality: supplement.kind,
+        text: `我上传的${supplement.kind === 'audio' ? '语音' : '图片'}：${supplement.filename ?? '（未命名）'}`,
+        source: `${scale} · ${supplement.kind === 'audio' ? '语音' : '图片'}补充`,
+        date: record.date,
+        level: record.level,
+      });
+      continue;
+    }
+    const supplementText = supplement?.kind === 'text' ? supplement.text?.trim() : undefined;
     if (supplementText) {
       out.push({
         id: record.id,
+        modality: 'text',
         text: supplementText,
-        source: `${definition?.id ?? record.questionnaire} · 补充记录`,
+        source: `${scale} · 补充记录`,
         date: record.date,
         level: record.level,
       });
@@ -334,6 +351,7 @@ export function myRetrievableInputs(records: PersonalScreeningRecord[]): Retriev
     if (!picked.length) continue;
     out.push({
       id: record.id,
+      modality: 'text',
       text: picked.join('；'),
       source: `${definition.id} · 逐题作答`,
       date: record.date,

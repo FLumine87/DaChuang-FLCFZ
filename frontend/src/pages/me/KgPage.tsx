@@ -96,6 +96,10 @@ export default function KgPage() {
   const [data, setData] = useState<GraphData | null>(null);
   /** 后端图谱是否拿到了数据（决定"来源"标注写服务端还是本机） */
   const [serverNodes, setServerNodes] = useState(0);
+  /** 图数据库是否真的连上了（Neo4j 已装好并接通，标注必须按真实状态写） */
+  const [graphConnected, setGraphConnected] = useState(false);
+  /** 本机三元组条数（localStorage）：标注里要用 */
+  const [localCount, setLocalCount] = useState(0);
   const [serverNotice, setServerNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -109,20 +113,28 @@ export default function KgPage() {
     setLoading(true);
     setServerNotice('');
     const local = localGraph(userId);
+  setLocalCount(Math.max(0, local.nodes.length - 1));
     try {
       const server = await api.getGraph(userId);
       setServerNodes(Math.max(0, server.nodes.length - 1));
       setData(mergeGraphs(server, local));
-      /* 说明文案在这里就写成完整句子（不是把后端字段拼进去）：
-         mock 是"服务端能用但没连图数据库"，catch 才是"取不到"。 */
-      if (server.mock) {
-        setServerNotice('服务端处于演示模式 · 未连接图数据库，当前显示本机记录。');
+      /* 说明文案只按**真实连接状态**给：连上了就什么都不说（2026-10-14 用户要求删掉
+         "服务端处于演示模式 · 未连接图数据库"那句 —— Neo4j 已接通，那句话是错的）；
+         确实没连上才提示一句人话，且不含任何后端原始响应体。 */
+      setGraphConnected(Boolean(server.neo4j_connected));
+      if (!server.neo4j_connected) {
+        setServerNotice(
+          server.mock
+            ? '服务端处于演示模式，图数据库尚未连接，当前显示本机记录。'
+            : '图数据库尚未连接，当前显示本机记录。',
+        );
       }
     } catch (e) {
       /* 后端不可用不该让页面空掉：本机三元组照样画出来，失败只在顶部如实说明。
          注意 briefErrorMessage：axios 的消息里可能带着原始响应体（裸 JSON），
          直接上屏就是"把后端返回体糊在用户脸上"——这正是 2026-10-14 那个 bug。 */
       setServerNodes(0);
+      setGraphConnected(false);
       setServerNotice(
         `知识图谱服务暂时取不到（${briefErrorMessage(e, '未连接到服务端')}），当前显示本机记录。`,
       );
@@ -223,7 +235,11 @@ export default function KgPage() {
             {/* 来源标注：本机（localStorage）/ 服务端图谱，两者都画在同一张图上时说清主次 */}
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
               <HardDrive className="w-3 h-3" />
-              {serverNodes > 0 ? `服务端图谱 ${serverNodes} 个节点（本机记录作补充）` : '本机记录（localStorage）'}
+              {graphConnected
+                ? serverNodes > 0
+                  ? `已连接个人知识图谱 · ${serverNodes} 个节点（本机记录作补充）`
+                  : `已连接个人知识图谱 · 该用户暂无图谱数据（本机记录 ${Math.max(0, localCount)} 条）`
+                : `图数据库未连接 · 本机记录 ${Math.max(0, localCount)} 条`}
             </span>
           </p>
         </div>

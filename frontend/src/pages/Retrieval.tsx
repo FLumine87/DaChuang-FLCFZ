@@ -259,6 +259,39 @@ export default function Retrieval() {
      location，而 window.location.search 在 hash 路由下永远是空的（别用它）。
      带 q 就自动填入搜索框并立即检索，用户不必再输一遍；没有 q 时保持空表单。
      autoRanRef 只防重复：同一条 q 只自动跑一次，重渲染不再发请求。 */
+  /* 历史记录的模态过滤（2026-10-14 用户实测："四个按钮点了不起作用"——
+     以前只切了展示的单元，列表与条数都没动）。口径：
+       · 语料条目：按"该模态单元是否存在"过滤（每条的 文本/语音/图像 三个单元都在，
+         所以条数不变，但每条展示的单元会跟着切）；
+       · 自己采集的记录（mine）：只在该模态下出现（supplement 只能是文字/语音/图片之一）；
+       · 我的输入（myInputs）：都是文本，只在「全部模态 / 文本」下出现。
+     三者合并后才是这份列表真实的条数与顺序（自己的在前）。 */
+  const hasUnit = (row: { text?: string; audio?: string; image?: string }, mode: Modality) =>
+    (row[mode] ?? '').trim().length > 0;
+  const corpusVisible = histMode === 'all' ? corpusRecords : corpusRecords.filter((r) => hasUnit(r, histMode));
+  const mineVisible = histMode === 'all' ? mine : mine.filter((r) => hasUnit(r, histMode));
+  const myInputsVisible = histMode === 'all' ? myInputs : myInputs.filter((i) => i.modality === histMode);
+  const historyRows = [...mineVisible, ...corpusVisible];
+  const historyTotal = historyRows.length + myInputsVisible.length;
+
+  /* 每个模态下到底有多少条：直接印在按钮上 —— 语料每条都有三个单元，条数不变，
+     光看列表看不出按钮有没有生效（2026-10-14 用户实测"点了没反应"），
+     计数 + 行内单元正文 + 一句口径说明，三处一起把"确实切了"讲清楚。 */
+  const modalityCount = (mode: 'all' | Modality) =>
+    mode === 'all'
+      ? corpusRecords.length + mine.length + myInputs.length
+      : corpusRecords.filter((r) => hasUnit(r, mode)).length +
+        mine.filter((r) => hasUnit(r, mode)).length +
+        myInputs.filter((i) => i.modality === mode).length;
+
+  /** 每个模态实际展示的是什么（说明文字必须与真实行为一致） */
+  const HIST_MODE_DESC: Record<'all' | Modality, string> = {
+    all: '全部模态：每条显示文本单元，自己的记录按采集模态展示',
+    text: '当前显示每条记录的文本单元（自述原文）',
+    audio: '当前显示每条记录的语音单元文本（语音特征描述）',
+    image: '当前显示每条记录的图像单元描述（非言语线索）',
+  };
+
   /* 「我的输入」：本机记录里的补充文字 / 逐题作答，进页面就取一次。
      读的是与写入同一个数据源（getScreeningRecords → 本机记录），不额外造数据。 */
   useEffect(() => {
@@ -838,7 +871,9 @@ export default function Retrieval() {
                 历史记录
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                共 {mine.length + corpusRecords.length} 条（含你自己采集的 {mine.length} 条）。切分类看不同模态的单元，点一条直接用它的文本检索。
+                共 {historyTotal} 条（含你自己采集的 {myInputsVisible.length + mineVisible.length} 条）。
+                {HIST_MODE_DESC[histMode]}
+                ；点一条直接用它的文本检索。
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {(['all', 'text', 'audio', 'image'] as const).map((m) => {
@@ -855,28 +890,31 @@ export default function Retrieval() {
                       }`}
                     >
                       {m === 'all' ? '全部模态' : MODALITY_META[m].label}
+                      <span className={`ml-1 tabular-nums ${active ? '' : 'text-slate-400'}`}>
+                        {modalityCount(m)}
+                      </span>
                     </button>
                   );
                 })}
               </div>
             </div>
             <span className="text-xs tabular-nums text-slate-400">
-              已显示 {Math.min(shown, mine.length + corpusRecords.length)} / {mine.length + corpusRecords.length}
+              已显示 {Math.min(shown, historyRows.length)} / {historyRows.length}
             </span>
           </div>
 
           {/* 我的输入：置顶、带「我的记录」标签，和语料库条目明确区分。
               点一条就回填检索框并立即检索（语料库条目仍是只回填，保持原交互）。 */}
-          {myInputs.length > 0 && (
+          {myInputsVisible.length > 0 && (
             <div className="mt-6 border-t border-slate-100 pt-5">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h3 className="text-sm font-semibold text-slate-800">我的输入</h3>
                 <span className="text-xs text-slate-400">
-                  共 {myInputs.length} 条 · 来自本机记录（localStorage），点一条直接检索
+                  共 {myInputsVisible.length} 条 · 来自本机记录（localStorage），点一条直接检索
                 </span>
               </div>
               <ul className="mt-3 grid gap-2">
-                {myInputs.map((item) => (
+                {myInputsVisible.map((item) => (
                   <li key={item.id}>
                     <button
                       type="button"
@@ -909,7 +947,7 @@ export default function Retrieval() {
           )}
 
           <ul className="mt-4 grid gap-3">
-            {[...mine, ...corpusRecords].slice(0, shown).map((r) => (
+            {historyRows.slice(0, shown).map((r) => (
               <li key={r.id}>
                 <button
                   type="button"
@@ -963,13 +1001,20 @@ export default function Retrieval() {
             ))}
           </ul>
 
-          {shown < mine.length + corpusRecords.length && (
+          {/* 该模态下一条都没有时给一句说明，不留空白（例如还没有任何图像采集） */}
+          {historyRows.length === 0 && myInputsVisible.length === 0 && (
+            <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
+              当前筛选下还没有记录。切回「全部模态」，或先去「多模态采集」补一条这个模态的记录。
+            </p>
+          )}
+
+          {shown < historyRows.length && (
             <button
               type="button"
               onClick={() => setShown((n) => n + 20)}
               className="ui-button mt-4 w-full"
             >
-              显示更多（还有 {mine.length + corpusRecords.length - shown} 条）
+              显示更多（还有 {historyRows.length - shown} 条）
             </button>
           )}
         </div>
