@@ -28,6 +28,15 @@ export interface PersonalScreeningRecord {
   status: 'completed' | 'pending';
   moodTag: string;
   date: string;
+  /** 逐题作答（题号 → 选项分值）。后端接口以前只回总分，所以是可选的 */
+  answers?: Record<number, number>;
+  /** 用户自愿补充的一条记录（文字 / 语音 / 图片） */
+  supplement?: {
+    kind: 'text' | 'audio' | 'image';
+    text?: string;
+    filename?: string;
+    url?: string;
+  };
 }
 
 export type ScreeningRecord = PersonalScreeningRecord;

@@ -12,7 +12,7 @@ import {
   SquarePen,
   X,
 } from "lucide-react";
-import { uploadFile } from "../../services/mockApi";
+import { saveScreeningSupplement, uploadFile } from "../../services/mockApi";
 import { getDraft, saveDraft, type SupplementKind } from "../../services/firstRun";
 import FirstRunShell from "./FirstRunShell";
 import { firstRunSteps } from "./firstRunSteps";
@@ -81,17 +81,21 @@ export default function FirstRunSupplement() {
   };
 
   const goResult = (withSupplement: boolean) => {
-    saveDraft({
-      supplement: withSupplement
-        ? kind === "text"
-          ? text.trim()
-            ? { kind, text: text.trim() }
-            : undefined
-          : file
-            ? { kind, filename: file.name, url: file.url }
-            : undefined
-        : { kind, text: undefined },
-    });
+    const supplement = withSupplement
+      ? kind === "text"
+        ? text.trim()
+          ? { kind, text: text.trim() }
+          : undefined
+        : file
+          ? { kind, filename: file.name, url: file.url }
+          : undefined
+      : undefined;
+    /* 先写进草稿（03 结果页要读），再**当场落库**到本次筛查记录上——
+       否则离开引导流程后这段内容就没了，档案里也查不到。 */
+    saveDraft({ supplement });
+    if (supplement && draft?.recordId) {
+      void saveScreeningSupplement(draft.recordId, supplement);
+    }
     navigate("/personal/first/result", { replace: true });
   };
 

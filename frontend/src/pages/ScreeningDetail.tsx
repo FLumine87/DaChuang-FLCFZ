@@ -33,6 +33,28 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
           <p className="mt-2 text-sm leading-6 text-slate-500">{definition?.introduction.recallPeriod} 总分反映量表所评估问题的整体程度，不能单凭分数判断你有哪些具体症状，也不等同于医学诊断。</p>
         </div>
       </section>
+      {record.supplement && (
+        <section className="ui-card p-6">
+          <h3 className="font-semibold text-slate-800">本次补充记录</h3>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            这次筛查时你自愿补充的内容，仅用于本次分析。
+          </p>
+          <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">
+            {record.supplement.kind === "text" ? (
+              <p className="whitespace-pre-wrap">{record.supplement.text}</p>
+            ) : record.supplement.kind === "image" && record.supplement.url ? (
+              <img
+                src={record.supplement.url}
+                alt={record.supplement.filename ?? "补充图片"}
+                className="max-h-64 rounded-lg object-contain"
+              />
+            ) : (
+              <p>{record.supplement.filename ?? "语音片段"}（已随本次筛查保存）</p>
+            )}
+          </div>
+        </section>
+      )}
+
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="ui-card p-5">
           <h3 className="font-semibold text-slate-800">相关表现与关注点</h3>
@@ -54,6 +76,21 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
         {isExample && definition?.id === 'PHQ-9' ? (
           <div className="mt-4 divide-y divide-slate-100">
             {definition.questions.map((q, index) => <div key={q.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span className="text-slate-700">{q.id}. {q.text}</span><span className="shrink-0 text-slate-500">{q.options.find(o => o.value === exampleAnswers[index])?.label} · {exampleAnswers[index]} 分</span></div>)}
+          </div>
+        ) : record.answers && definition ? (
+          /* 有逐题答案就照实回看（首次引导流程会把它一起存下来） */
+          <div className="mt-4 divide-y divide-slate-100">
+            {definition.questions.map((q) => {
+              const value = record.answers?.[q.id];
+              return (
+                <div key={q.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
+                  <span className="text-slate-700">{q.id}. {q.text}</span>
+                  <span className="shrink-0 text-slate-500">
+                    {value === undefined ? '未作答' : `${q.options.find(o => o.value === value)?.label} · ${value} 分`}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         ) : <p className="mt-3 text-sm leading-6 text-slate-500">当前记录接口仅提供总分，暂时无法回看逐题答案。这里不会根据总分推测你的作答。</p>}
       </section>

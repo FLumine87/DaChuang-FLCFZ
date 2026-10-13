@@ -121,6 +121,19 @@ function personalRecords(): PersonalScreeningRecord[] {
   return mine;
 }
 
+/** 给已提交的记录补一条内容（改它、再写回当前账号的记录列表） */
+function patchSubmittedRecord(id: string, patch: Partial<PersonalScreeningRecord>) {
+  const username = getTokenUsername();
+  if (!username) return;
+  const all = readSubmittedRecords();
+  const mine = all[username] ?? [];
+  const index = mine.findIndex((item) => item.id === id);
+  if (index < 0) return;
+  mine[index] = { ...mine[index], ...patch };
+  all[username] = mine;
+  writeSubmittedRecords(all);
+}
+
 /** 记一条自己提交的筛查，让它在列表/档案里真的出现 */
 function rememberSubmittedRecord(record: PersonalScreeningRecord) {
   const username = getTokenUsername();
@@ -286,6 +299,8 @@ export async function submitScreening(data: {
       status: 'completed',
       moodTag: '已完成',
       date: new Date().toLocaleDateString('sv-SE'),
+      /* 逐题作答也要落下来：以前只存分数，档案里看不到"哪一题答了什么" */
+      answers: data.answers,
     });
     return {
       id,
@@ -294,6 +309,25 @@ export async function submitScreening(data: {
     };
   }
   return request.post('/api/personal/screenings', data);
+}
+
+/**
+ * 把用户在 02「补充记录」里写/传的内容挂到本次筛查记录上。
+ *
+ * 之前这一步只写进了 sessionStorage 草稿（给 03 结果页看），一离开就没了——
+ * 档案里查不到，等于白填。真实后端需要对应的
+ * `POST /api/personal/screenings/{id}/supplement` 接口。
+ */
+export async function saveScreeningSupplement(
+  recordId: string,
+  supplement: { kind: 'text' | 'audio' | 'image'; text?: string; filename?: string; url?: string },
+): Promise<void> {
+  if (USE_MOCK) {
+    await delay(120);
+    patchSubmittedRecord(recordId, { supplement });
+    return;
+  }
+  await request.post(`/api/personal/screenings/${encodeURIComponent(recordId)}/supplement`, supplement);
 }
 
 export async function getDashboardData(): Promise<DashboardResponse> {

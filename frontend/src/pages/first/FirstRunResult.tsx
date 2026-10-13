@@ -39,7 +39,14 @@ import { firstRunSteps } from "./firstRunSteps";
 export default function FirstRunResult() {
   const draft = getDraft();
   const definition = questionnaires.find((item) => item.id === draft?.scaleId);
-  const [tab, setTab] = useState<"summary" | "evidence" | "advice">("summary");
+  const supplement = draft?.supplement;
+  const supplementText = supplement?.text?.trim();
+  const hasSupplement = Boolean(supplementText || supplement?.filename);
+  /* 用户补充过东西时，直接落在「分析依据」——那里能看到"你补充的内容被用在哪"。
+     否则补充完回到结果页看不出任何变化，像是白填了。 */
+  const [tab, setTab] = useState<"summary" | "evidence" | "advice">(
+    hasSupplement ? "evidence" : "summary",
+  );
 
   if (!draft?.recordId || !definition || draft.score === undefined || draft.maxScore === undefined) {
     return (
@@ -65,9 +72,6 @@ export default function FirstRunResult() {
   const maxScore = draft.maxScore ?? 0;
   const result = definition.scoring(score);
   const isPss = definition.id === "PSS-10";
-  const supplement = draft.supplement;
-  const supplementText = supplement?.text?.trim();
-  const hasSupplement = Boolean(supplementText || supplement?.filename);
   /* 用 completedAt（量表提交时刻）而不是 updatedAt：后者在 02 补充后会被刷新 */
   const completedAt = formatTime(draft.completedAt ?? draft.updatedAt);
 
@@ -192,6 +196,7 @@ export default function FirstRunResult() {
               <EvidenceItem
                 icon={ClipboardList}
                 title="本次作答与补充"
+                defaultOpen={hasSupplement}
                 summary={`${definition.id} 共 ${definition.questions.length} 题${
                   hasSupplement ? "，并补充了一条记录" : "，未补充其他内容"
                 }`}
@@ -287,15 +292,18 @@ function EvidenceItem({
   title,
   summary,
   pending = false,
+  defaultOpen = false,
   children,
 }: {
   icon: typeof Info;
   title: string;
   summary: string;
   pending?: boolean;
+  /** 有内容可看时默认展开：用户补充过东西，就该一眼看到它被用上了 */
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50/60">
       <button
