@@ -13,6 +13,9 @@ import {
   Bell,
   User,
   LogOut,
+  MessageCircle,
+  Network,
+  Newspaper,
 } from 'lucide-react';
 import { getCurrentSession, logout } from '../auth/session';
 
@@ -24,6 +27,15 @@ const navItems = [
   { path: '/personal/alerts', label: '预警中心', icon: AlertTriangle },
   { path: '/personal/cases', label: '我的档案', icon: FolderOpen },
 ];
+
+// 智能心理助手（个人端 Agent + 知识图谱）：独立分组，不打乱原有导航结构
+const meNavItems = [
+  { path: '/personal/me/chat', label: 'AI 陪伴对话', icon: MessageCircle },
+  { path: '/personal/me/kg', label: '我的知识图谱', icon: Network },
+  { path: '/personal/me/feed', label: '个性化推送', icon: Newspaper },
+];
+
+const allNavItems = [...navItems, ...meNavItems];
 
 export default function Layout() {
   const location = useLocation();
@@ -83,6 +95,33 @@ export default function Layout() {
               </Link>
             );
           })}
+
+          {/* 智能心理助手分组（新增模块，独立展示） */}
+          <div className="pt-3 mt-3 border-t border-emerald-100">
+            {sidebarOpen && (
+              <p className="px-3 pb-1 text-xs font-medium text-slate-400">智能心理助手</p>
+            )}
+            {meNavItems.map((item) => {
+              const isActive =
+                location.pathname === item.path ||
+                location.pathname.startsWith(item.path + '/');
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex items-center px-3 py-2.5 rounded-lg transition-colors ${
+                    isActive
+                      ? 'bg-emerald-50 text-emerald-700 font-medium'
+                      : 'text-slate-600 hover:bg-emerald-50/60 hover:text-slate-900'
+                  }`}
+                >
+                  <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-emerald-600' : ''}`} />
+                  {sidebarOpen && <span className="ml-3 whitespace-nowrap">{item.label}</span>}
+                </Link>
+              );
+            })}
+          </div>
         </nav>
 
         {/* User section */}
@@ -113,7 +152,7 @@ export default function Layout() {
         {/* Top bar */}
         <header className="h-16 bg-white/90 border-b border-emerald-200 flex items-center justify-between px-6 shadow-sm backdrop-blur">
           <h1 className="text-lg font-semibold text-slate-800">
-            {navItems.find(
+            {allNavItems.find(
               (item) =>
                 location.pathname === item.path ||
                 location.pathname.startsWith(item.path + '/')

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Search, Filter, ChevronDown, PlayCircle, ClipboardCheck } from 'lucide-react';
 import { questionnaireCatalog, type PersonalScreeningRecord } from '../data/mockData';
 import { getScreeningRecords, submitScreening } from '../services/mockApi';
+import { api } from '../services/api';
+import { getCurrentSession } from '../auth/session';
 import AlertBadge from '../components/AlertBadge';
 import StatusBadge from '../components/StatusBadge';
 import QuestionnaireForm from '../components/QuestionnaireForm';
@@ -14,6 +16,8 @@ export default function Screening() {
   const [activeQuestionnaire, setActiveQuestionnaire] = useState<string | null>(null);
   const [localRecords, setLocalRecords] = useState<PersonalScreeningRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [kgSyncMsg, setKgSyncMsg] = useState<string | null>(null);
+  const userId = getCurrentSession()?.username ?? 'demo_user';
 
   const fetchRecords = useCallback(async () => {
     try {
@@ -51,6 +55,20 @@ export default function Screening() {
     setActiveQuestionnaire(null);
     // 重新从后端拉取（真实模式下后端会生成筛查记录与分级预警）
     await fetchRecords();
+
+    // 量表得分自动回写个人 KG（失败静默，不阻塞 UI）
+    if (activeQuestionnaire) {
+      api.submitScaleScore(userId, activeQuestionnaire, score, true)
+        .then((r) => {
+          if (r.inference_triggered && r.report) {
+            setKgSyncMsg(`已写入知识图谱，最新风险评估：${r.report.risk_label}（综合分 ${r.report.overall_score}）`);
+          } else if (r.written > 0) {
+            setKgSyncMsg('量表得分已写入个人知识图谱');
+          }
+        })
+        .catch(() => setKgSyncMsg('量表得分写入知识图谱失败（Neo4j 未连接？），不影响本地记录'));
+      setTimeout(() => setKgSyncMsg(null), 8000);
+    }
   };
 
   if (activeQuestionnaire) {
@@ -69,6 +87,11 @@ export default function Screening() {
 
   return (
     <div className="space-y-6">
+      {kgSyncMsg && (
+        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-4 py-2.5 text-sm">
+          <ClipboardCheck className="w-3.5 h-3.5" /> {kgSyncMsg}
+        </div>
+      )}
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
         <h3 className="text-base font-semibold text-slate-800">筛查说明</h3>
         <p className="text-sm text-slate-500 mt-2 leading-6">

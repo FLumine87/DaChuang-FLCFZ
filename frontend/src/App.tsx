@@ -17,6 +17,9 @@ import AdminAlerts from './admin/pages/AdminAlerts';
 import AdminCases from './admin/pages/AdminCases';
 import AdminAgentWorkbench from './admin/pages/AdminAgentWorkbench';
 import AuthPage from './pages/AuthPage';
+import ChatPage from './pages/me/ChatPage';
+import KgPage from './pages/me/KgPage';
+import FeedPage from './pages/me/FeedPage';
 import { getCurrentSession } from './auth/session';
 
 function RequireRole({ role, children }: { role: 'admin' | 'user'; children: ReactElement }) {
@@ -47,6 +50,10 @@ export default function App() {
         <Route path="retrieval" element={<Retrieval />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="cases" element={<Cases />} />
+        {/* 智能心理助手（个人端 Agent + 知识图谱） */}
+        <Route path="me/chat" element={<ChatPage />} />
+        <Route path="me/kg" element={<KgPage />} />
+        <Route path="me/feed" element={<FeedPage />} />
         <Route path="*" element={<Navigate to="/personal/dashboard" replace />} />
       </Route>
 
