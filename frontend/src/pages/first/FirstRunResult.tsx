@@ -339,6 +339,7 @@ function EvidenceItem({
   title,
   summary,
   pending = false,
+  badge,
   loading = false,
   defaultOpen = false,
   children,
@@ -347,6 +348,8 @@ function EvidenceItem({
   title: string;
   summary: string;
   pending?: boolean;
+  /** 非 live 模式右上角那个小标记的文案；默认「了解分析技术」，演示模式传 MOCK_BADGE */
+  badge?: string;
   /** 拉取中：标题右侧给一个克制的转圈，不改动整页 */
   loading?: boolean;
   /** 有内容可看时默认展开：用户补充过东西，就该一眼看到它被用上了 */
@@ -370,7 +373,7 @@ function EvidenceItem({
             <span className="text-[14px] font-medium text-slate-800">{title}</span>
             {pending && (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
-                了解分析技术
+                {badge ?? "了解分析技术"}
               </span>
             )}
           </span>
@@ -399,12 +402,20 @@ function EvidenceItem({
 
 /* ------------------------------------------------- 分析依据：三条真实数据条目 */
 
+/**
+ * 演示模式的统一标注（用户 2026-10-14 明确要求这个说法）。
+ * 后端 mock_mode=true 时，报告是**模板 + 本机记录 + 仓库内置内容**拼出来的，
+ * 不是真实检索/大模型输出，界面上必须一眼看得出来。
+ */
+const MOCK_BADGE = "演示模式 · 模板生成";
+
 /** 只在这里统一三态文案，避免每条各写一遍 */
 function ModeNotice({ evidence }: { evidence: FirstRunEvidence }) {
   if (evidence.mode === "mock") {
     return (
       <p>
-        当前为演示模式：后端未接入真实检索，本次不返回相似线索与知识来源，下面的结论只来自量表作答。
+        当前为{MOCK_BADGE}：后端未连接个人知识图谱（Neo4j），本次没有图谱相似线索；
+        下面的解释与建议由后端内置模板整理，不是真实检索或大模型输出。
       </p>
     );
   }
@@ -455,7 +466,8 @@ function HashRetrievalItem({
   const rows = topMatched(evidence?.report, MAX_ROWS);
   /* 摘要必须和展开后的结论一致，顺序也和渲染分支一致：
      有数据 → 命中数；服务出错 → 暂不可用；真实检索但没命中 → 未检索到；
-     非 live（未接入/演示）→ 技术名。绝不能出现"摘要说没检索到、展开说服务挂了"这种自相矛盾。 */
+     演示模式 → 未连接图谱（如实说没查，不说"没查到"）；未接入 → 技术名。
+     绝不能出现"摘要说没检索到、展开说服务挂了"这种自相矛盾。 */
   const summary = loading
     ? "正在检索…"
     : rows.length
@@ -464,7 +476,9 @@ function HashRetrievalItem({
         ? "检索服务暂不可用"
         : evidence?.mode === "live"
           ? "本次未检索到高相似线索"
-          : "多模态线索的相似模式匹配";
+          : evidence?.mode === "mock"
+            ? "演示模式 · 未连接图谱，无相似线索"
+            : "多模态线索的相似模式匹配";
 
   return (
     <EvidenceItem
@@ -472,6 +486,7 @@ function HashRetrievalItem({
       title="动态跨模态哈希检索"
       summary={summary}
       pending={!loading && evidence?.mode !== "live"}
+      badge={evidence?.mode === "mock" ? MOCK_BADGE : undefined}
       loading={loading}
       defaultOpen={!loading && rows.length > 0}
     >
@@ -554,7 +569,9 @@ function RagReferenceItem({
 }) {
   const factors = (evidence?.report?.factors ?? []).slice(0, MAX_FACTORS);
   const recs = (evidence?.report?.recommendations ?? []).slice(0, MAX_ROWS);
-  const hasAny = factors.length > 0 || recs.length > 0;
+  /** 报告正文（后端返回的 summary；演示模式下就是模板文案，界面另有标注） */
+  const reportSummary = evidence?.report?.summary?.trim() ?? "";
+  const hasAny = Boolean(reportSummary) || factors.length > 0 || recs.length > 0;
   /* 同哈希条目：摘要与展开后的结论保持一致，出错时不说"本次未返回"。 */
   const summary = loading
     ? "正在整理…"
@@ -572,6 +589,7 @@ function RagReferenceItem({
       title="RAG 参考资料"
       summary={summary}
       pending={!loading && evidence?.mode !== "live"}
+      badge={evidence?.mode === "mock" ? MOCK_BADGE : undefined}
       loading={loading}
       defaultOpen={!loading && hasAny}
     >
@@ -594,6 +612,16 @@ function RagReferenceItem({
 
       {!loading && hasAny && (
         <div className="grid gap-3">
+          {/* 报告正文：后端返回的 summary 原样展示（接口给什么就显示什么） */}
+          {reportSummary && (
+            <div>
+              <p className="text-[12px] font-medium text-slate-700">报告正文</p>
+              <p className="mt-1 whitespace-pre-wrap text-[12px] leading-5 text-slate-500">
+                {reportSummary}
+              </p>
+            </div>
+          )}
+
           {factors.length > 0 && (
             <div>
               <p className="text-[12px] font-medium text-slate-700">风险因素</p>
@@ -710,6 +738,7 @@ function KnowledgeLinkItem({
             {evidence?.triples?.written
               ? `已写入个人知识图谱 ${evidence.triples.written} 条。`
               : "本次未写入个人知识图谱（图数据库未连接）。"}
+            {evidence?.triples?.mock ? "抽取走演示引擎（内置关键词），非大模型输出。" : ""}
           </p>
         </div>
       )}

@@ -5,11 +5,12 @@
 - GET  /recommendations/by_interest?user_id=xxx  纯兴趣驱动的内容推送（不依赖推理报告）
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from ...core.neo4j import neo4j_health
 from ...schemas.inference import CopingRecommendation
 from ...services import daily_checkin_agent, recommendation_agent
+from ...services.llm_client import mock_mode
 
 router = APIRouter(tags=["daily-checkin"])
 
@@ -34,6 +35,13 @@ def get_all_daily_checkins() -> dict:
 
 
 @router.get("/recommendations/by_interest", response_model=list[CopingRecommendation])
-def get_interest_feed(user_id: str, limit: int = 4) -> list[CopingRecommendation]:
-    """纯兴趣驱动的内容推送（日常问询后、绿级稳定期使用）。"""
-    return recommendation_agent.build_feed_from_interests(user_id, limit)
+def get_interest_feed(user_id: str, response: Response, limit: int = 4) -> list[CopingRecommendation]:
+    """纯兴趣驱动的内容推送（日常问询后、绿级稳定期使用）。
+
+    Neo4j 不可用时：Mock 模式返回仓库内置的通用内容（每条 reason 都写明
+    "演示模式"，非个性化），真实模式仍然返回空列表。响应体保持原有的数组结构
+    不变，另加 X-Mock-Mode 头，方便调用方在不破坏契约的前提下识别演示模式。
+    """
+    items = recommendation_agent.build_feed_from_interests(user_id, limit)
+    response.headers["X-Mock-Mode"] = "true" if mock_mode() else "false"
+    return items

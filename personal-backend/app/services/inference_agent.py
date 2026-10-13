@@ -27,7 +27,7 @@ from ..schemas.inference import (
     MatchedDisorder,
     RiskReport,
 )
-from . import llm_client
+from . import llm_client, recommendation_agent
 
 DISCLAIMER = "本报告由系统基于个人知识图谱自动生成，仅作参考，不构成医学诊断。如有需要请联系学校心理咨询中心或专业医疗机构。"
 
@@ -155,8 +155,82 @@ def _run(session, key: str, uid: str) -> list[dict]:
     return session.run(_QUERIES[key], uid=uid).data()
 
 
+# ---------- Mock 通路（Neo4j 不可用 + ENABLE_MOCK_ENGINES=True） ----------
+
+MOCK_NOTICE = "演示模式 · 模板生成：未连接个人知识图谱（Neo4j），本次报告不含图谱推理结果"
+
+
+def _local_alert_records(user_id: str) -> list[dict]:
+    """本地业务库（SQLite）里该用户自己的预警记录——Mock 通路唯一的真实数据来源。
+
+    个人端业务库目前只有 alerts 一张表（推理自动落库的预警），所以这里只读它：
+    有什么读什么，没有就返回空列表，绝不为凑字段补默认值。库/表不存在时也按
+    "没有记录"处理，不因为一个可选数据源把整份报告打挂。
+    """
+    from . import alert_service  # 延迟导入：只有 Mock 通路用得到
+
+    try:
+        return [row.model_dump() for row in alert_service.list_alerts(user_id=user_id)]
+    except Exception:
+        return []
+
+
+def _run_mock(user_id: str) -> RiskReport:
+    """Mock 通路：Neo4j 不可用但处于 Mock 模式时，用本地已有记录组装报告。
+
+    为什么这样改：run_inference 原先在 Neo4j 不可用时一律抛 RuntimeError，
+    路由层回 503 —— 于是"演示模式"下推理接口整个不可用。演示模式本来就不查图谱，
+    那就该走一条**明确标注**的通路，而不是假装能推理：
+
+      · 只用本地 SQLite 里确实存在的记录（当前是预警记录），不编造分数与历史；
+      · 没有任何本地记录时，factors 里如实写明"没有可评分的数据"，风险等级取绿；
+      · 报告正文仍走 _assemble_summary（Mock 下 llm_client.chat 返回空串 → 模板文案）；
+      · 建议列表用 recommendation_agent 的仓库内置内容（reason 里标注演示模式）；
+      · report.mock = True，界面据此标注"演示模式 · 模板生成"。
+
+    真实通路（Neo4j 可用）完全不受影响，仍是下面 run_inference 里那套图谱推理。
+    """
+    alerts = _local_alert_records(user_id)
+
+    factors: list[str] = [MOCK_NOTICE]
+    level = "green"
+    if alerts:
+        # list_alerts 按 id 倒序，第一条即最近一条。等级与标题都来自这条真实记录，
+        # 不是重新评估出来的——所以下面 factors 里必须写清出处。
+        latest = alerts[0]
+        level = latest.get("level") or "green"
+        factors.append(
+            f"本地最近一条预警记录：{latest.get('created_at', '')} {latest.get('title', '')}"
+        )
+        if len(alerts) > 1:
+            factors.append(f"本地另有 {len(alerts) - 1} 条历史预警记录（未逐条参与评分）")
+    else:
+        factors.append("本地记录中暂无该用户的量表得分与预警记录，本次没有可参与评分的个人数据")
+
+    report = RiskReport(
+        user_id=user_id,
+        risk_level=level,  # type: ignore[arg-type]
+        risk_label=RISK_LABELS.get(level, RISK_LABELS["green"]),
+        overall_score=0.0,  # 没跑评分：0 表示"未评分"，不表示"很健康"
+        crisis=False,
+        factors=factors,
+        matched_disorders=[],  # 没查图谱就没有相似线索，不编
+        recommendations=recommendation_agent.mock_fallback_feed(),
+        summary="",
+        disclaimer=DISCLAIMER,
+        alert_created=False,
+        created_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+        mock=True,
+    )
+    report.summary = _assemble_summary(report, [])
+    return report
+
+
 def run_inference(user_id: str) -> RiskReport:
     if not neo4j_health():
+        # Mock 模式走本地数据通路（明确标注 mock），其余情况保持原样报错。
+        if llm_client.mock_mode():
+            return _run_mock(user_id)
         raise RuntimeError("Neo4j 未连接，无法执行推理")
 
     driver = get_driver()

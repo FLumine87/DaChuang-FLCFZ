@@ -11,10 +11,23 @@
 // 原先硬编码 http://localhost:8001 会让 .env.local 里的代理配置完全失效，
 // 且浏览器会跨源直连（localhost vs 127.0.0.1 也不同源）。
 
-const BASE =
-  (import.meta.env.VITE_API_BASE as string | undefined) ??
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  '';
+/* /api/v1/* 由 personal-backend（FastAPI + Neo4j）提供 —— 它和主后端不是同一个服务：
+ *   · 开发：vite.config.ts 把 /api/v1 代理到 VITE_PERSONAL_PROXY_TARGET（默认 8001），
+ *           所以这里留空、走同源相对路径即可；
+ *   · 生产：**打包后没有 Vite 代理**，/api/v1/* 会打到主后端（Cloudflare Worker），
+ *           而 Worker 没有这些路由 —— 必须显式给 VITE_PERSONAL_API_BASE，
+ *           指向另外部署的 personal-backend，否则这一组功能不可用。
+ * 没配时下面 request() 会给出可读提示，而不是让它 404 裸报错。 */
+const PERSONAL_BASE = (import.meta.env.VITE_PERSONAL_API_BASE as string | undefined) ?? '';
+export const PERSONAL_API_READY = import.meta.env.DEV || Boolean(PERSONAL_BASE);
+
+const BASE = PERSONAL_BASE
+  ? PERSONAL_BASE
+  : import.meta.env.DEV
+    ? ((import.meta.env.VITE_API_BASE as string | undefined) ??
+       (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+       '')
+    : '';
 
 export interface Triple {
   subject: string;
@@ -43,6 +56,10 @@ export interface GraphData {
   nodes: GraphNode[];
   links: GraphLink[];
   neo4j_connected: boolean;
+  /** 后端处于 Mock（演示）模式：界面据此标注来源，不把演示结果说成图谱数据 */
+  mock?: boolean;
+  /** 前端本地拼出来的补充图谱（L1：localStorage 里的三元组） */
+  local?: boolean;
 }
 
 export interface ExtractResult {
@@ -50,6 +67,8 @@ export interface ExtractResult {
   triples: Triple[];
   written: number;
   neo4j_connected: boolean;
+  /** 后端处于 Mock（演示）模式：抽取走内置关键词引擎，也未写入图数据库 */
+  mock?: boolean;
 }
 
 export interface MatchedDisorder {
@@ -80,6 +99,10 @@ export interface RiskReport {
   disclaimer: string;
   alert_created: boolean;
   created_at: string;
+  /** 后端 Mock 通路（模板 / 本地记录组装）生成的报告，不是图谱推理结果 */
+  mock?: boolean;
+  /** 前端本机组装（服务端推理不可用时的兜底） */
+  local?: boolean;
 }
 
 export interface InferenceRunResult {
@@ -122,6 +145,12 @@ export interface ScaleScoreResult {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!PERSONAL_API_READY) {
+    throw new Error(
+      '知识图谱 / 推理服务未配置：打包版没有开发代理，需要设置 VITE_PERSONAL_API_BASE ' +
+        '指向已部署的 personal-backend（FastAPI + Neo4j）。当前构建未设置，这一组功能不可用。',
+    );
+  }
   const resp = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...init,

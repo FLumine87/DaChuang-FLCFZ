@@ -31,6 +31,7 @@ class ExtractResponse(BaseModel):
     triples: list[Triple]
     written: int = Field(description="成功写入 Neo4j 的三元组数量")
     neo4j_connected: bool
+    mock: bool = Field(default=False, description="是否处于 Mock（演示）模式，前端据此如实标注")
 
 
 class TriplesRequest(BaseModel):
@@ -58,6 +59,7 @@ class ScaleScoreResponse(BaseModel):
     neo4j_connected: bool
     inference_triggered: bool
     report: Optional[dict] = Field(default=None, description="若触发推理则返回报告概览")
+    mock: bool = Field(default=False, description="是否处于 Mock（演示）模式，前端据此如实标注")
 
 
 class GraphNode(BaseModel):
@@ -79,6 +81,7 @@ class GraphResponse(BaseModel):
     nodes: list[GraphNode]
     links: list[GraphLink]
     neo4j_connected: bool
+    mock: bool = Field(default=False, description="是否处于 Mock（演示）模式，前端据此如实标注")
 
 
 def coerce_triples(raw: list[dict]) -> list["Triple"]:

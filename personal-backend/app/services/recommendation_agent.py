@@ -108,6 +108,31 @@ CATEGORY_CONTENT_MAP = {
 }
 
 
+# ---------- Mock 通路兜底（Neo4j 不可用 + ENABLE_MOCK_ENGINES=True） ----------
+
+MOCK_REASON = "演示模式 · 仓库内置通用内容（非个性化推荐）"
+
+
+def mock_fallback_feed(limit: int = 3) -> list[CopingRecommendation]:
+    """没有图谱可查时的兜底内容：只用本文件已有的 SEED_GENERAL 条目。
+
+    为什么需要它：个性化推送页（/personal/me/feed）与推理报告的 content_feed
+    都依赖图谱里的兴趣画像；Neo4j 未启动时原来直接返回空列表，页面只能是一片空。
+    演示/离线场景下给一条内置内容比给空更有用，但必须让人一眼看出这不是
+    "按你的画像算出来的" —— 所以 reason 统一写明演示模式，返回体上另有 mock 标记。
+    绝不新编文案：条目、来源、链接全部取自本文件顶部的种子库。
+    """
+    return [
+        CopingRecommendation(
+            name=item["title"],
+            category="通用",
+            suggestion=f"来源：{item['source']}（{item['url']}）",
+            reason=MOCK_REASON,
+        )
+        for item in SEED_GENERAL[:limit]
+    ]
+
+
 def _fetch_music_recommendations(interest_names: list[str], limit: int = 3) -> list[dict]:
     """优先调用自建 NetEaseCloudMusicApi，失败/未配置则用种子数据。"""
     base = getattr(settings, "music_api_url", "") or ""
@@ -193,7 +218,9 @@ def build_recommendation_feed(report: RiskReport, limit: int = 6) -> list[Coping
         return []
 
     if not neo4j_health():
-        return []
+        # Mock 模式：没有兴趣画像可查，退化为一组内置通用内容（带演示标记），
+        # 而不是返回空列表让页面空着；真实模式仍然如实返回空。
+        return mock_fallback_feed(limit) if llm_client.mock_mode() else []
 
     # 拉用户兴趣画像（按 category 分组）
     driver = get_driver()
@@ -288,7 +315,8 @@ def build_feed_from_interests(user_id: str, limit: int = 4) -> list[CopingRecomm
     不依赖推理报告，直接从用户兴趣画像生成内容推送。
     """
     if not neo4j_health():
-        return []
+        # 同上：Mock 模式给内置通用内容，真实模式如实返回空
+        return mock_fallback_feed(limit) if llm_client.mock_mode() else []
 
     driver = get_driver()
     with driver.session() as session:

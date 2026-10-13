@@ -8,7 +8,7 @@
  * 要接后端只需改环境变量 VITE_USE_MOCK=false，组件无需改动。
  */
 
-import { request, USE_MOCK, getTokenUsername } from './http';
+import { request, USE_MOCK, getTokenUsername, isDemoToken } from './http';
 
 import {
   screeningRecords,
@@ -22,6 +22,7 @@ import {
   questionnaireCatalog,
   personalTimeline,
   type PersonalScreeningRecord,
+  type ScreeningRetrievalSnapshot,
   type AlertLevel,
   type RetrievalResult as PersonalRetrievalResult,
   type RetrievalIndexInfo,
@@ -109,10 +110,37 @@ function personalRecords(): PersonalScreeningRecord[] {
   const username = getTokenUsername();
   const mine = username ? readSubmittedRecords()[username] ?? [] : [];
   // 自己的提交排在前面；与样例数据同 id 的只留一条
-  return [
+  return withLocalRetrieval([
     ...mine,
     ...screeningRecords.filter((item) => !mine.some((s) => s.id === item.id)),
-  ];
+  ]);
+}
+
+/* ── 检索快照（L1：存在浏览器本地，随记录一起回看） ──────────────────────────
+   为什么单独一个覆盖层：真实后端没有这个字段（不做后端落库是用户选定的 L1 口径），
+   所以本地存一份「记录 id → 快照」，读取记录时并进去。
+   demo 模式下同时把快照写进那条记录本身，两种模式读到的结果因此一致。 */
+const RETRIEVAL_KEY = 'psych_screening_retrieval:v1';
+
+function readRetrievalOverlay(): Record<string, ScreeningRetrievalSnapshot> {
+  try {
+    const raw = localStorage.getItem(RETRIEVAL_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, ScreeningRetrievalSnapshot>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/** 把本地快照并进记录（记录自身已有快照时不覆盖） */
+function withLocalRetrieval(records: PersonalScreeningRecord[]): PersonalScreeningRecord[] {
+  const overlay = readRetrievalOverlay();
+  return records.map((record) =>
+    overlay[record.id] && !record.retrieval
+      ? { ...record, retrieval: overlay[record.id] }
+      : record,
+  );
 }
 
 /** 给已提交的记录补一条内容（改它、再写回当前账号的记录列表） */
@@ -263,7 +291,39 @@ export async function getScreeningRecords(): Promise<PersonalScreeningRecord[]> 
     await delay();
     return personalRecords();
   }
-  return request.get<PersonalScreeningRecord[]>('/api/personal/screenings');
+  try {
+    const rows = await request.get<PersonalScreeningRecord[]>('/api/personal/screenings');
+    return withLocalRetrieval(rows);
+  } catch (err) {
+    /* 同 getDashboardData：演示会话拿不到真实记录时退回演示数据，不整页报错 */
+    if (!isDemoToken()) throw err;
+    await delay();
+    return personalRecords();
+  }
+}
+
+/**
+ * 把本次「检索与解释」的快照挂到这条筛查记录上（L1：只存在浏览器本地）。
+ *
+ * 调用时机：02 提交补充、普通筛查提交完成之后各一次。快照由
+ * firstRunRetrieval.toRetrievalSnapshot 收敛，拿不到就是 mode='unavailable'，
+ * 这里只负责存，不做任何补全。
+ */
+export async function saveScreeningRetrieval(
+  recordId: string,
+  snapshot: ScreeningRetrievalSnapshot,
+): Promise<void> {
+  try {
+    const overlay = readRetrievalOverlay();
+    overlay[recordId] = snapshot;
+    localStorage.setItem(RETRIEVAL_KEY, JSON.stringify(overlay));
+  } catch {
+    /* 隐私模式写不进去：本次会话的详情页会少这一块，不影响其它内容 */
+  }
+  if (USE_MOCK) {
+    /* demo 模式记录就在本地，顺手写进记录本身（读的时候两种来源都能拿到） */
+    patchSubmittedRecord(recordId, { retrieval: snapshot });
+  }
 }
 
 export async function submitScreening(data: {
@@ -324,6 +384,20 @@ export async function saveScreeningSupplement(
   await request.post(`/api/personal/screenings/${encodeURIComponent(recordId)}/supplement`, supplement);
 }
 
+/** 演示数据整包：demo 模式与"演示会话被真实后端拒绝"两种情况共用同一份 */
+function demoDashboard(): DashboardResponse {
+  return {
+    moodTrend,
+    warningDistribution,
+    warningEvents,
+    actionPlan: [...actionPlan],
+    screeningRecords: personalRecords(),
+    userProfile,
+    questionnaireCatalog,
+    personalTimeline,
+  };
+}
+
 export async function getDashboardData(): Promise<DashboardResponse> {
   if (USE_MOCK) {
     await delay();
@@ -331,18 +405,18 @@ export async function getDashboardData(): Promise<DashboardResponse> {
        筛查记录再叠上本账号自己的提交 —— 见文件开头的「演示数据」说明。
        用户明确要求不做空状态：新账号也要能看到预警卡、趋势与最近记录。
        真实后端下这些字段自然随账号返回。 */
-    return {
-      moodTrend,
-      warningDistribution,
-      warningEvents,
-      actionPlan: [...actionPlan],
-      screeningRecords: personalRecords(),
-      userProfile,
-      questionnaireCatalog,
-      personalTimeline,
-    };
+    return demoDashboard();
   }
-  return request.get<DashboardResponse>('/api/personal/dashboard');
+  try {
+    return await request.get<DashboardResponse>('/api/personal/dashboard');
+  } catch (err) {
+    /* 演示会话（自签 alg=none token）在真实后端下必然 401。首页不该因此变成
+       一行错误文字或一片空白，所以退回演示数据；真实账号失败照实抛出，
+       由页面给出局部提示（见 Dashboard.tsx 的兜底分支）。 */
+    if (!isDemoToken()) throw err;
+    await delay();
+    return demoDashboard();
+  }
 }
 
 /** 管理端顶部指标（真实聚合查询）。后端 /api/dashboard/stats 已提供
@@ -372,7 +446,14 @@ export async function getWarnings(): Promise<WarningEvent[]> {
     await delay();
     return [...warningEvents];
   }
-  return request.get<WarningEvent[]>('/api/personal/warnings');
+  try {
+    return await request.get<WarningEvent[]>('/api/personal/warnings');
+  } catch (err) {
+    /* 同 getDashboardData：演示会话拿不到真实预警时退回演示数据 */
+    if (!isDemoToken()) throw err;
+    await delay();
+    return [...warningEvents];
+  }
 }
 
 /**
@@ -398,12 +479,21 @@ export async function getCases() {
     await delay();
     return { screeningRecords: personalRecords(), warningEvents, userProfile, personalTimeline };
   }
-  return request.get<{
-    screeningRecords: PersonalScreeningRecord[];
-    warningEvents: WarningEvent[];
-    userProfile: UserProfile;
-    personalTimeline: PersonalTimelineEvent[];
-  }>('/api/personal/profile');
+  try {
+    const data = await request.get<{
+      screeningRecords: PersonalScreeningRecord[];
+      warningEvents: WarningEvent[];
+      userProfile: UserProfile;
+      personalTimeline: PersonalTimelineEvent[];
+    }>('/api/personal/profile');
+    /* 「我的档案」与其它读路径保持一致：本地检索快照并进记录，回看时才看得到 */
+    return { ...data, screeningRecords: withLocalRetrieval(data.screeningRecords ?? []) };
+  } catch (err) {
+    /* 同 getDashboardData：演示会话下「我的档案」也退回演示数据 */
+    if (!isDemoToken()) throw err;
+    await delay();
+    return { screeningRecords: personalRecords(), warningEvents, userProfile, personalTimeline };
+  }
 }
 
 /** 检索请求参数（文本 / 图像 / 语音三种查询方式共用） */

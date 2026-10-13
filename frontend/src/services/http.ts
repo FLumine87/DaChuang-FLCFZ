@@ -60,10 +60,12 @@ export function getTokenUsername(): string | null {
 /**
  * 当前这枚 token 是不是"演示 token"（由前端 mockApi.apiLogin 自己签的 alg=none 三段式）。
  *
- * 只在 401 处理里用：演示 token 被真实后端拒绝是必然的，不能因此把用户登出。
+ * 401 处理里用它：演示 token 被真实后端拒绝是必然的，不能因此把用户登出。
+ * mockApi 的读取兜底也用它：演示会话在真实后端下必然 401，这类失败应退回演示数据，
+ * 而不是让页面整页报错（真实 JWT 的失败不受影响，照实暴露）。
  * 解不出来（或不是 alg:none）就当真实 JWT 处理，走原来的登出逻辑。
  */
-function isDemoToken(): boolean {
+export function isDemoToken(): boolean {
   const token = getToken();
   if (!token) return false;
   try {

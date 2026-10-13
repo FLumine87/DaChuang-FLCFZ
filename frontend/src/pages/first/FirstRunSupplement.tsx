@@ -12,8 +12,10 @@ import {
   SquarePen,
   X,
 } from "lucide-react";
-import { saveScreeningSupplement, uploadFile } from "../../services/mockApi";
+import { saveScreeningRetrieval, saveScreeningSupplement, uploadFile } from "../../services/mockApi";
 import { getDraft, saveDraft, type SupplementKind } from "../../services/firstRun";
+import { loadFirstRunEvidence, toRetrievalSnapshot } from "../../services/firstRunRetrieval";
+import { getCurrentSession } from "../../auth/session";
 import FirstRunShell from "./FirstRunShell";
 import { firstRunSteps } from "./firstRunSteps";
 
@@ -93,13 +95,27 @@ export default function FirstRunSupplement() {
     /* 先写进草稿（03 结果页要读），再**当场落库**到本次筛查记录上——
        否则离开引导流程后这段内容就没了，档案里也查不到。 */
     saveDraft({ supplement });
-    if (supplement && draft?.recordId) {
-      void saveScreeningSupplement(draft.recordId, supplement);
+    const recordId = draft?.recordId;
+    if (supplement && recordId) {
+      void saveScreeningSupplement(recordId, supplement);
+    }
+    /* 本次「检索与解释」的快照也存进这条记录（L1：只存在浏览器本地）。
+       03 结果页会自己再取一遍用于展示，这里只负责"记录里留得住"：
+       拿不到就存 mode:'unavailable' 与原样原因，绝不编造。 */
+    if (recordId) {
+      const userId = getCurrentSession()?.username ?? "demo_user";
+      void loadFirstRunEvidence(userId, supplement?.text)
+        .then((evidence) => saveScreeningRetrieval(recordId, toRetrievalSnapshot(evidence)))
+        .catch(() =>
+          saveScreeningRetrieval(recordId, {
+            at: new Date().toISOString(),
+            mode: "unavailable",
+            reason: "检索服务暂不可用",
+          }),
+        );
     }
     navigate("/personal/first/result", { replace: true });
   };
-
-  const hasContent = kind === "text" ? text.trim().length > 0 : !!file;
 
   return (
     <FirstRunShell
@@ -246,16 +262,6 @@ export default function FirstRunSupplement() {
             </p>
           )}
         </div>
-
-        {/* 提交前先预览：把将要提交的内容原样列出来 */}
-        {hasContent && (
-          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5">
-            <p className="text-[12px] font-medium text-slate-500">提交前预览</p>
-            <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-[13px] leading-6 text-slate-700">
-              {kind === "text" ? text.trim() : `${file?.name}（${kind === "audio" ? "语音" : "图片"}）`}
-            </p>
-          </div>
-        )}
 
 
         {/* 技术说明区：紧贴输入区，让评委在填写/提交时就能看到两个创新名称，

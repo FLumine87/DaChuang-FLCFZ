@@ -42,6 +42,10 @@ class RiskReport(BaseModel):
     disclaimer: str
     alert_created: bool = Field(description="本次推理是否自动创建了预警")
     created_at: str
+    mock: bool = Field(
+        default=False,
+        description="是否由 Mock 通路（模板/本地记录）生成，而非图谱推理；界面据此标注演示模式",
+    )
 
 
 class InferenceRunResponse(BaseModel):

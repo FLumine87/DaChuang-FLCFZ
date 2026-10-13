@@ -9,7 +9,9 @@
  *
  * 三种模式（由 GET /api/v1/health 判定，见 loadFirstRunEvidence）：
  *   'unreachable' 后端不可达 → 页面如实写"未接入"，不去猜也不去编
- *   'mock'        后端可达但 mock_mode=true → 明确标注演示/模拟模式，不调真实检索
+ *   'mock'        后端可达但 mock_mode=true → 调接口拿**带 mock 标记**的报告
+ *                 （模板文案 + 本地记录 + 仓库内置内容），界面一律标注
+ *                 「演示模式 · 模板生成」，绝不让人误以为是真实检索/LLM 输出
  *   'live'        后端可达且 mock_mode=false → 调真实接口，拿不到就是拿不到
  *
  * 关键约束（用户反复强调）：绝不编造数据。
@@ -29,6 +31,7 @@
 
 import { api } from './api';
 import type { CopingRecommendation, MatchedDisorder, RiskReport } from './api';
+import type { ScreeningRetrievalSnapshot } from '../data/mockData';
 
 /** 展示用的条数上限：条目多时只给前几条，其余在界面上注明"其余略" */
 export const MAX_ROWS = 5;
@@ -50,13 +53,15 @@ export interface TriplesResult {
   /** 成功写入图数据库的条数；Neo4j 未连接时为 0 */
   written: number;
   neo4jConnected: boolean;
+  /** 后端处于演示模式：抽取走内置关键词引擎，未写入图数据库 */
+  mock?: boolean;
 }
 
 /** 本次结果页「分析依据」需要展示的全部真实数据 */
 export interface FirstRunEvidence {
   mode: BackendMode;
   neo4jConnected: boolean;
-  /** 推理是否成功（mock 模式下恒为 false——不调就不算有） */
+  /** 推理是否成功（后端不可达时恒为 false——没调就不算有） */
   inferenceOk: boolean;
   /** 推理失败时后端给出的原因（如"Neo4j 未连接"），用于如实展示 */
   inferenceError?: string;
@@ -119,10 +124,11 @@ export async function loadFirstRunEvidence(
     matchedOmitted: 0,
   };
 
-  /* 后端不可达、或后端自己声明处于 mock 模式：都不调真实检索。
-     mock 模式下推理走的是模板/关键词引擎，拿它当"检索结果"展示等于假装，
-     所以这里只回报模式，由界面写明当前是演示模式。 */
-  if (health.mode !== 'live') return empty;
+  /* 后端不可达才不调：mock 模式也要调 —— 后端的 Mock 通路会返回一份 report.mock=true
+     的报告（模板正文 + 本地 SQLite 记录 + 仓库内置建议），03 的「RAG 参考资料」
+     据此展示真实返回的 summary 与建议，同时由界面标注「演示模式 · 模板生成」。
+     拿不到数据时（inferenceError）页面按原口径写明原因，不猜也不编。 */
+  if (health.mode === 'unreachable') return empty;
 
   /* 推理与知识抽取互不依赖，并行发起；任一失败都不影响另一条。
      用 allSettled 而不是 all：分析依据里两条应当各自独立可用。 */
@@ -149,6 +155,7 @@ export async function loadFirstRunEvidence(
       triples: extraction.value.triples ?? [],
       written: extraction.value.written ?? 0,
       neo4jConnected: Boolean(extraction.value.neo4j_connected),
+      mock: Boolean(extraction.value.mock),
     };
   } else if (extraction.status === 'rejected') {
     result.triplesError = briefError(extraction.reason);
@@ -161,6 +168,46 @@ export async function loadFirstRunEvidence(
 export function topMatched(report?: RiskReport, limit = MAX_ROWS): MatchedDisorder[] {
   const rows = report?.matched_disorders ?? [];
   return [...rows].sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+/** 快照里最多留几条相似线索（档案详情页只回看，不追求全量） */
+export const MAX_SNAPSHOT_MATCHES = 5;
+
+/**
+ * 把「本次分析依据」收敛成一条可存进筛查记录的快照（L1：存浏览器本地）。
+ *
+ * 规则只有一条：**拿到什么存什么**。
+ *   · 拿到报告 → 存 summary / 建议 / 命中线索；mode 按来源写 live 或 mock
+ *     （mock 一律标注，回看时不会被当成真实推理结果）；
+ *   · 没拿到 → mode='unavailable' + 原样原因，不补默认文案。
+ */
+export function toRetrievalSnapshot(evidence: FirstRunEvidence): ScreeningRetrievalSnapshot {
+  const report = evidence.report;
+  const at = new Date().toISOString();
+  if (!evidence.inferenceOk || !report) {
+    return {
+      at,
+      mode: 'unavailable',
+      reason:
+        evidence.inferenceError ??
+        (evidence.mode === 'unreachable' ? '后端未接入，本次未发起检索' : '本次未取得检索结果'),
+    };
+  }
+  return {
+    at,
+    mode: evidence.mode === 'mock' || report.mock ? 'mock' : 'live',
+    matches: (report.matched_disorders ?? []).slice(0, MAX_SNAPSHOT_MATCHES).map((row) => ({
+      name: row.name,
+      score: row.score,
+      coverage: row.coverage,
+      matched_symptoms: row.matched_symptoms ?? [],
+      matched_triggers: row.matched_triggers ?? [],
+    })),
+    summary: report.summary,
+    advice: (report.recommendations ?? []).map((rec) =>
+      rec.reason ? `${rec.name}：${rec.reason}` : rec.name,
+    ),
+  };
 }
 
 /** 关系的展示名：接口给的是本体里的大写关系名，这里只做显示层的翻译，不加语义 */

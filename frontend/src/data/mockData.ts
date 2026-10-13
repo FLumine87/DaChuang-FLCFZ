@@ -19,6 +19,35 @@ export interface QuestionnaireItem {
   target: string;
 }
 
+/**
+ * 本次筛查的「检索与解释」快照（L1：只存在浏览器本地，不落库）。
+ *
+ * 为什么要有它：推理/RAG 结果以前只在 03 结果页当场看得到，回到「我的档案」
+ * 就只剩分数了。用户 2026-10-14 选定 L1 后，把提交那一刻拿到的东西原样存进记录里，
+ * 之后回看能对上当时的口径（服务端真实 / 演示模板 / 没拿到）。
+ * 没拿到就存 mode='unavailable' + 原因，绝不补默认值。
+ */
+export interface ScreeningRetrievalSnapshot {
+  /** 快照时间（ISO） */
+  at: string;
+  /** live=服务端真实推理；mock=服务端演示模式（模板生成）；unavailable=本次没拿到 */
+  mode: 'live' | 'mock' | 'unavailable';
+  /** mode='unavailable' 时的原因，原样保留接口/网络给的说法 */
+  reason?: string;
+  /** 命中的相似线索（后端 matched_disorders 原样存，最多留 5 条） */
+  matches?: {
+    name: string;
+    score: number;
+    coverage?: number;
+    matched_symptoms?: string[];
+    matched_triggers?: string[];
+  }[];
+  /** 报告正文（后端 summary） */
+  summary?: string;
+  /** 建议与它的由来（后端 recommendations 的 name + reason） */
+  advice?: string[];
+}
+
 export interface PersonalScreeningRecord {
   id: string;
   questionnaire: string;
@@ -37,6 +66,8 @@ export interface PersonalScreeningRecord {
     filename?: string;
     url?: string;
   };
+  /** 提交时存下的检索/RAG 快照（L1：浏览器本地） */
+  retrieval?: ScreeningRetrievalSnapshot;
 }
 
 export type ScreeningRecord = PersonalScreeningRecord;

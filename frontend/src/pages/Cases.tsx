@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { ClipboardList, Clock, Sparkles, FileText, AlertTriangle } from 'lucide-react';
 import { type PersonalScreeningRecord, type WarningEvent, type PersonalTimelineEvent, type UserProfile } from '../data/mockData';
 import { getCases } from '../services/mockApi';
 import { getCurrentSession, getDisplayName } from '../auth/session';
 import AlertBadge from '../components/AlertBadge';
-import ScreeningDetail from './ScreeningDetail';
 
 export default function Cases() {
   const [screeningRecords, setScreeningRecords] = useState<PersonalScreeningRecord[]>([]);
@@ -14,9 +14,6 @@ export default function Cases() {
     name: '—', age: 0, gender: '', campus: '', major: '', stage: '', emergencyContact: '',
   });
   const [, setLoading] = useState(false);
-  /* 点开某条筛查看详情。有 answers（后端逐题作答）就展示真实作答，
-     没有就退回示例，并由 isExample 打出「示例报告」横幅，不冒充真实结果。 */
-  const [detail, setDetail] = useState<PersonalScreeningRecord | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -57,17 +54,6 @@ export default function Cases() {
     .filter(Boolean)
     .join(' · ');
 
-  /* 详情态：整页换成筛查详情，返回时回到档案页 */
-  if (detail) {
-    return (
-      <ScreeningDetail
-        record={detail}
-        onBack={() => setDetail(null)}
-        isExample={!detail.answers}
-      />
-    );
-  }
-
 
   return (
     <div className="space-y-6">
@@ -92,23 +78,21 @@ export default function Cases() {
               </p>
             )}
             {screeningRecords.slice(0, 4).map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setDetail(item)}
-                className="w-full rounded-lg bg-slate-50 p-3 text-left transition-colors hover:bg-primary-50/60"
-              >
+              <div key={item.id} className="p-3 bg-slate-50 rounded-lg">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-slate-800">{item.questionnaire}</p>
                   <AlertBadge level={item.level} size="sm" />
                 </div>
-                <p className="mt-1 flex items-center justify-between text-xs text-slate-500">
-                  <span>{item.score}/{item.maxScore} · {item.date}</span>
-                  <span className="text-primary-600">
-                    {item.answers ? '查看作答详情 →' : '查看详情 →'}
-                  </span>
-                </p>
-              </button>
+                <p className="text-xs text-slate-500 mt-1">{item.score}/{item.maxScore} · {item.date}</p>
+                {/* 记录详情就在筛查详情页（同一个 ScreeningDetail）：首次引导刚提交的
+                    那条也在这里，点开能看到逐题作答、补充内容与本次检索快照 */}
+                <Link
+                  to={`/personal/screening?record=${encodeURIComponent(item.id)}`}
+                  className="mt-2 inline-block text-xs font-medium text-primary-600 hover:underline"
+                >
+                  查看详情
+                </Link>
+              </div>
             ))}
           </div>
         </div>

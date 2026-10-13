@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Network, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Network, RefreshCw, AlertTriangle, HardDrive, MessageCircleHeart } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api, type GraphData } from '../../services/api';
 import { getCurrentSession } from '../../auth/session';
+import { localGraph, mergeGraphs } from '../../services/localKg';
 
 /* 节点/分类配色。
  *
@@ -91,6 +93,9 @@ export default function KgPage() {
   const userId = session?.username ?? 'demo_user';
 
   const [data, setData] = useState<GraphData | null>(null);
+  /** 后端图谱是否拿到了数据（决定"来源"标注写服务端还是本机） */
+  const [serverNodes, setServerNodes] = useState(0);
+  const [serverNotice, setServerNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
@@ -98,14 +103,23 @@ export default function KgPage() {
   /* 主题感知的节点/线条配色（见文件顶部 readPalette 的说明） */
   const palette = usePalette();
 
+  /* L1：本机（localStorage）里的三元组由「AI 陪伴对话」写入，这里作为图谱的
+     基础数据源。服务端（Neo4j）能给出数据时以它为主，本机只补充缺的部分。 */
   const load = async () => {
     setLoading(true);
     setError('');
+    setServerNotice('');
+    const local = localGraph(userId);
     try {
-      setData(await api.getGraph(userId));
+      const server = await api.getGraph(userId);
+      setServerNodes(Math.max(0, server.nodes.length - 1));
+      setData(mergeGraphs(server, local));
+      if (server.mock) setServerNotice('服务端处于演示模式：图谱接口未连接图数据库。');
     } catch (e) {
-      setError(e instanceof Error ? e.message : '加载图谱失败');
-      setData(null);
+      /* 后端不可用不该让页面空掉：本机三元组照样画出来，失败只在顶部如实说明 */
+      setServerNodes(0);
+      setServerNotice(e instanceof Error ? e.message : '图谱服务暂时取不到');
+      setData(local.nodes.length > 1 ? local : null);
     } finally {
       setLoading(false);
     }
@@ -183,7 +197,6 @@ export default function KgPage() {
     positionsRef.current = pos;
     // 触发重绘
     setRenderTick((t) => t + 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, links]);
 
   const pos = positionsRef.current;
@@ -196,8 +209,15 @@ export default function KgPage() {
           <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
             <Network className="w-4 h-4 text-primary-600" /> 我的个人知识图谱
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            用户 <span className="font-mono">{userId}</span> 的专属子图 · 点击节点查看详情
+          <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>
+              用户 <span className="font-mono">{userId}</span> 的专属子图 · 点击节点查看详情
+            </span>
+            {/* 来源标注：本机（localStorage）/ 服务端图谱，两者都画在同一张图上时说清主次 */}
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+              <HardDrive className="w-3 h-3" />
+              {serverNodes > 0 ? `服务端图谱 ${serverNodes} 个节点（本机记录作补充）` : '本机记录（localStorage）'}
+            </span>
           </p>
         </div>
         <button
@@ -209,6 +229,14 @@ export default function KgPage() {
         </button>
       </div>
 
+      {/* 服务端图谱取不到时的如实说明：不再把 503 的 JSON 糊在页面上 */}
+      {serverNotice && (
+        <div className="flex items-center gap-2 text-sm text-slate-600 ui-card px-3 py-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-warning-500" />
+          <span>知识图谱服务暂时取不到（{serverNotice}），当前显示本机记录。</span>
+        </div>
+      )}
+
       {error && (
         <div className="flex items-center gap-2 text-sm text-danger-600 bg-danger-50 border border-danger-200 rounded-lg px-3 py-2">
           <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
@@ -217,8 +245,20 @@ export default function KgPage() {
 
       <div className="ui-card overflow-hidden">
         {!data || nodes.length === 0 ? (
-          <div className="h-[520px] flex items-center justify-center text-sm text-slate-400">
-            {loading ? '加载中…' : data ? '该用户暂无图谱数据，去对话页聊几句吧' : '无法加载图谱'}
+          <div className="h-[520px] flex flex-col items-center justify-center gap-3 text-sm text-slate-400">
+            {loading ? (
+              '加载中…'
+            ) : (
+              <>
+                <p>先在「AI 陪伴对话」里说说近况，图谱会随记录生长。</p>
+                <Link
+                  to="/personal/me/chat"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-1.5 text-primary-600 hover:bg-primary-100"
+                >
+                  <MessageCircleHeart className="w-3.5 h-3.5" /> 去聊几句
+                </Link>
+              </>
+            )}
           </div>
         ) : (
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto block" style={{ background: `linear-gradient(135deg,${palette.canvasFrom},${palette.canvasTo})` }}>
