@@ -62,7 +62,7 @@
         --page: #f7f9fe;
         --header: #e7ecff;
 
-        /* 与 React 版同源：Latin 用新怪诞体（对齐腾讯 Haas Grot 血统），中文回退 PingFang SC */
+        /* 与 React 版同源（index.css 的 --font-sans） */
         --font-sans: -apple-system, "Helvetica Neue", "Inter", "PingFang SC",
           "Microsoft YaHei", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
         --shadow-card: 0 24px 70px -36px rgba(16, 24, 40, 0.35);
@@ -139,14 +139,15 @@
         position: sticky;
         top: 0;
         z-index: 40;
-        /* 毛玻璃：半透明 + 背景模糊，滚动时透出下层内容 */
-        background: color-mix(in srgb, var(--header) 76%, transparent);
-        backdrop-filter: blur(14px) saturate(170%);
-        -webkit-backdrop-filter: blur(14px) saturate(170%);
+        /* 与页面共用同一个背景：顶栏不加自己的底色，只做模糊，
+           避免出现一条与下方割裂的"色带" */
+        background: transparent;
+        backdrop-filter: blur(14px) saturate(180%);
+        -webkit-backdrop-filter: blur(14px) saturate(180%);
         padding: 0 24px;
       }
       @supports not (backdrop-filter: blur(1px)) {
-        header { background: var(--header); }
+        header { background: color-mix(in srgb, var(--page) 88%, transparent); }
       }
 
       .header-inner {
@@ -312,9 +313,9 @@
         margin: 24px 0 0;
         max-width: 720px;
         font-size: 50px;
-        line-height: 1.16;
-        font-weight: 500; /* 方案 B：与腾讯同向——中轻字重 + 极轻正字距 */
-        letter-spacing: 0.01em;
+        line-height: 1.2;
+        font-weight: 600;
+        letter-spacing: 0.25px;
         color: var(--slate-900);
         text-wrap: balance;
       }
@@ -324,7 +325,7 @@
         max-width: 600px;
         font-size: 20px;
         line-height: 2.1;
-        color: var(--slate-500);
+        color: var(--slate-600);
       }
 
       .points {
@@ -699,9 +700,9 @@
         margin: 24px 0 0;
         max-width: 720px;
         font-size: 38px;
-        line-height: 1.16;
-        font-weight: 500;
-        letter-spacing: 0.01em;
+        line-height: 1.2;
+        font-weight: 600;
+        letter-spacing: 0.25px;
         color: var(--slate-900);
         text-wrap: balance;
       }
@@ -711,7 +712,7 @@
         max-width: 640px;
         font-size: 20px;
         line-height: 2.1;
-        color: var(--slate-500);
+        color: var(--slate-600);
       }
 
       .footnote {
@@ -812,7 +813,7 @@
 
       .metric-value {
         font-size: 26px;
-        font-weight: 500;
+        font-weight: 600;
         line-height: 1;
         font-variant-numeric: tabular-nums;
         color: var(--primary-600);
