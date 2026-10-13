@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#091225"/><stop offset="0.52" stop-color="#111B31"/><stop offset="1" stop-color="#192743"/></linearGradient>
+  <radialGradient id="glow"><stop stop-color="#465FFF" stop-opacity="0.12"/><stop offset="1" stop-color="#465FFF" stop-opacity="0"/></radialGradient>
+  <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#536484" stroke-opacity="0.12"/></pattern>
+  <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="24" stdDeviation="40" flood-color="#020915" flood-opacity="0.28"/></filter>
+  <style>text{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif}</style>
+</defs>
+<rect width="1600" height="1000" fill="url(#bg)"/>
+<rect y="70" width="1600" height="930" fill="url(#grid)" opacity="0.3"/>
+<circle cx="1110" cy="500" r="700" fill="url(#glow)"/>
+<circle cx="335" cy="530" r="440" fill="none" stroke="#3B58A8" stroke-opacity="0.13"/>
+<circle cx="335" cy="530" r="310" fill="none" stroke="#3B58A8" stroke-opacity="0.10"/>
+<rect width="1600" height="70" fill="#07112A"/>
+<rect x="68" y="14" width="44" height="44" rx="12" fill="#465FFF"/>
+<path d="M78 37h6l4-10 6 20 5-12h6" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="130" y="43" fill="#F7F9FF" font-size="21" font-weight="700">心理筛查预警</text>
+<text x="290" y="43" fill="#9BAFEA" font-size="18">健康管理平台</text>
+<text x="1525" y="43" fill="#B8C6E5" font-size="17" text-anchor="end">首次筛查 · 1/3</text>
+
+<text x="90" y="244" fill="#849AFF" font-size="19" font-weight="600" letter-spacing="3">01  ·  状态筛查</text>
+<text x="90" y="331" fill="#F7F9FF" font-size="55" font-weight="700">最后一题，</text>
+<text x="90" y="405" fill="#F7F9FF" font-size="55" font-weight="700">请按真实感受回答。</text>
+<text x="90" y="477" fill="#AEBBD4" font-size="23">可以放慢一点，也可以随时暂停。</text>
+<text x="90" y="513" fill="#AEBBD4" font-size="23">旁边的支持信息在作答前就能看到。</text>
+
+<rect x="90" y="562" width="600" height="314" rx="22" fill="#203151" stroke="#5871AA" stroke-width="1.5"/>
+<circle cx="123" cy="605" r="15" fill="#465FFF"/>
+<text x="123" y="611" fill="#FFFFFF" font-size="19" font-weight="700" text-anchor="middle">i</text>
+<text x="151" y="613" fill="#F4F7FF" font-size="24" font-weight="700">需要帮助时</text>
+<text x="122" y="656" fill="#C5D1EA" font-size="18">无论选择哪一项，你都可以先停下来寻求支持。</text>
+<line x1="122" y1="681" x2="657" y2="681" stroke="#465A7E"/>
+<text x="122" y="719" fill="#E4EBFF" font-size="19" font-weight="600">可以联系</text>
+<text x="122" y="751" fill="#C5D1EA" font-size="17">信任的人、学校心理中心或心理援助热线</text>
+<text x="122" y="788" fill="#E4EBFF" font-size="19" font-weight="600">如果此刻有立即危险</text>
+<text x="122" y="821" fill="#C5D1EA" font-size="17">请让身边的人陪伴，并联系当地急救服务。</text>
+<text x="122" y="854" fill="#9EB4F2" font-size="16">正式上线时应补充学校已核实的联系方式和服务时间</text>
+
+<g filter="url(#shadow)"><rect x="800" y="176" width="710" height="700" rx="28" fill="#182235" stroke="#303C58" stroke-width="1.5"/></g>
+<text x="845" y="229" fill="#F7F9FF" font-size="21" font-weight="600">PHQ-9  情绪筛查</text>
+<rect x="1218" y="199" width="145" height="42" rx="10" fill="#202D48" stroke="#465FFF" stroke-width="1.4"/>
+<text x="1290" y="226" fill="#BAC7FF" font-size="16" font-weight="600" text-anchor="middle">ⓘ 了解 PHQ-9</text>
+<text x="1460" y="229" fill="#AEBBD4" font-size="17" text-anchor="end">第 9 / 9 题</text>
+<rect x="845" y="263" width="620" height="7" rx="4" fill="#293753"/>
+<rect x="845" y="263" width="620" height="7" rx="4" fill="#465FFF"/>
+<text x="845" y="328" fill="#F7F9FF" font-size="29" font-weight="650">有不如死掉或用某种方式</text>
+<text x="845" y="369" fill="#F7F9FF" font-size="29" font-weight="650">伤害自己的念头</text>
+<text x="845" y="410" fill="#AEBBD4" font-size="17">在过去两周里，这种想法出现得有多频繁？</text>
+<rect x="845" y="443" width="620" height="58" rx="13" fill="#1A263B" stroke="#34415E"/>
+<circle cx="877" cy="472" r="10" fill="#1A263B" stroke="#7E8BA7" stroke-width="2"/>
+<text x="905" y="480" fill="#CBD5E9" font-size="20">完全不会</text>
+<rect x="845" y="514" width="620" height="58" rx="13" fill="#1A263B" stroke="#34415E"/>
+<circle cx="877" cy="543" r="10" fill="#1A263B" stroke="#7E8BA7" stroke-width="2"/>
+<text x="905" y="551" fill="#CBD5E9" font-size="20">有几天</text>
+<rect x="845" y="585" width="620" height="58" rx="13" fill="#1A263B" stroke="#34415E"/>
+<circle cx="877" cy="614" r="10" fill="#1A263B" stroke="#7E8BA7" stroke-width="2"/>
+<text x="905" y="622" fill="#CBD5E9" font-size="20">超过一半的日子</text>
+<rect x="845" y="656" width="620" height="58" rx="13" fill="#1A263B" stroke="#34415E"/>
+<circle cx="877" cy="685" r="10" fill="#1A263B" stroke="#7E8BA7" stroke-width="2"/>
+<text x="905" y="693" fill="#CBD5E9" font-size="20">几乎每天</text>
+<rect x="845" y="749" width="180" height="62" rx="12" fill="#172136" stroke="#465FFF" stroke-width="1.5"/>
+<text x="935" y="788" fill="#B9C8F4" font-size="22" font-weight="600" text-anchor="middle">上一题</text>
+<rect x="1043" y="749" width="422" height="62" rx="12" fill="#465FFF"/>
+<text x="1254" y="788" fill="#F7F9FF" font-size="22" font-weight="600" text-anchor="middle">提交并查看结果  →</text>
+<text x="1155" y="850" fill="#8FA2CB" font-size="16" text-anchor="middle">暂停作答</text>
+</svg>

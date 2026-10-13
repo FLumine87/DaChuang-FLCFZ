@@ -19,6 +19,10 @@ import AdminCases from './admin/pages/AdminCases';
 import AdminAgentWorkbench from './admin/pages/AdminAgentWorkbench';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
+import WelcomePage from './pages/WelcomePage';
+import FirstRunQuestionnaire from './pages/first/FirstRunQuestionnaire';
+import FirstRunSupplement from './pages/first/FirstRunSupplement';
+import FirstRunResult from './pages/first/FirstRunResult';
 import { getCurrentSession } from './auth/session';
 
 function RequireRole({ role, children }: { role: 'admin' | 'user'; children: ReactElement }) {
@@ -42,6 +46,45 @@ export default function App() {
       {/* 旧地址兼容：原 /auth 是「介绍 + 登录」合页，现统一到登录页 */}
       <Route path="/auth" element={<Navigate to="/login" replace />} />
       <Route path="/selector" element={<SystemSelector />} />
+
+      {/* 个人端首次登录的欢迎页：独立成页（不带侧栏，与登录页同一套顶栏）。
+          只在账号第一次登录时由登录页跳进来；主页空状态的入口也会走到这里，
+          所以它本身不做"是不是首次"的判断，随时可以当"选量表"页用。 */}
+      <Route
+        path="/personal/welcome"
+        element={
+          <RequireRole role="user">
+            <WelcomePage />
+          </RequireRole>
+        }
+      />
+
+      {/* 首次引导的三步向导：01 逐题作答 → 02 补充记录（可选）→ 03 本次结果。
+          同样是独立成页（与欢迎页共用外壳），不走工作台的侧栏布局。 */}
+      <Route
+        path="/personal/first/questionnaire"
+        element={
+          <RequireRole role="user">
+            <FirstRunQuestionnaire />
+          </RequireRole>
+        }
+      />
+      <Route
+        path="/personal/first/supplement"
+        element={
+          <RequireRole role="user">
+            <FirstRunSupplement />
+          </RequireRole>
+        }
+      />
+      <Route
+        path="/personal/first/result"
+        element={
+          <RequireRole role="user">
+            <FirstRunResult />
+          </RequireRole>
+        }
+      />
 
       <Route path="/personal" element={<RequireRole role="user"><Layout /></RequireRole>}>
         <Route index element={<Navigate to="/personal/dashboard" replace />} />

@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ClipboardCheck,
   Moon,
+  PlayCircle,
   Plus,
   Sparkles,
 } from "lucide-react";
@@ -35,6 +36,7 @@ import {
 } from "../data/questionnaireData";
 import type { WarningEvent } from "../data/mockData";
 import { getCurrentSession } from "../auth/session";
+import { getPendingScale } from "../services/firstRun";
 
 const warningAppearance: Record<WarningEvent["level"], { label: string; valueClassName: string; iconClassName: string }> = {
   green: { label: "绿色", valueClassName: "text-success-600", iconClassName: "bg-success-50 text-success-600" },
@@ -152,6 +154,11 @@ export default function Dashboard() {
     userProfile,
   } = data;
   const signedInUsername = getCurrentSession()?.username || "同学";
+  /* 首次引导：这个账号有没有一份"选了但没提交"的量表。
+     hasRecords 才是"有没有记录"的判据，两者互不替代——
+     跳过引导的人没有记录但没有进行中的量表；点开又退出的人则有。 */
+  const hasRecords = screeningRecords.length > 0;
+  const pendingScale = hasRecords ? null : getPendingScale(signedInUsername);
   const recentWarnings = warningEvents.flatMap((alert) => {
     if (alert.status === "resolved") return [];
     const daysAgo = calendarDaysAgo(alert.createdAt);
@@ -261,20 +268,46 @@ export default function Dashboard() {
           </span>
           <div>
             <h2 className="text-lg font-semibold text-slate-800">
-              欢迎回来，{signedInUsername}
+              {hasRecords ? `欢迎回来，${signedInUsername}` : `你好，${signedInUsername}`}
             </h2>
             <p className="mt-1.5 text-xs leading-5 text-slate-500">
               {[userProfile?.stage, userProfile?.major, userProfile?.campus]
                 .filter(Boolean)
                 .join(" · ")}
             </p>
-            <p className="mt-2 text-xs text-slate-400">{dayTip}</p>
+            {/* 还没有任何筛查记录时，把"这里现在是什么状态、下一步点什么"
+                直接写在卡面上，而不是留一句与当前状态无关的日常提示。
+                引导里跳过的人、以及点开量表又中途退出的人，看到的入口不同：
+                前者是"开始首次筛查"（回欢迎页挑一个方向），
+                后者是"继续筛查"（直接回到他上次选的那份量表）。 */}
+            <p className="mt-2 text-xs text-slate-400">
+              {hasRecords
+                ? dayTip
+                : pendingScale
+                  ? "还没有筛查记录 · 上次选的方向还没做完，可以接着来。"
+                  : "还没有筛查记录 · 从一次简短的筛查开始，结果会保存在这里。"}
+            </p>
           </div>
         </div>
-        <Link to="/personal/screening" className="ui-button ui-button-primary">
-          <Plus className="h-4 w-4" />
-          开始今日筛查
-        </Link>
+        {hasRecords ? (
+          <Link to="/personal/screening" className="ui-button ui-button-primary">
+            <Plus className="h-4 w-4" />
+            开始今日筛查
+          </Link>
+        ) : pendingScale ? (
+          <Link
+            to={`/personal/first/questionnaire?scale=${encodeURIComponent(pendingScale)}`}
+            className="ui-button ui-button-primary"
+          >
+            <PlayCircle className="h-4 w-4" />
+            继续筛查
+          </Link>
+        ) : (
+          <Link to="/personal/welcome" className="ui-button ui-button-primary">
+            <Plus className="h-4 w-4" />
+            开始首次筛查
+          </Link>
+        )}
       </section>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard

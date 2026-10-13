@@ -9,6 +9,7 @@ import {
   Lock,
   Server,
 } from "lucide-react";
+import Aurora from "../components/Aurora";
 
 /* ============================================================================
    「作品介绍」页的章节内容（导航项 / 屏幕定义 / 四个章节与示意图）
@@ -73,21 +74,10 @@ export function Section({
   );
 }
 
-/* 动态背景层「极光」：只在内容屏使用（登录屏刻意不放，保持干净）。
-   纯 CSS 动画，只动 transform；光斑颜色与透明度都写在 index.css 的 .aurora 里。 */
-export function Aurora() {
-  return (
-    <div className="aurora" aria-hidden="true">
-      <span />
-      <span />
-      <span />
-      {/* 大片半透明"玻璃"形状：自己生成，缓慢漂移（比参考站的静态图更"动"） */}
-      <i className="glass glass-1" />
-      <i className="glass glass-2" />
-      <i className="glass glass-3" />
-    </div>
-  );
-}
+/* 动态背景层「极光」已上移到 components/Aurora.tsx（工作台也要复用同一层）。
+   本文件里 Section 自己要用，同时原样再导出，
+   主页的 `import { Aurora } from "./introSections"` 不用改。 */
+export { Aurora };
 
 /* 示意图统一外壳：放大内边距，让卡片撑满一屏 */
 function Panel({ label, children }: { label: string; children: ReactNode }) {

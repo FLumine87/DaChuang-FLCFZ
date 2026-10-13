@@ -23,6 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { getCurrentSession, logout } from "../auth/session";
+import Aurora from "./Aurora";
 import BrandLogo from "./BrandLogo";
 
 interface NavigationItem {
@@ -227,10 +228,18 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
 
   return (
     <div
-      className="app-shell min-h-screen bg-slate-50"
+      className="app-shell min-h-screen bg-page text-slate-800"
       data-collapsed={collapsed}
       data-mobile-open={mobileOpen}
     >
+      {/* 环境光背景：与主页内容屏同一层极光，固定铺在整个工作台之下。
+          侧栏与顶栏都是毛玻璃，光斑会从玻璃后面透出来——这正是登录页/主页
+          「同一张背景、模糊度不同」的分层方式。 */}
+      <div className="app-ambient">
+        <Aurora />
+        {/* 与登录页同一层细网格纹理，压在极光之上，往下淡出 */}
+        <div className="app-grid" />
+      </div>
       <a
         href="#main-content"
         className="sr-only fixed left-4 top-4 z-[60] rounded-lg bg-primary-500 p-3 text-white focus:not-sr-only"
@@ -255,7 +264,9 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         aria-label={isAdmin ? "管理端导航" : "个人端导航"}
         inert={isMobile && !mobileOpen}
       >
-        <div className="flex h-24 shrink-0 items-center justify-between px-6">
+        {/* 品牌行高度与顶栏一致（都是 64px）：侧栏与顶栏的底边因此落在同一条
+            水平线上，不再出现"侧栏头比顶栏高一截"的错位。 */}
+        <div className="flex h-16 shrink-0 items-center justify-between px-5">
           <Link
             to={`${root}/dashboard`}
             onClick={closeNavigation}
@@ -305,8 +316,10 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             </div>
           ))}
         </nav>
-        <div className="sidebar-label mx-5 mb-5 mt-auto shrink-0 rounded-2xl bg-slate-50 p-5 text-center">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white text-primary-500">
+        {/* 底部说明卡：与卡片同一套圆角与"淡玻璃"底色，
+            在毛玻璃侧栏上不再是一块突兀的实心浅灰块。 */}
+        <div className="sidebar-label mx-5 mb-5 mt-auto shrink-0 rounded-2xl border border-slate-200/70 bg-white/70 p-5 text-center">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
             <ShieldCheck className="h-5 w-5" />
           </div>
           <p className="text-sm font-semibold text-slate-800">
@@ -355,8 +368,11 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         )}
       </button>
       <div className="app-frame" inert={isMobile && mobileOpen}>
-        <header className="sticky top-0 z-20 flex h-[82px] items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 sm:px-7">
-          <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-5">
+        {/* 顶栏：与登录页/主页同一套做法——不再有自己的底色，只做毛玻璃，
+            高度同为 64px。原先的"白底 + 下边框"会横出一条色带，
+            与页面底色割裂，正是登录页那版刻意去掉的做法。 */}
+        <header className="nav-blur sticky top-0 z-20 flex h-16 items-center gap-3 px-4 sm:px-7">
+          <div className="flex shrink-0 items-center gap-3">
             <button
               className="ui-icon-button lg:hidden"
               aria-label="打开导航"
@@ -365,8 +381,22 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="relative w-full max-w-sm" ref={searchContainerRef}>
-              <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+            {/* 品牌 ｜ 当前页名：与登录页/主页顶栏同一做法，让人一眼知道在哪一页。
+                whitespace-nowrap 必须加，否则窄屏下 flex 会把中文逐字换行。 */}
+            <span className="hidden whitespace-nowrap text-[15px] font-medium text-primary-600 sm:inline">
+              {isAdmin ? "管理端" : "个人端"}
+            </span>
+            <span
+              aria-hidden="true"
+              className="hidden h-5 w-px bg-slate-300/80 sm:block"
+            />
+            <span className="hidden whitespace-nowrap text-[15px] font-medium text-slate-700 sm:inline">
+              {active.label}
+            </span>
+          </div>
+          <div className="flex min-w-0 flex-1 justify-center px-1">
+            <div className="relative w-full max-w-xs" ref={searchContainerRef}>
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <input
                 ref={searchRef}
                 value={query}
@@ -385,21 +415,21 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                 aria-expanded={searchOpen}
                 aria-controls="page-search-results"
                 placeholder="搜索页面…"
-                className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm sm:pr-16"
+                className="h-10 w-full rounded-xl border border-slate-200/80 bg-white/70 pl-10 pr-3 text-sm backdrop-blur transition-colors hover:border-slate-300 sm:pr-16"
               />
-              <kbd className="pointer-events-none absolute right-2.5 top-2.5 hidden rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[12px] text-slate-400 sm:block">
+              <kbd className="pointer-events-none absolute right-2.5 top-2.5 hidden rounded border border-slate-200/80 bg-white/60 px-1.5 py-0.5 text-[12px] text-slate-400 sm:block">
                 ⌘ K
               </kbd>
               {searchOpen && (
                 <div
                   id="page-search-results"
-                  className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-lg"
+                  className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)]"
                 >
                   <p className="px-3 py-2 text-xs text-slate-400">快速前往</p>
                   {results.length ? (
                     results.map((item) => (
                       <Link
-                        className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-slate-600 hover:bg-primary-50 hover:text-primary-500"
+                        className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-600 hover:bg-primary-50 hover:text-primary-600"
                         key={item.path}
                         to={item.path}
                         onClick={closeNavigation}
@@ -418,15 +448,15 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               )}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
                 aria-label="用户菜单"
                 aria-expanded={profileOpen}
-                className="flex items-center gap-2.5 rounded-lg py-1 sm:pl-1"
+                className="flex items-center gap-2.5 rounded-xl py-1 pl-1 pr-1.5 transition-colors duration-200 hover:bg-white/70 sm:pr-2.5"
               >
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-50 text-sm font-semibold text-primary-500">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-sm font-semibold text-primary-600">
                   {username.slice(0, 1).toUpperCase()}
                 </span>
                 <span className="hidden text-left sm:block">
@@ -440,7 +470,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                 <ChevronDown className="hidden h-4 w-4 text-slate-400 sm:block" />
               </button>
               {profileOpen && (
-                <div className="absolute right-0 top-full mt-3 w-56 rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
+                <div className="absolute right-0 top-full mt-3 w-56 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)]">
                   <div className="border-b border-slate-100 px-2 pb-3">
                     <p className="truncate text-sm font-semibold text-slate-800">
                       {username}
@@ -452,7 +482,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                   <Link
                     to={`${root}/cases`}
                     onClick={closeNavigation}
-                    className="mt-2 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-600 hover:bg-slate-50"
+                    className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"
                   >
                     <UserRound className="h-4 w-4" />
                     {isAdmin ? "案例管理" : "我的档案"}
@@ -460,7 +490,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                   <button
                     disabled={signingOut}
                     onClick={handleLogout}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
                   >
                     <LogOut className="h-4 w-4" />
                     {signingOut ? "正在退出…" : "退出登录"}
@@ -468,55 +498,68 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                 </div>
               )}
             </div>
-            {/* 深浅色切换：放在用户名右侧的顶栏区域 */}
+            {/* 深浅色切换：与登录页/主页顶栏同一个按钮（无底框、36px 圆角方块、
+                图标 hover 旋转），三处顶栏因此完全一致。 */}
             <button
               type="button"
               onClick={toggleTheme}
               aria-pressed={isDark}
               aria-label={isDark ? "切换为浅色模式" : "切换为深色模式"}
               title={isDark ? "切换为浅色模式" : "切换为深色模式"}
-              className="ui-icon-button"
+              className="group grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-500 transition-all duration-200 hover:bg-white/80 hover:text-primary-700 active:scale-90 active:bg-white"
             >
-              {isDark ? (
-                <Moon className="h-5 w-5" strokeWidth={1.7} />
-              ) : (
-                <Sun className="h-5 w-5" strokeWidth={1.7} />
-              )}
+              <span className="transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:rotate-[120deg] group-active:rotate-180">
+                {isDark ? (
+                  <Sun className="h-5 w-5" />
+                ) : (
+                  <Moon className="h-5 w-5" />
+                )}
+              </span>
             </button>
           </div>
         </header>
         <main className="app-content" id="main-content" tabIndex={-1}>
-          <div className="mb-7 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-semibold text-slate-800">
-                {active.label}
-              </h1>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                {active.description}
-              </p>
-            </div>
-            <nav
-              aria-label="面包屑"
-              className="flex items-center gap-2 pt-1 text-sm"
-            >
+          {/* 页面头：与登录页卡片同一套层级——眉标（13px / 字距 .16em / 主色）
+              + 标题 + 说明。原先只有 h1 + 说明，看起来是"后台模板"，
+              加上眉标后两端页面与登录页的阅读节奏一致了。 */}
+          <div className="mb-7">
+            <p className="app-page-eyebrow">
+              {isAdmin ? "管理端" : "个人端"} · {active.group}
+            </p>
+            <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h1 className="app-page-title text-slate-900">
+                  {active.label}
+                </h1>
+                <p className="mt-2.5 max-w-[760px] text-[15px] leading-7 text-slate-600">
+                  {active.description}
+                </p>
+              </div>
+              {/* 面包屑只在二级页出现。首页上「个人首页 > 个人首页」是同一句话
+                  说两遍，标题区已经有了，这里就不必再重复一遍。 */}
               {!isDashboard && (
-                <>
+                <nav
+                  aria-label="面包屑"
+                  className="flex items-center gap-2 pt-1 text-sm"
+                >
                   <Link
                     to={`${root}/dashboard`}
-                    className="text-slate-500 hover:text-primary-500"
+                    className="text-slate-500 transition-colors hover:text-primary-600"
                   >
                     {isAdmin ? "管理首页" : "个人首页"}
                   </Link>
                   <ChevronRight className="h-4 w-4 text-slate-400" />
-                </>
+                  <span className="text-slate-700">{active.label}</span>
+                </nav>
               )}
-              <span className="text-slate-800">{active.label}</span>
-            </nav>
+            </div>
           </div>
-          <div className="page-body">
+          {/* key 跟着路由走：每次换页重放一次 260ms 的淡入上浮，
+              与登录页 ↔ 主页的转场是同一段动画（.page-enter）。 */}
+          <div className="page-body page-enter" key={location.pathname}>
             <Outlet />
           </div>
-          <footer className="mt-10 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-5 text-xs text-slate-400">
+          <footer className="mt-10 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-5 text-xs text-slate-400">
             <span>心理筛查与健康管理</span>
             <span>让每一次关怀，都有所回应</span>
           </footer>

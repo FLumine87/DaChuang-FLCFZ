@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>个人首页 · 心理筛查预警系统（原型）</title>
+<link rel="stylesheet" href="../../prototype/assets/fonts/fonts.css">
+<link rel="stylesheet" href="../../prototype/assets/tokens.css">
+<link rel="stylesheet" href="../../prototype/assets/base.css">
+<link rel="stylesheet" href="../../prototype/assets/shell.css">
+<script>
+try {
+  var m = localStorage.getItem('proto-mode') === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-mode', m);
+} catch (e) {}
+</script>
+
+<style>
+  /* 样张局部样式：眉标 + 品牌副标题独立成行 */
+  .brand__sub { display: block; }
+  /* 眉标：从「标签」改成「一行信息」—— 15px / 500 / 字距收到 0.02em / 次要色。
+     原来 13px + 600 + 0.06em + 主色蓝 四条叠一起，看着像标签不像问候。 */
+  .pagehead__eyebrow {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--txt-2);
+  }
+  /* 深色模式下靠字重分不开层级，颜色是唯一的分层手段：
+     问候拿品牌色（有温度的那半句），日期退到 --txt-3（纯信息），
+     这样眉标 / H1 / 说明行才是三档，而不是和说明行同色的两档。 */
+  .pagehead__eyebrow .pagehead__greet { color: var(--accent); }
+  .pagehead__date { color: var(--txt-3); }
+
+  /* ---------- 首屏：不用卡片容器，标题块直接落在页面上 ---------- */
+  /* 三级字号：说明 15 < 眉标 20 < 标题 40 */
+  .hero3 { display: grid; gap: 44px; }
+  .hero3__act { display: flex; align-items: center; gap: var(--sp-6); flex-wrap: wrap; }
+  /* 悬挂眉标：眉标顶格，标题与说明一起缩进，形成层次 */
+  .hero3__title {
+    margin: 14px 0 0 34px;
+    font-size: 40px; font-weight: 600; line-height: 1.16; letter-spacing: -0.01em;
+  }
+  .hero3__desc {
+    margin: 16px 0 0 34px;
+    font-size: var(--fs-read); line-height: 1.7; color: var(--txt-2);
+  }
+  .hero3__modes {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-5);
+  }
+  .hero3__mode {
+    display: flex; align-items: center; gap: var(--sp-5);
+    padding: 22px 22px;
+    border-radius: var(--r-card);
+    background: var(--bg-card);
+    transition: background .18s ease, transform .18s ease;
+  }
+  .hero3__mode:hover { background: var(--hover-surface); }
+  .hero3__icon {
+    display: grid; place-items: center; flex: none;
+    width: 38px; height: 38px; border-radius: var(--r-control);
+    background: var(--accent-tint); color: var(--accent);
+  }
+  .hero3__icon svg { width: 19px; height: 19px; }
+  .hero3__text { display: grid; gap: 3px; min-width: 0; }
+  /* 入口标题不用链接色（全局 a{color:accent} 会让三个标题都变蓝，首页颜色预算被抢走） */
+  .hero3__t { font-size: var(--fs-read); font-weight: 600; color: var(--txt-1); }
+  .hero3__m { font-size: var(--fs-meta); color: var(--txt-3); }
+  .hero3__meta { margin: 0; font-size: var(--fs-meta); color: var(--txt-3); }
+
+  /* ---------- 区块标题提一档：和 40px 的首屏标题拉开两级，而不是断崖 ---------- */
+  .card__title { font-size: 1.25rem; }
+
+  /* 抗锯齿：原型 base.css 里是 antialiased（灰度抗锯齿，中文小字发糊），
+     React 端 index.css:162 已改回 auto，这里跟上。 */
+  body { -webkit-font-smoothing: auto; -moz-osx-font-smoothing: auto; }
+
+  /* ---------- 预警块 ---------- */
+  .alertblock__title { margin: var(--sp-5) 0 0; font-size: var(--fs-title); font-weight: 700; }
+  .alertblock__desc { margin: var(--sp-3) 0 0; font-size: var(--fs-base); line-height: var(--lh-cjk); color: var(--txt-2); max-width: 62ch; }
+
+  /* ---------- 你的最近 ---------- */
+  .recent__conclusion { margin: var(--sp-5) 0 0; font-size: 1.5rem; font-weight: 600; line-height: 1.3; }
+  .mrows { margin-top: var(--sp-6); }
+  .mrow {
+    display: grid; grid-template-columns: 52px 96px 1fr auto;
+    align-items: center; gap: var(--sp-6);
+    padding: 13px 0; border-top: 1px solid var(--line);
+  }
+  .mrow:first-child { border-top: 0; }
+  .mrow__name { font-size: var(--fs-base); color: var(--txt-3); }
+  .mrow__spark { width: 96px; height: 26px; display: block; }
+  .mrow__val { font-size: var(--fs-base); font-weight: 600; }
+  .mrow__delta { font-size: var(--fs-meta); color: var(--txt-3); white-space: nowrap; }
+  .mrow__delta--good { color: var(--state-green-text); }
+  .mrow__delta--bad { color: var(--state-orange-text); }
+  .recent__similar {
+    margin: var(--sp-6) 0 0; padding-top: var(--sp-5);
+    border-top: 1px solid var(--line);
+    font-size: var(--fs-base); line-height: var(--lh-cjk); color: var(--txt-2);
+  }
+  .reclist { list-style: none; margin: var(--sp-4) 0 0; padding: 0; }
+  .reclist li {
+    display: grid; grid-template-columns: 52px 40px minmax(0, 1fr) auto;
+    align-items: center; gap: var(--sp-4);
+    padding: 12px 0; border-top: 1px solid var(--line);
+    font-size: var(--fs-base);
+  }
+  .reclist li:first-child { border-top: 0; }
+  .reclist__mod { font-size: var(--fs-meta); color: var(--txt-3); }
+  .reclist__sum { color: var(--txt-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- 常驻求助条 ---------- */
+  .helpbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5);
+    margin-top: var(--sp-8); padding: 14px 20px;
+    border: 1px solid var(--line); border-radius: var(--r-card);
+    background: var(--bg-raised);
+    font-size: var(--fs-meta); color: var(--txt-2);
+  }
+  .helpbar__label { font-weight: 600; color: var(--txt-1); }
+  .helpbar__sep { color: var(--txt-3); }
+
+  /* ---------- 两个动作：各带一行状态，说明"为什么现在点" ---------- */
+  .hero3__act { display: flex; align-items: flex-start; gap: 40px; flex-wrap: wrap; }
+  .act { display: grid; gap: 10px; justify-items: start; }
+  .act__meta { font-size: var(--fs-meta); color: var(--txt-3); }
+  .act__meta--due { color: var(--accent); }
+  .act__meta--invite { color: var(--txt-2); }
+  .btn--invite { border-color: var(--accent-border); color: var(--accent); }
+</style>
+</head>
+<body data-surface="personal">
+
+<div class="app" data-shell='{"surface":"personal","active":"home","crumb":"个人首页"}'>
+  <aside class="sidebar" data-shell-sidebar></aside>
+  <div class="main">
+    <header class="topbar" data-shell-topbar></header>
+    <main class="content">
+      <div class="content__inner">
+
+        <!-- ============ 首屏 ============ -->
+        <div class="hero3">
+          <div>
+            <p class="pagehead__eyebrow"><span class="pagehead__greet">下午好，xiaoyu</span><span class="pagehead__date"> · 3 月 20 日 星期五</span></p>
+            <h1 class="hero3__title">今天，想说说自己吗？</h1>
+            <p class="hero3__desc">一次记录约 2–3 分钟，写几句、说一段、或者拍一张都可以。<br>系统会把三种线索一起看。</p>
+          </div>
+
+          <div class="hero3__act">
+            <div class="act">
+              <a class="btn btn--primary hero3__btn" href="personal-collect.html">记录一下现在</a>
+              <span class="act__meta">今天 08:20 记过一次</span>
+            </div>
+            <div class="act">
+              <a class="btn hero3__btn btn--invite" href="personal-screening.html">评估心理状态</a>
+              <span class="act__meta act__meta--due">距上次评估 16 天，可以做一次了</span>
+            </div>
+          </div>
+
+          
+        </div>
+
+        <!-- ============ 需要你处理（有预警才出现） ============ -->
+        <section class="card alertblock" style="margin-top:44px">
+          <div class="spread" style="align-items:flex-start;gap:var(--sp-6)">
+            <div style="flex:1;min-width:0">
+              <div class="inline" style="gap:var(--sp-4)">
+                <span class="pill pill--red"><span class="pill__dot"></span>红色预警</span>
+                <span class="dim" style="font-size:var(--fs-meta)">触发于 2026-03-18 23:10 · 已同步给值班咨询师</span>
+              </div>
+              <p class="alertblock__title">连续负性情绪 + 睡眠下降</p>
+              <p class="alertblock__desc">近 7 天情绪从 62 降到 45，睡眠从 6.8 小时降到 5.1 小时；命中历史「期中周压力—睡眠下降—情绪低落」模式。</p>
+            </div>
+            <div class="inline" style="gap:var(--sp-4);flex:none">
+              <a class="btn btn--primary" href="personal-alerts.html">现在可以做什么</a>
+              <button class="btn" type="button">标记已处理</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 你的最近 ============ -->
+        <div class="grid grid--sidebar" style="margin-top:var(--sp-6)">
+
+          <section class="card">
+            <div class="spread" style="align-items:baseline">
+              <div class="eyebrow">最近 30 天 · 已连续记录 12 天</div>
+              <span class="pill pill--green"><span class="pill__dot"></span>平稳</span>
+            </div>
+            <p class="recent__conclusion">这周比上周平稳一些</p>
+
+            <div class="mrows">
+              <div class="mrow">
+                <span class="dim__name">情绪</span>
+                <svg class="dim__spark" viewBox="0 0 96 26" aria-hidden="true"><polyline fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" points="2,20 12,18 22,15 32,17 42,12 52,14 62,10 72,11 82,7 94,5"/></svg>
+                <span class="dim__val">波动</span>
+                <span class="dim__delta dim__delta--good">较上周 好转</span>
+              </div>
+              <div class="mrow">
+                <span class="dim__name">睡眠</span>
+                <svg class="dim__spark" viewBox="0 0 96 26" aria-hidden="true"><polyline fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" points="2,7 12,10 22,13 32,16 42,19 52,16 62,15 72,17 82,13 94,13"/></svg>
+                <span class="dim__val">6.1 小时</span>
+                <span class="dim__delta dim__delta--bad">较上周 ↓ 0.8 小时</span>
+              </div>
+              <div class="mrow">
+                <span class="dim__name">压力</span>
+                <svg class="dim__spark" viewBox="0 0 96 26" aria-hidden="true"><polyline fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" points="2,19 12,16 22,13 32,9 42,6 52,10 62,13 72,16 82,14 94,13"/></svg>
+                <span class="dim__val">偏高</span>
+                <span class="dim__delta dim__delta--bad">较上周 ↑ 3</span>
+              </div>
+            </div>
+
+            <p class="recent__similar">
+              这次的模式，和 <a href="personal-retrieval.html">3 月 12 日、2 月 28 日</a> 很像 —— 都是任务堆叠后睡眠先掉。
+            </p>
+          </section>
+
+          <section class="card">
+            <div class="spread" style="align-items:baseline">
+              <div class="eyebrow">最近记录</div>
+              <a class="btn btn--ghost btn--sm" href="personal-profile.html">查看全部</a>
+            </div>
+            <ul class="reclist">
+              <li><span class="mono dim">03-20</span><span class="reclist__mod">文本</span><span class="reclist__sum">“作业堆着做不完，晚上三点才睡。”</span><span class="pill pill--orange"><span class="pill__dot"></span>需关注</span></li>
+              <li><span class="mono dim">03-18</span><span class="reclist__mod">语音</span><span class="reclist__sum">语速较基线下降 18%</span><span class="pill pill--orange"><span class="pill__dot"></span>需关注</span></li>
+              <li><span class="mono dim">03-17</span><span class="reclist__mod">图像</span><span class="reclist__sum">用色偏暗、线条收紧</span><span class="pill pill--yellow"><span class="pill__dot"></span>留意</span></li>
+              <li><span class="mono dim">03-15</span><span class="reclist__mod">文本</span><span class="reclist__sum">“今天还行，跟室友吃了饭。”</span><span class="pill pill--green"><span class="pill__dot"></span>平稳</span></li>
+              <li><span class="mono dim">03-13</span><span class="reclist__mod">语音</span><span class="reclist__sum">语速与基线接近</span><span class="pill pill--green"><span class="pill__dot"></span>平稳</span></li>
+            </ul>
+          </section>
+
+        </div>
+
+        <!-- ============ 今天可以做的 ============ -->
+        <section class="card" style="margin-top:var(--sp-6)">
+          <div class="card__head card__head--tight">
+            <div>
+              <h2 class="card__title">今天可以做的</h2>
+              <p class="card__desc">从一件小事开始，完成后点一下打勾</p>
+            </div>
+            <span class="pill pill--brand" data-plan-count>0 / 3</span>
+          </div>
+          <div class="homex-plan" data-plan>
+            <button class="homex-plan__item" type="button" aria-pressed="false">
+              <span class="homex-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <span class="homex-plan__text">
+                <span class="homex-plan__title">睡前写 3 条情绪日记</span>
+                <span class="homex-plan__meta">约 5 分钟 · 与近期睡眠困扰对应</span>
+              </span>
+            </button>
+            <button class="homex-plan__item" type="button" aria-pressed="false">
+              <span class="homex-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <span class="homex-plan__text">
+                <span class="homex-plan__title">给一位朋友发条消息</span>
+                <span class="homex-plan__meta">约 10 分钟 · 缓解社交回避倾向</span>
+              </span>
+            </button>
+            <button class="homex-plan__item" type="button" aria-pressed="false">
+              <span class="homex-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <span class="homex-plan__text">
+                <span class="homex-plan__title">完成一次 5-4-3-2-1 地面化练习</span>
+                <span class="homex-plan__meta">约 8 分钟 · 压力升高时使用</span>
+              </span>
+            </button>
+          </div>
+          <p class="homex-aux__note" style="margin-top:var(--sp-5)">
+            这些建议来自 <a href="personal-rag.html">RAG 分析</a>，依据是相似历史模式里恢复得比较快的那几条路径。
+          </p>
+        </section>
+
+        <!-- ============ 常驻求助条 ============ -->
+        <div class="helpbar">
+          <span class="helpbar__label">需要人聊聊？</span>
+          <span>心理援助热线 <b class="mono">12356</b>（24 小时）</span>
+          <span class="helpbar__sep">·</span>
+          <a href="#">预约校心理中心</a>
+          <span class="helpbar__sep">·</span>
+          <span>紧急联系人 辅导员张老师 <b class="mono">138 **** 6621</b></span>
+        </div>
+      </main>
+  </div>
+</div>
+
+<script>
+/* 今日行动：打勾 + 进度（原型内本地状态，不落库） */
+(function () {
+  var plan = document.querySelector('[data-plan]');
+  var counter = document.querySelector('[data-plan-count]');
+  if (!plan || !counter) return;
+  var items = Array.prototype.slice.call(plan.querySelectorAll('.homex-plan__item'));
+  function refresh() {
+    var done = items.filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; }).length;
+    counter.textContent = done + ' / ' + items.length;
+    counter.className = done === items.length ? 'pill pill--green' : 'pill pill--brand';
+  }
+  items.forEach(function (b) {
+    b.addEventListener('click', function () {
+      b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+      refresh();
+    });
+  });
+  refresh();
+})();
+
+/* 快捷提问：点一下填入输入框（原型不接真实模型） */
+(function () {
+  var input = document.querySelector('.homex-ask__input input');
+  if (!input) return;
+  document.querySelectorAll('.homex-ask__qs .chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      input.value = c.textContent.trim();
+      input.focus();
+    });
+  });
+})();
+</script>
+<script src="../../prototype/assets/shell.js"></script>
+<script src="../../prototype/assets/app.js"></script>
+
+<script>
+/* 样张：顶栏从「死文字」改成可点的位置面包屑 */
+(function () {
+  var nav = document.querySelector('.crumbs');
+  if (nav) {
+    nav.innerHTML = '<a href="personal-home.html">我的空间</a>' +
+                    '<span class="crumbs__sep" aria-hidden="true">›</span>' +
+                    '<span class="crumbs__now">个人首页</span>';
+  }
+  var sub = document.querySelector('.brand__sub');
+  if (sub) sub.textContent = '个人健康空间';
+})();
+</script>
+</body>
+</html>

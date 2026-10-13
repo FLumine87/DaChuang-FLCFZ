@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>个人首页 · 心理筛查预警系统（原型）</title>
+<link rel="stylesheet" href="../../prototype/assets/fonts/fonts.css">
+<link rel="stylesheet" href="../../prototype/assets/tokens.css">
+<link rel="stylesheet" href="../../prototype/assets/base.css">
+<link rel="stylesheet" href="../../prototype/assets/shell.css">
+<script>
+try {
+  var m = localStorage.getItem('proto-mode') === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-mode', m);
+} catch (e) {}
+</script>
+
+<style>
+  /* 样张局部样式：眉标 + 品牌副标题独立成行 */
+  .brand__sub { display: block; }
+  /* 眉标：从「标签」改成「一行信息」—— 15px / 500 / 字距收到 0.02em / 次要色。
+     原来 13px + 600 + 0.06em + 主色蓝 四条叠一起，看着像标签不像问候。 */
+  .pagehead__eyebrow {
+    margin: 0 0 var(--sp-2);
+    font-size: var(--fs-read);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--txt-2);
+  }
+  /* 问候比日期亮一档，让中间的「·」有分工 */
+  .pagehead__date { color: var(--txt-3); }
+</style>
+</head>
+<body data-surface="personal">
+
+<div class="app" data-shell='{"surface":"personal","active":"home","crumb":"个人首页"}'>
+  <aside class="sidebar" data-shell-sidebar></aside>
+  <div class="main">
+    <header class="topbar" data-shell-topbar></header>
+    <main class="content">
+      <div class="content__inner">
+  <div class="pagehead" style="margin-bottom:var(--sp-10)">
+    <div>
+      <p class="pagehead__eyebrow">对比 · 深色模式下页头三行的区分度</p>
+      <h1>眉标怎么拿回区分度</h1>
+      <p class="pagehead__desc">三种都用 15px / 500 / 字距 0.02em，只有颜色不同。H1 与说明行全程不变。</p>
+    </div>
+  </div>
+  <div class="stack" style="gap:var(--sp-10)">
+    <section>
+      <div class="eyebrow">① 现状 · 全灰：问候 --txt-2、日期 --txt-3 —— 问候和下面的说明行同色，分不开</div>
+      <div style="margin-top:var(--sp-5);padding-top:var(--sp-6);border-top:1px solid var(--line)">
+        <div class="pagehead">
+          <div>
+            <p class="pagehead__eyebrow">下午好，xiaoyu<span class="pagehead__date"> · 3 月 20 日 星期五</span></p>
+            <h1>今天，想说说自己吗？</h1>
+            <p class="pagehead__desc">写几句、说一段、或者随手拍一张都可以。一次记录约 2–3 分钟，<br>系统会把三种线索一起看，而不是只看一份量表。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section>
+      <div class="eyebrow">② 整行品牌色：问候 --accent、日期同色降透明度 —— 眉标整体成为独立一层</div>
+      <div style="margin-top:var(--sp-5);padding-top:var(--sp-6);border-top:1px solid var(--line)">
+        <div class="pagehead">
+          <div>
+            <p class="pagehead__eyebrow"><span style="color:var(--accent)">下午好，xiaoyu</span><span style="color:var(--accent);opacity:.72"> · 3 月 20 日 星期五</span></p>
+            <h1>今天，想说说自己吗？</h1>
+            <p class="pagehead__desc">写几句、说一段、或者随手拍一张都可以。一次记录约 2–3 分钟，<br>系统会把三种线索一起看，而不是只看一份量表。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section>
+      <div class="eyebrow">③ 蓝 + 灰：问候 --accent、日期 --txt-3 —— 问候有温度，日期退到信息层</div>
+      <div style="margin-top:var(--sp-5);padding-top:var(--sp-6);border-top:1px solid var(--line)">
+        <div class="pagehead">
+          <div>
+            <p class="pagehead__eyebrow"><span style="color:var(--accent)">下午好，xiaoyu</span><span style="color:var(--txt-3)"> · 3 月 20 日 星期五</span></p>
+            <h1>今天，想说说自己吗？</h1>
+            <p class="pagehead__desc">写几句、说一段、或者随手拍一张都可以。一次记录约 2–3 分钟，<br>系统会把三种线索一起看，而不是只看一份量表。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+  </div>
+</div>
+
+<script>
+/* 今日行动：打勾 + 进度（原型内本地状态，不落库） */
+(function () {
+  var plan = document.querySelector('[data-plan]');
+  var counter = document.querySelector('[data-plan-count]');
+  if (!plan || !counter) return;
+  var items = Array.prototype.slice.call(plan.querySelectorAll('.homex-plan__item'));
+  function refresh() {
+    var done = items.filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; }).length;
+    counter.textContent = done + ' / ' + items.length;
+    counter.className = done === items.length ? 'pill pill--green' : 'pill pill--brand';
+  }
+  items.forEach(function (b) {
+    b.addEventListener('click', function () {
+      b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+      refresh();
+    });
+  });
+  refresh();
+})();
+
+/* 快捷提问：点一下填入输入框（原型不接真实模型） */
+(function () {
+  var input = document.querySelector('.homex-ask__input input');
+  if (!input) return;
+  document.querySelectorAll('.homex-ask__qs .chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      input.value = c.textContent.trim();
+      input.focus();
+    });
+  });
+})();
+</script>
+<script src="../../prototype/assets/shell.js"></script>
+<script src="../../prototype/assets/app.js"></script>
+
+<script>
+/* 样张：顶栏从「死文字」改成可点的位置面包屑 */
+(function () {
+  var nav = document.querySelector('.crumbs');
+  if (nav) {
+    nav.innerHTML = '<a href="personal-home.html">我的空间</a>' +
+                    '<span class="crumbs__sep" aria-hidden="true">›</span>' +
+                    '<span class="crumbs__now">个人首页</span>';
+  }
+  var sub = document.querySelector('.brand__sub');
+  if (sub) sub.textContent = '个人健康空间';
+})();
+</script>
+</body>
+</html>

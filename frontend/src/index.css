@@ -105,6 +105,27 @@
   --color-violet-50: #241a3d;
 }
 
+/* ==========================================================================
+   工作台视觉令牌（个人端 / 管理端共用）
+   —— 值全部取自登录页与主页那套语言，避免两处各写一份魔法数字：
+      · 卡片：rounded-3xl（24px）+ 登录页卡片的同一投影（大范围、低不透明度）
+      · 控件：圆角 12px（对齐登录页按钮/输入框的 rounded-xl）
+      · 顶栏：64px 高、透明 + 毛玻璃（对齐 .nav-blur）
+   ========================================================================== */
+:root {
+  --card-radius: 1.5rem;
+  /* 登录页卡片投影是 0 24px 70px -36px / .35；工作台一屏有十几张卡片，
+     直接照搬会糊成一片灰，所以把不透明度收敛到 .22、范围收窄一档。 */
+  --card-shadow: 0 20px 50px -32px rgba(16, 24, 40, 0.22);
+  --control-radius: 0.75rem;
+  --topbar-height: 4rem;
+}
+
+/* 深色下投影几乎不可见，靠边框与底色分层即可；稍微加深一点保持"浮起"感 */
+.dark {
+  --card-shadow: 0 20px 50px -34px rgba(0, 0, 0, 0.65);
+}
+
 /* 切换主题时的短暂过渡：只在切换的那 ~240ms 内给所有元素加颜色过渡，
    切换完就移除，避免常驻 transition 影响 hover 等交互。 */
 html.theme-switching,
@@ -197,18 +218,19 @@ html.theme-switching *::after {
   .ui-card {
     min-width: 0;
     border: 1px solid var(--color-slate-200);
-    border-radius: 1rem;
+    border-radius: var(--card-radius);
     background: var(--color-white);
+    box-shadow: var(--card-shadow);
   }
   .ui-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    min-height: 42px;
-    padding: 0.625rem 1rem;
+    min-height: 44px;
+    padding: 0.625rem 1.125rem;
     border: 1px solid var(--color-slate-300);
-    border-radius: 0.5rem;
+    border-radius: var(--control-radius);
     background: var(--color-white);
     color: var(--color-slate-700);
     font-size: 0.875rem;
@@ -230,24 +252,31 @@ html.theme-switching *::after {
     border-color: var(--color-primary-600);
     background: var(--color-primary-600);
   }
+  /* 图标按钮：对齐登录页/主页顶栏的「主题切换」——无底框的 38px 圆角方块，
+     悬停才浮出一层淡底。原先的"白底描边"在毛玻璃顶栏上会显成一块补丁。 */
   .ui-icon-button {
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    width: 42px;
-    height: 42px;
-    border: 1px solid var(--color-slate-200);
-    border-radius: 0.75rem;
-    background: var(--color-white);
+    width: 38px;
+    height: 38px;
+    border: 1px solid transparent;
+    border-radius: 0.625rem;
+    background: transparent;
     color: var(--color-slate-500);
     transition:
-      background 150ms,
-      color 150ms;
+      background 200ms,
+      border-color 200ms,
+      color 200ms;
   }
   .ui-icon-button:hover {
-    background: var(--color-slate-50);
-    color: var(--color-primary-500);
+    border-color: var(--color-slate-200);
+    background: color-mix(in srgb, var(--color-white) 80%, transparent);
+    color: var(--color-primary-600);
+  }
+  .ui-icon-button:active {
+    transform: scale(0.92);
   }
   .ui-table-scroll {
     width: 100%;
@@ -260,13 +289,15 @@ html.theme-switching *::after {
     font-size: 0.875rem;
   }
   .ui-table thead {
-    background: var(--color-slate-50);
+    background: color-mix(in srgb, var(--color-slate-50) 60%, transparent);
   }
   .ui-table th {
     padding: 1rem 1.25rem;
     color: var(--color-slate-500);
     font-size: 0.75rem;
     font-weight: 500;
+    /* 表头字距与登录页的眉标同向（略微拉开），小字更透气 */
+    letter-spacing: 0.06em;
     white-space: nowrap;
   }
   .ui-table td {
@@ -283,9 +314,20 @@ html.theme-switching *::after {
   .app-shell {
     --sidebar-width: 290px;
   }
+  /* 环境光背景层：与主页内容屏同一个 .aurora，固定铺在整个工作台之下。
+     侧栏与卡片都是半透明的，光斑因此会从玻璃后面透出来。 */
+  .app-ambient {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
   .app-shell[data-collapsed="true"] {
     --sidebar-width: 90px;
   }
+  /* 侧栏：与顶栏同一套毛玻璃（blur + saturate），不再是一块不透明白板，
+     这样它和页面底色、极光背景是"同一张背景、模糊度不同"的关系。 */
   .app-sidebar {
     position: fixed;
     inset: 0 auto 0 0;
@@ -293,13 +335,18 @@ html.theme-switching *::after {
     display: flex;
     width: var(--sidebar-width);
     flex-direction: column;
-    border-right: 1px solid var(--color-slate-200);
-    background: var(--color-white);
+    border-right: 1px solid
+      color-mix(in srgb, var(--color-slate-200) 70%, transparent);
+    background: color-mix(in srgb, var(--color-white) 76%, transparent);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
     transition:
       width 200ms,
       transform 200ms;
   }
   .app-frame {
+    position: relative;
+    z-index: 1;
     min-width: 0;
     margin-left: var(--sidebar-width);
     transition: margin-left 200ms;
@@ -381,7 +428,7 @@ html.theme-switching *::after {
     gap: 0.75rem;
     min-height: 46px;
     padding: 0.75rem;
-    border-radius: 0.5rem;
+    border-radius: var(--control-radius);
     color: var(--color-slate-600);
     font-size: 0.875rem;
     font-weight: 500;
@@ -390,7 +437,7 @@ html.theme-switching *::after {
       color 150ms;
   }
   .sidebar-link:hover {
-    background: var(--color-slate-50);
+    background: color-mix(in srgb, var(--color-white) 70%, transparent);
     color: var(--color-slate-900);
   }
   .sidebar-link[aria-current="page"] {
@@ -428,8 +475,9 @@ html.theme-switching *::after {
     align-items: center;
     justify-content: center;
     padding: 0.75rem 1.25rem;
-    border-top: 1px solid var(--color-slate-100);
-    background: var(--color-white);
+    border-top: 1px solid
+      color-mix(in srgb, var(--color-slate-200) 60%, transparent);
+    background: transparent;
     color: var(--color-slate-500);
     font-size: 12px;
   }
@@ -452,9 +500,11 @@ html.theme-switching *::after {
     justify-content: center;
   }
   .app-content {
-    max-width: 1600px;
+    /* 与主页/登录页的内容容器同一个宽度（max-w-[1440px]），
+       两端页面在宽屏下因此对齐在同一条中轴线上。 */
+    max-width: 1440px;
     margin: 0 auto;
-    padding: 28px;
+    padding: 32px;
   }
   .app-content > .page-body > div > .flex.gap-3 {
     flex-wrap: wrap;
@@ -469,7 +519,28 @@ html.theme-switching *::after {
     scrollbar-width: thin;
     scrollbar-color: var(--color-slate-200) transparent;
   }
-  .auth-shell::before {
+  /* 细网格底纹层（内容屏的"纸面"质感）。
+     网格本身由下面的 .app-grid::before 画——那条规则原先挂在 .auth-shell 上，
+     但全项目没有任何组件用过这个类名，属于拆登录页时留下的死代码；
+     工作台正好要这层纹理，于是原地接管，不再复制一份同样的渐变。 */
+  .app-grid {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  /* 工作台里的极光刻意压低一档：登录页是"近白底 + 极淡纹理"，
+     主页那版极光原样铺满会让整个工作台泛蓝、离登录页反而更远。
+     深色模式仍由未分层的 .dark .aurora span（0.5）接管，不受这里影响。 */
+  .app-ambient .aurora span {
+    opacity: 0.6;
+  }
+  /* 那三片 40~58vw 的"玻璃"在主页是整屏背景的一部分，放到工作台里就变成
+     压在表格后面的浅蓝大方块（还能看到硬边），喧宾夺主。工作台只留柔和的
+     光斑与网格这两层安静的底纹。 */
+  .app-ambient .aurora .glass {
+    display: none;
+  }
+  .app-grid::before {
     content: "";
     position: absolute;
     inset: 0;
@@ -503,6 +574,11 @@ html.theme-switching *::after {
     .app-shell[data-collapsed="true"] .app-sidebar {
       width: 290px;
       transform: translateX(-100%);
+      /* 手机上侧栏是盖在深色遮罩上的抽屉：这里必须回到不透明，
+         否则玻璃会透出遮罩，抽屉整体发灰、文字对比度也掉下来。 */
+      background: var(--color-white);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
     }
     .app-shell[data-mobile-open="true"] .app-sidebar {
       transform: translateX(0);
@@ -620,7 +696,7 @@ html.theme-switching *::after {
   background: #1b233366;
 }
 
-.dark .auth-shell::before {
+.dark .app-grid::before {
   background-image:
     linear-gradient(#7592ff0b 1px, transparent 1px),
     linear-gradient(90deg, #7592ff0b 1px, transparent 1px);
@@ -1086,11 +1162,11 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] svg.lucide {
       顶栏单独命名（app-nav），转场时保持静止，只有内容在动。
    -------------------------------------------------------------------------- */
 ::view-transition-old(root) {
-  animation: vt-page-out 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: vt-page-out 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 ::view-transition-new(root) {
-  animation: vt-page-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: vt-page-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes vt-page-out {
@@ -1126,7 +1202,7 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] svg.lucide {
       走合成层；尊重系统"减弱动态效果"设置。
    ========================================================================== */
 .page-enter {
-  animation: page-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: page-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes page-enter {
@@ -1252,6 +1328,11 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] svg.lucide {
   .nav-blur {
     background: color-mix(in srgb, var(--color-page) 88%, transparent);
   }
+  /* 侧栏同样兜底：不支持毛玻璃时回到接近不透明的表面色，
+     否则半透明却没有模糊，文字会跟背后的极光糊在一起。 */
+  .app-sidebar {
+    background: color-mix(in srgb, var(--color-white) 96%, transparent);
+  }
 }
 
 /* ==========================================================================
@@ -1310,8 +1391,266 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] svg.lucide {
 }
 
 /* ==========================================================================
-   登录页左侧宣传区：细网格底纹 + 同心圆轨道（沿用旧版视觉）
+   工作台标题层级（个人端 / 管理端）
+   —— 与登录页卡片完全同一套结构：眉标（13px / 字距 .16em / 主色）+
+      标题 + 说明文字。只是工作台一屏要放数据，标题取 30px，
+      而不是主页那档 38~68px 的展示型大标题。
+   和 .auth-snap 一样必须写在 @layer 之外：上面的 h1 { 26px } 未分层，
+   否则这里的字号会被它压掉。
    ========================================================================== */
+.app-page-eyebrow {
+  font-size: 0.8125rem; /* 13px，同登录页卡片眉标 */
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--color-primary-500);
+}
+
+.app-page-title {
+  font-size: 1.875rem; /* 30px */
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: 0.25px;
+  overflow-wrap: break-word;
+}
+
+/* 超宽屏（2K/4K）与主页一样上浮一档 */
+@media (min-width: 1536px) {
+  .app-page-title {
+    font-size: 2rem; /* 32px */
+  }
+}
+
+/* ==========================================================================
+   首次引导欢迎页（/personal/welcome）的入场动效
+   —— 文案逐条上浮、四张量表卡随后依次落位、卡片整体再慢半拍，
+      同心圆轨道与柔光最先淡入并轻微放大，形成"背景先亮、文字后到"的顺序。
+   —— 只动 opacity / transform / scale（都是合成层属性，不触发重排重绘），
+      并且全部尊重系统"减弱动态效果"。
+   ========================================================================== */
+.welcome-in [data-fade] > * {
+  opacity: 0;
+  animation: welcome-rise 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* 左侧文案：眉标 → 标题 → 正文 → 要点，80ms 一档 */
+.welcome-in [data-fade] > *:nth-child(1) { animation-delay: 40ms; }
+.welcome-in [data-fade] > *:nth-child(2) { animation-delay: 100ms; }
+.welcome-in [data-fade] > *:nth-child(3) { animation-delay: 160ms; }
+.welcome-in [data-fade] > *:nth-child(4) { animation-delay: 220ms; }
+.welcome-in [data-fade] > *:nth-child(5) { animation-delay: 280ms; }
+.welcome-in [data-fade] > *:nth-child(6) { animation-delay: 340ms; }
+
+@keyframes welcome-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 卡片整块：比左侧文案晚、幅度大一点，像是"落位" */
+.welcome-in [data-fade="card"] > * {
+  animation-duration: 520ms;
+}
+
+/* 卡内四张量表卡：等卡片标题落位后依次出现 */
+.welcome-in [data-fade-tiles] > * {
+  opacity: 0;
+  animation: welcome-tile 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.welcome-in [data-fade-tiles] > *:nth-child(1) { animation-delay: 320ms; }
+.welcome-in [data-fade-tiles] > *:nth-child(2) { animation-delay: 380ms; }
+.welcome-in [data-fade-tiles] > *:nth-child(3) { animation-delay: 440ms; }
+.welcome-in [data-fade-tiles] > *:nth-child(4) { animation-delay: 500ms; }
+
+@keyframes welcome-tile {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 图形层：同心圆先淡入再轻微放大。
+   注意这里动的是独立的 scale 属性，不是 transform——登录页用 Tailwind 的
+   scale-[1.35] / scale-[1.7] 画另外两圈，那条工具类写的是 transform，
+   两者会相乘，因此不会把圆的尺寸顶掉。 */
+.welcome-orbit {
+  /* 圆默认落在 .auth-art 的左上角（绝对定位 + auto 偏移），
+     欢迎页希望它们围着右侧的选择卡，所以这里显式居中并右移一档 */
+  left: 62%;
+  top: 48%;
+  margin: -280px 0 0 -280px;
+}
+.welcome-in .welcome-orbit {
+  opacity: 0;
+  animation: welcome-orbit 760ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.welcome-in .welcome-orbit:nth-of-type(2) { animation-delay: 80ms; }
+.welcome-in .welcome-orbit:nth-of-type(3) { animation-delay: 160ms; }
+.welcome-in .welcome-glow {
+  opacity: 0;
+  animation: welcome-glow 900ms ease-out forwards;
+}
+
+@keyframes welcome-orbit {
+  from {
+    opacity: 0;
+    scale: 0.94;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes welcome-glow {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 轨道上的那枚点：最后出现，作为视觉落点。
+   它刻意不带 .welcome-orbit —— 那套规则会改写 left/top/margin（类选择器权重更高），
+   把这个点甩到圆心上去。 */
+.welcome-dot {
+  position: absolute;
+  left: 62%;
+  top: 48%;
+  width: 10px;
+  height: 10px;
+  margin: -285px 0 0 5px;
+  border-radius: 999px;
+  background: var(--color-primary-500);
+  box-shadow: 0 0 0 6px #465fff1f;
+  pointer-events: none;
+}
+.welcome-in .welcome-dot {
+  opacity: 0;
+  animation: welcome-glow 520ms ease-out 280ms forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-in [data-fade] > *,
+  .welcome-in [data-fade-tiles] > *,
+  .welcome-in .welcome-orbit,
+  .welcome-in .welcome-glow,
+  .welcome-in .welcome-dot {
+    opacity: 1;
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   首次引导 · 答题页
+   ========================================================================== */
+
+/* 题干折行：必须用自然折行（greedy），不能用 text-balance / text-pretty。
+   平衡折行为了让两行长度接近，会在句子中间提前断开——效果图上第 9 题那句
+   「有不如死掉或用某种方式 / 伤害自己的念头」就是这么被折断的。
+   自然折行会先把第一行填满再换行，读起来才是一个完整的短语。
+   写在未分层区域，确保压得过任何 text-* 工具类。 */
+.first-run-question {
+  text-wrap: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+}
+
+/* 换题时的题目淡入：只动 opacity/transform，避免整卡重排 */
+.question-enter {
+  animation: question-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes question-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 量表介绍弹窗：进出场都要有，并且互相对称。
+   之前只有进场，关闭时组件直接卸载，观感是"啪"地消失。 */
+.scale-intro-dialog {
+  animation: dialog-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.scale-intro-dialog-out {
+  animation: dialog-exit 170ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.dialog-backdrop-in {
+  animation: backdrop-in 200ms ease-out both;
+}
+
+.dialog-backdrop-out {
+  animation: backdrop-out 170ms ease-in both;
+}
+
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes dialog-exit {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question-enter,
+  .scale-intro-dialog,
+  .scale-intro-dialog-out,
+  .dialog-backdrop-in,
+  .dialog-backdrop-out {
+    animation: none;
+  }
+}
+
+/* 登录页左侧宣传区：细网格底纹 + 同心圆轨道（沿用旧版视觉） */
 /* 折线图的网格线与辅助线：用变量而非硬编码，深色下自动变暗 */
 .chart-grid {
   stroke: var(--color-slate-100);

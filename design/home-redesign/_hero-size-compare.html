@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>个人首页 · 心理筛查预警系统（原型）</title>
+<link rel="stylesheet" href="../../prototype/assets/fonts/fonts.css">
+<link rel="stylesheet" href="../../prototype/assets/tokens.css">
+<link rel="stylesheet" href="../../prototype/assets/base.css">
+<link rel="stylesheet" href="../../prototype/assets/shell.css">
+<script>
+try {
+  var m = localStorage.getItem('proto-mode') === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-mode', m);
+} catch (e) {}
+</script>
+
+<style>
+  /* 样张局部样式：眉标 + 品牌副标题独立成行 */
+  .brand__sub { display: block; }
+  /* 眉标：从「标签」改成「一行信息」—— 15px / 500 / 字距收到 0.02em / 次要色。
+     原来 13px + 600 + 0.06em + 主色蓝 四条叠一起，看着像标签不像问候。 */
+  .pagehead__eyebrow {
+    margin: 0 0 var(--sp-2);
+    font-size: var(--fs-read);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--txt-2);
+  }
+  /* 深色模式下靠字重分不开层级，颜色是唯一的分层手段：
+     问候拿品牌色（有温度的那半句），日期退到 --txt-3（纯信息），
+     这样眉标 / H1 / 说明行才是三档，而不是和说明行同色的两档。 */
+  .pagehead__eyebrow .pagehead__greet { color: var(--accent); }
+  .pagehead__date { color: var(--txt-3); }
+</style>
+</head>
+<body data-surface="personal">
+
+<div class="app" data-shell='{"surface":"personal","active":"home","crumb":"个人首页"}'>
+  <aside class="sidebar" data-shell-sidebar></aside>
+  <div class="main">
+    <header class="topbar" data-shell-topbar></header>
+    <main class="content">
+      <div class="content__inner">
+  <div class="pagehead" style="margin-bottom:var(--sp-8)">
+    <div>
+      <p class="pagehead__eyebrow">对比 · 把「页头」与「行动区」合并成一个 hero 之后，标题该多大</p>
+      <h1>标题多大合适</h1>
+      <p class="pagehead__desc">三块的差别只有标题字号，其余完全相同。每块就是一个合并后的首屏。</p>
+    </div>
+  </div>
+    <section style="margin-top:var(--sp-8)">
+      <div class="eyebrow">① 28px · 现在 hero 标题的上限（clamp 最大 1.75rem）</div>
+      <div style="margin-top:var(--sp-5)">
+        <section class="homex-hero" aria-label="选择记录方式">
+          <div>
+            <p class="pagehead__eyebrow" style="margin-bottom:var(--sp-4)"><span class="pagehead__greet">下午好，xiaoyu</span><span class="pagehead__date"> · 3 月 20 日 星期五</span></p>
+            <p style="margin:0;font-weight:600;font-size:28px;line-height:1.18;letter-spacing:-0.01em">今天，想说说自己吗？</p>
+            <p class="pagehead__desc" style="font-size:var(--fs-read);max-width:64ch">写几句、说一段、或者随手拍一张都可以。一次记录约 2–3 分钟，系统会把三种线索一起看，而不是只看一份量表。</p>
+          </div>
+
+          <div class="homex-modes">
+            <a class="homex-mode" href="personal-collect.html">
+              <span class="homex-mode__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>
+              </span>
+              <span class="homex-mode__text">
+                <span class="homex-mode__title">写一段话</span>
+                <span class="homex-mode__meta">记录此刻的心情与想法</span>
+              </span>
+            </a>
+            <a class="homex-mode" href="personal-collect.html">
+              <span class="homex-mode__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+              </span>
+              <span class="homex-mode__text">
+                <span class="homex-mode__title">录一段语音</span>
+                <span class="homex-mode__meta">约 30 秒，看语速与停顿</span>
+              </span>
+            </a>
+            <a class="homex-mode" href="personal-collect.html">
+              <span class="homex-mode__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m4 17 5-4 4 3 3-2 4 3"/></svg>
+              </span>
+              <span class="homex-mode__text">
+                <span class="homex-mode__title">上传一张图</span>
+                <span class="homex-mode__meta">绘画、手写或日常照片</span>
+              </span>
+            </a>
+          </div>
+
+          <div class="homex-hero__foot">
+            <a class="btn btn--primary btn--lg" href="personal-collect.html">开始综合状态记录</a>
+            <span class="dim" style="font-size:var(--fs-meta)">上次记录：今天 08:20 · 已连续记录 12 天</span>
+          </div>
+              </section>
+      </div>
+    </section>
+    <section style="margin-top:var(--sp-8)">
+      <div class="eyebrow">② 32px · 比现在明显有分量，仍在工作台尺度内</div>
+      <div style="margin-top:var(--sp-5)">
+        <section class="homex-hero" aria-label="选择记录方式">
+          <div>
+            <p class="pagehead__eyebrow" style="margin-bottom:var(--sp-4)"><span class="pagehead__greet">下午好，xiaoyu</span><span class="pagehead__date"> · 3 月 20 日 星期五</span></p>
+            <p style="margin:0;font-weight:600;font-size:32px;line-height:1.18;letter-spacing:-0.01em">今天，想说说自己吗？</p>
+            <p class="pagehead__desc" style="font-size:var(--fs-read);max-width:64ch">写几句、说一段、或者随手拍一张都可以。一次记录约 2–3 分钟，系统会把三种线索一起看，而不是只看一份量表。</p>
+          </div>
+
+          <div class="homex-modes">
+            <a class="homex-mode" href="personal-collect.html">
+              <span class="homex-mode__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>
+              </span>
+              <span class="homex-mode__text">
+                <span class="homex-mode__title">写一段话</span>
+                <span class="homex-mode__meta">记录此刻的心情与想法</span>
+              </span>
+            </a>
+            <a class="homex-mode" href="personal-collect.html">
+              <span class="homex-mode__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+              </span>
+              <span class="homex-mode__text">
+                <span class="homex-mode__title">录一段语音</span>
+                <span class="homex-mode__meta">约 30 秒，看语速与停顿</span>
+              </span>
+            </a>
+            <a class="homex-mode" href="personal-collect.html">
+              <span class="homex-mode__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m4 17 5-4 4 3 3-2 4 3"/></svg>
+              </span>
+              <span class="homex-mode__text">
+                <span class="homex-mode__title">上传一张图</span>
+                <span class="homex-mode__meta">绘画、手写或日常照片</span>
+              </span>
+            </a>
+          </div>
+
+          <div class="homex-hero__foot">
+            <a class="btn btn--primary btn--lg" href="personal-collect.html">开始综合状态记录</a>
+            <span class="dim" style="font-size:var(--fs-meta)">上次记录：今天 08:20 · 已连续记录 12 天</span>
+          </div>
+              </section>
+      </div>
+    </section>
+    <section style="margin-top:var(--sp-8)">
+      <div class="eyebrow">③ 40px · 接近腾讯云 hero（量出来约 44–48px）</div>
+      <div style="margin-top:var(--sp-5)">
+        <section class="homex-hero" aria-label="选择记录方式">
+          <div>
+            <p class="pagehead__eyebrow" style="margin-bottom:var(--sp-4)"><span class="pagehead__greet">下午好，xiaoyu</span><span class="pagehead__date"> · 3 月 20 日 星期五</span></p>
+            <p style="margin:0;font-weight:600;font-size:40px;line-height:1.18;letter-spacing:-0.01em">今天，想说说自己吗？</p>
+            <p class="pagehead__desc" style="font-size:var(--fs-read);max-width:64ch">写几句、说一段、或者随手拍一张都可以。一次记录约 2–3 分钟，系统会把三种线索一起看，而不是只看一份量表。</p>
+          </div>
+
+          <div class="homex-modes">
+            <a class="homex-mode" href="personal-collect.html">
+              <span class="homex-mode__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>
+              </span>
+              <span class="homex-mode__text">
+                <span class="homex-mode__title">写一段话</span>
+                <span class="homex-mode__meta">记录此刻的心情与想法</span>
+              </span>
+            </a>
+            <a class="homex-mode" href="personal-collect.html">
+              <span class="homex-mode__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+              </span>
+              <span class="homex-mode__text">
+                <span class="homex-mode__title">录一段语音</span>
+                <span class="homex-mode__meta">约 30 秒，看语速与停顿</span>
+              </span>
+            </a>
+            <a class="homex-mode" href="personal-collect.html">
+              <span class="homex-mode__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m4 17 5-4 4 3 3-2 4 3"/></svg>
+              </span>
+              <span class="homex-mode__text">
+                <span class="homex-mode__title">上传一张图</span>
+                <span class="homex-mode__meta">绘画、手写或日常照片</span>
+              </span>
+            </a>
+          </div>
+
+          <div class="homex-hero__foot">
+            <a class="btn btn--primary btn--lg" href="personal-collect.html">开始综合状态记录</a>
+            <span class="dim" style="font-size:var(--fs-meta)">上次记录：今天 08:20 · 已连续记录 12 天</span>
+          </div>
+              </section>
+      </div>
+    </section>
+</div>
+</main>
+  </div>
+</div>
+
+<script>
+/* 今日行动：打勾 + 进度（原型内本地状态，不落库） */
+(function () {
+  var plan = document.querySelector('[data-plan]');
+  var counter = document.querySelector('[data-plan-count]');
+  if (!plan || !counter) return;
+  var items = Array.prototype.slice.call(plan.querySelectorAll('.homex-plan__item'));
+  function refresh() {
+    var done = items.filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; }).length;
+    counter.textContent = done + ' / ' + items.length;
+    counter.className = done === items.length ? 'pill pill--green' : 'pill pill--brand';
+  }
+  items.forEach(function (b) {
+    b.addEventListener('click', function () {
+      b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+      refresh();
+    });
+  });
+  refresh();
+})();
+
+/* 快捷提问：点一下填入输入框（原型不接真实模型） */
+(function () {
+  var input = document.querySelector('.homex-ask__input input');
+  if (!input) return;
+  document.querySelectorAll('.homex-ask__qs .chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      input.value = c.textContent.trim();
+      input.focus();
+    });
+  });
+})();
+</script>
+<script src="../../prototype/assets/shell.js"></script>
+<script src="../../prototype/assets/app.js"></script>
+
+<script>
+/* 样张：顶栏从「死文字」改成可点的位置面包屑 */
+(function () {
+  var nav = document.querySelector('.crumbs');
+  if (nav) {
+    nav.innerHTML = '<a href="personal-home.html">我的空间</a>' +
+                    '<span class="crumbs__sep" aria-hidden="true">›</span>' +
+                    '<span class="crumbs__now">个人首页</span>';
+  }
+  var sub = document.querySelector('.brand__sub');
+  if (sub) sub.textContent = '个人健康空间';
+})();
+</script>
+</body>
+</html>

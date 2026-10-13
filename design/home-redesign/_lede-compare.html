@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>个人首页 · 心理筛查预警系统（原型）</title>
+<link rel="stylesheet" href="../../prototype/assets/fonts/fonts.css">
+<link rel="stylesheet" href="../../prototype/assets/tokens.css">
+<link rel="stylesheet" href="../../prototype/assets/base.css">
+<link rel="stylesheet" href="../../prototype/assets/shell.css">
+<script>
+try {
+  var m = localStorage.getItem('proto-mode') === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-mode', m);
+} catch (e) {}
+</script>
+
+<style>
+  /* 样张局部样式：眉标 + 品牌副标题独立成行 */
+  .brand__sub { display: block; }
+  .pagehead__eyebrow {
+    margin: 0 0 var(--sp-2);
+    font-size: var(--fs-label);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+  }
+</style>
+</head>
+<body data-surface="personal">
+
+<div class="app" data-shell='{"surface":"personal","active":"home","crumb":"个人首页"}'>
+  <aside class="sidebar" data-shell-sidebar></aside>
+  <div class="main">
+    <header class="topbar" data-shell-topbar></header>
+    <main class="content">
+      <div class="content__inner">
+
+        <div class="pagehead">
+          <div>
+            <p class="pagehead__eyebrow">对比 · 页头那句说明怎么断行</p>
+            <h1>同一段文案，三种断法</h1>
+            <p class="pagehead__desc">同一段文字、同一个容器宽度（<span class="mono">58ch</span>，虚线框是容器右边界），只是断行处理不同。</p>
+          </div>
+        </div>
+
+        <div class="stack" style="gap:var(--sp-10)">
+
+          <section class="card">
+            <div class="eyebrow" style="color:var(--state-red-text)">① 现状 · 断在「三种」中间（不要）</div>
+            <p class="pagehead__desc" style="margin-top:var(--sp-4);outline:1px dashed var(--line-strong);outline-offset:6px">写几句、说一段、或者随手拍一张都可以。一次记录约 2–3 分钟，系统会把三种线索一起看，而不是只看一份量表。</p>
+          </section>
+
+          <section class="card">
+            <div class="eyebrow" style="color:var(--state-green-text)">② 在句号处换行 · 推荐（30 字 / 22 字，两行均衡）</div>
+            <p class="pagehead__desc" style="margin-top:var(--sp-4);outline:1px dashed var(--line-strong);outline-offset:6px">写几句、说一段、或者随手拍一张都可以。一次记录约 2–3 分钟，<br>系统会把三种线索一起看，而不是只看一份量表。</p>
+          </section>
+
+          <section class="card">
+            <div class="eyebrow">③ 收短成一行（丢掉对比语气，29 字）</div>
+            <p class="pagehead__desc" style="margin-top:var(--sp-4);outline:1px dashed var(--line-strong);outline-offset:6px">写几句、说一段、或者拍一张，约 2–3 分钟，三种线索一起看。</p>
+          </section>
+
+          <section class="card">
+            <div class="eyebrow">④ 只加宽容器到 <span class="mono">76ch</span>（文案不动）</div>
+            <p class="pagehead__desc" style="margin-top:var(--sp-4);max-width:76ch;outline:1px dashed var(--line-strong);outline-offset:6px">写几句、说一段、或者随手拍一张都可以。一次记录约 2–3 分钟，系统会把三种线索一起看，而不是只看一份量表。</p>
+          </section>
+
+        </div>
+      </main>
+  </div>
+</div>
+
+<script>
+/* 今日行动：打勾 + 进度（原型内本地状态，不落库） */
+(function () {
+  var plan = document.querySelector('[data-plan]');
+  var counter = document.querySelector('[data-plan-count]');
+  if (!plan || !counter) return;
+  var items = Array.prototype.slice.call(plan.querySelectorAll('.homex-plan__item'));
+  function refresh() {
+    var done = items.filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; }).length;
+    counter.textContent = done + ' / ' + items.length;
+    counter.className = done === items.length ? 'pill pill--green' : 'pill pill--brand';
+  }
+  items.forEach(function (b) {
+    b.addEventListener('click', function () {
+      b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+      refresh();
+    });
+  });
+  refresh();
+})();
+
+/* 快捷提问：点一下填入输入框（原型不接真实模型） */
+(function () {
+  var input = document.querySelector('.homex-ask__input input');
+  if (!input) return;
+  document.querySelectorAll('.homex-ask__qs .chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      input.value = c.textContent.trim();
+      input.focus();
+    });
+  });
+})();
+</script>
+<script src="../../prototype/assets/shell.js"></script>
+<script src="../../prototype/assets/app.js"></script>
+
+<script>
+/* 样张：顶栏从「死文字」改成可点的位置面包屑 */
+(function () {
+  var nav = document.querySelector('.crumbs');
+  if (nav) {
+    nav.innerHTML = '<a href="personal-home.html">我的空间</a>' +
+                    '<span class="crumbs__sep" aria-hidden="true">›</span>' +
+                    '<span class="crumbs__now">个人首页</span>';
+  }
+  var sub = document.querySelector('.brand__sub');
+  if (sub) sub.textContent = '个人健康空间';
+})();
+</script>
+</body>
+</html>

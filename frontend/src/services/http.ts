@@ -36,6 +36,27 @@ export function clearToken() {
   sessionStorage.removeItem(TOKEN_KEY_TEMP);
 }
 
+/**
+ * 从当前 token 里解出用户名（mock token 与真实 JWT 都是三段式，payload 第二段）。
+ *
+ * 为什么放在 http.ts：mock 数据层要按账号区分演示数据（见 mockApi 里的
+ * 「演示数据按账号隔离」），而 session.ts 反过来依赖 mockApi（logout），
+ * 两边互相 import 会形成环。token 的读写本来就归这里管，放在这一层最合适。
+ */
+export function getTokenUsername(): string | null {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const parsed = JSON.parse(atob(base64)) as { username?: string };
+    return parsed.username || null;
+  } catch {
+    return null;
+  }
+}
+
 const http: AxiosInstance = axios.create({
   baseURL: BASE_URL || '/',
   timeout: 15000,

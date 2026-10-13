@@ -16,6 +16,7 @@ import {
 import BrandLogo from "../components/BrandLogo";
 import { apiLogin, apiRegister } from "../services/mockApi";
 import { saveDisplayName, saveSessionToken } from "../auth/session";
+import { resolveEntryPath } from "../auth/entryPath";
 
 type AuthTab = "login" | "register";
 type Theme = "light" | "dark";
@@ -40,8 +41,8 @@ export default function LoginPage() {
   const [tab, setTab] = useState<AuthTab>("login");
   const [panel, setPanel] = useState<Panel>(initialPanel);
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
-  const [username, setUsername] = useState(() => (initialPanel === "admin" ? "adminer" : ""));
-  const [password, setPassword] = useState(() => (initialPanel === "admin" ? "admin" : ""));
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
@@ -50,6 +51,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+
+  /* 这里刻意**不做**"已登录就直接放行"：打开登录页永远当作没登录过，
+     输入框留空、正常走一次登录。否则点顶栏「登录」会被瞬间送进系统，
+     连表单都看不到（用户明确要求过）。
+     "记住我"仍然保留：勾了之后 token 存在 localStorage，直接访问工作台地址
+     依旧是登录状态，不用重新输。 */
 
   useEffect(() => {
     const dark = theme === "dark";
@@ -105,14 +112,10 @@ export default function LoginPage() {
     setPanel(next);
     setShowPassword(false);
     resetTips();
-    if (next === "admin") {
-      setUsername("adminer");
-      setPassword("admin");
-      setTab("login");
-    } else {
-      setUsername("");
-      setPassword("");
-    }
+    /* 两个身份之间切换时同样清空：不给任何预填 */
+    setUsername("");
+    setPassword("");
+    if (next === "admin") setTab("login");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -139,12 +142,11 @@ export default function LoginPage() {
       saveSessionToken(result.token, rememberMe);
       saveDisplayName(result.name);
       setMessage("登录成功，正在进入系统…");
-      setTimeout(() => {
-        navigate(
-          result.role === "admin" ? "/admin/dashboard" : "/personal/dashboard",
-          { replace: true },
-        );
-      }, 500);
+      /* 直接跳，不再 setTimeout 等 500ms：那句话是给"跳转前"看的，
+         但真实体感就是登录后干等半秒（用户提过等待太久）。
+         个人账号第一次登录先进欢迎页；判据是账号的引导状态，不是"有没有筛查记录"：
+         跳过引导的人本来就没有记录，用记录判的话他每次登录都会被再拦一次。 */
+      navigate(resolveEntryPath(result.role), { replace: true });
     } finally {
       setLoading(false);
     }

@@ -8,7 +8,7 @@
  * 要接后端只需改环境变量 VITE_USE_MOCK=false，组件无需改动。
  */
 
-import { request, USE_MOCK } from './http';
+import { request, USE_MOCK, getTokenUsername } from './http';
 
 import {
   screeningRecords,
@@ -58,10 +58,76 @@ import {
 
 // ─── 工具函数 ────────────────────────────────────────────────────────────────
 
+/**
+ * 演示模式的"网络"延迟。
+ * 原先 200~800ms 是照着真实接口的体感写的，但首次引导要连着走
+ * 作答 → 补充 → 结果 → 主页四屏，每一步都等半秒就明显发顿（用户反馈过）。
+ * 现在收到 90~240ms：仍然能看出"数据是取回来的"，但不挡手。
+ */
 function delay(ms?: number): Promise<void> {
   return new Promise((resolve) =>
-    setTimeout(resolve, ms ?? 200 + Math.random() * 600)
+    setTimeout(resolve, ms ?? 90 + Math.random() * 150)
   );
+}
+
+// ─── 演示数据按账号隔离（仅 VITE_USE_MOCK=true 生效）────────────────────────
+/**
+ * 仓库里那套样例数据（6 条筛查记录、趋势、预警…）是给**内置演示账号 xiaoyu**
+ * 看的，答辩演示要的就是"数据饱满"的样子。
+ *
+ * 但个人端现在有首次引导：新注册的账号必须真的"还没有筛查记录"，否则
+ * 「还没有筛查记录」这个状态在演示模式下永远看不到；新账号提交的筛查也不会
+ * 出现在列表里（原先 submitScreening 只返回一个 id，没往数据里写）。
+ *
+ * 于是这里把**个人端**的筛查记录按账号分开：
+ *   · 演示账号  = 仓库样例数据 + 自己的提交
+ *   · 其他账号  = 只看到自己的提交（新账号就是空列表）
+ * 管理端（adminScreeningRecords）不动，仍是那套完整样例。
+ * 接了真实后端以后这一段完全不生效。
+ */
+const DEMO_ACCOUNT = 'xiaoyu';
+const MOCK_RECORDS_KEY = 'psych_mock_records:v1';
+
+function readSubmittedRecords(): Record<string, PersonalScreeningRecord[]> {
+  try {
+    const raw = localStorage.getItem(MOCK_RECORDS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, PersonalScreeningRecord[]>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeSubmittedRecords(all: Record<string, PersonalScreeningRecord[]>) {
+  try {
+    localStorage.setItem(MOCK_RECORDS_KEY, JSON.stringify(all));
+  } catch {
+    /* 隐私模式下写不进去：本次会话内列表会少一条自己的提交，不影响流程 */
+  }
+}
+
+/** 当前账号能看到的个人筛查记录（新的在前） */
+function personalRecords(): PersonalScreeningRecord[] {
+  const username = getTokenUsername();
+  const mine = username ? readSubmittedRecords()[username] ?? [] : [];
+  // 未登录（理论上进不来）与演示账号：给仓库里那套完整样例
+  if (!username || username === DEMO_ACCOUNT) {
+    return [
+      ...mine,
+      ...screeningRecords.filter((item) => !mine.some((s) => s.id === item.id)),
+    ];
+  }
+  return mine;
+}
+
+/** 记一条自己提交的筛查，让它在列表/档案里真的出现 */
+function rememberSubmittedRecord(record: PersonalScreeningRecord) {
+  const username = getTokenUsername();
+  if (!username) return;
+  const all = readSubmittedRecords();
+  all[username] = [record, ...(all[username] ?? [])].slice(0, 50);
+  writeSubmittedRecords(all);
 }
 
 // ─── 类型定义 ────────────────────────────────────────────────────────────────
@@ -188,7 +254,7 @@ export async function apiLogout(): Promise<void> {
 export async function getScreeningRecords(): Promise<PersonalScreeningRecord[]> {
   if (USE_MOCK) {
     await delay();
-    return [...screeningRecords];
+    return personalRecords();
   }
   return request.get<PersonalScreeningRecord[]>('/api/personal/screenings');
 }
@@ -208,8 +274,21 @@ export async function submitScreening(data: {
       orange: '中高',
       red: '高',
     };
+    const id = `ME-SCR-${Date.now().toString().slice(-6)}`;
+    /* 以前只返回一个 id，数据里什么都不落 —— 演示模式下刚做完的筛查
+       不会出现在记录列表里。现在按账号记一条，列表和档案都能看到。 */
+    rememberSubmittedRecord({
+      id,
+      questionnaire: data.questionnaire,
+      score: data.score,
+      maxScore: data.maxScore,
+      level: data.level,
+      status: 'completed',
+      moodTag: '已完成',
+      date: new Date().toLocaleDateString('sv-SE'),
+    });
     return {
-      id: `ME-SCR-${Date.now().toString().slice(-6)}`,
+      id,
       status: 'success',
       riskLevel: labels[data.level],
     };
@@ -220,12 +299,16 @@ export async function submitScreening(data: {
 export async function getDashboardData(): Promise<DashboardResponse> {
   if (USE_MOCK) {
     await delay();
+    /* 只有筛查记录按账号隔离（见文件开头的「演示数据按账号隔离」）。
+       趋势 / 预警 / 行动计划仍是仓库里那套样例数据：真按账号清空的话，
+       首页会出现"0 小时""均值 0.0 h"和大片空白图表，反而比数据饱满更难看，
+       而"连续打卡 12 天"本来就是写死的、清不掉。真实后端下这些字段自然随账号为空。 */
     return {
       moodTrend,
       warningDistribution,
       warningEvents,
       actionPlan: [...actionPlan],
-      screeningRecords,
+      screeningRecords: personalRecords(),
       userProfile,
       questionnaireCatalog,
       personalTimeline,
@@ -285,7 +368,7 @@ export async function updateWarningStatus(
 export async function getCases() {
   if (USE_MOCK) {
     await delay();
-    return { screeningRecords, warningEvents, userProfile, personalTimeline };
+    return { screeningRecords: personalRecords(), warningEvents, userProfile, personalTimeline };
   }
   return request.get<{
     screeningRecords: PersonalScreeningRecord[];
