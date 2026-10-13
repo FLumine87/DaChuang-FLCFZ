@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { type CaseRecord } from '../data/adminMockData';
 import { getAdminCases } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
@@ -45,6 +46,7 @@ export default function AdminCases() {
               <p className="text-sm text-slate-600">筛查 {item.screeningCount} 次</p>
               <AdminStatusBadge status={item.status} />
             </div>
+            <Link to={`/admin/agent-workbench?caseId=${encodeURIComponent(item.id)}`} className="mt-4 inline-flex text-sm font-medium text-blue-600 hover:text-blue-800">打开 Agent 研判档案 →</Link>
           </div>
         ))}
       </div>
