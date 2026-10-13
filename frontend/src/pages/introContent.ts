@@ -1,5 +1,5 @@
-/* 「作品简介」与四个章节的导航项与屏幕定义。
-   登录是独立的第 1 屏（不在导航里），其后是作品简介与四个章节。 */
+/* 主页的导航项与屏幕定义（作品简介 + 四个章节）。
+   登录已剥离为独立页面 /login，不再占用滑动序列的一屏。 */
 
 export const navItems = [
   { id: "top", label: "作品简介" },
@@ -9,5 +9,5 @@ export const navItems = [
   { id: "privacy", label: "隐私安全" },
 ];
 
-/* 整屏翻页：6 屏 = 登录 + 作品简介 + 四个章节（右侧页码点用） */
-export const screens = [{ id: "login", label: "登录" }, ...navItems];
+/* 整屏翻页：5 屏（作品简介 + 四个章节），右侧页码点用 */
+export const screens = [...navItems];

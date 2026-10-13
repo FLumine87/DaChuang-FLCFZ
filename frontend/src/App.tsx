@@ -17,7 +17,8 @@ import AdminRetrieval from './admin/pages/AdminRetrieval';
 import AdminAlerts from './admin/pages/AdminAlerts';
 import AdminCases from './admin/pages/AdminCases';
 import AdminAgentWorkbench from './admin/pages/AdminAgentWorkbench';
-import AuthPage from './pages/AuthPage';
+import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
 import { getCurrentSession } from './auth/session';
 
 function RequireRole({ role, children }: { role: 'admin' | 'user'; children: ReactElement }) {
@@ -36,8 +37,10 @@ function RequireRole({ role, children }: { role: 'admin' | 'user'; children: Rea
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/auth" replace />} />
-      <Route path="/auth" element={<AuthPage />} />
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      {/* 旧地址兼容：原 /auth 是「介绍 + 登录」合页，现统一到登录页 */}
+      <Route path="/auth" element={<Navigate to="/login" replace />} />
       <Route path="/selector" element={<SystemSelector />} />
 
       <Route path="/personal" element={<RequireRole role="user"><Layout /></RequireRole>}>
