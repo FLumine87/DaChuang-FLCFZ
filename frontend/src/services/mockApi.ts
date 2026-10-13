@@ -70,22 +70,19 @@ function delay(ms?: number): Promise<void> {
   );
 }
 
-// ─── 演示数据按账号隔离（仅 VITE_USE_MOCK=true 生效）────────────────────────
+// ─── 演示数据（仅 VITE_USE_MOCK=true 生效）──────────────────────────────────
 /**
- * 仓库里那套样例数据（6 条筛查记录、趋势、预警…）是给**内置演示账号 xiaoyu**
- * 看的，答辩演示要的就是"数据饱满"的样子。
+ * 用户 2026-10-14 拍板：**不做空状态，演示数据要给足** ——
+ * "不要空状态，还是要保留我们本来带有的展示数据，这样才能看到更多的东西。"
  *
- * 但个人端现在有首次引导：新注册的账号必须真的"还没有筛查记录"，否则
- * 「还没有筛查记录」这个状态在演示模式下永远看不到；新账号提交的筛查也不会
- * 出现在列表里（原先 submitScreening 只返回一个 id，没往数据里写）。
+ * 所以个人端在演示模式下**恒等于**「仓库自带那套样例记录 + 本账号自己提交的记录」：
+ * 任何新注册账号进首页都能看到预警卡、最近 30 天趋势与最近记录，而不是一片空白。
+ * 同一 id 只保留一条，避免自己的提交与样例数据重复计数。
  *
- * 于是这里把**个人端**的筛查记录按账号分开：
- *   · 演示账号  = 仓库样例数据 + 自己的提交
- *   · 其他账号  = 只看到自己的提交（新账号就是空列表）
- * 管理端（adminScreeningRecords）不动，仍是那套完整样例。
+ * 下面这组函数只负责"本账号提交过什么"，是上面那份合并结果的增量部分；
+ * `rememberSubmittedRecord` 保留 —— 自己刚提交的筛查要真的出现在列表与档案里。
  * 接了真实后端以后这一段完全不生效。
  */
-const DEMO_ACCOUNT = 'xiaoyu';
 const MOCK_RECORDS_KEY = 'psych_mock_records:v1';
 
 function readSubmittedRecords(): Record<string, PersonalScreeningRecord[]> {
@@ -107,18 +104,15 @@ function writeSubmittedRecords(all: Record<string, PersonalScreeningRecord[]>) {
   }
 }
 
-/** 当前账号能看到的个人筛查记录（新的在前） */
+/** 当前账号能看到的个人筛查记录（新的在前）：样例数据 + 本账号自己的提交 */
 function personalRecords(): PersonalScreeningRecord[] {
   const username = getTokenUsername();
   const mine = username ? readSubmittedRecords()[username] ?? [] : [];
-  // 未登录（理论上进不来）与演示账号：给仓库里那套完整样例
-  if (!username || username === DEMO_ACCOUNT) {
-    return [
-      ...mine,
-      ...screeningRecords.filter((item) => !mine.some((s) => s.id === item.id)),
-    ];
-  }
-  return mine;
+  // 自己的提交排在前面；与样例数据同 id 的只留一条
+  return [
+    ...mine,
+    ...screeningRecords.filter((item) => !mine.some((s) => s.id === item.id)),
+  ];
 }
 
 /** 给已提交的记录补一条内容（改它、再写回当前账号的记录列表） */
@@ -333,10 +327,10 @@ export async function saveScreeningSupplement(
 export async function getDashboardData(): Promise<DashboardResponse> {
   if (USE_MOCK) {
     await delay();
-    /* 只有筛查记录按账号隔离（见文件开头的「演示数据按账号隔离」）。
-       趋势 / 预警 / 行动计划仍是仓库里那套样例数据：真按账号清空的话，
-       首页会出现"0 小时""均值 0.0 h"和大片空白图表，反而比数据饱满更难看，
-       而"连续打卡 12 天"本来就是写死的、清不掉。真实后端下这些字段自然随账号为空。 */
+    /* 演示模式下整页都给仓库那套样例数据（趋势 / 预警 / 行动计划 / 筛查记录），
+       筛查记录再叠上本账号自己的提交 —— 见文件开头的「演示数据」说明。
+       用户明确要求不做空状态：新账号也要能看到预警卡、趋势与最近记录。
+       真实后端下这些字段自然随账号返回。 */
     return {
       moodTrend,
       warningDistribution,

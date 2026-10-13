@@ -57,6 +57,27 @@ export function getTokenUsername(): string | null {
   }
 }
 
+/**
+ * 当前这枚 token 是不是"演示 token"（由前端 mockApi.apiLogin 自己签的 alg=none 三段式）。
+ *
+ * 只在 401 处理里用：演示 token 被真实后端拒绝是必然的，不能因此把用户登出。
+ * 解不出来（或不是 alg:none）就当真实 JWT 处理，走原来的登出逻辑。
+ */
+function isDemoToken(): boolean {
+  const token = getToken();
+  if (!token) return false;
+  try {
+    const header = token.split('.')[0];
+    if (!header) return false;
+    const parsed = JSON.parse(atob(header.replace(/-/g, '+').replace(/_/g, '/'))) as {
+      alg?: string;
+    };
+    return parsed.alg === 'none';
+  } catch {
+    return false;
+  }
+}
+
 const http: AxiosInstance = axios.create({
   baseURL: BASE_URL || '/',
   timeout: 15000,
@@ -111,6 +132,21 @@ http.interceptors.response.use(
     // 登录/注册接口的 401 是"凭证错误"，不是会话过期，需透传后端原因
     const isAuthEntry = /\/api\/auth\/(login|register)$/.test(error.config?.url ?? '');
     if (error.response?.status === 401 && !isAuthEntry) {
+      /* 演示 token 不触发全局登出。
+       *
+       * 演示/离线模式下发的是一枚 alg=none 的三段式自家 token（见 mockApi.apiLogin），
+       * 真实后端（personal-backend / backend）校验签名，必然回 401。
+       * 若照常 clearToken + 跳登录页，就会变成"打开智能体工作台 = 被强制登出"——
+       * 一个可选增强接口的鉴权失败不该毁掉整个会话。
+       *
+       * 所以：拿演示 token 时只把错误透传给调用方（页面据此如实展示"需登录后端/
+       * 服务不可用"），不清凭证、不跳转；真实 JWT 的 401（确实过期/被吊销）
+       * 仍然按原逻辑登出。 */
+      if (isDemoToken()) {
+        return Promise.reject(
+          new Error(error.response?.data?.message || '当前为演示登录，后端接口需要真实登录凭证'),
+        );
+      }
       clearToken();
       // 项目用 HashRouter：登录路由在 hash 里；线上又部署在仓库子路径下，
       // 所以必须带上 BASE_URL，否则 GitHub Pages 上会跳到不存在的 /auth 而 404。

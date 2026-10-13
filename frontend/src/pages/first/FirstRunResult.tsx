@@ -449,13 +449,18 @@ function HashRetrievalItem({
   enabled: boolean;
 }) {
   const rows = topMatched(evidence?.report, MAX_ROWS);
+  /* 摘要必须和展开后的结论一致，顺序也和渲染分支一致：
+     有数据 → 命中数；服务出错 → 暂不可用；真实检索但没命中 → 未检索到；
+     非 live（未接入/演示）→ 技术名。绝不能出现"摘要说没检索到、展开说服务挂了"这种自相矛盾。 */
   const summary = loading
     ? "正在检索…"
     : rows.length
       ? `命中 ${rows.length + (evidence?.matchedOmitted ?? 0)} 条相似线索`
-      : evidence?.mode === "live"
-        ? "本次未检索到高相似线索"
-        : "多模态线索的相似模式匹配";
+      : evidence?.mode === "live" && evidence.inferenceError
+        ? "检索服务暂不可用"
+        : evidence?.mode === "live"
+          ? "本次未检索到高相似线索"
+          : "多模态线索的相似模式匹配";
 
   return (
     <EvidenceItem
@@ -546,13 +551,16 @@ function RagReferenceItem({
   const factors = (evidence?.report?.factors ?? []).slice(0, MAX_FACTORS);
   const recs = (evidence?.report?.recommendations ?? []).slice(0, MAX_ROWS);
   const hasAny = factors.length > 0 || recs.length > 0;
+  /* 同哈希条目：摘要与展开后的结论保持一致，出错时不说"本次未返回"。 */
   const summary = loading
     ? "正在整理…"
     : hasAny
       ? `${factors.length} 条风险因素 · ${recs.length} 条建议依据`
-      : evidence?.mode === "live"
-        ? "本次未返回知识依据"
-        : "结合心理知识库组织解释与建议";
+      : evidence?.mode === "live" && evidence.inferenceError
+        ? "检索服务暂不可用"
+        : evidence?.mode === "live"
+          ? "本次未返回知识依据"
+          : "结合心理知识库组织解释与建议";
 
   return (
     <EvidenceItem
