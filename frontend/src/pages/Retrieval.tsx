@@ -1,5 +1,24 @@
 import { useRef, useState } from 'react';
 import {
+  corpusRecords,
+  MODALITY_META,
+  type Modality,
+} from '../data/corpusRecords';
+
+/** 语料记录等级外观：与全站 稳定/关注/警告/高危 同一套口径 */
+const LEVEL_NAME: Record<string, string> = {
+  green: '稳定',
+  yellow: '关注',
+  orange: '警告',
+  red: '高危',
+};
+const LEVEL_PILL: Record<string, string> = {
+  green: 'bg-success-50 text-success-600',
+  yellow: 'bg-warning-50 text-warning-600',
+  orange: 'bg-orange-50 text-orange-600',
+  red: 'bg-danger-50 text-danger-600',
+};
+import {
   Search,
   FileText,
   Mic,
@@ -70,6 +89,10 @@ export default function Retrieval() {
   const [scope, setScope] = useState<'all' | 'text' | 'audio' | 'image'>('all');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<RetrievalResult[] | null>(null);
+  /* 语料库历史记录一次先列 20 条，避免 300 条一口气铺满页面 */
+  const [shown, setShown] = useState(20);
+  /* 语料库历史记录的模态分类：全部 / 文本 / 语音 / 图像 */
+  const [histMode, setHistMode] = useState<'all' | Modality>('all');
   const [report, setReport] = useState<RagReport | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -701,10 +724,106 @@ export default function Retrieval() {
       )}
 
       {!loading && !error && !results && (
-        <div className="text-center py-20">
-          <Search className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-          <p className="text-slate-400 text-sm">输入你的状态描述，开始动态跨模态哈希检索</p>
-          <p className="text-slate-300 text-xs mt-1">支持文本、语音、图像多模态输入，输出 RAG 风险解释</p>
+        /* 还没检索时不再放一张空状态图：把语料库里真实存在的历史记录列出来，
+           点一条就把它的文字填进检索框 —— 既是"历史记录"，也是现成的检索样例。 */
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold text-slate-800">
+                语料库里的历史记录
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                共 {corpusRecords.length} 条，每条含文本 / 语音 / 图像三个单元。切分类看不同模态的单元，点一条直接用它的文本检索。
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(['all', 'text', 'audio', 'image'] as const).map((m) => {
+                  const active = histMode === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => { setHistMode(m); setShown(20); }}
+                      className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                        active
+                          ? 'border-primary-300 bg-primary-50 font-medium text-primary-600'
+                          : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {m === 'all' ? '全部模态' : MODALITY_META[m].label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <span className="text-xs tabular-nums text-slate-400">
+              已显示 {Math.min(shown, corpusRecords.length)} / {corpusRecords.length}
+            </span>
+          </div>
+
+          <ul className="mt-4 grid gap-3">
+            {corpusRecords.slice(0, shown).map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => setQuery(r.text)}
+                  className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-primary-300 hover:bg-primary-50/40"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs font-medium tabular-nums text-slate-600">
+                        {r.id}
+                      </span>
+                      <span className="text-xs tabular-nums text-slate-400">{r.date}</span>
+                      {r.context && (
+                        <span className="text-xs text-slate-400">· {r.context}</span>
+                      )}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">
+                        {histMode === 'all'
+                          ? '文本 · 语音 · 图像'
+                          : `${MODALITY_META[histMode].label}单元`}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${LEVEL_PILL[r.level]}`}
+                      >
+                        {LEVEL_NAME[r.level]}
+                      </span>
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {histMode === 'text'
+                      ? r.text
+                      : histMode === 'audio'
+                        ? r.audio
+                        : histMode === 'image'
+                          ? r.image
+                          : r.text}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {r.themes.map((t) => (
+                      <span
+                        key={t}
+                        className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {shown < corpusRecords.length && (
+            <button
+              type="button"
+              onClick={() => setShown((n) => n + 20)}
+              className="ui-button mt-4 w-full"
+            >
+              显示更多（还有 {corpusRecords.length - shown} 条）
+            </button>
+          )}
         </div>
       )}
 

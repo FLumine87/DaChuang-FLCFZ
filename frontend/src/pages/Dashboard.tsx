@@ -13,11 +13,16 @@
  * 分数带不另写阈值表：拿量表自己的 scoring() 在 0..满分 上扫一遍，
  * 分档因此永远与「筛查结果页」一致。
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getDashboardData, type DashboardResponse } from "../services/mockApi";
 import { questionnaires, type QuestionnaireDefinition } from "../data/questionnaireData";
-import type { AlertLevel, PersonalScreeningRecord } from "../data/mockData";
+import {
+  retrievalResults,
+  type AlertLevel,
+  type PersonalScreeningRecord,
+} from "../data/mockData";
+import { getDraft } from "../services/firstRun";
 
 /* ------------------------------------------------------------------ 小工具 */
 
@@ -86,6 +91,14 @@ const LEVEL_BAR: Record<string, string> = {
 };
 
 /** 记录上的模态标记：用户自愿补充的那条记录才有 supplement */
+/* 用户还没写补充内容时的占位样例。
+   出处：backend/data/hashing/corpus.db → units 表 → unit_id = 'R0001-txt'（真实语料原文）。
+   为什么用它：新用户进来「本次输入」是空的，只放一句干巴巴的提示看不出"输入长什么样"；
+   放一条系统里真实存在的历史自述，既能示意格式，又不会让人误以为是自己的记录
+   —— 所以下面必须带「样例」标记。 */
+const SAMPLE_INPUT =
+  "最近这段时间，考试前脑子一片空白；像被一层灰蒙住，看不到出路，这种情况已经持续一阵了。";
+
 function modalityOf(r: PersonalScreeningRecord) {
   const kind = r.supplement?.kind;
   if (kind === "audio") return "语音";
@@ -158,8 +171,27 @@ export default function Dashboard() {
       return acc;
     }, {});
 
+    /* 「本次输入」：优先取首次引导里刚提交的那条补充；
+       没有就退回最近一条记录自带的 supplement。新用户两条都空。 */
+    const draft = getDraft();
+    const supplement = draft?.supplement ?? records[0]?.supplement;
+    const input =
+      supplement?.kind === "text"
+        ? { kind: "text" as const, text: supplement.text ?? "" }
+        : supplement?.kind === "audio"
+          ? { kind: "audio" as const, text: "" }
+          : supplement?.kind === "image"
+            ? { kind: "image" as const, text: "" }
+            : null;
+
+    /* 检索结果：取相似度最高的一条，其余用「还有 N 条」带过（版面只放得下一条） */
+    const matched = [...retrievalResults].sort((a, b) => b.similarity - a.similarity);
+
     return {
       name: data.userProfile?.name ?? "",
+      input,
+      top: matched[0],
+      restCount: Math.max(0, matched.length - 1),
       date: todayLabel(),
       records,
       last,
@@ -363,21 +395,71 @@ export default function Dashboard() {
 
               {/* 栏二：检索 */}
               <div className="lg:border-l lg:border-slate-100 lg:pl-8">
-                <p className="text-[13px] text-slate-400">我们检索到了什么</p>
-                <p className="mt-2 text-[14px] leading-[1.7] text-slate-600">
-                  和{" "}
-                  <Link
-                    to="/personal/retrieval"
-                    className="text-primary-600 hover:text-primary-700"
-                  >
-                    历史记录里的相似时刻
-                  </Link>{" "}
-                  很像 —— 都是任务堆叠后睡眠先掉。
+                <p className="flex items-center gap-1.5 text-[13px] text-slate-400">
+                  本次输入
+                  {!view.input && (
+                    <span className="rounded bg-slate-100 px-1 text-[11px] font-medium text-slate-400">
+                      样例
+                    </span>
+                  )}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Tag>命中 5 个相似模式</Tag>
-                  <Tag>最高相似度 76%</Tag>
-                </div>
+                {view.input ? (
+                  view.input.kind === "text" ? (
+                    /* 文本：原文照展 —— 这是用户自己写的，也是检索真正用的那条 query */
+                    <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-700">
+                      「{view.input.text}」
+                    </p>
+                  ) : (
+                    /* 语音 / 图像：只说明模态，不展示原始文件 */
+                    <p className="mt-2 text-[14px] leading-[1.7] text-slate-600">
+                      你上传了{view.input.kind === "audio" ? "一段语音" : "一张图片"}
+                      —— 系统提取其特征后参与跨模态比对，原始文件不在首页展示。
+                    </p>
+                  )
+                ) : (
+                  <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-500">
+                    「{SAMPLE_INPUT}」
+                  </p>
+                )}
+
+                {view.top && (
+                  <>
+                    <div className="mt-4 rounded-xl border border-slate-100 p-3">
+                      <p className="text-[12px] text-slate-400">检索到的最相似记录</p>
+                      <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-2">
+                        <span className="flex items-baseline gap-2">
+                          <span className="text-[13.5px] font-medium tabular-nums text-slate-700">
+                            {view.top.id}
+                          </span>
+                          <span className="text-[12px] text-slate-400">
+                            {view.top.date}
+                          </span>
+                        </span>
+                        <span className="flex items-baseline gap-2">
+                          <span
+                            className={`text-[12.5px] font-medium ${LEVEL_TEXT[view.top.alertLevel]}`}
+                          >
+                            {LEVEL_LABEL[view.top.alertLevel]}
+                          </span>
+                          <span className="text-[15px] font-semibold tabular-nums text-slate-900">
+                            {Math.round(view.top.similarity * 100)}%
+                          </span>
+                        </span>
+                      </div>
+                      <p className="mt-1.5 line-clamp-1 text-[13px] leading-[1.6] text-slate-600">
+                        {view.top.summary}
+                      </p>
+                      <div className="mt-1.5 flex items-center justify-end">
+                        <Link
+                          to="/personal/retrieval"
+                          className="text-[12px] text-primary-600 hover:text-primary-700"
+                        >
+                          还有 {view.restCount} 条 →
+                        </Link>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* 栏三：RAG */}
@@ -460,7 +542,7 @@ export default function Dashboard() {
               : "目前还只有文字记录 —— 补一条语音或传一张图，跨模态比对才立得住。"}
           </p>
 
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 lg:mt-auto">
             <div>
               <p className="text-[13px] text-slate-400">检索命中</p>
               <p className="mt-1.5 text-[15px] text-slate-600">
@@ -487,12 +569,12 @@ export default function Dashboard() {
               to="/personal/alerts"
               className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12.5px] text-slate-600 hover:border-primary-300 hover:text-primary-600"
             >
-              全部
+              {view.monthWarnings.length > 2 ? `全部 ${view.monthWarnings.length} 条` : '全部'}
             </Link>
           </div>
 
           <ul className="mt-4 grid gap-3">
-            {view.monthWarnings.map((alert) => (
+            {view.monthWarnings.slice(0, 2).map((alert) => (
               <li key={alert.id} className="rounded-xl border border-slate-100 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[12.5px] tabular-nums text-slate-400">
@@ -548,14 +630,6 @@ export default function Dashboard() {
 }
 
 /* ---------------------------------------------------------------- 子组件 */
-
-function Tag({ children }: { children: ReactNode }) {
-  return (
-    <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[12.5px] text-slate-600">
-      {children}
-    </span>
-  );
-}
 
 /** 动作块：一行标题 + 一行状态（状态说明"为什么现在点"） */
 function ActionStack({

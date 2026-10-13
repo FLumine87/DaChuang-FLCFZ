@@ -110,6 +110,9 @@ export default function App() {
       <Route path="/admin" element={<RequireRole role="admin"><AdminLayout /></RequireRole>}>
         <Route index element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="dashboard" element={<AdminDashboard />} />
+        <Route path="me/chat" element={<ChatPage />} />
+        <Route path="me/kg" element={<KgPage />} />
+        <Route path="me/feed" element={<FeedPage />} />
         <Route path="screening" element={<AdminScreening />} />
         <Route path="data-collection" element={<AdminDataCollection />} />
         <Route path="retrieval" element={<AdminRetrieval />} />

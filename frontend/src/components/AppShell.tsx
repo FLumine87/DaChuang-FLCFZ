@@ -12,9 +12,12 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageCircle,
   Moon,
+  Network,
   PanelLeftClose,
   PanelLeftOpen,
+  Rss,
   Search,
   ShieldCheck,
   Sun,
@@ -100,6 +103,27 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       description: "通过文字、语音与图像，记录更完整的状态。",
       icon: Database,
       group: "工作空间",
+    },
+    {
+      path: `${root}/me/chat`,
+      label: "AI 陪伴对话",
+      description: "随时说说此刻的感受，获得陪伴与回应。",
+      icon: MessageCircle,
+      group: "智能心理助手",
+    },
+    {
+      path: `${root}/me/kg`,
+      label: "我的知识图谱",
+      description: "把记录里的线索连成图，看清状态之间的关系。",
+      icon: Network,
+      group: "智能心理助手",
+    },
+    {
+      path: `${root}/me/feed`,
+      label: "个性化推送",
+      description: "按你的关注点，推送可执行的调适建议。",
+      icon: Rss,
+      group: "智能心理助手",
     },
     {
       path: `${root}/retrieval`,
@@ -290,7 +314,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           </button>
         </div>
         <nav className="sidebar-nav app-scrollbar px-5 pb-5">
-          {["工作空间", "智能分析", "健康管理"].map((group) => (
+          {["工作空间", "智能分析", "智能心理助手", "健康管理"].map((group) => (
             <div className="sidebar-group mb-7" key={group}>
               <div className="sidebar-group-title mb-3 flex h-5 items-center px-3 text-[12px] font-medium tracking-widest text-slate-400">
                 <span className="sidebar-label">{group}</span>
