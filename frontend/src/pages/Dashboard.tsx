@@ -29,6 +29,7 @@ import {
   type RetrievalResult,
 } from "../data/mockData";
 import { getDraft } from "../services/firstRun";
+import { supplementModalityText } from "../services/localKg";
 import { getCurrentSession } from "../auth/session";
 import { USE_MOCK, clearToken } from "../services/http";
 
@@ -104,15 +105,6 @@ const LEVEL_BAR: Record<string, string> = {
    为什么用它：新用户进来「最近一次输入」是空的，只放一句干巴巴的提示看不出"输入长什么样"；
    放一条系统里真实存在的历史自述，既能示意格式，又不会让人误以为是自己的记录
    —— 所以下面必须带「样例」标记。 */
-/* 语音 / 图像单元在语料里的写法就是一段"特征描述"，没有原始文件。
-   下面是语料中的真实原文（R0064 的 aud / img 单元），用作占位写法示意；
-   等后端起起来、能对该用户的上传真正抽特征时，这里换成后端返回的描述。 */
-const SAMPLE_MODALITY: Record<'audio' | 'image', string> = {
-  audio: '语音片段特征：句中被叹气声打断；句子常被打断，语音表达的能量水平偏低。',
-  image:
-    '记录到的非言语线索：人物被画得很小，缩在纸的一角；视线频繁下移看手机，整体呈现低落与紧张并存的状态。',
-};
-
 const SAMPLE_INPUT =
   "最近这段时间，考试前脑子一片空白；像被一层灰蒙住，看不到出路，这种情况已经持续一阵了。";
 
@@ -199,14 +191,14 @@ export default function Dashboard() {
     const draft = getDraft();
     const supplement =
       records.find((r) => r.supplement)?.supplement ?? draft?.supplement;
-    const input =
-      supplement?.kind === "text"
-        ? { kind: "text" as const, text: supplement.text ?? "" }
-        : supplement?.kind === "audio"
-          ? { kind: "audio" as const, text: "" }
-          : supplement?.kind === "image"
-            ? { kind: "image" as const, text: "" }
-            : null;
+    /* 文本取原文；音频 / 图片取**与检索历史同一段**模态文字描述
+       （supplementModalityText 是两处共用的唯一实现：有分析描述就是
+       「语音片段特征：…」/「记录到的非言语线索：…」，没有就回退成文件名）。
+       以前这里对音频/图片直接摆了一段写死的"样例"描述，与历史记录对不上。 */
+    const supplementText = supplementModalityText(supplement);
+    const input = supplement
+      ? { kind: supplement.kind, text: supplementText }
+      : null;
 
     /* 检索结果：取相似度最高的一条，其余用「还有 N 条」带过（版面只放得下一条） */
     const ranked = [...retrievalResults].sort((a, b) => b.similarity - a.similarity);
@@ -215,7 +207,7 @@ export default function Dashboard() {
        没有补充文字时用「量表名 + 本次分档」兜底 —— 这是卡里确实显示过的内容，
        不是编出来的查询词。 */
     const retrievalQuery =
-      input?.kind === "text" && input.text.trim()
+      input?.text.trim()
         ? input.text.trim()
         : last
           ? `${def?.name ?? last.questionnaire}：${result?.label ?? LEVEL_LABEL[last.level] ?? last.level}`
@@ -355,7 +347,8 @@ export default function Dashboard() {
       {/* ============ 首屏：左标题 + 右「今日行动计划」（缩小后移到右上角） ============ */}
       {/* 左栏：标题 + 灰字 + 两个动作，整块在左栏内垂直居中（对齐右侧计划卡的高度） */}
       <div className="lg:flex lg:flex-col lg:justify-center" style={{ paddingTop: tune.offset }}>
-      <header>
+      {/* hero-stagger：三行从左向右依次登场（动效定义见 index.css） */}
+      <header className="hero-stagger">
         <p className="font-medium leading-none" style={{ fontSize: tune.line1 }}>
           <span className="text-primary-500">
             {greeting()}
@@ -522,24 +515,17 @@ export default function Dashboard() {
               <div className="lg:border-l lg:border-slate-100 lg:pl-8">
                 <p className="flex items-center gap-1.5 text-[15px] font-semibold text-slate-700">
                   最近一次输入
-                  {(!view.input || view.input.kind !== "text") && (
+                  {!view.input && (
                     <span className="rounded bg-slate-100 px-1 text-[11px] font-medium text-slate-400">
                       样例
                     </span>
                   )}
                 </p>
                 {view.input ? (
-                  view.input.kind === "text" ? (
-                    /* 文本：原文照展 —— 这是用户自己写的，也是检索真正用的那条 query */
-                    <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-700">
-                      「{view.input.text}」
-                    </p>
-                  ) : (
-                    /* 语音 / 图像：按语料里那套"特征描述"的写法展示，不露原始文件 */
-                    <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-700">
-                      {SAMPLE_MODALITY[view.input.kind]}
-                    </p>
-                  )
+                  /* 文本给原文，音频/图片给该记录在检索历史里的同一段模态描述 */
+                  <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-700">
+                    「{view.input.text}」
+                  </p>
                 ) : (
                   <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-500">
                     「{SAMPLE_INPUT}」

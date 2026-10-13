@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import type { ReactElement } from 'react';
+import { lazy, Suspense, type ReactElement } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import DashboardV2 from './pages/DashboardV2';
@@ -19,15 +19,20 @@ import AdminCases from './admin/pages/AdminCases';
 /* 管理端「预警处置工作台」：团队 main 用 AgentWorkspaceV2 取代了旧的
    AdminAgentWorkbench（旧文件已随本合并删除），这里指向 V2，路由地址不变。 */
 import AdminAgentWorkspace from './admin/pages/AgentWorkspaceV2';
+import AdminJudgement from './admin/pages/AdminJudgement';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import WelcomePage from './pages/WelcomePage';
 import FirstRunQuestionnaire from './pages/first/FirstRunQuestionnaire';
 import FirstRunSupplement from './pages/first/FirstRunSupplement';
 import FirstRunResult from './pages/first/FirstRunResult';
-import ChatPage from './pages/me/ChatPage';
-import KgPage from './pages/me/KgPage';
-import FeedPage from './pages/me/FeedPage';
+/* 「智能心理助手」三件套按需加载。
+   它们各自 280–410 行，且挂载时要读 localStorage、组装本机图谱 ——
+   之前是直接 import，全站打成一个 1.22 MB 的 bundle，点进去同步挂载就卡一下。
+   拆出去之后：首屏包变小，这三个页面各自一小块，切换时先出占位再填内容。 */
+const ChatPage = lazy(() => import('./pages/me/ChatPage'));
+const KgPage = lazy(() => import('./pages/me/KgPage'));
+const FeedPage = lazy(() => import('./pages/me/FeedPage'));
 import { getCurrentSession } from './auth/session';
 
 function RequireRole({ role, children }: { role: 'admin' | 'user'; children: ReactElement }) {
@@ -43,8 +48,21 @@ function RequireRole({ role, children }: { role: 'admin' | 'user'; children: Rea
   return children;
 }
 
+/** 按需加载的占位：给一块与页面同色的骨架，避免切换时闪白 */
+function RouteFallback() {
+  return (
+    <div className="grid min-h-[60vh] place-items-center bg-page">
+      <div className="flex items-center gap-2 text-sm text-slate-400">
+        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
+        正在打开…
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
+    <Suspense fallback={<RouteFallback />}>
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -118,11 +136,13 @@ export default function App() {
         <Route path="retrieval" element={<AdminRetrieval />} />
         <Route path="alerts" element={<AdminAlerts />} />
         <Route path="cases" element={<AdminCases />} />
+        <Route path="judgement" element={<AdminJudgement />} />
         <Route path="agent-workbench" element={<AdminAgentWorkspace />} />
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }

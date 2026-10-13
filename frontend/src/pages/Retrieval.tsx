@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import { getScreeningRecords, search, fetchRetrievalMedia } from '../services/mockApi';
 import { USE_MOCK } from '../services/http';
-import { myRetrievableInputs, type RetrievableInput } from '../services/localKg';
+import { supplementModalityText } from '../services/localKg';
 import { getCurrentSession } from '../auth/session';
 import type { RetrievalResult, RetrievalIndexInfo } from '../data/mockData';
 import AlertBadge from '../components/AlertBadge';
@@ -118,8 +118,11 @@ export default function Retrieval() {
                 severity: 0,
                 context: '我的记录',
                 text: sup.kind === 'text' ? (sup.text ?? '') : '',
-                audio: sup.kind === 'audio' ? `我上传的语音：${sup.filename ?? '（未命名）'}` : '',
-                image: sup.kind === 'image' ? `我上传的图片：${sup.filename ?? '（未命名）'}` : '',
+                /* 模态文本统一走 supplementModalityText（与首页「最近一次输入」同一处逻辑）：
+                   有分析描述就显示「语音片段特征：…」/「记录到的非言语线索：…」，
+                   没有就如实回退成文件名 */
+                audio: sup.kind === 'audio' ? supplementModalityText(sup, 'audio') : '',
+                image: sup.kind === 'image' ? supplementModalityText(sup, 'image') : '',
               };
             }),
         );
@@ -129,8 +132,6 @@ export default function Retrieval() {
       alive = false;
     };
   }, []);
-  /** 当前账号自己提交过的可检索文本（L1：本机记录），列在语料库历史之前 */
-  const [myInputs, setMyInputs] = useState<RetrievableInput[]>([]);
   const [report, setReport] = useState<RagReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [indexInfo, setIndexInfo] = useState<RetrievalIndexInfo | null>(null);
@@ -263,48 +264,33 @@ export default function Retrieval() {
      以前只切了展示的单元，列表与条数都没动）。口径：
        · 语料条目：按"该模态单元是否存在"过滤（每条的 文本/语音/图像 三个单元都在，
          所以条数不变，但每条展示的单元会跟着切）；
-       · 自己采集的记录（mine）：只在该模态下出现（supplement 只能是文字/语音/图片之一）；
-       · 我的输入（myInputs）：都是文本，只在「全部模态 / 文本」下出现。
-     三者合并后才是这份列表真实的条数与顺序（自己的在前）。 */
+       · 自己采集的记录（mine）：只在该模态下出现（supplement 只能是文字/语音/图片之一），
+         已经并入主列表并带「我的记录」标签 —— 不再另开「我的输入」分组（同一批数据
+         显示两遍会让条数重复计入）。
+     合并后才是这份列表真实的条数与顺序（自己的在前）。 */
   const hasUnit = (row: { text?: string; audio?: string; image?: string }, mode: Modality) =>
     (row[mode] ?? '').trim().length > 0;
   const corpusVisible = histMode === 'all' ? corpusRecords : corpusRecords.filter((r) => hasUnit(r, histMode));
   const mineVisible = histMode === 'all' ? mine : mine.filter((r) => hasUnit(r, histMode));
-  const myInputsVisible = histMode === 'all' ? myInputs : myInputs.filter((i) => i.modality === histMode);
   const historyRows = [...mineVisible, ...corpusVisible];
-  const historyTotal = historyRows.length + myInputsVisible.length;
+  const historyTotal = historyRows.length;
 
   /* 每个模态下到底有多少条：直接印在按钮上 —— 语料每条都有三个单元，条数不变，
      光看列表看不出按钮有没有生效（2026-10-14 用户实测"点了没反应"），
      计数 + 行内单元正文 + 一句口径说明，三处一起把"确实切了"讲清楚。 */
   const modalityCount = (mode: 'all' | Modality) =>
     mode === 'all'
-      ? corpusRecords.length + mine.length + myInputs.length
+      ? corpusRecords.length + mine.length
       : corpusRecords.filter((r) => hasUnit(r, mode)).length +
-        mine.filter((r) => hasUnit(r, mode)).length +
-        myInputs.filter((i) => i.modality === mode).length;
+        mine.filter((r) => hasUnit(r, mode)).length;
 
   /** 每个模态实际展示的是什么（说明文字必须与真实行为一致） */
   const HIST_MODE_DESC: Record<'all' | Modality, string> = {
-    all: '全部模态：每条显示文本单元，自己的记录按采集模态展示',
+    all: '全部模态：语料条目显示文本单元，自己的记录按实际采集到的模态显示',
     text: '当前显示每条记录的文本单元（自述原文）',
     audio: '当前显示每条记录的语音单元文本（语音特征描述）',
     image: '当前显示每条记录的图像单元描述（非言语线索）',
   };
-
-  /* 「我的输入」：本机记录里的补充文字 / 逐题作答，进页面就取一次。
-     读的是与写入同一个数据源（getScreeningRecords → 本机记录），不额外造数据。 */
-  useEffect(() => {
-    let alive = true;
-    getScreeningRecords()
-      .then((records) => {
-        if (alive) setMyInputs(myRetrievableInputs(records));
-      })
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const [searchParams] = useSearchParams();
   const autoQuery = searchParams.get('q') ?? '';
@@ -871,7 +857,7 @@ export default function Retrieval() {
                 历史记录
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                共 {historyTotal} 条（含你自己采集的 {myInputsVisible.length + mineVisible.length} 条）。
+                共 {historyTotal} 条（含你自己采集的 {mineVisible.length} 条）。
                 {HIST_MODE_DESC[histMode]}
                 ；点一条直接用它的文本检索。
               </p>
@@ -903,49 +889,6 @@ export default function Retrieval() {
             </span>
           </div>
 
-          {/* 我的输入：置顶、带「我的记录」标签，和语料库条目明确区分。
-              点一条就回填检索框并立即检索（语料库条目仍是只回填，保持原交互）。 */}
-          {myInputsVisible.length > 0 && (
-            <div className="mt-6 border-t border-slate-100 pt-5">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold text-slate-800">我的输入</h3>
-                <span className="text-xs text-slate-400">
-                  共 {myInputsVisible.length} 条 · 来自本机记录（localStorage），点一条直接检索
-                </span>
-              </div>
-              <ul className="mt-3 grid gap-2">
-                {myInputsVisible.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setQuery(item.text);
-                        void handleSearch(undefined, item.text);
-                      }}
-                      className="w-full rounded-xl border border-primary-100 bg-primary-50/40 p-4 text-left transition-colors hover:border-primary-300 hover:bg-primary-50"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700">
-                            我的记录
-                          </span>
-                          <span className="text-xs text-slate-500">{item.source}</span>
-                          <span className="text-xs tabular-nums text-slate-400">{item.date}</span>
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${LEVEL_PILL[item.level]}`}
-                        >
-                          {LEVEL_NAME[item.level]}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">{item.text}</p>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
           <ul className="mt-4 grid gap-3">
             {historyRows.slice(0, shown).map((r) => (
               <li key={r.id}>
@@ -967,7 +910,9 @@ export default function Retrieval() {
                     <span className="flex items-center gap-2">
                       <span className="text-xs text-slate-400">
                         {histMode === 'all'
-                          ? '文本 · 语音 · 图像'
+                          ? [r.text && '文本', r.audio && '语音', r.image && '图像']
+                              .filter(Boolean)
+                              .join(' · ')
                           : `${MODALITY_META[histMode].label}单元`}
                       </span>
                       <span
@@ -978,13 +923,15 @@ export default function Retrieval() {
                     </span>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    {histMode === 'text'
-                      ? r.text
-                      : histMode === 'audio'
-                        ? r.audio
-                        : histMode === 'image'
-                          ? r.image
-                          : r.text}
+                    {histMode === 'all'
+                      ? /* 全部模态：语料条目看文本单元；自己的记录只有采集到的那一个模态，
+                           按"文本→语音→图像"取第一个有内容的（否则自己的图片记录会是空白行） */
+                        r.text || r.audio || r.image
+                      : histMode === 'text'
+                        ? r.text
+                        : histMode === 'audio'
+                          ? r.audio
+                          : r.image}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {r.themes.map((t) => (
@@ -1002,7 +949,7 @@ export default function Retrieval() {
           </ul>
 
           {/* 该模态下一条都没有时给一句说明，不留空白（例如还没有任何图像采集） */}
-          {historyRows.length === 0 && myInputsVisible.length === 0 && (
+          {historyRows.length === 0 && (
             <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
               当前筛选下还没有记录。切回「全部模态」，或先去「多模态采集」补一条这个模态的记录。
             </p>

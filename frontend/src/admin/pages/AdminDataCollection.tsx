@@ -554,7 +554,14 @@ export default function AdminDataCollection() {
         )}
 
       {/* Tabs */}
-      <div className="ui-card flex gap-2 p-1.5 w-fit">
+      {/* 分段控件用**控件圆角**（rounded-xl = 12px），不用卡片那套 24px。
+         24px 圆角套在 44px 高的条上会变成药丸形，和里面的按钮叠在一起
+         整块都像药丸；改用控件圆角之后是规规矩矩的长方形，与项目里
+         .ui-button（--control-radius）一致。 */}
+      {/* 右侧缩进一点：这条分段控件是 w-fit 的窄条，和上面整宽的卡片同为
+          左对齐时会贴着同一个左边界，看着"杵在最左边"。缩进一档之后
+          它读起来更像上面那张卡片的附属操作条，不再抢左边界。 */}
+      <div className="ml-2 flex w-fit gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_2px_rgba(16,24,40,0.05)]">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -562,7 +569,7 @@ export default function AdminDataCollection() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+              className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
                 isActive ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >

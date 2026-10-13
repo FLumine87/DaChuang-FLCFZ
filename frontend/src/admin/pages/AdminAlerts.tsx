@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Search } from 'lucide-react';
+import { ArrowLeft, Search, MousePointerClick } from 'lucide-react';
 import {
   getAdminAlert, listAdminAlerts, listAdminAssignees, updateAdminAlert, USE_MOCK,
   type AdminAlertDetail, type Assignee, type Page,
@@ -99,9 +99,10 @@ export default function AdminAlerts() {
   const hasMore = result ? page * result.pageSize < result.total : false;
 
   return <div className="space-y-5">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h2 className="text-2xl font-bold text-slate-900">预警管理</h2>
-        <p className="mt-1 text-sm text-slate-500">查询预警、分配处理人并记录处置过程。</p></div>
+    {/* 这一块以前又渲染了一遍「预警管理」大标题 + 说明，和外壳的页头
+        （管理端 · 健康管理 / 预警管理 / 查看风险变化…）叠成两层。
+        外壳那层带面包屑、两端页面统一，所以这里只留"演示数据"标记。 */}
+    <div className="flex flex-wrap items-center justify-end gap-3">
       {USE_MOCK && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">演示数据，操作仅在本页有效</span>}
     </div>
     <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3">
@@ -155,11 +156,31 @@ export default function AdminAlerts() {
           </div>
         </div>}
       </div>
-      <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        {!selectedId && <p className="text-sm text-slate-500">选择一条预警查看详情并处理。</p>}
+      {/* 右侧详情栏：原来用 h-fit，没选中时只剩一行字 —— 一个巴掌大的白框，
+          和左边长长的列表并排很突兀。现在撑一个最小高度，空态在框内居中，
+          做成"待操作"的样子；并且**空态与加载态互斥**（原来两行会同时出现，
+          既说"选一条"又说"正在加载"，自相矛盾）。 */}
+      <aside className="flex min-h-[460px] flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {!selectedId && !detailLoading && (
+          <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+            <span className="grid h-12 w-12 place-items-center rounded-full bg-slate-50 text-slate-300">
+              <MousePointerClick className="h-6 w-6" />
+            </span>
+            <p className="mt-4 text-sm font-medium text-slate-600">
+              选择一条预警查看详情并处理
+            </p>
+            <p className="mt-1.5 max-w-[260px] text-xs leading-5 text-slate-400">
+              左侧列表里每一条都能点开：查看触发原因与补充说明，分配处理人，并记录处置过程。
+            </p>
+          </div>
+        )}
         {selectedId && <button type="button" onClick={() => { setSelectedId(null); setDetail(null); }}
           className="mb-4 inline-flex items-center gap-1 text-sm text-sky-700 hover:underline"><ArrowLeft className="h-4 w-4" /> 返回列表</button>}
-        {detailLoading && <p role="status" className="text-sm text-slate-500">正在加载详情…</p>}
+        {detailLoading && (
+          <div className="flex flex-1 items-center justify-center text-sm text-slate-400" role="status">
+            正在加载详情…
+          </div>
+        )}
         {detailError && <p role="alert" className="text-sm text-rose-700">详情加载失败：{detailError}</p>}
         {detail && !detailLoading && <>
           <div className="flex items-start justify-between gap-2"><div><h3 className="font-semibold text-slate-900">{detail.id}</h3>

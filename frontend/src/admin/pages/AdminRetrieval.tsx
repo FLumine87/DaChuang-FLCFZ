@@ -3,6 +3,13 @@ import { Search, Sparkles, Loader2 } from 'lucide-react';
 import { adminSearch } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import type { RetrievalResult } from '../data/adminMockData';
+import { corpusRecords } from '../../data/corpusRecords';
+
+const LEVEL_NAME: Record<string, string> = { green: '稳定', yellow: '关注', orange: '警告', red: '高危' };
+const LEVEL_PILL: Record<string, string> = {
+  green: 'bg-success-50 text-success-600', yellow: 'bg-warning-50 text-warning-600',
+  orange: 'bg-orange-50 text-orange-600', red: 'bg-danger-50 text-danger-600',
+};
 
 interface RagReport {
   summary: string;
@@ -12,6 +19,7 @@ interface RagReport {
 export default function AdminRetrieval() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [shown, setShown] = useState(20);
   const [results, setResults] = useState<RetrievalResult[] | null>(null);
   const [report, setReport] = useState<RagReport | null>(null);
   // 查询模态与媒体：后端支持文本 / 图像 / 语音三种查询，这里补齐入口
@@ -205,9 +213,63 @@ export default function AdminRetrieval() {
       )}
 
       {!loading && !results && (
-        <div className="text-center py-16">
-          <Search className="w-14 h-14 text-slate-200 mx-auto mb-3" />
-          <p className="text-slate-400 text-sm">输入检索词，查找相似案例与风险模式</p>
+        /* 空状态不再只有一张图标：把语料库的真实记录列出来，
+           管理员可以直接点一条试检索 —— 和个人端检索页同一套做法。
+           管理端看得更"横"：带主题标签与风险等级，便于按类别挑样本。 */
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold text-slate-800">语料库记录</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                共 {corpusRecords.length} 条真实语料，每条含文本 / 语音 / 图像三个单元。
+                点一条把它填进检索框。
+              </p>
+            </div>
+            <span className="text-xs tabular-nums text-slate-400">
+              已显示 {Math.min(shown, corpusRecords.length)} / {corpusRecords.length}
+            </span>
+          </div>
+          <ul className="mt-4 grid gap-2">
+            {corpusRecords.slice(0, shown).map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => setQuery(r.text)}
+                  className="w-full rounded-lg border border-slate-100 p-3.5 text-left transition-colors hover:border-primary-300 hover:bg-primary-50/40"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 text-xs">
+                      <span className="font-medium tabular-nums text-slate-600">{r.id}</span>
+                      <span className="tabular-nums text-slate-400">{r.date}</span>
+                      {r.context && <span className="text-slate-400">· {r.context}</span>}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="flex flex-wrap gap-1">
+                        {r.themes.map((t) => (
+                          <span key={t} className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">
+                            {t}
+                          </span>
+                        ))}
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${LEVEL_PILL[r.level]}`}>
+                        {LEVEL_NAME[r.level]}
+                      </span>
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-sm leading-6 text-slate-600">{r.text}</p>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {shown < corpusRecords.length && (
+            <button
+              type="button"
+              onClick={() => setShown((n) => n + 20)}
+              className="ui-button mt-3 w-full"
+            >
+              显示更多（还有 {corpusRecords.length - shown} 条）
+            </button>
+          )}
         </div>
       )}
     </div>

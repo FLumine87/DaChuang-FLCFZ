@@ -374,7 +374,14 @@ export async function submitScreening(data: {
  */
 export async function saveScreeningSupplement(
   recordId: string,
-  supplement: { kind: 'text' | 'audio' | 'image'; text?: string; filename?: string; url?: string },
+  supplement: {
+    kind: 'text' | 'audio' | 'image';
+    text?: string;
+    filename?: string;
+    url?: string;
+    /** 音频/图片的分析描述（上传接口返回），首页与检索页据此展示同一段文字 */
+    description?: string;
+  },
 ): Promise<void> {
   if (USE_MOCK) {
     await delay(120);
@@ -577,8 +584,13 @@ export async function uploadFile(file: File): Promise<{ url: string; filename: s
 export async function getAdminDashboardData(): Promise<AdminDashboardResponse> {
   if (USE_MOCK) {
     await delay();
-    const now = new Date();
-    const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    /* 月份口径：**按数据里最新的那个月**统计，不用当前自然月。
+       演示数据是 2026-03、今天是 2026-10 —— 按自然月过滤会恒显示 0 条，
+       看起来像"本月没有预警"，其实是口径错了。
+       个人端「最近预警」卡片早就用了这个口径（见 Dashboard.tsx 同名判断），
+       管理端这里之前没跟上，所以「本月预警」一直是 0。 */
+    const monthPrefix =
+      alertRecords.map((a) => (a.createdAt ?? '').slice(0, 7)).sort().pop() ?? '';
     return {
       trendData,
       alertDistribution,

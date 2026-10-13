@@ -12,6 +12,7 @@ import {
   TechVisual,
 } from "./introSections";
 import { navItems, screens } from "./introContent";
+import BackToTop from '../components/BackToTop';
 
 type Theme = "light" | "dark";
 
@@ -409,6 +410,7 @@ export default function LandingPage() {
 
   return (
     <div className="page-enter min-h-screen scroll-smooth bg-page text-slate-800">
+      <BackToTop />
       {/* ================= 顶部导航 ================= */}
       <header className="nav-blur sticky top-0 z-40 px-6 sm:px-10 lg:px-12 xl:px-16">
         <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center justify-between gap-4">

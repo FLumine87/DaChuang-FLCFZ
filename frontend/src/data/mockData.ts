@@ -65,6 +65,12 @@ export interface PersonalScreeningRecord {
     text?: string;
     filename?: string;
     url?: string;
+    /**
+     * 音频/图片补充的分析描述（上传时由后端或演示引擎返回，例如
+     * "对…的模拟分析完成：已完成哈希编码…"）。首页「最近一次输入」与检索页
+     * 历史记录都优先展示它；没有就如实回退成文件名，不编造特征描述。
+     */
+    description?: string;
   };
   /** 提交时存下的检索/RAG 快照（L1：浏览器本地） */
   retrieval?: ScreeningRetrievalSnapshot;

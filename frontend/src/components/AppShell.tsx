@@ -28,6 +28,7 @@ import {
 import { getCurrentSession, logout } from "../auth/session";
 import Aurora from "./Aurora";
 import BrandLogo from "./BrandLogo";
+import BackToTop from './BackToTop';
 
 interface NavigationItem {
   path: string;
@@ -54,6 +55,22 @@ const THEME_KEY = "psych_theme";
  *  换浏览器 / 新窗口 / 清过站点数据后一律回到浅色。 */
 const readStoredTheme = (): Theme =>
   window.localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
+
+
+/* 悬停预取：鼠标移到侧栏项上就把对应页面的 chunk 拉下来。
+   不预取的话，点下去才开始下载 —— 那一下就是"卡一下"。
+   这里只在悬停/聚焦时发一次，且失败静默（网络不好不该弹错）。 */
+const PREFETCH: Record<string, () => Promise<unknown>> = {
+  '/me/chat': () => import('../pages/me/ChatPage'),
+  '/me/kg': () => import('../pages/me/KgPage'),
+  '/me/feed': () => import('../pages/me/FeedPage'),
+};
+const prefetched = new Set<string>();
+function prefetch(path: string) {
+  if (prefetched.has(path) || !PREFETCH[path]) return;
+  prefetched.add(path);
+  void PREFETCH[path]().catch(() => prefetched.delete(path));
+}
 
 export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   const location = useLocation();
@@ -167,7 +184,22 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       icon: TriangleAlert,
       group: "健康管理",
     },
-    /* 管理端不需要「案例管理」（用户要求删除）；用户端保留「我的档案」——
+    /* 管理端的「案例管理」放**工作空间**分组。
+       它原先只在右上角下拉里，藏在二级菜单里不好找；用户要求挪回侧栏。
+       用户端的「我的档案」留在「健康管理」不动 —— 两者的定位不同：
+       管理端是"看所有案例"，用户端是"回看自己的筛查记录"。 */
+    ...(isAdmin
+      ? [
+          {
+            path: `${root}/cases`,
+            label: "案例管理",
+            description: "汇集案例资料，持续跟踪干预与恢复进展。",
+            icon: FolderOpen,
+            group: "工作空间",
+          },
+        ]
+      : []),
+    /* 用户端保留「我的档案」——
        那是筛查记录的入口，首次引导落库后要靠它回看。 */
     ...(isAdmin
       ? []
@@ -348,6 +380,8 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                       key={item.path}
                       to={item.path}
                       onClick={closeNavigation}
+                      onMouseEnter={() => prefetch(item.path.replace(root, ''))}
+                      onFocus={() => prefetch(item.path.replace(root, ''))}
                       className="sidebar-link"
                       aria-current={
                         active.path === item.path ? "page" : undefined
@@ -442,8 +476,12 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               aria-hidden="true"
               className="hidden h-5 w-px bg-slate-300/80 sm:block"
             />
+            {/* 顶栏第二段显示**分组名**（工作空间 / 智能分析 / 健康管理…），
+                不是页名。页名下面的大标题已经写了，顶栏再说一遍是重复；
+                而分组名放在这里，正好承担"我在哪一块"这个定位，
+                页头那行眉标因此可以去掉（见下方 hasOwnHero 附近的说明）。 */}
             <span className="hidden whitespace-nowrap text-[15px] font-medium text-slate-700 sm:inline">
-              {active.label}
+              {active.group}
             </span>
           </div>
           <div className="flex min-w-0 flex-1 justify-center px-1">
@@ -531,14 +569,18 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                       {isAdmin ? "管理工作空间" : "个人健康空间"}
                     </p>
                   </div>
-                  <Link
-                    to={`${root}/cases`}
-                    onClick={closeNavigation}
-                    className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"
-                  >
-                    <UserRound className="h-4 w-4" />
-                    {isAdmin ? "案例管理" : "我的档案"}
-                  </Link>
+                  {/* 管理端的「案例管理」已挪到侧栏「工作空间」分组，
+                      这里只保留用户端的「我的档案」。 */}
+                  {!isAdmin && (
+                    <Link
+                      to={`${root}/cases`}
+                      onClick={closeNavigation}
+                      className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+                    >
+                      <UserRound className="h-4 w-4" />
+                      我的档案
+                    </Link>
+                  )}
                   <button
                     disabled={signingOut}
                     onClick={handleLogout}
@@ -577,10 +619,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               个人端首页自带 hero，这里整块让位（见 hasOwnHero）。 */}
           {!hasOwnHero && (
           <div className="mb-7">
-            <p className="app-page-eyebrow">
-              {isAdmin ? "管理端" : "个人端"} · {active.group}
-            </p>
-            <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
                 <h1 className="app-page-title text-slate-900">
                   {active.label}
@@ -611,6 +650,8 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           )}
           {/* key 跟着路由走：每次换页重放一次 260ms 的淡入上浮，
               与登录页 ↔ 主页的转场是同一段动画（.page-enter）。 */}
+          {/* 管理端所有页面 + 个人端首页显示回到顶部（个人端其余页面内容短，不需要） */}
+          {(isAdmin || isDashboard) && <BackToTop />}
           <div className="page-body page-enter" key={location.pathname}>
             <Outlet />
           </div>

@@ -162,6 +162,8 @@ export interface SupplementDraft {
   filename?: string;
   /** 语音 / 图片上传后的地址（mock 模式下是 blob URL） */
   url?: string;
+  /** 语音 / 图片的分析描述（上传接口返回的 analysis），存下来供首页与检索页一致展示 */
+  description?: string;
 }
 
 export interface FirstRunDraft {

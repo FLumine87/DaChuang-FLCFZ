@@ -283,82 +283,44 @@ export async function collectLocalSignals(username: string): Promise<LocalSignal
 }
 
 /**
- * 当前账号自己提交过、可以拿去检索的文本（L1：只来自本机记录）。
+ * 取一条补充记录在某个模态下的「可检索文本」。
  *
- * 来源按优先级：
- *   1. 记录的 supplement.text —— 用户自己写的那句话；
- *   2. 没有补充文字时，退回「量表逐题作答」里分值最高的三题，拼成
- *      "题干：选项文案" 的自述（内容是用户自己选的选项，不是生成的句子）。
- * 两条都没有的记录直接跳过 —— 宁可少列，也不凭空造一条"我的输入"。
+ * 为什么必须只有这一处：首页「最近一次输入」与检索页历史记录展示的是同一条内容，
+ * 各写一套必然走样（用户 2026-10-14 明确要求"最后一个输入"要跟历史记录里的
+ * 模态文字描述一致）。两处都调这个函数。
+ *
+ * 优先级（拿到什么写什么，绝不为凑格式编内容）：
+ *   1. 文字补充 → 原文；
+ *   2. 音频 / 图片补充自带的描述（上传时后端 / 演示引擎返回的分析文案）→
+ *      与语料行同一套前缀：「语音片段特征：…」「记录到的非言语线索：…」；
+ *   3. 没有描述 → 如实回退成文件名（"我上传的语音：xxx.wav"），
+ *      指定了另一个模态但这条补充不是该模态时 → "…：暂无文字描述"。
+ *
+ * @param supplement 记录（或首次引导草稿）上的补充内容
+ * @param modality   想要哪个模态的文本；缺省按 supplement.kind
  */
-export interface RetrievableInput {
-  /** 记录 id + 模态（同一条记录的文字/语音/图片各算一项） */
-  id: string;
-  /** 这条输入来自哪种模态：检索页按模态过滤时用 */
-  modality: 'text' | 'audio' | 'image';
-  /** 实际拿去检索的文本（语音/图片是文件名/描述，可读且不编造） */
-  text: string;
-  /** 展示用来源：量表名 + 补充记录/逐题作答 */
-  source: string;
-  date: string;
-  level: PersonalScreeningRecord['level'];
-}
+export function supplementModalityText(
+  supplement:
+    | { kind: 'text' | 'audio' | 'image'; text?: string; filename?: string; description?: string }
+    | null
+    | undefined,
+  modality?: 'text' | 'audio' | 'image',
+): string {
+  if (!supplement) return '';
+  const kind = modality ?? supplement.kind;
+  const isSameModality = supplement.kind === kind;
 
-export function myRetrievableInputs(records: PersonalScreeningRecord[]): RetrievableInput[] {
-  const out: RetrievableInput[] = [];
-  for (const record of records) {
-    if (record.status !== 'completed') continue;
-    const definition = questionnaires.find(
-      (q) => q.id === record.questionnaire || q.name === record.questionnaire,
-    );
-    const scale = definition?.id ?? record.questionnaire;
-    /* 语音 / 图片补充：没有原始文字，就用文件名说清"这是我的哪一次上传"（不编内容） */
-    const supplement = record.supplement;
-    if (supplement?.kind === 'audio' || supplement?.kind === 'image') {
-      out.push({
-        id: `${record.id}-${supplement.kind}`,
-        modality: supplement.kind,
-        text: `我上传的${supplement.kind === 'audio' ? '语音' : '图片'}：${supplement.filename ?? '（未命名）'}`,
-        source: `${scale} · ${supplement.kind === 'audio' ? '语音' : '图片'}补充`,
-        date: record.date,
-        level: record.level,
-      });
-      continue;
-    }
-    const supplementText = supplement?.kind === 'text' ? supplement.text?.trim() : undefined;
-    if (supplementText) {
-      out.push({
-        id: record.id,
-        modality: 'text',
-        text: supplementText,
-        source: `${scale} · 补充记录`,
-        date: record.date,
-        level: record.level,
-      });
-      continue;
-    }
-    const answers = record.answers;
-    if (!definition || !answers) continue;
-    const picked = definition.questions
-      .map((question) => ({ question, value: answers[question.id] }))
-      .filter((item) => typeof item.value === 'number' && item.value > 0)
-      .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
-      .slice(0, 3)
-      .map(({ question, value }) => {
-        const label = question.options.find((option) => option.value === value)?.label;
-        return `${question.text}：${label ?? `${value} 分`}`;
-      });
-    if (!picked.length) continue;
-    out.push({
-      id: record.id,
-      modality: 'text',
-      text: picked.join('；'),
-      source: `${definition.id} · 逐题作答`,
-      date: record.date,
-      level: record.level,
-    });
+  if (kind === 'text') {
+    return isSameModality ? (supplement.text ?? '').trim() : '';
   }
-  return out;
+
+  const label = kind === 'audio' ? '语音片段特征' : '记录到的非言语线索';
+  const description = isSameModality ? (supplement.description ?? '').trim() : '';
+  if (description) return `${label}：${description}`;
+  if (isSameModality) {
+    return `我上传的${kind === 'audio' ? '语音' : '图片'}：${supplement.filename ?? '（未命名）'}`;
+  }
+  return `${label}：暂无文字描述`;
 }
 
 /* ─────────────────── 本地报告 / 本地推送 / 本地问询（兜底） ─────────────────── */

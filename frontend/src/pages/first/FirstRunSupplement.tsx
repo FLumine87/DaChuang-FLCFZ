@@ -35,9 +35,13 @@ export default function FirstRunSupplement() {
   const draft = getDraft();
   const [kind, setKind] = useState<SupplementKind>("text");
   const [text, setText] = useState(draft?.supplement?.text ?? "");
-  const [file, setFile] = useState<{ name: string; url: string } | null>(
+  const [file, setFile] = useState<{ name: string; url: string; description?: string } | null>(
     draft?.supplement?.url
-      ? { name: draft.supplement.filename ?? "已选择的文件", url: draft.supplement.url }
+      ? {
+          name: draft.supplement.filename ?? "已选择的文件",
+          url: draft.supplement.url,
+          description: draft.supplement.description,
+        }
       : null,
   );
   const [uploading, setUploading] = useState(false);
@@ -74,7 +78,9 @@ export default function FirstRunSupplement() {
     setUploading(true);
     try {
       const result = await uploadFile(picked);
-      setFile({ name: result.filename, url: result.url });
+      /* analysis 一起存下来：首页「最近一次输入」与检索历史都展示这段描述，
+         而不是只给一个文件名（用户 2026-10-14 明确要求两处一致） */
+      setFile({ name: result.filename, url: result.url, description: result.analysis });
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "上传失败，请重试");
     } finally {
@@ -89,7 +95,7 @@ export default function FirstRunSupplement() {
           ? { kind, text: text.trim() }
           : undefined
         : file
-          ? { kind, filename: file.name, url: file.url }
+          ? { kind, filename: file.name, url: file.url, description: file.description }
           : undefined
       : undefined;
     /* 先写进草稿（03 结果页要读），再**当场落库**到本次筛查记录上——

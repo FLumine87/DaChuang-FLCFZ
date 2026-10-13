@@ -4,8 +4,30 @@ import {
   FileText, Mic, ImageIcon, Upload, ChevronRight, Sparkles,
   Square, Play, Pause, Trash2, CheckCircle2, AlertCircle, X,
 } from 'lucide-react';
-import { uploadFile } from '../services/mockApi';
+import {
+  uploadFile,
+  getScreeningRecords,
+  saveScreeningSupplement,
+} from '../services/mockApi';
 import { questionnaireCatalog } from '../data/mockData';
+
+/* 采集落库：上传完把这条记录挂到最近一次筛查上（后端现成接口
+   POST /api/personal/screenings/{id}/supplement）。
+   不挂的话，采集就是"发射后不管" —— 检索与分析的历史列表看不到、
+   首页「最近一次输入」也拿不到，等于白采。 */
+async function persistCollection(
+  kind: 'text' | 'audio' | 'image',
+  payload: { text?: string; filename?: string; url?: string },
+): Promise<void> {
+  try {
+    const records = await getScreeningRecords();
+    const target = records.find((r) => r.status === 'completed') ?? records[0];
+    if (!target) return; // 一次筛查都没做过，没有可挂靠的记录
+    await saveScreeningSupplement(target.id, { kind, ...payload });
+  } catch {
+    /* 落库失败不阻塞用户 —— 文件已经传上去了，页面照常提示成功 */
+  }
+}
 
 type Tab = 'text' | 'audio' | 'image';
 type RecordState = 'idle' | 'requesting' | 'recording' | 'stopped';
@@ -247,7 +269,8 @@ function AudioTab() {
               for (const entry of audioList) {
                 if (!entry.file) continue;
                 try {
-                  await uploadFile(entry.file);
+                  const up = await uploadFile(entry.file);
+                  await persistCollection('audio', { filename: up.filename, url: up.url });
                 } catch (e) {
                   console.error('上传音频失败', e);
                   failed.push(entry.name);
@@ -379,7 +402,8 @@ function ImageTab() {
               for (const img of images) {
                 if (!img.file) continue;
                 try {
-                  await uploadFile(img.file);
+                  const up = await uploadFile(img.file);
+                  await persistCollection('image', { filename: up.filename, url: up.url });
                 } catch (e) {
                   console.error('上传图像失败', e);
                   failed.push(img.name);
@@ -503,7 +527,14 @@ export default function DataCollection() {
       </div>
 
       {/* Tabs */}
-      <div className="ui-card flex gap-2 p-1.5 w-fit">
+      {/* 分段控件用**控件圆角**（rounded-xl = 12px），不用卡片那套 24px。
+         24px 圆角套在 44px 高的条上会变成药丸形，和里面的按钮叠在一起
+         整块都像药丸；改用控件圆角之后是规规矩矩的长方形，与项目里
+         .ui-button（--control-radius）一致。 */}
+      {/* 右侧缩进一点：这条分段控件是 w-fit 的窄条，和上面整宽的卡片同为
+          左对齐时会贴着同一个左边界，看着"杵在最左边"。缩进一档之后
+          它读起来更像上面那张卡片的附属操作条，不再抢左边界。 */}
+      <div className="ml-2 flex w-fit gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_2px_rgba(16,24,40,0.05)]">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -511,7 +542,7 @@ export default function DataCollection() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+              className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
                 isActive ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >

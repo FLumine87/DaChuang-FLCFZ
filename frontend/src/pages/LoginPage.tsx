@@ -230,8 +230,11 @@ export default function LoginPage() {
           <div className="auth-orbit scale-[1.35]" />
           <div className="auth-orbit scale-[1.7]" />
 
-          {/* 左：与作品简介屏同一套文字格式（眉标 + 大标题 + 正文 + 要点） */}
-          <div className="relative z-10">
+          {/* 左：与作品简介屏同一套文字格式（眉标 + 大标题 + 正文 + 要点）
+              lg:self-start —— 切到「注册」时右侧卡片会高出 234px（多两个字段），
+              网格是 items-center，整格一变高就把左栏一起往上推，
+              文字看着"跳"了一下。让左栏自己贴住行的上沿，右卡怎么长都不动它。 */}
+          <div className="relative z-10 lg:self-start">
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
               关注状态 · 看见变化
             </p>

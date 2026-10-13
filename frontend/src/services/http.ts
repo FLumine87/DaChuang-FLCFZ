@@ -138,6 +138,34 @@ export const request = {
   },
 };
 
+/* 凭证复验：拿一个"一定需要登录"的核心接口再问一次。
+   只有它也 401，才认定凭证失效（清凭证 + 跳登录）；
+   否则说明是某个业务接口自己的问题，不该毁掉整个会话。
+   结果缓存 3 秒，避免并发 401 打出多次复验请求。 */
+let verifyCache: { at: number; valid: boolean } | null = null;
+async function credentialStillValid(): Promise<boolean> {
+  const now = Date.now();
+  if (verifyCache && now - verifyCache.at < 3000) return verifyCache.valid;
+  const token = getToken();
+  if (!token) return false;
+  /* 管理端与个人端各挑一个必然要求登录的接口 */
+  const probe = /^#?\/admin/.test(location.hash)
+    ? '/api/dashboard/stats'
+    : '/api/personal/profile';
+  try {
+    const resp = await axios.get(`${BASE_URL}${probe}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      validateStatus: () => true,
+    });
+    const valid = resp.status !== 401;
+    verifyCache = { at: now, valid };
+    return valid;
+  } catch {
+    /* 网络不通 ≠ 凭证失效，别把人踢出去 */
+    return true;
+  }
+}
+
 http.interceptors.response.use(
   (response) => {
     // 约定后端返回 { code: 0|200, message, data }
@@ -152,7 +180,7 @@ http.interceptors.response.use(
     }
     return body;
   },
-  (error: AxiosError<{ message?: string }>) => {
+  async (error: AxiosError<{ message?: string }>) => {
     // 登录/注册接口的 401 是"凭证错误"，不是会话过期，需透传后端原因
     const isAuthEntry = /\/api\/auth\/(login|register)$/.test(error.config?.url ?? '');
     if (error.response?.status === 401 && !isAuthEntry) {
@@ -169,6 +197,24 @@ http.interceptors.response.use(
       if (isDemoToken()) {
         return Promise.reject(
           new Error(error.response?.data?.message || '当前为演示登录，后端接口需要真实登录凭证'),
+        );
+      }
+      /* 401 分级（2026-10-14）：**不再拿任意一个业务接口的 401 直接判死刑**。
+       *
+       * 起因：管理端「预警处置工作台」的 /api/agent-workspace 回 401 时，
+       * 旧逻辑会 clearToken + 跳登录 —— 于是"打开工作台 = 被强制登出"，
+       * 而且后开的「预警管理」「案例管理」跟着一起进不去（连坐）。
+       * 同一个失效凭证下，另外 5 个业务页面却能降级到演示数据正常显示，
+       * 8 个页面行为不一致。
+       *
+       * 现在先用一个**核心接口**复验凭证：
+       *   · 复验也 401 → 凭证确实无效 → 照旧清凭证 + 跳登录
+       *   · 复验通过   → 是这个接口自己的问题（未实现 / 另一套鉴权）→ 只透传错误
+       * 复验结果短时缓存，避免并发 401 打出多次请求。 */
+      const stillValid = await credentialStillValid();
+      if (stillValid) {
+        return Promise.reject(
+          new Error(error.response?.data?.message || '该接口拒绝了本次请求（其余功能不受影响）'),
         );
       }
       clearToken();
