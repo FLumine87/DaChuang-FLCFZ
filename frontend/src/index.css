@@ -767,6 +767,27 @@ h3.text-2xl {
     padding-top: 2rem;
     padding-bottom: 2rem;
   }
+}
+
+/* 更矮（约 700px 视口，13 寸全屏常见）：再收一档。
+   菜单/工具栏占掉高度后视口常只有 700 出头，不收这一档就会因"装不下一屏"
+   触发兜底、把整屏翻页整个关掉，用户观感就是"上下滑动没反应"。 */
+@media (max-height: 760px) {
+  .auth-snap .auth-screen > div {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+  .auth-snap .auth-hero-title {
+    font-size: 1.875rem;
+    line-height: 1.25;
+  }
+  .auth-snap .auth-section-title {
+    font-size: 1.75rem;
+    line-height: 1.25;
+  }
+  .auth-snap .auth-screen p {
+    line-height: 1.8;
+  }
   /* 登录屏靠 flex 居中，不需要这层额外留白，否则矮屏会被顶高一屏 */
   .auth-snap #login > div {
     padding-top: 0;

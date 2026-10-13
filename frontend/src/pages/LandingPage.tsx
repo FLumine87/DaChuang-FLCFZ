@@ -111,7 +111,7 @@ export default function LandingPage() {
     const SETTLE_DELAY = 180;
     const FAST_DURATION = 320;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const desktop = window.matchMedia("(min-width: 1024px) and (min-height: 720px)");
+    const desktop = window.matchMedia("(min-width: 1024px) and (min-height: 600px)");
 
     let raf = 0;
     let settleTimer: number | undefined;
