@@ -902,6 +902,13 @@
         color: var(--slate-600);
       }
 
+      /* 指标行与下方三张卡片共用同一套 3 列网格，保证逐列对齐 */
+      .metric-row {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
       .metrics {
         display: grid;
         gap: 14px;
@@ -1125,15 +1132,18 @@
       }
 
       /* 作品简介屏：四个环节文字右对齐到各自节点 */
+      /* 四步链路：4 列网格居中，正好落在下方图表的里程碑与纵向网格线上
+         （原来是绝对定位 + 右对齐，右端贴线、左端参差，看着就是没对齐） */
       .chart-labels {
-        position: relative;
-        height: 24px;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
         margin-top: 24px;
       }
 
       .chart-labels span {
-        position: absolute;
-        top: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         white-space: nowrap;
         font-size: 14px;
         font-weight: 600;
@@ -1630,10 +1640,10 @@
               <p class="panel-label">评估链路</p>
 
               <div class="chart-labels">
-                <span style="right:87.5%">三模态采集<span class="to">→</span></span>
-                <span style="right:62.5%">哈希检索<span class="to">→</span></span>
-                <span style="right:37.5%">RAG 报告<span class="to">→</span></span>
-                <span style="right:12.5%">分级预警</span>
+                <span>三模态采集<span class="to">→</span></span>
+                <span>哈希检索<span class="to">→</span></span>
+                <span>RAG 报告<span class="to">→</span></span>
+                <span>分级预警</span>
               </div>
 
               <svg class="chart" viewBox="0 0 900 240" preserveAspectRatio="none" role="img"
@@ -1663,7 +1673,7 @@
                 </g>
               </svg>
 
-              <div style="margin-top:24px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 32px;border-top:1px dashed var(--slate-200);padding-top:20px">
+              <div class="metric-row" style="margin-top:24px;border-top:1px dashed var(--slate-200);padding-top:20px">
                 <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">3</b><span class="metric-label" style="margin:0">模态 · 9 类特征</span></span>
                 <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">毫秒级</b><span class="metric-label" style="margin:0">相似样例检索</span></span>
                 <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">4</b><span class="metric-label" style="margin:0">级预警阈值</span></span>

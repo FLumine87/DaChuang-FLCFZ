@@ -524,17 +524,16 @@ export default function LandingPage() {
             <div className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-9">
             <p className="text-[13px] font-medium tracking-[0.18em] text-slate-400">评估链路</p>
 
-            <div className="relative mt-6 h-6">
+            {/* 四步链路：每格居中，正好落在下方图表的里程碑与纵向网格线上。
+                原来是绝对定位 + 右对齐，每个标签"右端贴线、左端参差"，看着就是没对齐。 */}
+            <div className="mt-6 grid grid-cols-4">
               {["三模态采集", "哈希检索", "RAG 报告", "分级预警"].map((step, index) => (
                 <span
                   key={step}
-                  className="absolute top-0 whitespace-nowrap text-[14px] font-semibold text-slate-800 sm:text-[15px]"
-                  style={{ right: `${(1 - (index + 0.5) / 4) * 100}%` }}
+                  className="flex items-center justify-center whitespace-nowrap text-[14px] font-semibold text-slate-800 sm:text-[15px]"
                 >
                   {step}
-                  {index < 3 && (
-                    <span className="ml-2 align-middle text-[13px] text-slate-300">→</span>
-                  )}
+                  {index < 3 && <span className="ml-1.5 text-[13px] text-slate-300">→</span>}
                 </span>
               ))}
             </div>
@@ -578,7 +577,7 @@ export default function LandingPage() {
               </g>
             </svg>
 
-            <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-dashed border-slate-200 pt-5">
+            <div className="mt-6 grid gap-2.5 border-t border-dashed border-slate-200 pt-5 sm:grid-cols-3">
               {[
                 { value: "3", label: "模态 · 9 类特征" },
                 { value: "毫秒级", label: "相似样例检索" },
