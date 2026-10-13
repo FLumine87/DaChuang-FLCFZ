@@ -146,7 +146,7 @@
         display: flex;
         align-items: flex-start;
         gap: 8px;
-        font-size: 14px;
+        font-size: 15px;
         line-height: 20px;
         color: var(--slate-600);
       }
@@ -458,7 +458,7 @@
       .title {
         margin: 24px 0 0;
         max-width: 720px;
-        font-size: 50px;
+        font-size: 60px;
         line-height: 1.2;
         font-weight: 600;
         letter-spacing: 0.25px;
@@ -985,7 +985,7 @@
         display: flex;
         align-items: flex-start;
         gap: 12px;
-        font-size: 15px;
+        font-size: 14px;
         line-height: 1.75;
         color: var(--slate-600);
       }
@@ -1290,6 +1290,11 @@
       }
 
       /* ==================== 宽屏适配 ==================== */
+      /* React 的 .auth-section-title 从 640px 起即为 60px，HTML 此前到 1024px 才升，
+         平板宽度下只有 38px、与 React 差 22px */
+      @media (min-width: 640px) {
+        .section-title { font-size: 60px; }
+      }
       @media (min-width: 1024px) {
         .auth-screen {
           min-height: calc(100svh - 64px);
@@ -1388,7 +1393,7 @@
           gap: 96px;
         }
         .title {
-          font-size: 60px;
+          font-size: 68px;
         }
         .card {
           max-width: 500px;
@@ -1429,10 +1434,10 @@
         .brand-product, .brand-divider { display: none; }
 
         /* 字号下沉到手机尺度 */
-        .title { font-size: 34px; }
-        .section-title { font-size: 30px; }
-        .lede, .section-desc { font-size: 17px; line-height: 1.8; }
-        .eyebrow { font-size: 14px; }
+        .title { font-size: 38px; }
+        .section-title { font-size: 38px; }
+        .lede, .section-desc { font-size: 18px; line-height: 1.8; }
+        .eyebrow { font-size: 16px; }
         .check-list li { font-size: 14px; }
         .panel-label { font-size: 13px; }
 
@@ -1497,6 +1502,10 @@
         .panel [style*="grid-template-columns: repeat(2"],
         .priv-nodes { grid-template-columns: minmax(0, 1fr) !important; }
       }
+      /* 登录屏不显示章节导航：React 的 /login 就没有导航（章节属于主页），
+         单文件镜像页此前在登录屏也挂着 5 个导航项，与 React 不一致。 */
+      header.nav-hidden nav.sections { display: none; }
+
 </style>
   </head>
   <body>
@@ -2450,6 +2459,9 @@
             /* 顶栏动作随所在屏切换：登录屏给「返回主页」，主页各屏给「登录」——
                HTML 是单文件六屏（登录是第 1 屏），写死"返回主页"在主页上就自相矛盾。 */
             var onLogin = id === "login";
+            /* 登录屏隐藏章节导航（与 React 一致） */
+            var hd = document.querySelector("header");
+            if (hd) hd.classList.toggle("nav-hidden", onLogin);
             var at = document.getElementById("headerActionText");
             var ai = document.getElementById("headerActionIcon");
             if (at) at.textContent = onLogin ? "返回主页" : "登录";
