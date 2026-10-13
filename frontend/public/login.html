@@ -34,7 +34,12 @@
         --primary-500: #465fff;
         --primary-600: #3641f5;
         --primary-700: #2a31d8;
+        --success-500: #12b76a;
         --success-600: #039855;
+        --orange-50: #fff6ed;
+        --orange-500: #fb6514;
+        --orange-600: #ec4a0a;
+        --warning-500: #f79009;
         --danger-50: #fef3f2;
         --danger-100: #fee4e2;
         --danger-600: #d92d20;
@@ -602,6 +607,524 @@
         display: none !important;
       }
 
+
+      /* ==================== 整屏翻页（六屏一页到底） ==================== */
+      .auth-snap {
+        scroll-behavior: auto;
+      }
+
+      .auth-screen {
+        display: flex;
+        align-items: center;
+        padding: 64px 24px;
+      }
+
+      .section-grid {
+        margin: 0 auto;
+        width: 100%;
+        max-width: 1440px;
+        display: grid;
+        align-items: center;
+        gap: 48px;
+      }
+
+      .divider-top {
+        border-top: 1px solid color-mix(in srgb, var(--slate-200) 70%, transparent);
+        background: color-mix(in srgb, var(--white) 60%, transparent);
+      }
+
+      /* 章节标题：与 React 版同一档字号（h2 用类规则避免被全局 h2 压倒） */
+      .section-title {
+        margin: 24px 0 0;
+        max-width: 720px;
+        font-size: 38px;
+        line-height: 1.15;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--slate-900);
+        text-wrap: balance;
+      }
+
+      .section-desc {
+        margin: 32px 0 0;
+        max-width: 640px;
+        font-size: 20px;
+        line-height: 2.1;
+        color: var(--slate-500);
+      }
+
+      .footnote {
+        margin: 40px 0 0;
+        font-size: 12px;
+        color: var(--slate-400);
+      }
+
+      /* ==================== 右侧示意图卡片 ==================== */
+      .panel {
+        border: 1px solid var(--slate-200);
+        border-radius: 30px;
+        background: var(--white);
+        padding: 36px;
+        box-shadow: 0 26px 64px -44px rgba(16, 24, 40, 0.5);
+      }
+
+      .panel-label {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.18em;
+        color: var(--slate-400);
+      }
+
+      .panel-body {
+        margin-top: 24px;
+      }
+
+      .chain {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .chain .arrow {
+        color: var(--slate-300);
+      }
+
+      .chip-primary {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--primary-200);
+        border-radius: 999px;
+        background: var(--primary-50);
+        padding: 8px 16px;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--primary-600);
+      }
+
+      .chip-plain {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--slate-200);
+        border-radius: 999px;
+        padding: 10px 20px;
+        font-size: 15px;
+        color: var(--slate-600);
+      }
+
+      .chip-muted {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        background: var(--slate-100);
+        padding: 8px 16px;
+        font-size: 13px;
+        color: var(--slate-600);
+      }
+
+      .metrics {
+        display: grid;
+        gap: 14px;
+        margin-top: 24px;
+      }
+
+      .metric-card {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        border-radius: 16px;
+        background: var(--slate-50);
+        padding: 20px;
+      }
+
+      .metric-icon {
+        width: 40px;
+        height: 40px;
+        flex: none;
+        display: grid;
+        place-items: center;
+        border-radius: 12px;
+        background: var(--white);
+        color: var(--primary-500);
+      }
+
+      .metric-value {
+        font-size: 26px;
+        font-weight: 800;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        color: var(--primary-600);
+      }
+
+      .metric-label {
+        margin: 8px 0 0;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--slate-500);
+      }
+
+      .check-list {
+        margin: 24px 0 0;
+        padding: 24px 0 0;
+        list-style: none;
+        display: grid;
+        gap: 12px;
+        border-top: 1px dashed var(--slate-200);
+      }
+
+      .check-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        font-size: 15px;
+        line-height: 1.75;
+        color: var(--slate-600);
+      }
+
+      .check-list svg {
+        flex: none;
+        margin-top: 5px;
+        color: var(--success-600);
+      }
+
+      .groups {
+        display: grid;
+        gap: 16px;
+      }
+
+      .group {
+        border: 1px solid var(--slate-100);
+        border-radius: 16px;
+        padding: 24px;
+      }
+
+      .group-tag {
+        display: inline-block;
+        border-radius: 12px;
+        padding: 8px 14px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .group-tag.is-audio {
+        background: var(--primary-50);
+        color: var(--primary-600);
+      }
+      .group-tag.is-text {
+        background: var(--success-50);
+        color: var(--success-600);
+      }
+      .group-tag.is-visual {
+        background: var(--orange-50);
+        color: var(--orange-600);
+      }
+
+      .group ul {
+        margin: 16px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 10px;
+      }
+
+      .group li p:first-child {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--slate-700);
+      }
+
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        flex: none;
+      }
+      .dot.is-text {
+        background: var(--success-500);
+      }
+      .dot.is-audio {
+        background: var(--primary-500);
+      }
+      .dot.is-visual {
+        background: var(--orange-500);
+      }
+
+      .group li p:last-child {
+        margin: 4px 0 0 16px;
+        font-size: 13px;
+        color: var(--slate-400);
+      }
+
+      .levels {
+        display: grid;
+        gap: 20px;
+      }
+
+      .level {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .level-name {
+        width: 96px;
+        flex: none;
+        font-size: 15px;
+        color: var(--slate-600);
+      }
+
+      .level-track {
+        flex: 1;
+        height: 14px;
+        border-radius: 999px;
+        background: var(--slate-100);
+        overflow: hidden;
+      }
+
+      .level-fill {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+      }
+
+      .level-note {
+        width: 144px;
+        flex: none;
+        text-align: right;
+        font-size: 13px;
+        color: var(--slate-400);
+      }
+
+      .nodes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .node {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        border: 1px solid var(--slate-100);
+        border-radius: 16px;
+        background: var(--slate-50);
+        padding: 20px;
+      }
+
+      .node-title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--slate-700);
+      }
+
+      .node-note {
+        margin: 4px 0 0;
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--slate-400);
+      }
+
+      .link-line {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 20px 0;
+        font-size: 12px;
+        color: var(--slate-500);
+      }
+
+      .link-line .rule {
+        flex: 1;
+        height: 1px;
+        background: var(--slate-200);
+      }
+
+      /* 作品简介屏：四个环节文字右对齐到各自节点 */
+      .chart-labels {
+        position: relative;
+        height: 24px;
+        margin-top: 24px;
+      }
+
+      .chart-labels span {
+        position: absolute;
+        top: 0;
+        white-space: nowrap;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--slate-800);
+      }
+
+      .chart-labels .to {
+        margin-left: 8px;
+        font-size: 12px;
+        color: var(--slate-300);
+        vertical-align: middle;
+      }
+
+      .chart {
+        display: block;
+        width: 100%;
+        aspect-ratio: 4.4 / 1;
+        margin-top: 12px;
+      }
+
+      .chart-grid {
+        stroke: var(--slate-100);
+      }
+      .chart-guide {
+        stroke: var(--slate-200);
+      }
+      .chart-line {
+        stroke: var(--primary-500);
+      }
+      .chart-node {
+        fill: var(--white);
+        stroke: var(--primary-500);
+      }
+
+      /* 页码点 */
+      .dots {
+        position: fixed;
+        right: 16px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 30;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .dots button {
+        width: 8px;
+        height: 8px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--slate-300);
+        padding: 0;
+        cursor: pointer;
+        transition: all 200ms ease;
+      }
+
+      .dots button:hover {
+        background: var(--slate-400);
+      }
+      .dots button.is-active {
+        width: 8px;
+        height: 24px;
+        background: var(--primary-500);
+      }
+
+      /* 首屏底部居中：下滑引导 */
+      .scroll-hint {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 20px;
+        display: none;
+        justify-content: center;
+        pointer-events: none;
+      }
+
+      .scroll-hint button {
+        pointer-events: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--slate-200);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--white) 85%, transparent);
+        padding: 8px 16px;
+        font: inherit;
+        font-size: 12px;
+        color: var(--slate-500);
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+        transition: all 150ms ease;
+      }
+
+      .scroll-hint button:hover {
+        border-color: var(--primary-200);
+        color: var(--primary-600);
+      }
+
+      .scroll-hint svg {
+        animation: bounce 1.4s infinite;
+      }
+
+      @keyframes bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(3px);
+        }
+      }
+
+      .relative {
+        position: relative;
+      }
+
+      /* ==================== 宽屏适配 ==================== */
+      @media (min-width: 1024px) {
+        .auth-screen {
+          min-height: calc(100svh - 64px);
+          padding: 80px 48px;
+        }
+        .section-grid {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+          gap: 64px;
+        }
+        .metrics {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .check-list.is-two {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .groups {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .section-title {
+          font-size: 60px;
+        }
+        .dots {
+          display: flex;
+        }
+        .scroll-hint {
+          display: flex;
+        }
+      }
+
+      @media (min-width: 1280px) {
+        .auth-screen {
+          padding: 80px 64px;
+        }
+      }
+
+      @media (min-width: 1536px) {
+        .section-title {
+          font-size: 68px;
+        }
+        .chart {
+          aspect-ratio: 5.2 / 1;
+        }
+      }
+
+      @media (max-height: 900px) {
+        .section-grid {
+          padding-top: 48px;
+          padding-bottom: 48px;
+        }
+      }
+
       /* ============================ 响应式 ============================ */
       @media (min-width: 640px) {
         header {
@@ -744,7 +1267,9 @@
       </header>
 
       <!-- ============================ 主区 ============================ -->
-      <main class="screen">
+      <main id="screens">
+        <!-- ============ 第 1 屏：登录 ============ -->
+        <section class="auth-screen relative" id="login">
         <div class="grid">
           <!-- 左：主张与要点 -->
           <div>
@@ -851,7 +1376,7 @@
                   </span>
                 </div>
 
-                <p class="alert" id="alert" role="alert"></p>
+                <p class="alert" id="formAlert" role="alert"></p>
 
                 <button class="submit" type="submit" id="submit">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -881,7 +1406,273 @@
             </div>
           </div>
         </div>
+
+          <div class="scroll-hint">
+            <button type="button" data-goto="top">
+              继续了解作品
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
+        </section>
+
+        <!-- ============ 第 2 屏：作品简介 ============ -->
+        <section class="auth-screen" id="top">
+          <div class="section-grid">
+            <div>
+              <p class="eyebrow">作品概览</p>
+              <h2 class="section-title">多模态心理筛查与分级预警系统</h2>
+              <p class="section-desc">
+                以<strong style="font-weight:500;color:var(--slate-800)">动态跨模态哈希检索</strong>为核心，
+                融合 RAG、知识图谱与联邦学习，支持文本、语音、图像三模态采集与特征编码，
+                输出可追溯的筛查报告，并按四级阈值触发预警与人工复核，形成从状态采集到干预处置的闭环。
+              </p>
+
+              <ul class="check-list" style="gap:6px;padding-top:20px;margin-top:24px">
+                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" ><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>适用于校园、企业等批量筛查场景</li>
+                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" ><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>量表仅作辅助校准，不作独立判据</li>
+                <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" ><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>高风险个案进入人工研判</li>
+              </ul>
+
+              <div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:8px">
+                <span class="chip-primary" style="padding:6px 12px;font-size:12px">
+                  <span class="dot" style="background:var(--primary-500);margin-right:8px"></span>心理筛查与健康管理平台
+                </span>
+                <span class="chip-plain" style="padding:6px 12px;font-size:12px;border-color:var(--slate-200);background:var(--white)">国家级大创立项 · 2026-06</span>
+                <span class="chip-plain" style="padding:6px 12px;font-size:12px;border-color:var(--slate-200);background:var(--white)">金种子重点课题</span>
+              </div>
+            </div>
+
+            <div class="panel">
+              <p class="panel-label">评估链路</p>
+
+              <div class="chart-labels">
+                <span style="right:87.5%">三模态采集<span class="to">→</span></span>
+                <span style="right:62.5%">哈希检索<span class="to">→</span></span>
+                <span style="right:37.5%">RAG 报告<span class="to">→</span></span>
+                <span style="right:12.5%">分级预警</span>
+              </div>
+
+              <svg class="chart" viewBox="0 0 900 240" preserveAspectRatio="none" role="img"
+                   aria-label="三模态采集、哈希检索、RAG 报告、分级预警四个环节的状态演进示意">
+                <defs>
+                  <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--primary-500)" stop-opacity="0.2" />
+                    <stop offset="100%" stop-color="var(--primary-500)" stop-opacity="0" />
+                  </linearGradient>
+                </defs>
+                <path class="chart-grid" d="M0 70H900M0 135H900M0 200H900" fill="none" stroke-width="1" />
+                <g class="chart-guide" stroke-width="1" stroke-dasharray="4 6">
+                  <line x1="112.5" y1="10" x2="112.5" y2="216" />
+                  <line x1="337.5" y1="10" x2="337.5" y2="216" />
+                  <line x1="562.5" y1="10" x2="562.5" y2="216" />
+                  <line x1="787.5" y1="10" x2="787.5" y2="216" />
+                </g>
+                <path d="M0 172C37.5 172 75 156 112.5 156C150 156 262.5 118 337.5 118C412.5 118 487.5 92 562.5 92C637.5 92 712.5 58 787.5 58C830 58 870 40 900 40V240H0Z"
+                      fill="url(#chartFill)" />
+                <path class="chart-line" d="M0 172C37.5 172 75 156 112.5 156C150 156 262.5 118 337.5 118C412.5 118 487.5 92 562.5 92C637.5 92 712.5 58 787.5 58C830 58 870 40 900 40"
+                      fill="none" stroke-width="3" stroke-linecap="round" />
+                <g class="chart-node" stroke-width="3">
+                  <circle cx="112.5" cy="156" r="5" />
+                  <circle cx="337.5" cy="118" r="5" />
+                  <circle cx="562.5" cy="92" r="5" />
+                  <circle cx="787.5" cy="58" r="5" />
+                </g>
+              </svg>
+
+              <div style="margin-top:24px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 32px;border-top:1px dashed var(--slate-200);padding-top:20px">
+                <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">3</b><span class="metric-label" style="margin:0">模态 · 9 类特征</span></span>
+                <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">毫秒级</b><span class="metric-label" style="margin:0">相似样例检索</span></span>
+                <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">4</b><span class="metric-label" style="margin:0">级预警阈值</span></span>
+              </div>
+
+              <div class="metrics" style="margin-top:24px;border-top:1px dashed var(--slate-200);padding-top:20px">
+                <div><p style="margin:0;font-size:13px;font-weight:600;color:var(--slate-800)">文本记录</p><p style="margin:2px 0 0;font-size:11px;line-height:1.5;color:var(--slate-500)">认知模式与语言逻辑</p></div>
+                <div><p style="margin:0;font-size:13px;font-weight:600;color:var(--slate-800)">语音采样</p><p style="margin:2px 0 0;font-size:11px;line-height:1.5;color:var(--slate-500)">语音语调与情绪波动</p></div>
+                <div><p style="margin:0;font-size:13px;font-weight:600;color:var(--slate-800)">图像采集</p><p style="margin:2px 0 0;font-size:11px;line-height:1.5;color:var(--slate-500)">面部表情与绘画笔迹</p></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 第 tech 屏 ============ -->
+        <section class="auth-screen divider-top" id="tech">
+          <div class="section-grid">
+            <div>
+              <p class="eyebrow">关键技术与方法</p>
+              <h2 class="section-title">动态跨模态哈希检索与 RAG 生成</h2>
+              <p class="section-desc">针对动态心理数据环境下的概念漂移、哈希映射冲突与二值量化信息损失，系统采用多哈希表增量更新、查询自适应重排序与非对称距离度量，并在在线监督集体矩阵分解框架下引入半监督伪标签、类别敏感稀疏正则化与决策级融合，实现三模态联合检索。报告生成以检索命中的相似样例与心理知识库为依据，大语言模型仅承担语言组织，以降低事实性错误。</p>
+            </div>
+            <div class="panel">
+              <p class="panel-label">技术链路</p>
+              <div class="panel-body">
+                <div class="chain">
+                  <span class="chip-primary">三模态输入</span>
+                  <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-primary">哈希编码</span>
+                  <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-primary">跨模态检索</span>
+                  <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-primary">RAG 报告</span>
+                </div>
+
+                <div class="metrics">
+                  <div class="metric-card"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h4l2-7 4 14 2-7h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><p class="metric-value">毫秒级</p><p class="metric-label">相似案例检索响应</p></div></div>
+                  <div class="metric-card"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><p class="metric-value">亿级</p><p class="metric-label">汉明距离检索规模</p></div></div>
+                  <div class="metric-card"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8zM14 3v5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><p class="metric-value">双依据</p><p class="metric-label">检索样例 + 专业知识库</p></div></div>
+                </div>
+
+                <ul class="check-list is-two">
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>多哈希表增量更新，适应样本分布变化</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>查询自适应重排序与非对称距离度量</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>半监督伪标签与类别敏感稀疏正则化</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>知识图谱关联支撑报告依据可追溯</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 第 assess 屏 ============ -->
+        <section class="auth-screen divider-top" id="assess">
+          <div class="section-grid">
+            <div>
+              <p class="eyebrow">评估维度</p>
+              <h2 class="section-title">三模态线索与多维评估指标</h2>
+              <p class="section-desc">文本通道提取认知模式与语言逻辑，音频通道提取语音语调、情绪波动与情感强度，视觉通道提取面部表情、绘画笔迹与情绪外露；在此基础上结合压力水平、睡眠时长、情绪趋势与标准化量表，形成可纵向比较的个体状态画像。量表用于辅助校准，不作为独立判据。</p>
+            </div>
+            <div class="panel">
+              <p class="panel-label">三模态 × 多维度</p>
+              <div class="panel-body">
+                <div class="groups">
+                  <div class="group">
+                  <span class="group-tag is-text">文本</span>
+                  <ul><li><p><span class="dot is-text"></span>量表答案</p><p>标准化条目作答</p></li><li><p><span class="dot is-text"></span>认知模式</p><p>用词与归因倾向</p></li><li><p><span class="dot is-text"></span>语言逻辑</p><p>语义连贯性</p></li></ul>
+                </div>
+                  <div class="group">
+                  <span class="group-tag is-audio">音频</span>
+                  <ul><li><p><span class="dot is-audio"></span>语音语调</p><p>音高与能量分布</p></li><li><p><span class="dot is-audio"></span>情绪波动</p><p>短时起伏幅度</p></li><li><p><span class="dot is-audio"></span>情感强度</p><p>情感表达力度</p></li></ul>
+                </div>
+                  <div class="group">
+                  <span class="group-tag is-visual">视觉</span>
+                  <ul><li><p><span class="dot is-visual"></span>面部表情</p><p>表情张力与效价</p></li><li><p><span class="dot is-visual"></span>绘画笔迹</p><p>线条与用色特征</p></li><li><p><span class="dot is-visual"></span>情绪外露</p><p>画面整体氛围</p></li></ul>
+                </div>
+                </div>
+
+                <div style="margin-top:24px;border-top:1px dashed var(--slate-200);padding-top:20px">
+                  <p style="margin:0;font-size:12px;color:var(--slate-400)">同时纳入的标准化量表</p>
+                  <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+                    <span class="chip-muted">压力水平</span><span class="chip-muted">睡眠时长</span><span class="chip-muted">情绪趋势</span>
+                    <span class="chip-muted">PHQ-9</span><span class="chip-muted">GAD-7</span><span class="chip-muted">ISI</span><span class="chip-muted">PSS-10</span>
+                  </div>
+                  <p style="margin:16px 0 0;font-size:12px;line-height:1.7;color:var(--slate-400)">量表只作辅助校准，结论以三模态证据为主。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 第 alert 屏 ============ -->
+        <section class="auth-screen divider-top" id="alert">
+          <div class="section-grid">
+            <div>
+              <p class="eyebrow">预警机制</p>
+              <h2 class="section-title">四级预警与人工复核闭环</h2>
+              <p class="section-desc">多模态信号持续偏离个体基线时，系统按四级阈值自动生成预警；达到高风险阈值的个案自动进入人工研判队列，由咨询师确认后转入个案跟踪与处置留痕。算法仅提供提示与风险排序，最终结论由专业人员确认，并可输出转介建议。</p>
+            </div>
+            <div class="panel">
+              <p class="panel-label">四级预警 · 处置闭环</p>
+              <div class="panel-body">
+                <div class="levels"><div class="level">
+                    <span class="level-name">状态平稳</span>
+                    <span class="level-track"><span class="level-fill" style="width:25%;background:#12b76a"></span></span>
+                    <span class="level-note">维持常规记录</span>
+                  </div><div class="level">
+                    <span class="level-name">建议留意</span>
+                    <span class="level-track"><span class="level-fill" style="width:50%;background:#f79009"></span></span>
+                    <span class="level-note">推送自助建议</span>
+                  </div><div class="level">
+                    <span class="level-name">需要关注</span>
+                    <span class="level-track"><span class="level-fill" style="width:75%;background:#fb6514"></span></span>
+                    <span class="level-note">纳入观察名单</span>
+                  </div><div class="level">
+                    <span class="level-name">优先照顾</span>
+                    <span class="level-track"><span class="level-fill" style="width:100%;background:#f04438"></span></span>
+                    <span class="level-note">进入人工研判</span>
+                  </div>
+                </div>
+
+                <div class="chain" style="margin-top:24px;border-top:1px dashed var(--slate-200);padding-top:24px">
+                  <span class="chip-plain">自动预警</span><svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-plain">人工研判</span><svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-plain">个案跟踪</span><svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="chip-plain">处置留痕</span>
+                </div>
+
+                <div style="margin-top:24px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 32px;border-top:1px dashed var(--slate-200);padding-top:20px">
+                  <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">4</b><span class="metric-label" style="margin:0">级预警阈值</span></span>
+                  <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">100%</b><span class="metric-label" style="margin:0">高风险个案人工复核</span></span>
+                  <span style="display:flex;align-items:baseline;gap:8px"><b class="metric-value" style="font-size:22px">全程</b><span class="metric-label" style="margin:0">处置流程留痕可追溯</span></span>
+                </div>
+
+                <ul class="check-list" style="gap:10px">
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>高风险个案自动进入人工研判队列，不交由算法独立判定</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>咨询师确认后转入个案跟踪，处置过程全程留痕、可回溯</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 第 privacy 屏 ============ -->
+        <section class="auth-screen divider-top" id="privacy">
+          <div class="section-grid">
+            <div>
+              <p class="eyebrow">数据安全</p>
+              <h2 class="section-title">联邦学习与「数据不出域」</h2>
+              <p class="section-desc">心理数据属于敏感个人信息。系统采用联邦学习实现跨机构协同训练：各参与机构在本地完成模型训练，仅上行加密后的模型更新，原始数据不离开本地，在保持模型精度的同时满足隐私合规要求。</p>
+              <p class="footnote">心理筛查预警 · 健康管理平台　|　科学评估 · 隐私保护 · 人工复核</p>
+            </div>
+            <div class="panel">
+              <p class="panel-label">联邦学习架构</p>
+              <div class="panel-body">
+                <div class="nodes">
+                  <div class="node"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16v6H4zM4 13h16v6H4z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><p class="node-title">学校 A</p><p class="node-note">本地训练 · 原始数据留存本地</p></div></div>
+                  <div class="node"><span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16v6H4zM4 13h16v6H4z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><p class="node-title">学校 B</p><p class="node-note">本地训练 · 原始数据留存本地</p></div></div>
+                </div>
+
+                <div class="link-line">
+                  <span class="rule"></span>
+                  <span class="chip-primary"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 11h14v9H5zM8 11V8a4 4 0 018 0v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>只交换加密模型更新</span>
+                  <span class="rule"></span>
+                </div>
+
+                <div class="node" style="background:var(--slate-50)">
+                  <span class="metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                  <div><p class="node-title">全局模型</p><p class="node-note">数据不出域 · 兼顾模型精度与隐私合规</p></div>
+                </div>
+
+                <ul class="check-list is-two">
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>横向联邦：同构机构间协同建模</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>纵向联邦：同一人群的多源特征联合</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>联邦迁移：小样本机构亦可参与</li>
+                  <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>仅上行加密模型更新，原始数据不出域</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
+
+      <nav class="dots" aria-label="页面进度">
+        <button type="button" data-goto="login" title="登录" aria-label="登录"></button>
+        <button type="button" data-goto="top" title="作品简介" aria-label="作品简介" class="is-active"></button>
+        <button type="button" data-goto="tech" title="核心技术" aria-label="核心技术"></button>
+        <button type="button" data-goto="assess" title="状态评估" aria-label="状态评估"></button>
+        <button type="button" data-goto="alert" title="预警处置" aria-label="预警处置"></button>
+        <button type="button" data-goto="privacy" title="隐私安全" aria-label="隐私安全"></button>
+      </nav>
     </div>
 
     <script>
@@ -938,13 +1729,13 @@
         }
 
         function showAlert(text, kind) {
-          var el = $("alert");
+          var el = $("formAlert");
           el.textContent = text;
           el.className = "alert " + (kind === "ok" ? "is-ok" : "is-error");
         }
 
         function clearAlert() {
-          var el = $("alert");
+          var el = $("formAlert");
           el.textContent = "";
           el.className = "alert";
         }
@@ -1105,6 +1896,258 @@
         });
 
         render();
+
+        /* ===================================================================
+           整屏翻页：原生滚动 + 停手后缓动落到整屏
+           —— 不拦截滚轮（保留系统惯性），只在手势停下后校正到整屏；
+              任何新的滚轮/触摸/按键输入立刻取消进行中的滑行。
+           —— 任一屏装不下一屏时自动退回普通滚动（contentFits 兜底）。
+           =================================================================== */
+        (function () {
+          var NAV_H = 64;
+          var DURATION = 550;
+          var FAST = 320;
+          var SETTLE = 180;
+          var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+          var desktop = window.matchMedia("(min-width: 1024px) and (min-height: 720px)");
+
+          var screens = Array.prototype.slice.call(
+            document.querySelectorAll(".auth-screen")
+          );
+          var dots = Array.prototype.slice.call(
+            document.querySelectorAll(".dots button")
+          );
+          var navButtons = Array.prototype.slice.call(
+            document.querySelectorAll("nav.sections button")
+          );
+          var raf = 0;
+          var settleTimer;
+          var animating = false;
+          var targetIdx = -1;
+
+          function ease(t) {
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+          }
+
+          function posOf(el) {
+            var max =
+              document.documentElement.scrollHeight - window.innerHeight;
+            return Math.max(0, Math.min(max, el.offsetTop - NAV_H));
+          }
+
+          function actualIndex() {
+            var y = window.scrollY + NAV_H + 4;
+            var idx = 0;
+            screens.forEach(function (el, i) {
+              if (el.offsetTop <= y) idx = i;
+            });
+            return idx;
+          }
+
+          function cancelGlide() {
+            if (raf) cancelAnimationFrame(raf);
+            raf = 0;
+            animating = false;
+          }
+
+          function glideTo(target, msOverride) {
+            cancelGlide();
+            var best = 0;
+            var bestGap = Infinity;
+            screens.forEach(function (el, i) {
+              var gap = Math.abs(posOf(el) - target);
+              if (gap < bestGap) {
+                bestGap = gap;
+                best = i;
+              }
+            });
+            targetIdx = best;
+
+            var startY = window.scrollY;
+            var delta = target - startY;
+            var ms = reduce.matches ? 0 : msOverride || DURATION;
+            if (Math.abs(delta) < 2) return;
+            if (!ms) {
+              window.scrollTo(0, target);
+              return;
+            }
+            var t0 = performance.now();
+            animating = true;
+            (function step(now) {
+              var p = Math.min(1, (now - t0) / ms);
+              window.scrollTo(0, startY + delta * ease(p));
+              if (p < 1) {
+                raf = requestAnimationFrame(step);
+              } else {
+                animating = false;
+                raf = 0;
+              }
+            })(t0);
+          }
+
+          function nearestTop() {
+            var y = window.scrollY;
+            var best = screens[0];
+            var bestGap = Infinity;
+            screens.forEach(function (el) {
+              var gap = Math.abs(el.offsetTop - NAV_H - y);
+              if (gap < bestGap) {
+                bestGap = gap;
+                best = el;
+              }
+            });
+            var max =
+              document.documentElement.scrollHeight - window.innerHeight;
+            return Math.max(0, Math.min(max, best.offsetTop - NAV_H));
+          }
+
+          function contentFits() {
+            var avail = window.innerHeight - NAV_H;
+            return screens.every(function (el) {
+              var row = el.firstElementChild;
+              if (!row) return true;
+              var kids = Array.prototype.filter.call(
+                row.children,
+                function (k) {
+                  var pos = getComputedStyle(k).position;
+                  return pos !== "absolute" && pos !== "fixed";
+                }
+              );
+              var tallest = kids.length
+                ? Math.max.apply(
+                    null,
+                    kids.map(function (k) {
+                      return k.getBoundingClientRect().height;
+                    })
+                  )
+                : row.getBoundingClientRect().height;
+              var cs = getComputedStyle(row);
+              var pad =
+                parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+              return tallest + pad <= avail + 4;
+            });
+          }
+
+          function scheduleSettle() {
+            window.clearTimeout(settleTimer);
+            settleTimer = window.setTimeout(function () {
+              if (animating) return;
+              glideTo(nearestTop());
+            }, SETTLE);
+          }
+
+          function setActive(id) {
+            dots.forEach(function (b) {
+              b.classList.toggle("is-active", b.dataset.goto === id);
+            });
+            navButtons.forEach(function (b) {
+              b.classList.toggle("is-active", b.dataset.goto === id);
+            });
+          }
+
+          function goTo(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            setActive(id);
+            glideTo(Math.max(0, el.offsetTop - NAV_H));
+          }
+
+          function goBy(dir) {
+            var base = targetIdx >= 0 ? targetIdx : actualIndex();
+            var to = Math.min(screens.length - 1, Math.max(0, base + dir));
+            if (to === base) return;
+            glideTo(posOf(screens[to]), animating ? FAST : undefined);
+          }
+
+          /* 滚轮：不 preventDefault，靠 settle 校正 */
+          window.addEventListener(
+            "wheel",
+            function () {
+              targetIdx = -1;
+              cancelGlide();
+              scheduleSettle();
+            },
+            { passive: true }
+          );
+          ["touchstart", "touchmove"].forEach(function (ev) {
+            window.addEventListener(
+              ev,
+              function () {
+                targetIdx = -1;
+                cancelGlide();
+                scheduleSettle();
+              },
+              { passive: true }
+            );
+          });
+
+          /* 键盘：↑↓ / PageUp / PageDown / 空格 */
+          window.addEventListener("keydown", function (e) {
+            var el = e.target;
+            var tag = el && el.tagName;
+            if (tag === "INPUT" || tag === "TEXTAREA" || (el && el.isContentEditable))
+              return;
+            var space = e.key === " " || e.key === "Spacebar";
+            if (space && (tag === "BUTTON" || tag === "A")) return;
+            var down =
+              e.key === "ArrowDown" || e.key === "PageDown" || space;
+            var up = e.key === "ArrowUp" || e.key === "PageUp";
+            if (!down && !up) return;
+            if (!desktop.matches || !contentFits()) return;
+            e.preventDefault();
+            targetIdx = -1;
+            cancelGlide();
+            goBy(down ? 1 : -1);
+          });
+
+          window.addEventListener(
+            "scroll",
+            function () {
+              if (!desktop.matches || animating || !contentFits()) return;
+              scheduleSettle();
+            },
+            { passive: true }
+          );
+          window.addEventListener("resize", function () {
+            if (!desktop.matches || animating || !contentFits()) return;
+            scheduleSettle();
+          });
+
+          /* 页码点与顶栏导航、下滑引导 */
+          document.addEventListener("click", function (e) {
+            var b = e.target.closest("[data-goto]");
+            if (!b) return;
+            goTo(b.dataset.goto);
+          });
+
+          /* 顶栏导航项绑定 data-goto */
+          var order = ["top", "tech", "assess", "alert", "privacy"];
+          navButtons.forEach(function (b, i) {
+            b.dataset.goto = order[i];
+          });
+
+          /* 滚动到哪一屏，导航与页码点高亮哪一个 */
+          if ("IntersectionObserver" in window) {
+            var io = new IntersectionObserver(
+              function (entries) {
+                var visible = entries
+                  .filter(function (en) {
+                    return en.isIntersecting;
+                  })
+                  .sort(function (a, b) {
+                    return b.intersectionRatio - a.intersectionRatio;
+                  })[0];
+                if (visible) setActive(visible.target.id);
+              },
+              { rootMargin: "-45% 0px -50% 0px", threshold: [0, 0.2, 0.5, 1] }
+            );
+            screens.forEach(function (el) {
+              io.observe(el);
+            });
+          }
+
+          document.documentElement.classList.add("auth-snap");
+        })();
       })();
     </script>
   </body>
