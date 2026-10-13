@@ -522,7 +522,7 @@ export default function LandingPage() {
               否则框会瞬间出现、内容再逐条浮现，看着像"空盒子先落地"。 */}
           <div data-reveal data-visual>
             <div className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-9">
-            <p className="text-[13px] font-medium tracking-[0.18em] text-slate-400">评估链路</p>
+            <p className="text-[13px] font-medium tracking-[0.18em] text-slate-500">评估链路</p>
 
             {/* 四步链路：每格居中，正好落在下方图表的里程碑与纵向网格线上。
                 原来是绝对定位 + 右对齐，每个标签"右端贴线、左端参差"，看着就是没对齐。 */}

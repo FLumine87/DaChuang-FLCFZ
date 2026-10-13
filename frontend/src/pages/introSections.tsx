@@ -65,7 +65,7 @@ export function Section({
               ))}
             </ul>
           )}
-          {footnote && <p className="mt-10 text-[13px] text-slate-400">{footnote}</p>}
+          {footnote && <p className="mt-10 text-[13px] text-slate-500">{footnote}</p>}
         </div>
         <div data-reveal data-visual>{visual}</div>
       </div>
@@ -93,7 +93,7 @@ export function Aurora() {
 function Panel({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-9">
-      <p className="text-[13px] font-medium tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="text-[13px] font-medium tracking-[0.18em] text-slate-500">{label}</p>
       <div className="mt-6">{children}</div>
     </div>
   );
@@ -204,7 +204,7 @@ export function AssessVisual() {
                     <span className={`h-1.5 w-1.5 rounded-full ${group.bar}`} />
                     {name}
                   </p>
-                  <p className="mt-1 pl-4 text-[14px] text-slate-400">{note}</p>
+                  <p className="mt-1 pl-4 text-[14px] text-slate-500">{note}</p>
                 </li>
               ))}
             </ul>
@@ -213,7 +213,7 @@ export function AssessVisual() {
       </div>
 
       <div className="mt-6 border-t border-dashed border-slate-200 pt-5">
-        <p className="text-[13px] text-slate-400">同时纳入的标准化量表</p>
+        <p className="text-[13px] text-slate-500">同时纳入的标准化量表</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {dims.map((chip) => (
             <span key={chip} className="rounded-full bg-slate-100 px-4 py-2 text-[14px] text-slate-600">
@@ -221,7 +221,7 @@ export function AssessVisual() {
             </span>
           ))}
         </div>
-        <p className="mt-4 text-[13px] leading-6 text-slate-400">
+        <p className="mt-4 text-[13px] leading-6 text-slate-500">
           量表只作辅助校准，结论以三模态证据为主。
         </p>
       </div>
@@ -246,7 +246,7 @@ export function AlertVisual() {
             <span className="h-3.5 flex-1 overflow-hidden rounded-full bg-slate-100">
               <span className={`block h-full rounded-full ${level.tone} ${level.width}`} />
             </span>
-            <span className="w-36 shrink-0 text-right text-[14px] text-slate-400">{level.note}</span>
+            <span className="w-36 shrink-0 text-right text-[14px] text-slate-500">{level.note}</span>
           </div>
         ))}
       </div>
@@ -307,7 +307,7 @@ export function PrivacyVisual() {
             </span>
             <div className="min-w-0">
               <p className="text-base font-semibold text-slate-700">{node}</p>
-              <p className="mt-1 text-[13px] leading-5 text-slate-400">
+              <p className="mt-1 text-[13px] leading-5 text-slate-500">
                 本地训练 · 原始数据留存本地
               </p>
             </div>
@@ -330,7 +330,7 @@ export function PrivacyVisual() {
         </span>
         <div className="min-w-0">
           <p className="text-base font-semibold text-slate-700">全局模型</p>
-          <p className="mt-1 text-[13px] leading-5 text-slate-400">
+          <p className="mt-1 text-[13px] leading-5 text-slate-500">
             数据不出域 · 兼顾模型精度与隐私合规
           </p>
         </div>

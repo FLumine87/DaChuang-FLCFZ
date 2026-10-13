@@ -563,7 +563,7 @@
       }
 
       input.text::placeholder {
-        color: var(--slate-400);
+        color: var(--slate-500);
       }
       input.text:focus {
         border-color: var(--primary-400);
@@ -584,7 +584,7 @@
         border: 0;
         background: none;
         padding: 4px;
-        color: var(--slate-400);
+        color: var(--slate-500);
         cursor: pointer;
       }
       .password-field button:hover {
@@ -617,7 +617,7 @@
         align-items: center;
         gap: 4px;
         font-size: 13px;
-        color: var(--slate-400);
+        color: var(--slate-500);
       }
       .safe svg {
         color: var(--success-600);
@@ -702,7 +702,7 @@
         gap: 8px;
         font-size: 13px;
         line-height: 1.6;
-        color: var(--slate-400);
+        color: var(--slate-500);
       }
       .note svg {
         flex: none;
@@ -835,7 +835,7 @@
       .footnote {
         margin: 40px 0 0;
         font-size: 13px;
-        color: var(--slate-400);
+        color: var(--slate-500);
       }
 
       /* ==================== 右侧示意图卡片 ==================== */
@@ -852,7 +852,7 @@
         font-size: 13px;
         font-weight: 500;
         letter-spacing: 0.18em;
-        color: var(--slate-400);
+        color: var(--slate-500);
       }
 
       .panel-body {
@@ -1043,7 +1043,7 @@
       .group li p:last-child {
         margin: 4px 0 0 16px;
         font-size: 13px;
-        color: var(--slate-400);
+        color: var(--slate-500);
       }
 
       .levels {
@@ -1083,7 +1083,7 @@
         flex: none;
         text-align: right;
         font-size: 14px;
-        color: var(--slate-400);
+        color: var(--slate-500);
       }
 
       .nodes {
@@ -1113,7 +1113,7 @@
         margin: 4px 0 0;
         font-size: 14px;
         line-height: 1.6;
-        color: var(--slate-400);
+        color: var(--slate-500);
       }
 
       .link-line {
@@ -1542,7 +1542,7 @@
                 <div class="hidden" id="strengthField">
                   <div class="row">
                     <span style="font-size: 13px; color: var(--slate-500)">密码强度</span>
-                    <span id="strengthText" style="font-size: 13px; color: var(--slate-400)">未输入</span>
+                    <span id="strengthText" style="font-size: 13px; color: var(--slate-500)">未输入</span>
                   </div>
                   <div class="strength-bar"><span id="strengthFill"></span></div>
                 </div>
@@ -1767,12 +1767,12 @@
                 </div>
 
                 <div style="margin-top:24px;border-top:1px dashed var(--slate-200);padding-top:20px">
-                  <p style="margin:0;font-size:12px;color:var(--slate-400)">同时纳入的标准化量表</p>
+                  <p style="margin:0;font-size:12px;color:var(--slate-500)">同时纳入的标准化量表</p>
                   <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
                     <span class="chip-muted">压力水平</span><span class="chip-muted">睡眠时长</span><span class="chip-muted">情绪趋势</span>
                     <span class="chip-muted">PHQ-9</span><span class="chip-muted">GAD-7</span><span class="chip-muted">ISI</span><span class="chip-muted">PSS-10</span>
                   </div>
-                  <p style="margin:16px 0 0;font-size:12px;line-height:1.7;color:var(--slate-400)">量表只作辅助校准，结论以三模态证据为主。</p>
+                  <p style="margin:16px 0 0;font-size:12px;line-height:1.7;color:var(--slate-500)">量表只作辅助校准，结论以三模态证据为主。</p>
                 </div>
               </div>
             </div>
@@ -1976,7 +1976,7 @@
           if (!v) {
             fill.style.width = "0";
             text.textContent = "未输入";
-            text.style.color = "var(--slate-400)";
+            text.style.color = "var(--slate-500)";
             return;
           }
           strength = scorePassword(v);

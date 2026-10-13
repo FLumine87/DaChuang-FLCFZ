@@ -373,7 +373,7 @@ export default function LoginPage() {
                       type="button"
                       aria-label={showPassword ? "隐藏密码" : "显示密码"}
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-3.5 text-slate-400 transition-colors hover:text-slate-700"
+                      className="absolute right-4 top-3.5 text-slate-500 transition-colors hover:text-slate-700"
                     >
                       {showPassword ? (
                         <EyeOff className="h-5 w-5" />
@@ -389,7 +389,7 @@ export default function LoginPage() {
                     <div>
                       <div className="flex justify-between text-[13px] text-slate-500">
                         <span>密码强度</span>
-                        <span className={password ? strength.color : "text-slate-400"}>
+                        <span className={password ? strength.color : "text-slate-500"}>
                           {password ? strength.label : "未输入"}
                         </span>
                       </div>
@@ -438,7 +438,7 @@ export default function LoginPage() {
                     />
                     {isAdmin ? "在本机保持登录" : "记住我"}
                   </label>
-                  <span className="inline-flex items-center gap-1 text-[13px] text-slate-400">
+                  <span className="inline-flex items-center gap-1 text-[13px] text-slate-500">
                     <Check className="h-3.5 w-3.5 text-success-600" />
                     安全登录
                   </span>
@@ -501,13 +501,13 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => switchPanel(isAdmin ? "user" : "admin")}
                 aria-pressed={isAdmin}
-                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium text-slate-400 transition-colors duration-200 hover:bg-slate-50 hover:text-primary-600"
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium text-slate-500 transition-colors duration-200 hover:bg-slate-50 hover:text-primary-600"
               >
                 <ShieldCheck className="h-3.5 w-3.5" />
                 {isAdmin ? "返回用户登录" : "管理员 / 咨询师入口"}
               </button>
 
-              <p className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-4 text-[13px] leading-5 text-slate-400">
+              <p className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-4 text-[13px] leading-5 text-slate-500">
                 <ShieldCheck className="h-4 w-4 shrink-0" />
                 {isAdmin
                   ? "仅限授权人员使用，研判与处置操作均留痕"
