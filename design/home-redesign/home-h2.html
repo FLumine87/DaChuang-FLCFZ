@@ -35,16 +35,24 @@ try {
 
   /* ---------- 首屏：不用卡片容器，标题块直接落在页面上 ---------- */
   /* 三级字号：说明 15 < 眉标 20 < 标题 40 */
-  .hero3 { display: grid; gap: 44px; }
+  /* 页头加一条底线：浅色下给这块一个"底"，不至于飘在大片留白里 */
+  .hero3 {
+    display: grid; gap: 44px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--line);
+  }
   .hero3__act { display: flex; align-items: center; gap: var(--sp-6); flex-wrap: wrap; }
   /* 悬挂眉标：眉标顶格，标题与说明一起缩进，形成层次 */
+  /* 与登录页/主页同一套规格（index.css:1348 .auth-hero-title）：
+     字重 500 + 极轻正字距 +0.25px + 行高 1.2。
+     原来用的 600 + −0.01em 正是那边注释里否掉的"又粗又挤"。 */
   .hero3__title {
     margin: 14px 0 0 34px;
-    font-size: 40px; font-weight: 600; line-height: 1.16; letter-spacing: -0.01em;
+    font-size: 40px; font-weight: 500; line-height: 1.2; letter-spacing: 0.25px;
   }
   .hero3__desc {
     margin: 16px 0 0 34px;
-    font-size: var(--fs-read); line-height: 1.7; color: var(--txt-2);
+    font-size: 1rem; line-height: 1.75; color: var(--txt-2);
   }
   .hero3__modes {
     display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
