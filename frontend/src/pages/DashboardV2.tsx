@@ -245,7 +245,7 @@ export default function DashboardV2() {
               <div>
                 <p className="text-xs text-white/55">今日综合状态</p>
                 <div className="mt-2 flex items-end gap-2">
-                  <span className="text-5xl font-semibold tracking-tight">{latestPoint?.mood ?? "--"}</span>
+                  <span className="text-5xl font-semibold">{latestPoint?.mood ?? "--"}</span>
                   <span className="pb-1.5 text-xs text-white/45">/ 100</span>
                 </div>
               </div>

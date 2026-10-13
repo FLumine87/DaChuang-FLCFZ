@@ -701,6 +701,16 @@ html.theme-switching *::after {
 h1 {
   font-size: 1.625rem; /* 26px ← text-2xl */
 }
+
+/* 标题字距统一：工作台原来用 tracking-tight（26px 下约 -0.65px），
+   与落地页/登录页的 0.25px 方向相反。这里在全局层统一，
+   未分层规则优先于 Tailwind 的 tracking-* 工具类，一处生效全站。 */
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: 0.25px;
+}
 h1.text-3xl {
   font-size: 2rem; /* 32px ← 30px（登录页/系统选择页） */
 }

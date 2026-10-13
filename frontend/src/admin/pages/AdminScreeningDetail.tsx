@@ -15,7 +15,7 @@ export default function AdminScreeningDetail({ record, onBack }: Props) {
           <ArrowLeft className="w-5 h-5 text-slate-600" />
         </button>
         <div>
-          <h2 className="text-xl font-bold text-slate-800">筛查详情 - {record.id}</h2>
+          <h2 className="text-xl font-semibold text-slate-800">筛查详情 - {record.id}</h2>
           <p className="text-sm text-slate-400 mt-0.5">{record.date} · {record.counselor}</p>
         </div>
       </div>

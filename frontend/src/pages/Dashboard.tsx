@@ -402,7 +402,7 @@ export default function Dashboard() {
           {lastRecord ? (
             <>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-[32px] font-semibold leading-none tracking-tight text-slate-800 tabular-nums">
+                <p className="text-[32px] font-semibold leading-none text-slate-800 tabular-nums">
                   {lastRecord.score}
                   <span className="ml-1 text-base font-normal text-slate-400">
                     / {lastRecord.maxScore}

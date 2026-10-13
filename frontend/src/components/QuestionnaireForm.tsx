@@ -237,7 +237,7 @@ export default function QuestionnaireForm({
             <div className="flex items-center gap-4">
               <div>
                 <p className="text-xs text-slate-500">总得分</p>
-                <p className="text-3xl font-bold text-slate-800">
+                <p className="text-3xl font-semibold text-slate-800">
                   {totalScore}
                   <span className="text-base font-normal text-slate-400 ml-1">
                     / {maxScore}

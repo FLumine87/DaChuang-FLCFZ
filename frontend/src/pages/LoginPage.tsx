@@ -266,7 +266,7 @@ export default function LoginPage() {
                 >
                   {isAdmin ? "STAFF ACCESS" : tab === "login" ? "WELCOME BACK" : "CREATE ACCOUNT"}
                 </p>
-                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
+                <h2 className="mt-3 text-2xl font-semibold text-slate-900">
                   {isAdmin ? "管理员登录" : tab === "login" ? "欢迎回来" : "创建个人账号"}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">

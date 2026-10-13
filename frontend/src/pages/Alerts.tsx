@@ -78,7 +78,7 @@ export default function Alerts() {
         ].map((item) => (
           <div key={item.label} className="ui-card p-4">
             <p className="text-sm text-slate-500">{item.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${item.color.split(' ')[0]}`}>{item.count}</p>
+            <p className={`text-2xl font-semibold mt-1 ${item.color.split(' ')[0]}`}>{item.count}</p>
           </div>
         ))}
       </div>

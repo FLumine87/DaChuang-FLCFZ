@@ -5,7 +5,7 @@ export default function SystemSelector() {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <div className="w-full max-w-4xl">
-        <h1 className="text-3xl font-bold text-slate-800 text-center">心理筛查预警系统</h1>
+        <h1 className="text-3xl font-semibold text-slate-800 text-center">心理筛查预警系统</h1>
         <p className="text-slate-500 text-center mt-2">请选择进入管理端或个人端原型</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">

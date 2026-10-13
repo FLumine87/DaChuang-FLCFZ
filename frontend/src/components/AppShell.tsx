@@ -488,7 +488,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         <main className="app-content" id="main-content" tabIndex={-1}>
           <div className="mb-7 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-800">
+              <h1 className="text-2xl font-semibold text-slate-800">
                 {active.label}
               </h1>
               <p className="mt-2 text-sm leading-6 text-slate-500">
