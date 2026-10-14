@@ -10,7 +10,8 @@ from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
 from app.db import database as db
 from app.services import screening_service, case_service, alert_service
-# 检索结论改用规则模板（MockRAGEngine）生成，不再同步调大模型——见 _search_report
+# 检索结论用规则模板（MockRAGEngine）秒出；RAG 报告走 get_rag_engine（大模型，前端异步取）
+from app.engines import get_rag_engine
 from app.engines.rag.mock_engine import MockRAGEngine
 from app.handlers.retrieval import perform_search, to_frontend_hit
 
@@ -634,12 +635,12 @@ def _hits_alert_level(raw_results: list, query: str = "") -> str:
             sim = 0.0
         if sim < 0.70:
             continue
-        rid = str(r.get("record_id") or r.get("id") or "")
+        rid = str(r.get("record_id") or r.get("recordId") or r.get("id") or "")
         if rid:
             if rid in seen:
                 continue
             seen.add(rid)
-        level = str(r.get("alert_level") or "green").lower()
+        level = str(r.get("alert_level") or r.get("alertLevel") or "green").lower()
         if level in counts:
             counts[level] += 1
     if counts["red"] or counts["orange"] >= 2:
@@ -689,3 +690,69 @@ async def personal_search(ctx: RequestContext):
         "results": results, "report": report, "query": data.get("query"),
         "modality": modality, "modality_filter": mf, "index": info,
     })
+
+
+def _hits_context(hits: list, top_n: int = 5) -> str:
+    """把检索命中拼成给大模型的 RAG 上下文（这正是"检索增强"的增强部分）。
+
+    前端传来的命中是 camelCase（recordId / alertLevel），按记录去重后
+    取相似度最高的前 top_n 条，每条附上风险等级与摘要。
+    """
+    seen: dict[str, tuple[float, dict]] = {}
+    for h in hits:
+        if not isinstance(h, dict):
+            continue
+        rid = str(h.get("recordId") or h.get("record_id") or h.get("id") or "")
+        if not rid or rid in seen:
+            continue
+        try:
+            sim = float(h.get("similarity") or h.get("score") or 0)
+        except (TypeError, ValueError):
+            sim = 0.0
+        seen[rid] = (sim, h)
+    top = sorted(seen.items(), key=lambda kv: kv[1][0], reverse=True)[:top_n]
+    lines = []
+    for rid, (sim, h) in top:
+        level = str(h.get("alertLevel") or h.get("alert_level") or "green")
+        level_name = {"green": "稳定", "yellow": "关注", "orange": "警告", "red": "高危"}.get(level, level)
+        desc = str(h.get("summary") or h.get("text") or h.get("explain") or "").strip()[:100]
+        lines.append(f"- 案例 {rid}（哈希相似度 {sim:.2f}，风险等级：{level_name}）{('：' + desc) if desc else ''}")
+    return "\n".join(lines) if lines else "（本次检索没有返回命中详情）"
+
+
+async def personal_rag_report(ctx: RequestContext):
+    """检索页的 RAG 深度报告：大模型结合知识库与检索命中生成（约 20~30 秒）。
+
+    与检索接口分离（2026-10-14 产品口径）：检索结果必须秒出（哈希检索的优势），
+    由前端先渲染结果、在报告区显示"大模型思考中"，再单独请求本接口；
+    大模型回来后替换展示。无 Key 或调用失败时引擎自动降级规则模板，
+    mock 标记如实返回，前端兜底显示规则分析并标注来源。
+    """
+    data = ctx.body or {}
+    query = str(data.get("query") or "")
+    hits = data.get("hits") or []
+
+    rag_engine = get_rag_engine()
+    await rag_engine.initialize()
+
+    screening_data = {
+        "id": 0,
+        "name": (query or "本次检索")[:40],
+        "questionnaire": "跨模态检索",
+        "score": 0,
+        "max_score": 100,
+        "alert_level": _hits_alert_level(hits, query),
+        # RAG 的"增强"部分：哈希检索命中的相似案例摘要
+        "retrieval_context": _hits_context(hits),
+        "hit_count": len(hits),
+    }
+
+    report = await rag_engine.generate_report(screening_data)
+    if isinstance(report, dict) and "risk_level" in report:
+        report["riskLevel"] = report.pop("risk_level")
+    # 来源取报告自身的标记（引擎如实写：真大模型 mock=False，降级 mock=True）。
+    # 不能再用"配置文件里有没有 Key"来判断——Key 存在不代表这次调用成功（2026-10-15）。
+    mock = bool((report or {}).get("mock", True))
+    if isinstance(report, dict):
+        report["mock"] = mock
+    return success_response(data={"report": report, "mock": mock})

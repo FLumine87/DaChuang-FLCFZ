@@ -657,6 +657,37 @@ export async function fetchRetrievalMedia(unitId: string): Promise<RetrievalMedi
   );
 }
 
+/** RAG 深度报告请求体：带上检索命中的精简信息，供大模型做检索增强分析 */
+export interface RagReportRequest {
+  query: string;
+  hits: {
+    recordId?: string;
+    alertLevel?: string;
+    similarity?: number;
+    summary?: string;
+  }[];
+}
+
+/**
+ * RAG 深度报告（大模型生成，约 20~30 秒）。
+ * 与检索接口分离：检索秒出，报告由前端在结果出来后异步请求，
+ * 期间报告区显示"大模型思考中"。此请求单独放行 90 秒超时
+ * （http 实例默认 15 秒是给普通接口的，会掐断大模型生成）。
+ * 返回 mock=true 表示后端处于离线模式（无 Key / 引擎降级），
+ * 调用方应兜底显示规则分析并标注来源。
+ */
+export async function fetchRagReport<T>(payload: RagReportRequest): Promise<{ report: T | null; mock: boolean }> {
+  if (USE_MOCK) {
+    await delay(800);
+    return { report: null, mock: true };
+  }
+  return request.post<{ report: T | null; mock: boolean }>(
+    '/api/personal/rag-report',
+    { query: payload.query, hits: payload.hits },
+    { timeout: 90_000 },
+  );
+}
+
 export async function uploadFile(file: File): Promise<{ url: string; filename: string; analysis: string }> {
   if (USE_MOCK) {
     await delay(600 + Math.random() * 400);

@@ -34,7 +34,7 @@ import {
   ArrowLeft,
   Camera,
 } from 'lucide-react';
-import { getScreeningRecords, getPersonalSupplements, search, fetchRetrievalMedia } from '../services/mockApi';
+import { getScreeningRecords, getPersonalSupplements, search, fetchRetrievalMedia, fetchRagReport } from '../services/mockApi';
 import { USE_MOCK } from '../services/http';
 import { supplementModalityText } from '../services/localKg';
 import { getCurrentSession } from '../auth/session';
@@ -153,6 +153,13 @@ export default function Retrieval() {
     };
   }, []);
   const [report, setReport] = useState<RagReport | null>(null);
+  /** 报告两阶段（2026-10-14 产品口径）：检索结果秒出（哈希检索的优势），
+   *  报告区先显示"大模型思考中"，RAG 深度报告异步回来后替换展示。 */
+  const [reportPhase, setReportPhase] = useState<'idle' | 'thinking' | 'done'>('idle');
+  /** 规则报告兜底：大模型失败 / Mock / 超时的时候显示，并标注来源 */
+  const fallbackReportRef = useRef<RagReport | null>(null);
+  /** 当前报告请求的序号：思考期间再次检索时，旧请求回来直接丢弃 */
+  const reportSeqRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [indexInfo, setIndexInfo] = useState<RetrievalIndexInfo | null>(null);
   // 查询模态：文本直接检索；图像/语音需先选文件（本地预览，提交时转 base64）
@@ -255,6 +262,7 @@ export default function Retrieval() {
     setLoading(true);
     setResults(null);
     setReport(null);
+    setReportPhase('idle');
     setError(null);
     setIndexInfo(null);
     try {
@@ -268,11 +276,44 @@ export default function Retrieval() {
         mediaBase64,
         mediaName: mediaFile?.name,
       });
+      /* 检索结果秒出，立即渲染（哈希检索的优势）。报告分两步：
+         ① 检索接口附带的规则结论先存为兜底（大模型不可用时展示）；
+         ② 报告区进入"大模型思考中"，异步请求 RAG 深度报告，回来后替换。 */
+      const hits = ((res.results ?? []) as RetrievalResult[]).slice(0, 10).map((r) => ({
+        recordId: r.recordId,
+        alertLevel: r.alertLevel,
+        similarity: r.similarity,
+        summary: r.summary,
+      }));
       setResults((res.results ?? []) as RetrievalResult[]);
-      setReport((res.report ?? null) as RagReport | null);
       setIndexInfo((res.index ?? null) as RetrievalIndexInfo | null);
+      const ruleReport = (res.report ?? null) as RagReport | null;
+      fallbackReportRef.current = ruleReport;
+      if (!ruleReport) {
+        setReportPhase('done');
+        return;
+      }
+      setReportPhase('thinking');
+      const seq = ++reportSeqRef.current; // 思考期间再次检索时，旧报告作废
+      void (async () => {
+        try {
+          const rr = await fetchRagReport<RagReport>({ query: effQuery, hits });
+          if (seq !== reportSeqRef.current) return;
+          if (rr.mock || !rr.report) {
+            setReport(ruleReport); // 引擎降级：如实显示规则报告
+          } else {
+            setReport(rr.report); // 大模型报告
+          }
+        } catch {
+          if (seq !== reportSeqRef.current) return;
+          setReport(ruleReport); // 超时 / 失败：兜底规则报告
+        } finally {
+          if (seq === reportSeqRef.current) setReportPhase('done');
+        }
+      })();
     } catch (err) {
       setError((err as Error).message || '检索失败，请稍后重试');
+      setReportPhase('done');
     } finally {
       setLoading(false);
     }
@@ -847,17 +888,32 @@ export default function Retrieval() {
                     {report?.riskLevel && <div className="px-3 py-1 bg-slate-100 text-slate-700 rounded-md text-sm font-medium">
                       风险提示：{report.riskLevel}
                     </div>}
-                    {/* 结论来源如实标注：检索页不调大模型，按命中分布用规则模板生成 */}
-                    {report?.mock && (
+                    {/* 结论来源如实标注：mock=规则兜底（大模型不可用），否则为大模型生成 */}
+                    {reportPhase === 'done' && report?.mock && (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">
                         规则分析 · 依据检索命中
+                      </span>
+                    )}
+                    {reportPhase === 'done' && report && !report.mock && (
+                      <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-normal text-primary-600">
+                        大模型分析
                       </span>
                     )}
                   </div>
                 </div>
               </div>
 
-              {!report && (
+              {reportPhase === 'thinking' && (
+                <div className="p-5 flex items-center gap-3 text-sm text-slate-500">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary-500 shrink-0" />
+                  <span>
+                    大模型思考中：正在结合知识库与本次 {results.length} 条检索命中生成深度分析报告，
+                    通常需要 30 ~ 60 秒，期间可以先查看上面的检索结果。
+                  </span>
+                </div>
+              )}
+
+              {reportPhase === 'done' && !report && (
                 <p className="p-5 text-sm leading-6 text-slate-500">
                   本次没有返回分析结论（上面的检索命中不受影响）。可以稍后重试，或换一种描述再检索一次。
                 </p>

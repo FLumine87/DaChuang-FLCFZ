@@ -115,19 +115,59 @@ class MockRAGEngine(RAGEngineInterface):
         score = screening_data.get("score", 0)
         max_score = screening_data.get("max_score", 100)
         alert_level = screening_data.get("alert_level", "green")
-        
+
         if alert_level in ["red", "orange"]:
             risk_level = "high"
         elif alert_level == "yellow":
             risk_level = "medium"
         else:
             risk_level = "low"
-        
+
         template = self.RISK_TEMPLATES[risk_level]
-        
+
         questionnaire = screening_data.get("questionnaire", "量表")
         name = screening_data.get("name", "被试")
-        
+
+        # 跨模态检索场景（2026-10-14）：没有量表得分，绝不能输出"得分0分"这类
+        # 硬套量表模板的误导文案——结论只描述检索命中的风险分布。
+        is_retrieval = (
+            bool(screening_data.get("retrieval_context"))
+            or questionnaire == "跨模态检索"
+        )
+        if is_retrieval:
+            hit_count = screening_data.get("hit_count")
+            hit_text = f"共 {hit_count} 个" if hit_count is not None else "若干"
+            retrieval_summary = {
+                "high": f"本次跨模态检索命中 {hit_text} 相似历史模式，其中多个为高风险案例，"
+                        "当前查询状态与历史高危模式高度相似，建议尽快安排专业评估。",
+                "medium": f"本次跨模态检索命中 {hit_text} 相似历史模式，存在一定比例的中风险案例，"
+                          "建议持续关注，并结合上方命中列表的具体内容进一步评估。",
+                "low": f"本次跨模态检索命中 {hit_text} 相似历史模式，整体风险特征较低，"
+                       "未见明显的高风险聚集，建议保持常规关注。",
+            }[risk_level]
+            retrieval_match = {
+                "high": "检索命中的相似案例中，高风险（警告 / 危险）模式占比较高，"
+                        "跨模态特征与当前查询高度吻合，需要重点关注。",
+                "medium": "检索命中的相似案例中存在中等风险特征，"
+                          "建议结合上方命中列表的具体内容综合判断。",
+                "low": "检索命中的相似案例整体风险特征平稳，未发现明显的高风险特征聚集。",
+            }[risk_level]
+            return {
+                "subject": name,
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "summary": retrieval_summary,
+                "risk_level": risk_level,
+                "sections": [
+                    {"title": "跨模态特征匹配",
+                     "content": f"以查询内容为线索，跨模态哈希检索命中 {hit_text} 相似历史模式"
+                                "（文本 / 语音 / 图像单元详见检索结果列表）。"},
+                    {"title": "风险评估", "content": retrieval_match},
+                    {"title": "综合评估结论", "content": template["sections"][2]["content"]},
+                ],
+                "recommendations": template["recommendations"],
+                "mock": True,
+            }
+
         sections = []
         for section in template["sections"]:
             content = section["content"]
@@ -145,6 +185,9 @@ class MockRAGEngine(RAGEngineInterface):
             "risk_level": risk_level,
             "sections": sections,
             "recommendations": template["recommendations"],
+            # 如实标记：规则模板生成，不是大模型输出（2026-10-15）
+            "mock": True,
+            "source": "rule",
         }
     
     async def add_to_knowledge_base(self, documents: List[Dict]) -> bool:

@@ -118,6 +118,7 @@ class DeepSeekRAGEngine(RAGEngineInterface):
         try:
             knowledge = await self.retrieve(
                 f"{screening_data.get('questionnaire', '量表')} "
+                f"{screening_data.get('name', '')} "  # 检索场景下 name 即查询词
                 f"{screening_data.get('alert_level', '')}",
                 top_k=3,
             )
@@ -135,6 +136,9 @@ class DeepSeekRAGEngine(RAGEngineInterface):
             if report:
                 report["subject"] = screening_data.get("name", "被试")
                 report["date"] = datetime.now().strftime("%Y-%m-%d")
+                # 如实标记：这一段只有真正拿到大模型输出才会走到
+                report["mock"] = False
+                report["source"] = "llm"
                 return report
         except Exception as e:  # 网络/解析/限流等任何异常都降级
             print(f"[DeepSeekRAG] 调用失败，降级为 Mock 报告: {e}")
@@ -154,14 +158,38 @@ class DeepSeekRAGEngine(RAGEngineInterface):
         alert_level = screening_data.get("alert_level", "green")
         questionnaire = screening_data.get("questionnaire", "量表")
         name = screening_data.get("name", "被试")
-        return f"""你是一名专业的心理健康评估专家。请根据以下信息生成一份心理筛查分析报告。
-
-【被试信息】
+        # 检索场景：把哈希检索命中的相似案例作为 RAG 的"增强"上下文喂给大模型
+        retrieval_context = str(screening_data.get("retrieval_context") or "").strip()
+        hit_count = screening_data.get("hit_count")
+        # 检索场景不是量表测评，"得分 0 分"毫无意义还会误导生成——字段整个不给
+        if retrieval_context:
+            subject_block = f"""【查询信息】
+查询内容：{name}
+测评方式：{questionnaire}（非量表测评，没有得分，请勿在报告中提及任何得分）
+预警等级（按命中案例风险分布的规则判定）：{alert_level}"""
+            sections_hint = ('[{"title": "跨模态特征匹配", "content": "结合上面检索命中的相似案例，分析当前查询状态与历史模式的异同，必须引用具体案例编号与相似度"},'
+                             '{"title": "风险评估", "content": "基于命中案例的风险分布与知识库的风险等级判断"},'
+                             '{"title": "综合评估结论", "content": "全面的评估结论"}]')
+        else:
+            subject_block = f"""【被试信息】
 姓名：{name}
 测评量表：{questionnaire}
 得分：{score}分（满分{max_score}分）
-预警等级：{alert_level}
+预警等级：{alert_level}"""
+            sections_hint = ('[{"title": "量表分析", "content": "详细的量表得分分析"},'
+                             '{"title": "风险评估", "content": "基于得分与知识库的风险等级判断"},'
+                             '{"title": "综合评估结论", "content": "全面的评估结论"}]')
+        retrieval_block = ""
+        if retrieval_context:
+            retrieval_block = f"""
+【跨模态哈希检索命中（与该查询最相似的历史案例，共 {hit_count if hit_count is not None else len(retrieval_context.splitlines())} 个相似模式）】
+{retrieval_context}
 
+"""
+        return f"""你是一名专业的心理健康评估专家。请根据以下信息生成一份心理筛查分析报告。
+
+{subject_block}
+{retrieval_block}
 【参考知识库】
 {knowledge_text}
 
@@ -171,11 +199,7 @@ class DeepSeekRAGEngine(RAGEngineInterface):
     "date": "YYYY-MM-DD",
     "summary": "综合分析摘要",
     "risk_level": "high/medium/low",
-    "sections": [
-        {{"title": "量表分析", "content": "详细的量表得分分析"}},
-        {{"title": "风险评估", "content": "基于得分与知识库的风险等级判断"}},
-        {{"title": "综合评估结论", "content": "全面的评估结论"}}
-    ],
+    "sections": {sections_hint},
     "recommendations": [
         "建议1",
         "建议2",
@@ -183,6 +207,8 @@ class DeepSeekRAGEngine(RAGEngineInterface):
     ]
 }}
 
+要求：分析必须具体引用检索命中案例的证据（相似度、风险分布），不要泛泛而谈；
+报告全文不得出现"得分 0 分 / 满分 100 分"之类的量表得分表述（本场景没有量表）。
 请直接返回JSON，不要包含其他文字。"""
 
     def _call_deepseek(self, prompt: str) -> str:
@@ -210,7 +236,9 @@ class DeepSeekRAGEngine(RAGEngineInterface):
             },
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        # 超时给到 60 秒：这份报告的实际生成时间在 25~31 秒之间震荡，
+        # 原来写死 30 秒会经常撞线 → 静默降级成规则模板（2026-10-15 修复）
+        with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         return data["choices"][0]["message"]["content"]
 
@@ -263,5 +291,10 @@ class DeepSeekRAGEngine(RAGEngineInterface):
         return None
 
     async def _fallback_report(self, screening_data: Dict) -> Dict:
+        """降级报告：必须如实标记 mock，不能让调用方以为这是大模型生成的。"""
         from app.engines.rag.mock_engine import MockRAGEngine
-        return await MockRAGEngine().generate_report(screening_data)
+        report = await MockRAGEngine().generate_report(screening_data)
+        if isinstance(report, dict):
+            report["mock"] = True
+            report["source"] = "rule"
+        return report
