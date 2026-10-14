@@ -13,6 +13,8 @@ export default defineConfig({
     viewport: { width: 1440, height: 1050 },
     launchOptions: {
       executablePath: process.env.AGENT_TEST_CHROME || (existsSync(edge) ? edge : undefined),
+      // 无头环境没有真实摄像头：用假设备 + 自动允许权限，让 CameraCapture 的 e2e 可跑
+      args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
     },
   },
 });

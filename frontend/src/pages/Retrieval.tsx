@@ -32,6 +32,7 @@ import {
   FolderOpen,
   Square,
   ArrowLeft,
+  Camera,
 } from 'lucide-react';
 import { getScreeningRecords, getPersonalSupplements, search, fetchRetrievalMedia } from '../services/mockApi';
 import { USE_MOCK } from '../services/http';
@@ -39,6 +40,7 @@ import { supplementModalityText } from '../services/localKg';
 import { getCurrentSession } from '../auth/session';
 import type { RetrievalResult, RetrievalIndexInfo } from '../data/mockData';
 import AlertBadge from '../components/AlertBadge';
+import CameraCapture from '../components/CameraCapture';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { toCorpusWavFile } from '../utils/audioRecorder';
 
@@ -231,6 +233,9 @@ export default function Retrieval() {
 
   // 麦克风按钮的下拉菜单：从文件选 / 直接录音
   const [micMenuOpen, setMicMenuOpen] = useState(false);
+  /** 图片线索的两个来源：从文件选择 / 现场拍照（摄像头） */
+  const [imgMenuOpen, setImgMenuOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const recorder = useAudioRecorder((file) => {
     pickMedia('audio', file);
     setMicMenuOpen(false);
@@ -414,17 +419,46 @@ export default function Retrieval() {
               </>
             )}
           </div>
-          <button
-            onClick={() => imageInputRef.current?.click()}
-            title="上传一张面部图像作为查询线索"
-            className={`px-3 py-2.5 border rounded-lg transition-colors cursor-pointer ${
-              queryModality === 'image'
-                ? 'border-primary-300 bg-primary-50 text-primary-600'
-                : 'border-slate-200 text-slate-500 hover:bg-slate-50'
-            }`}
-          >
-            <Image className="w-4 h-4" />
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setImgMenuOpen((v) => !v)}
+              title="上传一张面部图像，或现场拍照作为查询线索"
+              className={`px-3 py-2.5 border rounded-lg transition-colors cursor-pointer ${
+                queryModality === 'image'
+                  ? 'border-primary-300 bg-primary-50 text-primary-600'
+                  : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <Image className="w-4 h-4" />
+            </button>
+            {imgMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setImgMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-20 w-44 bg-white border border-slate-200 rounded-lg shadow-lg py-1">
+                  <button
+                    onClick={() => {
+                      setImgMenuOpen(false);
+                      imageInputRef.current?.click();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    从文件选择
+                  </button>
+                  <button
+                    onClick={() => {
+                      setImgMenuOpen(false);
+                      setCameraOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    现场拍照
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <button
             onClick={() => handleSearch()}
             disabled={loading || !canSearch}
@@ -1026,6 +1060,13 @@ export default function Retrieval() {
           </div>
         </div>
       )}
+
+      {/* 现场拍照：拍完与"从文件选择"走同一条 pickMedia → base64 → 检索链路 */}
+      <CameraCapture
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={(file) => pickMedia('image', file)}
+      />
     </div>
   );
 }
