@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { navigateWithTransition } from "../utils/viewTransition";
+import { readDemoPreset } from "../demoPreset";
 import {
   ArrowLeft,
   Check,
@@ -41,8 +42,11 @@ export default function LoginPage() {
   const [tab, setTab] = useState<AuthTab>("login");
   const [panel, setPanel] = useState<Panel>(initialPanel);
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  /* 演示包（手机版）会预填演示账号：手机上打两遍账号密码很烦，
+     而演示现场常是"把手机递给别人看"。没有预设时初值仍是空串。 */
+  const preset = readDemoPreset().prefill ?? {};
+  const [username, setUsername] = useState(preset.username ?? "");
+  const [password, setPassword] = useState(preset.password ?? "");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
