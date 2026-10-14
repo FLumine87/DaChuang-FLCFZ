@@ -112,7 +112,16 @@ export default function ViewModeSwitcher({
          之前是个深色胶囊 + 蓝色选中块，既比旁边的按钮宽一倍（119px vs 76px），
          风格也跟顶栏格格不入（用户："还是太宽了，而且要与旁边按键风格一致"）。
          窄屏只留一个按钮（图标表示"点一下会去哪边"），宽屏两个都显示。 */}
-      <div className="fixed right-2 top-2 z-[9999] hidden items-center sm:flex">
+      {/* 与顶栏严格对齐 —— 这一排看起来"违和"，实测是两个原因叠加：
+           ① 垂直：顶栏 h-16（64px），控件是 h-9（36px），正中应是 top 14px。
+              原来写 top-2(8px)，中心落在 26px，比主题按钮的 32px 高了 6px；
+           ② 水平：容器是 position:fixed，**脱离了顶栏的 flex 流**，顶栏那组
+              的 gap-2 管不到它，于是"主题→桌面"是 0 间隙、"桌面→手机"是 8px，
+              间距忽宽忽窄。
+          现在：top-3.5(14px) 对齐垂直中线；gap-2 让三者中心距统一 44px；
+          right-10/lg:right-12/xl:right-16 与顶栏自身的
+          px-6/sm:px-10/lg:px-12/xl:px-16 逐档对应，右边距与页面左边距一致。 */}
+      <div className="fixed right-10 top-3.5 z-[9999] hidden items-center gap-2 lg:right-12 xl:right-16 sm:flex">
         {([['desktop', '桌面端视图', Monitor], ['mobile', '手机端视图', Smartphone]] as const).map(
           ([value, label, Icon]) => (
             <button

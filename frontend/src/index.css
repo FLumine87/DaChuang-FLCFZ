@@ -1338,24 +1338,34 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
 }
 
 /* 视图切换按钮常驻在最右上角（见 components/ViewModeSwitcher.tsx）。
-   那里原本是顶栏的「登录 / 主题切换 / 用户菜单」，所以按钮出现时给顶栏补一段
-   右内边距，把顶栏内容整体左移让位。
-   5 个页面（落地页/登录页/首次引导/个人端/管理端）的顶栏都带 .nav-blur，
-   一条规则全覆盖，不必逐个改。
+   那个位置原本是顶栏的「登录 / 主题切换」，所以按钮出现时给顶栏补一段右内边距，
+   把顶栏内容整体左移让位。5 个页面（落地页/登录页/首次引导/个人端/管理端）
+   的顶栏都带 .nav-blur，一条规则全覆盖，不必逐个改。
 
-   数值按**实测矩形**反推，不是估的（按钮已改成与顶栏一致的 h-9 w-9 轻量图标）：
-     · ≥640px：两个图标共 72px（实测），加右侧间距 → 5.5rem(88px)
-     · <640px：按钮不显示，所以不占内边距。
-       实测 390px 顶栏各项（品牌+主页+登录+主题）总宽 337px，加左右内边距
-       至少 53px 正好占满 390px、没有任何空隙，切换按钮无论怎么摆都会
-       压住主题按钮（试过 right-1 + 单按钮 34px、内边距 44px，一律报遮挡）。
-   踩过的坑：先前按估算留 6rem/4.5rem，脚本报出「登录」「切换到深色模式」被遮挡。 */
+   数值＝页面右边距 + 按钮总宽(80px: 两个 h-9 图标 + gap-2 8px) + 间隙(8px)，
+   逐档对应顶栏自身的 px-10 / lg:px-12 / xl:px-16，这样按钮的右边距和页面的
+   左边距是同一个值，不会一边贴着屏幕边、一边留着大边距（实测过：先前
+   固定 right-2 时按钮距右边缘 8px，而页面左边距是 64px，看着就是没对齐）。
+
+   窄屏（<640px）按钮不显示，也就不占内边距：实测 390px 顶栏各项总宽 337px，
+   加左右内边距至少 53px 正好占满 390px、没有任何空隙，切换按钮无论怎么摆
+   都会压住主题按钮。 */
 html.view-switcher-on .nav-blur {
   padding-right: 0;
 }
 @media (min-width: 640px) {
   html.view-switcher-on .nav-blur {
-    padding-right: 5.5rem;
+    padding-right: 8rem; /* 40 + 80 + 8 */
+  }
+}
+@media (min-width: 1024px) {
+  html.view-switcher-on .nav-blur {
+    padding-right: 8.5rem; /* 48 + 80 + 8 */
+  }
+}
+@media (min-width: 1280px) {
+  html.view-switcher-on .nav-blur {
+    padding-right: 9.5rem; /* 64 + 80 + 8 */
   }
 }
 
