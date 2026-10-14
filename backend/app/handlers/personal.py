@@ -394,6 +394,61 @@ async def submit_personal_screening(ctx: RequestContext):
     })
 
 
+def _build_action_plan(screenings, alerts, supplements):
+    """按**真实数据**排出行动计划。
+
+    背景：这里原本写死 `action_plan = []`，前端个人首页那张"行动计划"卡
+    因此永远只有前端自己按预警等级补的那一条（`Dashboard.tsx` 的 levelPlan），
+    看着像"平台只有一条建议"。
+
+    刻意**不重复等级条目**：前端已经会按最新预警等级在前面补
+    「预约心理辅导 / 与可信赖的人聊一聊 / 继续每日情绪记录」，
+    后端再发一条同义的会变成两条一样的话。这里只发"数据本身能证明该做"的事，
+    而且每条都能追溯到一条查询结果，不是套话：
+
+      · 完全没做过筛查   → 先去测一次（否则后面所有建议都无从谈起）
+      · 做过筛查         → 回看报告；做过两次以上才算"已完成"
+      · 没做过三模态采集 → 补一次记录（采集是本平台区别于纯量表的点）
+      · 有采集记录       → 保持每日记录（进行中）
+      · 有未处置的预警   → 去跟进
+      · 最近一次是高危   → 优先稳住作息（睡眠是这类个案最普遍的可干预项）
+
+    字段形状与前端 mock 及 DashboardV2 的读取保持一致：
+      {id, title, duration, status}，status ∈ new | tracking | resolved
+    """
+    plan = []
+    latest = screenings[0] if screenings else None
+    pending = [
+        a for a in alerts
+        if (a.get("status") or "pending") in ("pending", "processing")
+    ]
+
+    if not screenings:
+        plan.append({"id": "PLAN-FIRST-SCREEN", "title": "完成一次首次心理筛查",
+                     "duration": "约 3 分钟", "status": "new"})
+    else:
+        plan.append({"id": "PLAN-REVIEW-LATEST", "title": "回看最近一次筛查报告",
+                     "duration": "约 5 分钟",
+                     "status": "resolved" if len(screenings) > 1 else "new"})
+
+    if not supplements:
+        plan.append({"id": "PLAN-SUPPLEMENT", "title": "补充一次三模态采集记录",
+                     "duration": "约 5 分钟", "status": "new"})
+    else:
+        plan.append({"id": "PLAN-KEEP-LOG", "title": "保持每日情绪记录",
+                     "duration": "每日", "status": "tracking"})
+
+    if pending:
+        plan.append({"id": "PLAN-FOLLOW-ALERT", "title": "跟进尚未处置的预警",
+                     "duration": "本周内", "status": "new"})
+
+    if (latest or {}).get("alert_level") in ("orange", "red"):
+        plan.append({"id": "PLAN-REGULAR-SLEEP", "title": "先稳住作息：固定起床时间",
+                     "duration": "连续 7 天", "status": "new"})
+
+    return plan
+
+
 async def get_personal_dashboard(ctx: RequestContext):
     user_id = int(ctx.user["sub"])
     questionnaires = await db.query_a("SELECT * FROM questionnaires WHERE is_active = 1")
@@ -436,8 +491,6 @@ async def get_personal_dashboard(ctx: RequestContext):
         {"name": "高危", "value": dist.get("red", 0), "color": "#ef4444"},
     ]
 
-    action_plan = []
-
     timeline_query = screenings[:5]
     personal_timeline = []
     for s in timeline_query:
@@ -467,6 +520,9 @@ async def get_personal_dashboard(ctx: RequestContext):
         (user_id,),
     )
     supplements = [_supplement_dict(r) for r in supplement_rows]
+
+    # 行动计划要在 supplements 取到之后再算 —— 它有一条判据就是"有没有采集记录"
+    action_plan = _build_action_plan(screenings, alerts, supplements)
 
     return success_response(data={
         "moodTrend": mood_trend,
