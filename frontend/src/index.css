@@ -1337,16 +1337,26 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
   }
 }
 
-/* 顶栏**不**单独成组 —— 这里原来写着 view-transition-name: app-nav。
-   被命名之后浏览器会把顶栏从 root 快照里抠出来单独做一次交叉淡入，
-   于是转场期间会出现**两套导航内容互相 ghost**：从 /login 切到 / 时，
-   登录页的「登录」和落地页的「平台简介/核心技术…」叠在同一行，
-   左上角品牌看起来一直在抖（用户反馈"左上角那个抽搐"，录屏第 4.6s
-   那一帧能直接看到重影）。
-   当初命名是想让顶栏在转场里别跟着晃，但整页 root 快照本来就是静止的，
-   顶栏跟着一起淡入即可，观感反而干净。 */
+/* 顶栏在转场里**不参与淡入淡出**，直接换成新内容。
+   历史：这里先是写了 view-transition-name: app-nav —— 浏览器于是把顶栏从 root
+   快照里抠出来单独做交叉淡入，转场期间"登录页的「登录」"和"落地页的
+   「平台简介/核心技术…」"两套导航叠在一起互相 ghost，左上角看着一直在抖，
+   当时把命名去掉解决了 ghost。
+   但去掉命名之后，顶栏就跟着 root 一起交叉淡入；用户连续点按钮切换时，
+   顶栏一遍遍淡进淡出，反馈"渐入动画过于频繁，看起来像抽搐"。
+   正解是**命名 + 显式取消两端的动画**：老快照直接隐藏、新快照直接显示，
+   于是顶栏在转场中是一块稳定的、瞬间切换的导航条 —— 既没有 ghost，
+   也没有反复淡入。 */
 .nav-blur {
-  view-transition-name: none;
+  view-transition-name: app-nav;
+}
+::view-transition-old(app-nav) {
+  animation: none;
+  opacity: 0;
+}
+::view-transition-new(app-nav) {
+  animation: none;
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1362,7 +1372,16 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
       这里给页面根节点一个 260ms 的淡入 + 轻微上浮；只动 opacity/transform，
       走合成层；尊重系统"减弱动态效果"设置。
    ========================================================================== */
-.page-enter {
+/* 只在**首次加载**播一次，之后的客户端路由切换一律不播。
+   原因：这个类挂在各页面的根节点上，而根节点包含顶栏 —— 每次切页都会重新挂载、
+   于是整页（含顶栏）从 opacity:0 再淡入一遍。高频采样实测：连续切 3 次页，
+   页面根透明度出现 25 次「<1」的采样（0 → 0.598 → 0.927 → 1）。
+   连点按钮时就是一遍遍重播，用户原话："上方的导航栏渐入动画过于频繁，
+   看起来像抽搐"。
+   而且路由切换本来就有 View Transition 在做交叉淡入（.vt-page-in/out），
+   这个 page-enter 是**叠加的第二层动画**，去掉它不会让切换变生硬。
+   main.tsx 在挂载 400ms 后给 <html> 加 app-booted，之后新挂载的页面不再命中。 */
+html:not(.app-booted) .page-enter {
   animation: page-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 

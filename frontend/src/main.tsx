@@ -19,6 +19,12 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
+/* 首次加载的进场动画（.page-enter）只在这一次播。
+   挂载 400ms 后打上标记，之后客户端路由切换重新挂载的页面就不再命中那条规则
+   —— 否则每次切页整页（含顶栏）都会从 opacity:0 再淡入一遍，
+   连点按钮时看着像抽搐（详见 index.css 里 .page-enter 那段说明）。 */
+window.setTimeout(() => document.documentElement.classList.add('app-booted'), 400)
+
 /* 关于「手机端 / 桌面端」视图切换：
    这个功能已按用户要求移除。它把按钮常驻在顶栏右上角，而那里正是
    「登录 / 主题切换」的位置 —— 为了给它让位，顶栏得补一段右内边距，
