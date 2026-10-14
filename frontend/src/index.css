@@ -1337,37 +1337,6 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
   }
 }
 
-/* 视图切换按钮常驻在最右上角（见 components/ViewModeSwitcher.tsx）。
-   那个位置原本是顶栏的「登录 / 主题切换」，所以按钮出现时给顶栏补一段右内边距
-   把内容左移让位。5 个页面（落地页/登录页/首次引导/个人端/管理端）的顶栏都带
-   .nav-blur，一条规则全覆盖，不必逐个改。
-
-   按钮已改成**单个**（只显示"点一下会去哪边"的那个图标，见组件里的说明），
-   所以宽度是 36px。内边距 = 页面右边距 + 36px + 间隙 8px，逐档对应顶栏自身的
-   px-10 / lg:px-12 / xl:px-16，保证按钮的右边距和页面左边距是同一个值。
-
-   窄屏（<640px）按钮不显示，也就不占内边距：实测 390px 顶栏各项总宽 337px，
-   加左右内边距至少 53px 正好占满 390px、没有任何空隙，按钮无论怎么摆都会
-   压住主题按钮。 */
-html.view-switcher-on .nav-blur {
-  padding-right: 0;
-}
-@media (min-width: 640px) {
-  html.view-switcher-on .nav-blur {
-    padding-right: 5.25rem; /* 40 + 36 + 8 */
-  }
-}
-@media (min-width: 1024px) {
-  html.view-switcher-on .nav-blur {
-    padding-right: 5.75rem; /* 48 + 36 + 8 */
-  }
-}
-@media (min-width: 1280px) {
-  html.view-switcher-on .nav-blur {
-    padding-right: 6.75rem; /* 64 + 36 + 8 */
-  }
-}
-
 /* 顶栏**不**单独成组 —— 这里原来写着 view-transition-name: app-nav。
    被命名之后浏览器会把顶栏从 root 快照里抠出来单独做一次交叉淡入，
    于是转场期间会出现**两套导航内容互相 ghost**：从 /login 切到 / 时，
