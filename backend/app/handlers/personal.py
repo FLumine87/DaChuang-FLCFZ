@@ -6,7 +6,7 @@ from app.core.responses import success_response
 from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
 from app.db import database as db
-from app.services import screening_service, case_service
+from app.services import screening_service, case_service, alert_service
 from app.engines import get_rag_engine
 from app.handlers.retrieval import perform_search, to_frontend_hit
 
@@ -207,6 +207,21 @@ async def get_personal_warnings(ctx: RequestContext):
         "WHERE s.user_id = ? ORDER BY a.created_at DESC, a.id DESC LIMIT 100",
         (int(ctx.user["sub"]),))
     return success_response(data=[_warning_dict(a) for a in alerts])
+
+
+async def update_personal_warning(ctx: RequestContext, alert_id: str):
+    """个人端自助改自己预警的状态（标记为跟踪中 / 已缓解）。
+
+    路径参数用的是**展示码**（alerts.alert_id，如 ALT-41CA2F），不是数据库主键 ——
+    个人端列表返回的就是展示码，前端手里没有主键。
+    （router 会把纯数字的路径参数 coerce 成 int，这里显式转回 str 兼容。）
+    返回体沿用列表同一套 _warning_dict，前端拿到即可直接替换本地那一条。
+    """
+    updated = await alert_service.update_alert_by_user(
+        str(alert_id), int(ctx.user["sub"]), ctx.body or {})
+    if not updated:
+        raise HttpError(404, "预警记录不存在")
+    return success_response(data=_warning_dict(updated))
 
 
 async def get_personal_profile(ctx: RequestContext):
