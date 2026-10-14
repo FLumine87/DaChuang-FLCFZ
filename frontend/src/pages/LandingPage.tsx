@@ -342,10 +342,20 @@ export default function LandingPage() {
     const targets = Array.from(document.querySelectorAll<HTMLElement>(".auth-screen"));
     if (!targets.length) return;
 
-    /* 三重保险，避免"入场动画把内容藏住"：
-       1) 隐藏态只在 html.reveal-ready 下生效，观察器就绪前内容照常可见；
-       2) 观察器以很宽松的条件判定（任何相交即视为进入）；
-       3) 当前屏（active）每次都强制标记，不依赖相交回调的时机。 */
+    /* 入场编排**每个会话只播一次**。
+       原先每次挂载都会 add("reveal-ready")，于是"登录页 ↔ 落地页"来回切时，
+       整套编排每次重放：实测返回落地页后仍有 120 个动画在跑
+       （分屏标题各 900ms），用户反馈"重复切换界面时出现卡卡的感觉"。
+       首屏的第一印象要保住，所以第一次照旧播；之后直接进终态。 */
+    const REVEAL_KEY = "psych_landing_revealed";
+    const skipReveal = (() => {
+      try {
+        return sessionStorage.getItem(REVEAL_KEY) === "1";
+      } catch {
+        return false; /* 隐私模式不可写时按"首次"处理，不影响正确性 */
+      }
+    })();
+
     const mark = (el: HTMLElement, inView: boolean) => {
       el.classList.toggle("is-inview", inView);
     };
@@ -361,7 +371,21 @@ export default function LandingPage() {
       { rootMargin: "-10% 0px -10% 0px", threshold: 0 },
     );
     targets.forEach((el) => observer.observe(el));
-    document.documentElement.classList.add("reveal-ready");
+
+    /* 三重保险，避免"入场动画把内容藏住"：
+       1) 隐藏态只在 html.reveal-ready 下生效，观察器就绪前内容照常可见；
+       2) 观察器以很宽松的条件判定（任何相交即视为进入）；
+       3) 当前屏（active）每次都强制标记，不依赖相交回调的时机。
+       本会话已经播过一次时干脆不加 reveal-ready —— 没有隐藏态就没有动画，
+       内容直接可见，来回切页不再重放。 */
+    if (!skipReveal) {
+      document.documentElement.classList.add("reveal-ready");
+      try {
+        sessionStorage.setItem(REVEAL_KEY, "1");
+      } catch {
+        /* 忽略：不可写就退化成"每次都播"，与改动前一致 */
+      }
+    }
 
     return () => {
       observer.disconnect();
@@ -543,7 +567,7 @@ export default function LandingPage() {
               平台概览
             </p>
             <h2 className="auth-section-title mt-6 max-w-[720px] text-balance tracking-tight text-slate-900">
-              多模态心理筛查与分级预警系统
+              多模态心理筛查与<span className="whitespace-nowrap">分级预警系统</span>
             </h2>
             {/* 首屏讲"这个产品能做什么"，技术路线留给「核心技术」屏。
                 依据申报书「使用说明」：用户经三模态采集 → 自动生成预警报告 →
@@ -596,15 +620,35 @@ export default function LandingPage() {
             <p className="text-[13px] font-medium tracking-[0.18em] text-slate-500">评估链路</p>
 
             {/* 四步链路：每格居中，正好落在下方图表的里程碑与纵向网格线上。
-                原来是绝对定位 + 右对齐，每个标签"右端贴线、左端参差"，看着就是没对齐。 */}
+                原来是绝对定位 + 右对齐，每个标签"右端贴线、左端参差"，看着就是没对齐。
+                箭头不能跟着标签走：整格是居中的，箭头贴在文字右边就落在格子中间偏左，
+                和下一格之间空出一大块（用户反馈"箭头太靠左"）。
+                桌面改为绝对定位到**格子右边界**（= 两标签之间的空隙正中，
+                也就是下方 25%/50%/75% 三条网格线的位置）。
+                窄屏是两列，只有同一行内的相邻两步（0→1、2→3）才画内联箭头，
+                否则 1→2 的箭头会指向下一行的左后方，属于误导。 */}
             <div className="mt-6 grid grid-cols-2 gap-y-2 sm:grid-cols-4">
               {["三模态采集", "哈希检索", "RAG 报告", "分级预警"].map((step, index) => (
                 <span
                   key={step}
-                  className="flex items-center justify-center whitespace-nowrap text-[14px] font-semibold text-slate-800 sm:text-[15px]"
+                  className="relative flex items-center justify-center whitespace-nowrap text-[14px] font-semibold text-slate-800 sm:text-[15px]"
                 >
                   {step}
-                  {index < 3 && <span className="ml-1.5 text-[13px] text-slate-300">→</span>}
+                  {index < 3 && (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 text-[13px] text-slate-300 sm:block"
+                      >
+                        →
+                      </span>
+                      {index % 2 === 0 && (
+                        <span aria-hidden="true" className="ml-1.5 text-[13px] text-slate-300 sm:hidden">
+                          →
+                        </span>
+                      )}
+                    </>
+                  )}
                 </span>
               ))}
             </div>
@@ -648,6 +692,16 @@ export default function LandingPage() {
               </g>
             </svg>
 
+            {/* 这张曲线原先没有任何说明：只有一条上扬的线加四个点，看不出在讲什么。
+                补一句 caption 说清"横轴是什么、纵轴是什么、这条线在表达什么"，
+                并明确标注是示意画法 —— 它的路径是手写的固定坐标，
+                不是真实统计数据，不写清楚容易被当成实测指标。 */}
+            <p className="mt-3 text-[13px] leading-5 text-slate-500">
+              横轴为上面四个环节，纵轴为累计可用的判断依据；每过一个环节，
+              可用于研判的证据就多一层，因此曲线逐级抬升。
+              <span className="text-slate-400">（示意画法，非真实统计值）</span>
+            </p>
+
             <div className="mt-6 grid gap-2.5 border-t border-dashed border-slate-200 pt-5 sm:grid-cols-3">
               {[
                 { value: "3", label: "模态 · 9 类特征" },
@@ -684,7 +738,7 @@ export default function LandingPage() {
       <Section
         id="tech"
         eyebrow="关键技术与方法"
-        title="动态跨模态哈希检索与 RAG 生成"
+        title={<>动态跨模态哈希<span className="whitespace-nowrap">检索</span>与 RAG 生成</>}
         desc="针对动态心理数据环境下的概念漂移与哈希映射冲突，系统采用多哈希表增量更新、查询自适应重排序、非对称距离度量与 Hadamard 矩阵，并在在线监督集体矩阵分解（OSCMFH）框架下引入半监督伪标签与决策级融合，实现图像、语音、文本的跨模态联合检索；报告由 RAG 以检索命中样例与心理知识库为依据生成，语言模型仅承担语言组织，以降低事实性错误。"
         points={[
           "基于多哈希表系统的增量式模态哈希",
@@ -698,7 +752,7 @@ export default function LandingPage() {
       <Section
         id="assess"
         eyebrow="评估维度"
-        title="三模态线索与多维评估指标"
+        title={<>三模态线索与多维<span className="whitespace-nowrap">评估</span>指标</>}
         desc="相比依赖人工访谈与单一量表的传统筛查，系统在同一时间轴上融合三条通道的线索，形成可纵向比较的个体状态画像；量表结果仅用于辅助校准，不作为独立判据。"
         points={[
           "文本通道：认知模式与语言逻辑",
@@ -712,7 +766,7 @@ export default function LandingPage() {
       <Section
         id="alert"
         eyebrow="预警机制"
-        title="四级预警与人工复核闭环"
+        title={<>四级预警与人工<span className="whitespace-nowrap">复核闭环</span></>}
         desc="多模态信号持续偏离个体基线时，系统按四级阈值自动生成预警；达到高风险阈值的个案自动进入人工研判队列，由咨询师确认后转入个案跟踪与处置留痕。算法仅提供提示与风险排序，最终结论由专业人员确认，并可输出转介建议。"
         points={[
           "四级阈值：绿 / 黄 / 橙 / 红，按偏离基线程度自动分级",
@@ -726,7 +780,7 @@ export default function LandingPage() {
       <Section
         id="privacy"
         eyebrow="数据安全"
-        title="联邦学习与「数据不出域」"
+        title={<>联邦学习与「<span className="whitespace-nowrap">数据不出域</span>」</>}
         desc="心理数据属于敏感个人信息。系统采用联邦学习实现跨机构模型协同训练而不直接共享原始敏感数据：各参与机构在本地完成模型训练，仅上行加密后的模型更新，原始数据不离开本地，在保持模型精度的同时满足隐私合规要求。"
         points={[
           "数据不出域：原始敏感数据不离开机构本地",

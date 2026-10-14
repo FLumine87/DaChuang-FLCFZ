@@ -415,7 +415,13 @@ export default function Dashboard() {
             {view.planItems.map((plan, index) => (
               <li
                 key={plan.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"
+                /* min-w-0 不能省：<ul> 是 grid，而 grid item 默认 min-width:auto
+                   = min-content；标题是 truncate（white-space:nowrap），
+                   min-content 就是整句话的宽度 —— 栅格列会被撑开，truncate 根本没
+                   机会生效。实测：卡片内容区 390px 时，18 字标题还装得下，
+                   24 字就把 li 撑到 512px、横向溢出 104px。
+                   父级那两层 min-w-0 管不住 grid item 自己这一层。 */
+                className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-medium tabular-nums text-primary-500">

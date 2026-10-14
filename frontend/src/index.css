@@ -126,18 +126,25 @@
   --card-shadow: 0 20px 50px -34px rgba(0, 0, 0, 0.65);
 }
 
-/* 切换主题时的短暂过渡：只在切换的那 ~240ms 内给所有元素加颜色过渡，
-   切换完就移除，避免常驻 transition 影响 hover 等交互。 */
+/* 切换主题时的短暂过渡：只在切换的那 ~240ms 内给元素加颜色过渡，
+   切换完就移除，避免常驻 transition 影响 hover 等交互。
+
+   ⚠ 这里**刻意不含 background-color**。
+   原先背景也在过渡列表里，结果是：整页底色从深蓝 rgb(11,17,32) 插值到
+   浅灰 rgb(249,250,251)，中途必然经过一片中灰 —— 高频采样实测
+   t+369ms 时 body 就是 rgb(148,151,158)，整屏泛灰，用户看到的就是
+   "切换时会闪一下"。大面积色块做颜色过渡只会得到这种中间态，
+   所以背景一律瞬间切换；文字/描边这些细面积元素保留过渡，
+   既不会有灰屏，切换也不生硬。 */
 html.theme-switching,
 html.theme-switching *,
 html.theme-switching *::before,
 html.theme-switching *::after {
   transition:
-    background-color 200ms ease,
-    border-color 200ms ease,
-    color 200ms ease,
-    fill 200ms ease,
-    stroke 200ms ease !important;
+    border-color 160ms ease,
+    color 160ms ease,
+    fill 160ms ease,
+    stroke 160ms ease !important;
   transition-delay: 0ms !important;
 }
 
@@ -1084,7 +1091,13 @@ h3.text-2xl {
   transition:
     opacity 900ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity, transform;
+  /* 这里**不能**常驻 will-change。
+     will-change: transform 会把元素永久提升为合成层，而合成层用不了次像素
+     抗锯齿（subpixel AA）—— 大标题会因此发虚。上面 body 那段"刻意不设
+     -webkit-font-smoothing: antialiased 以保留系统次像素抗锯齿"的意图，
+     会被这一行整个抵消掉（用户反馈"文字锐度"）。
+     正确做法：只在进场动画期间挂上（见下面 html.reveal-ready 那条），
+     动画结束（.is-inview）立刻释放回 auto。 */
 }
 
 /* 文字列**从左向右**渐入，不是上浮。
@@ -1093,12 +1106,16 @@ h3.text-2xl {
 html.reveal-ready .auth-screen [data-reveal]:not([data-visual]) > * {
   opacity: 0;
   transform: translateX(-22px);
+  /* 动画期间才提升合成层：既有 GPU 加速，又不牺牲落地后的文字锐度 */
+  will-change: opacity, transform;
 }
 
 html.reveal-ready .auth-screen.is-inview [data-reveal] > *,
 html.reveal-ready .auth-screen.is-inview [data-reveal]:not([data-visual]) > * {
   opacity: 1;
   transform: none;
+  /* 动画结束，释放合成层 → 次像素抗锯齿恢复 → 文字重新变锐 */
+  will-change: auto;
 }
 
 /* 逐级延迟：同屏内相邻居块依次登场（每级 90ms） */
@@ -1130,6 +1147,8 @@ html.reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em) {
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:not(strong):not(em) {
   opacity: 1;
   transform: none;
+  /* 与第一层同理：落地后释放合成层，否则这些文字也一直是灰度抗锯齿 */
+  will-change: auto;
 }
 
 /* 第二层整体比第一层晚 260ms 起，内部再逐项 +70ms */
@@ -1154,6 +1173,7 @@ html.reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em) {
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:not(strong):not(em) {
   opacity: 1;
   transform: none;
+  will-change: auto;
 }
 
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(1) { transition-delay: 380ms; }
@@ -1465,7 +1485,18 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
 .auth-snap .auth-section-title {
   font-size: 2.375rem; /* 38px */
   line-height: 1.2;
-  font-weight: 500;
+  /* 字号/字重照抄腾讯官网实测值（2026-10-14 用 headless 打开
+     tencent.com/zh-cn/who-we-are/ 读 computedStyle 得到，非目测）：
+       「我们一直秉承科技向善的宗旨…」这句 h3
+       46px / 600 / line-height 55.2px(=1.20) / letter-spacing 0.25px / 容器 888px
+     行高与字距本项目原本就与之一致，差的只有字号和字重，所以只动这两项。
+     桌面档 46px 就取腾讯的绝对值；字号占容器比因此从 9.8% 收到约 7.5%，
+     接近腾讯那 5.2% 的克制感。
+     为什么字重反而从 400 提到 600：腾讯的大标题实测就是 600，
+     它看着不粗是因为**字号更小**（46 而非 60）—— 绝对尺寸直接决定观感重量。
+     之前 60px + 500 显得"又粗又挤"、60px + 400 又"太细"，
+     症结在字号偏大，不在字重本身。 */
+  font-weight: 600;
   letter-spacing: 0.25px;
 }
 @media (min-width: 640px) {
@@ -1473,8 +1504,21 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
     font-size: 3.125rem; /* 50px */
   }
   .auth-snap .auth-section-title {
-    font-size: 3.75rem; /* 60px */
+    /* 腾讯实测是 46px，用户反馈"可以调大点，但不要太过"，取 52px：
+       仍在腾讯那一档的量级（占容器约 8.5%，介于腾讯 5.2% 与原 9.8% 之间），
+       比 46px 有分量，又不像 60px 那样压人。 */
+    font-size: 3.25rem; /* 52px */
   }
+}
+
+/* 首次引导（FirstRunShell）的标题自带手工 <br>，行是**作者排好的**，
+   度量不能收紧到会把作者的分行再拆一次。
+   实测："最后一题，／请按真实感受回答。" 第二段正好 9 个字，
+   而上面统一给的度量是 9em（= 9 字）—— 卡在临界点，加上中文标点禁则，
+   末尾的"答。"被挤成第三行，孤零零一个字（用户反馈"这里的排版不好"）。
+   这里给一档更宽的度量，保证作者写的每一行都放得下。 */
+.first-run .auth-section-title {
+  max-width: min(100%, 12em);
 }
 
 /* 窄屏（手机）适配。
@@ -1508,12 +1552,41 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
 }
 
 /* 标题防溢出：中文长标题不可断行时会顶出栅格、被右侧卡片盖住。
-   这里统一允许在字符间断行，并留一个兜底防止超长英文串撑破容器。 */
+   这里统一允许在字符间断行，并留一个兜底防止超长英文串撑破容器。
+
+   max-width 不能再写 100%：本文件开头那段说明过"无层级样式优先于分层工具类"，
+   而 100% 会把标题元素上 Tailwind 的 `max-w-[720px]` 整个盖掉 —— 度量控制形同
+   虚设，行宽只剩栅格列宽。栅格列宽随断点变（1440 下 609px、2xl 下 720px），
+   于是同一个标题在不同屏幕上时折时不折：
+     "三模态线索与多维评估指标" 单行要 630px —— 1440 下折两行，2xl 下挤成一行。
+   用户反馈就是"这种标题太长了，要换行"。
+   改成显式度量：52px 字号下约 10~11 字/行，11 字以上的标题稳定折两行，
+   且不会折成三行（最长的 772px / 560 ≈ 1.4 行）。 */
 .auth-snap .auth-hero-title,
 .auth-snap .auth-section-title {
-  word-break: normal;
+  /* auto-phrase：让浏览器按**词组**边界断行，而不是逐字断。
+     中文没有空格，默认 normal 会得到"动态跨模态哈希检 / 索与 RAG 生成"
+     这种把"检索"劈开的断法（用户反馈"检字之前就要换行"）。
+     auto-phrase 会利用语言模型分出词组，断点落在"哈希 / 检索"之间。
+     浏览器不支持时自动退回 normal，只是断行位置差一些，不会破版。
+     需要页面声明 lang（index.html 里是 zh-CN）才生效。 */
+  word-break: auto-phrase;
   overflow-wrap: break-word;
-  max-width: 100%;
+  /* 度量用 em，**必须跟着字号走**。
+     这里踩过一个坑：原本写死 460px，但字号是分档的（≥640 是 52px、
+     ≥1536 是 60px），于是"每行几个字"随屏幕变 —— 1440 下 8 字/行、
+     1920 下只有 7.6 字/行，同一个标题在两台电脑上断行结果完全不同，
+     1920 上甚至断成三行、末尾孤儿一个"成"字（用户要求"注意不同电脑
+     显示尺寸的兼容"）。换成 em 后，任何字号下都是固定的 9 字/行，
+     断行结果在所有尺寸上一致。
+     560px 时两行都铺满，整块看着像个"方块"；收到 9em 后右边缘有参差，
+     接近腾讯那种自然断行的观感。 */
+  max-width: min(100%, 9em);
+  /* 关掉 text-balance：它会把两行**拉成等长**（12 字 → 6+6），
+     正是"这一块太齐整"的来源。腾讯的标题右边缘是参差的，
+     所以这里改回自然断行 —— 注意必须写在无层级里才能压过
+     JSX 上的 Tailwind `text-balance` 工具类。 */
+  text-wrap: wrap;
 }
 
 /* 超宽屏（全屏 2K/4K）适配：内容上浮一档，避免"小内容飘在大屏中央" */
@@ -1522,7 +1595,8 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
     font-size: 3.75rem; /* 56 → 60px */
   }
   .auth-snap .auth-section-title {
-    font-size: 4.25rem; /* 60 → 68px */
+    /* 跟着 52px 那档同比例放大一档（原 68px） */
+    font-size: 3.75rem; /* 60px */
   }
 }
 
