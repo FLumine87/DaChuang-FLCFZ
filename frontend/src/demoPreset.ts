@@ -18,11 +18,11 @@ export interface DemoPreset {
   /** 登录页预填的演示账号 */
   prefill?: { username?: string; password?: string };
   /**
-   * 是否渲染「手机端 / 桌面端」视图切换外壳。
-   * 只给需要"在一台电脑上同时演示两种版式"的包用；打开后会用一个
-   * 390px 宽的 iframe 呈现真·手机版式（见 components/DemoViewToggle.tsx）。
+   * 是否显示「手机端 / 桌面端」切换按钮（见 components/ViewModeSwitcher.tsx）。
+   * 默认显示；手机演示包会显式设为 false —— 那个包本来就是在手机本体上打开的，
+   * 再放一个「切到桌面端」的按钮既没用又挡内容。
    */
-  viewToggle?: boolean;
+  viewSwitcher?: boolean;
 }
 
 export function readDemoPreset(): DemoPreset {

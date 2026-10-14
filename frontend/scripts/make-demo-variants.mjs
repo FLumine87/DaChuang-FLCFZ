@@ -1,8 +1,8 @@
 /**
  * 把 dist-single/index.html（真·单文件产物）复制成两份演示包：
  *
- *   demo-desktop.html —— 桌面端演示：从落地页进入，**并带「手机端 / 桌面端」切换按钮**
- *                      （一台电脑上就能同时演示两种版式）。
+ *   demo-desktop.html —— 桌面端演示：从落地页进入（右上角自带手机端/桌面端切换按钮，
+ *                      这是应用自带的功能，不靠预设开关）。
  *   demo-mobile.html  —— 手机端演示：直接进登录页，并**预填演示账号**
  *                        （手机上打两遍账号密码很烦，现场常是"把手机递给别人看"）。
  *
@@ -38,11 +38,13 @@ const variants = [
   {
     file: 'demo-desktop.html',
     label: '桌面端演示',
-    preset: { route: '#/', viewToggle: true },
+    preset: { route: '#/' },
   },
   {
     file: 'demo-mobile.html',
     label: '手机端演示',
+    /* 不再按"这个包会在手机上打开"去关按钮 —— 构建时无从得知它在哪儿被打开。
+       按钮由 ViewModeSwitcher 运行时按 (窄视口 + 触摸) 自行判定显隐。 */
     preset: { route: '#/login', prefill: { username: 'xiaoyu', password: '123456' } },
   },
 ];

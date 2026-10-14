@@ -1201,46 +1201,56 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(5) 
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(6) { transition-delay: 630ms; }
 
 /* ==========================================================================
-   手机 / 平板：关掉进场位移与错峰，只留一次很淡的渐入
+   手机 / 平板（lg 以下）：就是一张**普通网页**
    --------------------------------------------------------------------------
-   上面那套是**三层叠加**：文字列 translateX(-22px) + 面板内 translateY(12px)
-   + 组成件 translateY(10px)，错峰最长 652ms，并且动画期间每一层都挂
-   will-change 提升为合成层。桌面 GPU 扛得住，手机上就是肉眼可见的掉帧
-   （用户反馈"手机端还是很卡"，要求"不用搞那种上下滑动的动画，
-   就像我滑动页面那样就行"）。
+   用户的原话："手机端就不用搞那种上下滑动的动画了，就像我滑动页面那样就行了，
+   普通的页面……也不用那种有弹性用的。"
 
-   做法：
-     · 位移全部归零 —— 页面不再"滑进来"，就是普通滚动；
-     · 错峰延迟全部归零 —— 同屏一次性淡入，不再逐条排队；
-     · 时长收到 260ms，并去掉 will-change（少一层合成层就少一次重绘）；
-     · **保留 opacity 渐入**（用户说"渐入你看情况修改"）：纯 opacity 的
-       合成开销远小于 transform，页面也不至于"啪"地一下出现。
+   所以这里不是"把动画调轻"，而是**一条都不跑**：
+     1) 进场编排整体的终态直接生效（opacity:1 / transform:none / transition:none），
+        滚动时内容不会淡入、不会位移、不会缩放 —— 内容就在那儿；
+     2) 图标那条回弹曲线单独处理：它的 transform 用的是
+        cubic-bezier(0.34, 1.4, 0.64, 1)，第二个参数 1.4 > 1 会产生**过冲**
+        （先冲过头再弹回来），这就是用户说的"弹性"；
+     3) 关掉滚到边界时的橡皮筋（overscroll-behavior），页面拉到头就停住。
 
-   断点取 1023px（lg 以下）＝ 单列堆叠版式，正是位移动画最没意义的场景；
-   桌面 ≥1024 完全不受影响。
-   延迟那几条必须 !important：原规则用了 :nth-child(n)，特异度高于本块的
-   基础选择器，不用 !important 压不住。
+   注意用 !important 是必需的：原规则大量使用 :nth-child(n) 与多层后代选择器，
+   特异度普遍高于这里的基础选择器。
+   断点 1023px ＝ 单列堆叠版式；桌面 ≥1024 完整保留那套编排，不受影响。
    ========================================================================== */
 @media (max-width: 1023px) {
+  /* 1) 进场动画整体不跑：直接落终态 */
+  html.reveal-ready .auth-screen [data-reveal] > *,
   html.reveal-ready .auth-screen [data-reveal]:not([data-visual]) > *,
   html.reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em),
   html.reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em) {
+    opacity: 1 !important;
     transform: none !important;
+    transition: none !important;
+    transition-delay: 0ms !important;
     will-change: auto !important;
   }
 
-  html.reveal-ready .auth-screen [data-reveal] > *,
-  html.reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em),
-  html.reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em) {
-    transition: opacity 260ms ease !important;
-    transition-delay: 0ms !important;
+  /* 2) 图标：连过冲曲线一起去掉。
+        选择器覆盖**整个 .auth-screen**，不能只写 [data-reveal] svg.lucide ——
+        实测还剩 44 处过冲，就是因为有一部分 lucide 图标不在 [data-reveal] 里
+        （手机端胶囊导航、返回顶部按钮、卡片外的小图标等），
+        只写后代链会漏掉它们。!important 足以压过原来那条
+        .auth-screen [data-reveal] svg.lucide，不必再拼特异度。 */
+  html.reveal-ready .auth-screen svg,
+  html.reveal-ready .auth-screen img,
+  .auth-screen svg,
+  .auth-screen img {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
   }
 
-  html.reveal-ready .auth-screen.is-inview [data-reveal] > *,
-  html.reveal-ready .auth-screen.is-inview [data-reveal][data-visual] > *,
-  html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:not(strong):not(em),
-  html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:not(strong):not(em) {
-    transition-delay: 0ms !important;
+  /* 3) 关掉边界橡皮筋（同一条也顺便关掉下拉刷新，演示时不会误触） */
+  html,
+  body {
+    overscroll-behavior: none;
   }
 }
 
