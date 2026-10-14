@@ -213,7 +213,49 @@ def init_db_sync() -> None:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN user_id INTEGER")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_screenings_user_id ON screenings(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_cases_user_id ON cases(user_id)")
+        _seed_demo_accounts(conn)
         conn.commit()
+
+
+def _seed_demo_accounts(conn: sqlite3.Connection) -> None:
+    """确保登录页宣传的两个演示账号存在且凭证正确（幂等，仅本地启动时执行）。
+
+    背景（2026-10-14 用户报告的两个 bug）：
+      1. 登录页「演示账号」展示 xiaoyu/123456，但后端没有任何种子账号，
+         该用户在库里根本不存在 → 真实后端模式下登录必失败；
+      2. 登录页「管理端 · 咨询师」展示 adminer/admin，但 adminer 是用户经
+         公开注册接口创建的，注册接口按安全要求（防提权）固定 role='user'，
+         于是管理端账号能登录、落地的却是个人端。
+    这里在每次本地启动时补齐：不存在则创建；角色或密码与宣传不符则纠正。
+    账号清单与 frontend/src/pages/LoginPage.tsx 的 fillDemo 保持一致。
+    """
+    # 延迟导入：避免模块顶层的循环依赖
+    from app.core.security import get_password_hash, verify_password
+
+    demo_accounts = (
+        ("adminer", "admin", "admin"),
+        ("xiaoyu", "123456", "user"),
+    )
+    for username, password, role in demo_accounts:
+        row = conn.execute(
+            "SELECT password_hash, role FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        if row is None:
+            conn.execute(
+                "INSERT INTO users (username, password_hash, name, role, is_active) "
+                "VALUES (?, ?, ?, ?, 1)",
+                (username, get_password_hash(password), username, role),
+            )
+            continue
+        if row["role"] != role:
+            conn.execute(
+                "UPDATE users SET role = ? WHERE username = ?", (role, username)
+            )
+        if not verify_password(password, row["password_hash"] or ""):
+            conn.execute(
+                "UPDATE users SET password_hash = ? WHERE username = ?",
+                (get_password_hash(password), username),
+            )
 
 
 def query(sql: str, params=()) -> list:

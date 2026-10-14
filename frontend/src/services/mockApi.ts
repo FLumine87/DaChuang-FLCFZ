@@ -619,7 +619,17 @@ export async function getAdminAlerts(): Promise<AlertRecord[]> {
     await delay();
     return [...alertRecords];
   }
-  return request.get<AlertRecord[]>('/api/admin/alerts');
+  /* 后端 /api/admin/alerts 返回分页包装 { items, total, page, pageSize }
+     （见 services/adminApi.ts 的 Page<T> 与 backend get_admin_alerts），不是裸数组。
+     2026-10-14 修复：此前直接按 AlertRecord[] 取用，AdminDashboard 与
+     AdminJudgement 对拿到的对象调 .filter 抛出
+     "alerts.filter is not a function"——React 无错误边界，整个管理端白屏。
+     这里解包出 items；兼容两种形状（裸数组 / 分页包装），异常形状返回空数组。 */
+  const page = await request.get<{ items?: AlertRecord[] } | AlertRecord[]>(
+    '/api/admin/alerts',
+  );
+  if (Array.isArray(page)) return page;
+  return Array.isArray(page?.items) ? page.items : [];
 }
 
 export async function getAdminCases(): Promise<CaseRecord[]> {
@@ -627,7 +637,15 @@ export async function getAdminCases(): Promise<CaseRecord[]> {
     await delay();
     return [...caseRecords];
   }
-  return request.get<CaseRecord[]>('/api/admin/cases');
+  /* 与 getAdminAlerts 同源的问题：/api/admin/cases 返回分页包装
+     { items, total, page, pageSize }（见 adminApi.ts 的 listAdminCases 的 Page<T>），
+     不是裸数组。2026-10-14 修复：此前直接当数组用，案例页对拿到的对象做数组操作
+     会抛错白屏。这里解包出 items，并兼容裸数组形状。 */
+  const page = await request.get<{ items?: CaseRecord[] } | CaseRecord[]>(
+    '/api/admin/cases',
+  );
+  if (Array.isArray(page)) return page;
+  return Array.isArray(page?.items) ? page.items : [];
 }
 
 export async function adminSearch(
