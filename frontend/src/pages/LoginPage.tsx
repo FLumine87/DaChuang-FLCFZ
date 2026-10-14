@@ -33,7 +33,7 @@ const readPanel = (search: string): Panel =>
   new URLSearchParams(search).get("panel") === "admin" ? "admin" : "user";
 
 /* 独立登录页：主页左上角「登录」按钮跳到这里；主页右上角「管理员登录」带 ?panel=admin。
-   进来只做登录这一件事——作品介绍留给主页，不再一页两职。 */
+   进来只做登录这一件事——平台介绍留给主页，不再一页两职。 */
 export default function LoginPage() {
   const navigate = useNavigate();
   const { search } = useLocation();

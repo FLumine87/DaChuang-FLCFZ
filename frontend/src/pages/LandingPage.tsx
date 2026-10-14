@@ -540,7 +540,7 @@ export default function LandingPage() {
         <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
           <div data-reveal>
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
-              作品概览
+              平台概览
             </p>
             <h2 className="auth-section-title mt-6 max-w-[720px] text-balance tracking-tight text-slate-900">
               多模态心理筛查与分级预警系统
