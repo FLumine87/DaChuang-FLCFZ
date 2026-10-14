@@ -51,7 +51,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, busy]); // busy 也要滚：思考占位出现时把气泡滚进视口
 
   const send = async () => {
     const text = input.trim();
@@ -201,6 +201,22 @@ export default function ChatPage() {
             </div>
           </div>
         ))}
+        {/* 大模型思考中的占位气泡（2026-10-15）：生成要 20~30 秒，
+            不能让用户对着空屏等。回复到达后随 busy=false 消失。 */}
+        {busy && (
+          <div className="flex justify-start">
+            <div className="ui-card rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-slate-500">
+              <span className="inline-flex items-center gap-2">
+                正在思考中
+                <span className="inline-flex gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:150ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:300ms]" />
+                </span>
+              </span>
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
