@@ -199,6 +199,8 @@ export interface DashboardResponse {
   warningEvents: WarningEvent[];
   actionPlan: { id: string; title: string; duration: string; status: 'new' | 'tracking' | 'resolved' }[];
   screeningRecords: PersonalScreeningRecord[];
+  /** 采集补充列表（含挂用户名下、未挂记录的）：「最近一次输入」的兜底来源 */
+  supplements?: PersonalSupplement[];
   userProfile: UserProfile;
   questionnaireCatalog: typeof questionnaireCatalog;
   personalTimeline: PersonalTimelineEvent[];
@@ -365,12 +367,47 @@ export async function submitScreening(data: {
   return request.post('/api/personal/screenings', data);
 }
 
+/** 采集分析报告里的一条命中记录（后端 /api/personal/supplements 返回）。 */
+export interface CollectionHit {
+  id: string;
+  modality?: string;
+  modalityLabel?: string;
+  summary?: string;
+  similarity: number;
+  alertLevel: 'green' | 'yellow' | 'orange' | 'red' | string;
+  tags?: string[];
+  date?: string;
+  explain?: string;
+}
+
+/**
+ * 哈希检索引擎对一次采集的分析报告。
+ *
+ * 采集提交后由后端同步生成（见 backend app/handlers/personal.py 的
+ * _analyze_collection）：检索引擎跑一次跨模态检索 → 按「相似度 × 风险等级」
+ * 评估 → 达到预警级别（orange/red）时同步建档到预警中心。
+ */
+export interface CollectionAnalysis {
+  modality: 'text' | 'audio' | 'image';
+  query?: string;
+  level: 'green' | 'yellow' | 'orange' | 'red';
+  levelLabel: string;
+  isAlert: boolean;
+  reason: string;
+  conclusion: string;
+  hits: CollectionHit[];
+  alertId?: string | null;
+  index?: unknown;
+  createdAt?: string;
+}
+
 /**
  * 把用户在 02「补充记录」里写/传的内容挂到本次筛查记录上。
  *
  * 之前这一步只写进了 sessionStorage 草稿（给 03 结果页看），一离开就没了——
  * 档案里查不到，等于白填。真实后端需要对应的
  * `POST /api/personal/screenings/{id}/supplement` 接口。
+ * 返回哈希检索引擎的检索报告（后端同步分析；分析失败时为 null）。
  */
 export async function saveScreeningSupplement(
   recordId: string,
@@ -382,13 +419,66 @@ export async function saveScreeningSupplement(
     /** 音频/图片的分析描述（上传接口返回），首页与检索页据此展示同一段文字 */
     description?: string;
   },
-): Promise<void> {
+): Promise<CollectionAnalysis | null> {
   if (USE_MOCK) {
     await delay(120);
     patchSubmittedRecord(recordId, { supplement });
-    return;
+    return null;
   }
-  await request.post(`/api/personal/screenings/${encodeURIComponent(recordId)}/supplement`, supplement);
+  const data = await request.post<{ id: number; report?: CollectionAnalysis | null }>(
+    `/api/personal/screenings/${encodeURIComponent(recordId)}/supplement`,
+    supplement,
+  );
+  return data?.report ?? null;
+}
+
+/** 采集补充的对外形状（挂记录与挂用户名下共用）。 */
+export interface PersonalSupplement {
+  id: number;
+  /** screening=挂在筛查记录下；user=直接挂在用户名下（新账号首次采集） */
+  context: 'screening' | 'user';
+  kind: 'text' | 'audio' | 'image';
+  text?: string;
+  filename?: string;
+  url?: string;
+  description?: string;
+  screeningId?: string;
+  /** 哈希检索分析报告（保存时同步生成；早期数据可能没有） */
+  analysis?: CollectionAnalysis;
+  createdAt?: string;
+}
+
+/**
+ * 把一次采集补充挂到**用户名下**（没有筛查记录时的路径）。
+ *
+ * 新账号一次筛查都没做过时，此前采集内容无处可挂（"只上传不挂靠"——
+ * 首页「最近一次输入」与检索页「我的记录」都看不到）。后端按 user_id
+ * 落库后，读取侧会一并展示；见 GET /api/personal/supplements。
+ * 与挂记录路径一样，返回哈希检索引擎的检索报告。
+ */
+export async function saveUserSupplement(supplement: {
+  kind: 'text' | 'audio' | 'image';
+  text?: string;
+  filename?: string;
+  url?: string;
+  description?: string;
+}): Promise<CollectionAnalysis | null> {
+  if (USE_MOCK) {
+    await delay(120);
+    return null;
+  }
+  const data = await request.post<{ id: number; report?: CollectionAnalysis | null }>(
+    '/api/personal/supplements',
+    supplement,
+  );
+  return data?.report ?? null;
+}
+
+/** 当前用户的采集补充列表（挂记录 + 挂用户名下），按时间倒序。 */
+export async function getPersonalSupplements(): Promise<PersonalSupplement[]> {
+  if (USE_MOCK) return [];
+  const data = await request.get<PersonalSupplement[]>('/api/personal/supplements');
+  return Array.isArray(data) ? data : [];
 }
 
 /** 演示数据整包：demo 模式与"演示会话被真实后端拒绝"两种情况共用同一份 */

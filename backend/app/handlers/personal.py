@@ -1,6 +1,8 @@
 """个人端接口 handler（保留前端响应字段结构，async）。"""
 from datetime import datetime, timedelta
 import json
+import os
+import uuid
 
 from app.core.responses import success_response
 from app.core.exceptions import HttpError
@@ -43,6 +45,46 @@ def _screening_item(s: dict, qn: str) -> dict:
     }
 
 
+async def _attach_supplements(items: list) -> None:
+    """给筛查记录挂上「多模态采集」补充（最新的那条）。
+
+    前端约定：记录带 supplement 字段才会进「最近一次输入」与检索页「我的记录」
+    （见 pages/Dashboard.tsx、pages/Retrieval.tsx）。一条筛查可能补过多次
+    （文本/语音/图片都算补充），这里只挂最新一条，历史仍保留在表里。
+    """
+    ids = [it.get("id") for it in items if it.get("id")]
+    if not ids:
+        return
+    placeholders = ",".join("?" for _ in ids)
+    rows = await db.query_a(
+        f"SELECT * FROM screening_supplements WHERE screening_id IN ({placeholders}) ORDER BY id DESC",
+        ids,
+    )
+    latest: dict = {}
+    for r in rows:
+        latest.setdefault(r["screening_id"], r)  # DESC 排序 → 首见即最新
+    for it in items:
+        sup = latest.get(it.get("id"))
+        if not sup:
+            continue
+        analysis = None
+        if sup.get("analysis"):
+            try:
+                analysis = json.loads(sup["analysis"])
+            except Exception:
+                analysis = None
+        it["supplement"] = {
+            k: v for k, v in {
+                "kind": sup.get("kind"),
+                "text": sup.get("text"),
+                "filename": sup.get("filename"),
+                "url": sup.get("url"),
+                "description": sup.get("description"),
+                "analysis": analysis,
+            }.items() if v is not None
+        }
+
+
 async def _qn_name(questionnaire_id):
     q = await db.query_one_a("SELECT name FROM questionnaires WHERE id = ?", (questionnaire_id,))
     return q["name"] if q else "未知"
@@ -73,7 +115,234 @@ async def get_personal_screenings(ctx: RequestContext):
     for s in rows:
         qn = await _qn_name(s["questionnaire_id"])
         items.append(_screening_item(s, qn))
+    await _attach_supplements(items)
     return success_response(data=items)
+
+
+async def save_screening_supplement(ctx: RequestContext, screening_id):
+    """把「多模态采集」的一次补充挂到指定筛查记录上（有筛查记录时的默认路径）。
+
+    前端在每次上传成功后调用（见 pages/DataCollection.tsx 的 persistCollection
+    → services/mockApi.ts saveScreeningSupplement）；按 user_id 校验归属，
+    只能给自己的记录补充。screening_id 为公开编号（SCR-xxx）。
+    保存后立即跑一次哈希检索分析：报告随响应返回（前端在采集页底部展示），
+    并回写到本条补充上，达到预警级别时同步生成预警记录。
+    """
+    data = ctx.body or {}
+    kind = data.get("kind")
+    if kind not in ("text", "audio", "image"):
+        raise HttpError(400, "补充类型必须是 text / audio / image")
+    user_id = int(ctx.user["sub"])
+    row = await db.query_one_a(
+        "SELECT id FROM screenings WHERE screening_id = ? AND user_id = ?",
+        (str(screening_id), user_id),
+    )
+    if not row:
+        raise HttpError(404, "筛查记录不存在")
+    sup_id = await db.execute_a(
+        "INSERT INTO screening_supplements (user_id, screening_id, kind, text, filename, url, description) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (user_id, str(screening_id), kind, data.get("text"), data.get("filename"),
+         data.get("url"), data.get("description")),
+    )
+    report = await _analyze_collection(ctx, sup_id, kind, data, user_id, row)
+    return success_response(data={"id": sup_id, "report": report}, message="补充已保存")
+
+
+async def save_personal_supplement(ctx: RequestContext):
+    """把一次补充挂到**用户名下**（没有筛查记录时的路径）。
+
+    新账号一次筛查都没做过时，采集内容此前无处可挂（只上传不挂靠、
+    首页与检索页都看不到）。这里允许直接按 user_id 落库，
+    读取侧（首页「最近一次输入」/ 检索页「我的记录」）会把它一并展示。
+    同样跑哈希检索分析，预警挂在用户名下（screening_id 为空）。
+    """
+    data = ctx.body or {}
+    kind = data.get("kind")
+    if kind not in ("text", "audio", "image"):
+        raise HttpError(400, "补充类型必须是 text / audio / image")
+    user_id = int(ctx.user["sub"])
+    row_id = await db.execute_a(
+        "INSERT INTO screening_supplements (user_id, screening_id, kind, text, filename, url, description) "
+        "VALUES (?, NULL, ?, ?, ?, ?, ?)",
+        (user_id, kind, data.get("text"), data.get("filename"),
+         data.get("url"), data.get("description")),
+    )
+    report = await _analyze_collection(ctx, row_id, kind, data, user_id, None)
+    return success_response(data={"id": row_id, "report": report}, message="已保存到你的档案")
+
+
+# ─── 采集的哈希检索分析 ────────────────────────────────────────────────────────
+
+_SEVERITY = {"green": 0, "yellow": 1, "orange": 2, "red": 3}
+_LEVEL_LABEL = {"green": "稳定", "yellow": "关注", "orange": "警告", "red": "高危"}
+_KIND_LABEL = {"text": "文本", "audio": "语音", "image": "图像"}
+
+
+def _resolve_upload_path(url: str) -> str | None:
+    """/uploads/audio/xxx.wav → 磁盘绝对路径（前缀校验防穿越；不存在返回 None）。"""
+    from app.handlers.upload import UPLOAD_ROOT
+    rel = (url or "")[len("/uploads/"):] if (url or "").startswith("/uploads/") else ""
+    if not rel:
+        return None
+    root = os.path.realpath(UPLOAD_ROOT)
+    candidate = os.path.realpath(os.path.join(root, rel))
+    if candidate.startswith(root + os.sep) and os.path.isfile(candidate):
+        return candidate
+    return None
+
+
+def _report_hit(h: dict) -> dict:
+    """报告里的命中记录（精简版：去掉缩略图/媒体元数据，保留可解释信息）。"""
+    return {
+        k: v for k, v in {
+            "id": h.get("id"),
+            "modality": h.get("modality"),
+            "modalityLabel": h.get("modality_label"),
+            "summary": h.get("summary"),
+            "similarity": round(float(h.get("similarity") or 0), 4),
+            "alertLevel": h.get("alert_level") or "green",
+            "tags": h.get("tags") or [],
+            "date": h.get("date"),
+            "explain": h.get("explain"),
+        }.items() if v is not None
+    }
+
+
+async def _analyze_collection(ctx: RequestContext, sup_id, kind: str, data: dict,
+                              user_id: int, screening_row) -> dict | None:
+    """对一次采集跑哈希检索引擎，生成检索报告；达到预警级别时生成预警记录。
+
+    评估口径（相似度 × 风险等级 双条件，避免每次检索都误报）：
+      · 最高相似记录 sim >= 0.75 且其等级为 orange/red → 取该等级（生成预警）
+      · 最高相似记录 sim >= 0.65 且等级非 green → yellow（关注，不生成预警记录，
+        与筛查预警的既有口径一致：只有 orange/red 才建档）
+      · 其余 → green
+    分析失败（引擎未就绪等）返回 None，不影响补充本身的挂载。
+    """
+    try:
+        from app.engines import get_hashing_engine
+
+        engine = get_hashing_engine()
+        media_path = None
+        if kind in ("audio", "image"):
+            media_path = _resolve_upload_path(data.get("url") or "")
+        query = (data.get("text") or "").strip()
+        results, info = await engine.search_with_info(
+            query=query, modality=kind, top_k=5, modality_filter=None,
+            media_path=media_path,
+        )
+        hits = sorted([_report_hit(h) for h in (results or [])],
+                      key=lambda h: h.get("similarity") or 0, reverse=True)
+
+        top = hits[0] if hits else None
+        sim = (top.get("similarity") or 0) if top else 0
+        top_level = (top.get("alertLevel") or "green") if top else "green"
+
+        if top and sim >= 0.75 and _SEVERITY.get(top_level, 0) >= 2:
+            level = top_level
+        elif top and sim >= 0.65 and _SEVERITY.get(top_level, 0) >= 1:
+            level = "yellow"
+        else:
+            level = "green"
+
+        reason = (
+            f"最相似记录（{top.get('id')}）相似度 {sim:.2f}，风险等级{_LEVEL_LABEL.get(top_level)}"
+            if top else "未检索到相似记录"
+        )
+        # 结论：把命中规模、最高相似度和处置建议写成一段话
+        high_count = sum(1 for h in hits if _SEVERITY.get(h.get("alertLevel"), 0) >= 2)
+        parts = [f"在真实跨模态语料库中检索到 {len(hits)} 条相似记录，最高相似度 {sim:.2f}。"]
+        if high_count:
+            parts.append(f"其中 {high_count} 条为高风险等级记录，与本次输入存在情绪风险特征重合。")
+        if level in ("orange", "red"):
+            parts.append("已生成预警并同步到预警中心，建议尽快完成一次量表筛查或联系咨询师。")
+        elif level == "yellow":
+            parts.append("存在一定风险信号，建议持续记录并关注情绪变化。")
+        else:
+            parts.append("暂未发现明显风险信号，请继续保持记录习惯。")
+        conclusion = "".join(parts)
+
+        # 达到预警级别（orange/red）→ 建档挂载；x/y 为补充所在记录（可空）
+        alert_id = None
+        if level in ("orange", "red"):
+            name = await _current_user_name(ctx) or "用户"
+            alert_id = f"ALT-{uuid.uuid4().hex[:6].upper()}"
+            await db.execute_a(
+                "INSERT INTO alerts (alert_id, screening_id, user_id, name, level, trigger, description, "
+                "status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)",
+                (
+                    alert_id,
+                    screening_row["id"] if screening_row else None,
+                    user_id, name, level,
+                    f"多模态采集 · {_KIND_LABEL[kind]}线索与{_LEVEL_LABEL[level]}案例高度相似（相似度 {sim:.2f}）",
+                    conclusion,
+                ),
+            )
+
+        report = {
+            "modality": kind,
+            "query": (query[:120] or data.get("filename") or ""),
+            "level": level,
+            "levelLabel": _LEVEL_LABEL[level],
+            "isAlert": level in ("orange", "red"),
+            "reason": reason,
+            "conclusion": conclusion,
+            "hits": hits,
+            "alertId": alert_id,
+            "index": info if isinstance(info, dict) else None,
+            "createdAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+        # 回写到补充记录上：首页/检索页/采集页都从这里取「结论」
+        await db.execute_a(
+            "UPDATE screening_supplements SET analysis = ? WHERE id = ?",
+            (json.dumps(report, ensure_ascii=False), sup_id),
+        )
+        return report
+    except Exception:
+        # 分析失败不阻塞挂载（服务端无访问日志，打印堆栈便于本地排查）
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def _supplement_dict(r: dict) -> dict:
+    """补充记录的对外形状（前端 Supplement 类型：kind + 可选 text/filename/url/description）。"""
+    analysis = None
+    raw = r.get("analysis")
+    if raw:
+        try:
+            analysis = json.loads(raw)
+        except Exception:
+            analysis = None
+    return {
+        k: v for k, v in {
+            "id": r.get("id"),
+            "context": "screening" if r.get("screening_id") else "user",
+            "kind": r.get("kind"),
+            "text": r.get("text"),
+            "filename": r.get("filename"),
+            "url": r.get("url"),
+            "description": r.get("description"),
+            "screeningId": r.get("screening_id"),
+            "analysis": analysis,
+            "createdAt": _fmt(r.get("created_at"), "%Y-%m-%d %H:%M"),
+        }.items() if v is not None
+    }
+
+
+async def get_personal_supplements(ctx: RequestContext):
+    """当前用户的全部采集补充（含挂记录与挂用户名下两种），按时间倒序。
+
+    检索页「我的记录」用它把新账号的用户级采集也纳入历史列表；
+    首页以其中最新一条作为「最近一次输入」的兜底。
+    """
+    user_id = int(ctx.user["sub"])
+    rows = await db.query_a(
+        "SELECT * FROM screening_supplements WHERE user_id = ? ORDER BY id DESC LIMIT 100",
+        (user_id,),
+    )
+    return success_response(data=[_supplement_dict(r) for r in rows])
 
 
 async def submit_personal_screening(ctx: RequestContext):
@@ -144,10 +413,12 @@ async def get_personal_dashboard(ctx: RequestContext):
     for s in screenings:
         qn = await _qn_name(s["questionnaire_id"])
         screening_records.append(_screening_item(s, qn))
+    await _attach_supplements(screening_records)
 
     alerts = await db.query_a(
-        "SELECT a.* FROM alerts a JOIN screenings s ON a.screening_id = s.id "
-        "WHERE s.user_id = ? ORDER BY a.created_at DESC, a.id DESC LIMIT 5", (user_id,))
+        "SELECT a.* FROM alerts a LEFT JOIN screenings s ON a.screening_id = s.id "
+        "WHERE (s.user_id = ? OR a.user_id = ?) ORDER BY a.created_at DESC, a.id DESC LIMIT 5",
+        (user_id, user_id))
     warning_events = [_warning_dict(a) for a in alerts]
 
     mood_trend = []
@@ -155,8 +426,8 @@ async def get_personal_dashboard(ctx: RequestContext):
     dist = {}
     for level in ("green", "yellow", "orange", "red"):
         row = await db.query_one_a(
-            "SELECT COUNT(*) AS c FROM alerts a JOIN screenings s ON a.screening_id = s.id "
-            "WHERE s.user_id = ? AND a.level = ?", (user_id, level))
+            "SELECT COUNT(*) AS c FROM alerts a LEFT JOIN screenings s ON a.screening_id = s.id "
+            "WHERE (s.user_id = ? OR a.user_id = ?) AND a.level = ?", (user_id, user_id, level))
         dist[level] = row["c"] if row else 0
     warning_distribution = [
         {"name": "稳定", "value": dist.get("green", 0), "color": "#22c55e"},
@@ -189,12 +460,21 @@ async def get_personal_dashboard(ctx: RequestContext):
     elif profile_name:
         user_profile["name"] = profile_name
 
+    # 采集补充列表（含挂用户名下、未挂记录的）：首页「最近一次输入」
+    # 在记录级补充之外用它兜底，新账号首次采集也能在首页看到。
+    supplement_rows = await db.query_a(
+        "SELECT * FROM screening_supplements WHERE user_id = ? ORDER BY id DESC LIMIT 20",
+        (user_id,),
+    )
+    supplements = [_supplement_dict(r) for r in supplement_rows]
+
     return success_response(data={
         "moodTrend": mood_trend,
         "warningDistribution": warning_distribution,
         "warningEvents": warning_events,
         "actionPlan": action_plan,
         "screeningRecords": screening_records,
+        "supplements": supplements,
         "userProfile": user_profile,
         "questionnaireCatalog": questionnaire_catalog,
         "personalTimeline": personal_timeline,
@@ -202,10 +482,12 @@ async def get_personal_dashboard(ctx: RequestContext):
 
 
 async def get_personal_warnings(ctx: RequestContext):
+    uid = int(ctx.user["sub"])
+    # 挂记录的预警按记录归属查；采集产生的用户名下预警（screening_id 为空）按 a.user_id 查
     alerts = await db.query_a(
-        "SELECT a.* FROM alerts a JOIN screenings s ON a.screening_id = s.id "
-        "WHERE s.user_id = ? ORDER BY a.created_at DESC, a.id DESC LIMIT 100",
-        (int(ctx.user["sub"]),))
+        "SELECT a.* FROM alerts a LEFT JOIN screenings s ON a.screening_id = s.id "
+        "WHERE (s.user_id = ? OR a.user_id = ?) ORDER BY a.created_at DESC, a.id DESC LIMIT 100",
+        (uid, uid))
     return success_response(data=[_warning_dict(a) for a in alerts])
 
 
@@ -218,10 +500,12 @@ async def get_personal_profile(ctx: RequestContext):
     for s in screenings:
         qn = await _qn_name(s["questionnaire_id"])
         screening_records.append(_screening_item(s, qn))
+    await _attach_supplements(screening_records)
 
     alerts = await db.query_a(
-        "SELECT a.* FROM alerts a JOIN screenings s ON a.screening_id = s.id "
-        "WHERE s.user_id = ? ORDER BY a.created_at DESC, a.id DESC LIMIT 10", (user_id,))
+        "SELECT a.* FROM alerts a LEFT JOIN screenings s ON a.screening_id = s.id "
+        "WHERE (s.user_id = ? OR a.user_id = ?) ORDER BY a.created_at DESC, a.id DESC LIMIT 10",
+        (user_id, user_id))
     warning_events = [_warning_dict(a) for a in alerts]
 
     user = await db.query_one_a("SELECT name FROM users WHERE id = ?", (user_id,))

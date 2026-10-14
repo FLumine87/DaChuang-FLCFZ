@@ -79,7 +79,9 @@ CREATE TABLE IF NOT EXISTS alert_rules (
 CREATE TABLE IF NOT EXISTS alerts (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     alert_id        TEXT NOT NULL UNIQUE,
-    screening_id    INTEGER NOT NULL,
+    -- screening_id 可空：多模态采集的预警挂在用户名下（user_id）；既有 D1 请执行 006
+    screening_id    INTEGER,
+    user_id         INTEGER,
     name            TEXT NOT NULL,
     level           TEXT DEFAULT 'green',
     trigger         TEXT,
@@ -178,3 +180,21 @@ CREATE TABLE IF NOT EXISTS media_files (
 );
 CREATE INDEX IF NOT EXISTS ix_media_files_id ON media_files(id);
 CREATE INDEX IF NOT EXISTS ix_media_files_file_id ON media_files(file_id);
+
+-- 「多模态采集」页的自愿补充（文本日记 / 语音片段 / 图片）。
+-- 与 app/db/database.py 的 SCHEMA_SQL 保持同步。既有 D1 请执行 005_screening_supplements.sql。
+-- 两种挂靠：screening_id 非空=挂在筛查记录下；为空=挂在用户名下（新账号首次采集）。
+CREATE TABLE IF NOT EXISTS screening_supplements (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER,
+    screening_id    TEXT,
+    kind            TEXT NOT NULL,
+    text            TEXT,
+    filename        TEXT,
+    url             TEXT,
+    description     TEXT,
+    analysis        TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_screening_supplements_sid ON screening_supplements(screening_id);
+CREATE INDEX IF NOT EXISTS ix_screening_supplements_uid ON screening_supplements(user_id);

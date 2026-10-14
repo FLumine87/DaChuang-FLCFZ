@@ -86,7 +86,11 @@ CREATE TABLE IF NOT EXISTS alert_rules (
 CREATE TABLE IF NOT EXISTS alerts (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     alert_id        TEXT NOT NULL UNIQUE,
-    screening_id    INTEGER NOT NULL,
+    -- screening_id 可空：多模态采集产生的预警挂在用户名下（user_id），
+    -- 不强制依赖筛查记录（新账号首次采集也能产生预警）。旧表为 NOT NULL，
+    -- 由 init_db_sync 迁移重建放开。
+    screening_id    INTEGER,
+    user_id         INTEGER,
     name            TEXT NOT NULL,
     level           TEXT DEFAULT 'green',
     trigger         TEXT,
@@ -171,6 +175,29 @@ CREATE TABLE IF NOT EXISTS media_files (
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_media_files_file_id ON media_files(file_id);
+
+-- 「多模态采集」页的自愿补充（文本日记 / 语音片段 / 图片）。
+-- 两种挂靠方式：
+--   · screening_id 非空：挂在某条筛查记录下（有筛查记录时的默认方式）；
+--   · screening_id 为空：挂在用户名下（user_id），新账号首次采集也能进档案。
+-- 一条记录可以补多条（保留历史），列表接口只挂最新一条给前端展示。
+CREATE TABLE IF NOT EXISTS screening_supplements (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER,
+    screening_id    TEXT,
+    kind            TEXT NOT NULL,
+    text            TEXT,
+    filename        TEXT,
+    url             TEXT,
+    description     TEXT,
+    -- 哈希检索引擎分析结果（JSON）：风险等级/结论/命中记录，
+    -- 由 supplement 接口保存时同步写入，供首页/检索页/采集页展示。
+    analysis        TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_screening_supplements_sid ON screening_supplements(screening_id);
+-- 注意：user_id 是后加的列（旧表通过 init_db_sync 的 ALTER 迁移），
+-- 其索引必须在迁移之后创建，不能写进这里（旧表上执行会报 no such column）。
 """
 
 
@@ -213,6 +240,83 @@ def init_db_sync() -> None:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN user_id INTEGER")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_screenings_user_id ON screenings(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_cases_user_id ON cases(user_id)")
+        # screening_supplements 的早期版本只有 screening_id（NOT NULL）且无 user_id。
+        # SQLite 无法用 ALTER 放开 NOT NULL —— 该表是 2026-10-14 新增的、无历史包袱，
+        # 直接重建为新结构并搬运数据（新库上 SCHEMA_SQL 建的就是新结构，此分支不触发）。
+        sup_cols = {row[1]: row[3] for row in conn.execute("PRAGMA table_info(screening_supplements)")}
+        if "user_id" not in sup_cols or sup_cols.get("screening_id") == 1:
+            has_uid = "user_id" in sup_cols
+            conn.execute("ALTER TABLE screening_supplements RENAME TO screening_supplements_old")
+            conn.executescript(
+                "CREATE TABLE IF NOT EXISTS screening_supplements ("
+                " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                " user_id INTEGER,"
+                " screening_id TEXT,"
+                " kind TEXT NOT NULL,"
+                " text TEXT,"
+                " filename TEXT,"
+                " url TEXT,"
+                " description TEXT,"
+                " created_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
+                "CREATE INDEX IF NOT EXISTS ix_screening_supplements_sid ON screening_supplements(screening_id);"
+            )
+            cols = ("id, user_id, screening_id, kind, text, filename, url, description, created_at"
+                    if has_uid else
+                    "id, screening_id, kind, text, filename, url, description, created_at")
+            conn.execute(
+                f"INSERT INTO screening_supplements ({cols}) SELECT {cols} FROM screening_supplements_old"
+            )
+            conn.execute("DROP TABLE screening_supplements_old")
+        # 挂记录的历史数据回填归属；user_id 索引在列存在之后再建
+        conn.execute(
+            "UPDATE screening_supplements SET user_id = ("
+            " SELECT s.user_id FROM screenings s WHERE s.screening_id = screening_supplements.screening_id"
+            ") WHERE user_id IS NULL AND screening_id IS NOT NULL"
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_screening_supplements_uid ON screening_supplements(user_id)")
+        # analysis 列（哈希检索分析结果 JSON）：纯新增列，ALTER 即可
+        sup_cols2 = {row[1] for row in conn.execute("PRAGMA table_info(screening_supplements)")}
+        if "analysis" not in sup_cols2:
+            conn.execute("ALTER TABLE screening_supplements ADD COLUMN analysis TEXT")
+        # alerts：旧表 screening_id 为 NOT NULL（预警必须挂筛查记录）。
+        # 多模态采集的预警允许挂在用户名下（user_id，screening_id 可空），
+        # SQLite 无法 ALTER 放开约束 —— 重建搬运（既有预警数据原样保留）。
+        alert_cols = {row[1]: row[3] for row in conn.execute("PRAGMA table_info(alerts)")}
+        if alert_cols.get("screening_id") == 1 or "user_id" not in alert_cols:
+            has_uid = "user_id" in alert_cols
+            conn.execute("ALTER TABLE alerts RENAME TO alerts_old")
+            conn.executescript(
+                "CREATE TABLE alerts ("
+                " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                " alert_id TEXT NOT NULL UNIQUE,"
+                " screening_id INTEGER,"
+                " user_id INTEGER,"
+                " name TEXT NOT NULL,"
+                " level TEXT DEFAULT 'green',"
+                " trigger TEXT,"
+                " description TEXT,"
+                " status TEXT DEFAULT 'pending',"
+                " assignee_id INTEGER,"
+                " follow_up_notes TEXT,"
+                " resolved_at DATETIME,"
+                " created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+                " updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
+                "CREATE INDEX IF NOT EXISTS ix_alerts_alert_id ON alerts(alert_id);"
+            )
+            base = ("id, alert_id, screening_id, user_id, name, level, trigger, description, status, "
+                    "assignee_id, follow_up_notes, resolved_at, created_at, updated_at")
+            src = base if has_uid else (
+                "id, alert_id, screening_id, NULL, name, level, trigger, description, status, "
+                "assignee_id, follow_up_notes, resolved_at, created_at, updated_at")
+            conn.execute(f"INSERT INTO alerts ({base}) SELECT {src} FROM alerts_old")
+            conn.execute("DROP TABLE alerts_old")
+        # 归属回填（幂等，每次启动执行）：user_id = 0 是早期搬运填入的字面量（应为 NULL）。
+        # 放在重建分支之外 —— 表已重建过时这里仍要把历史数据的归属补齐/纠正。
+        conn.execute(
+            "UPDATE alerts SET user_id = ("
+            " SELECT s.user_id FROM screenings s WHERE s.id = alerts.screening_id"
+            ") WHERE (user_id IS NULL OR user_id = 0) AND screening_id IS NOT NULL"
+        )
         _seed_demo_accounts(conn)
         conn.commit()
 

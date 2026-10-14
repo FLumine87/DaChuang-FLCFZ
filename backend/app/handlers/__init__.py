@@ -19,6 +19,12 @@ ROUTES = [
     # ---- 个人端 ----
     ("GET", "/api/personal/screenings", personal.get_personal_screenings, "user"),
     ("POST", "/api/personal/screenings", personal.submit_personal_screening, "user"),
+    # 「多模态采集」上传成功后把补充挂到记录上（前端 persistCollection 调用）
+    ("POST", "/api/personal/screenings/{screening_id}/supplement",
+     personal.save_screening_supplement, "user"),
+    # 没有筛查记录时挂到用户名下；读取侧用 GET 列表合并展示
+    ("POST", "/api/personal/supplements", personal.save_personal_supplement, "user"),
+    ("GET", "/api/personal/supplements", personal.get_personal_supplements, "user"),
     ("GET", "/api/personal/dashboard", personal.get_personal_dashboard, "user"),
     ("GET", "/api/personal/warnings", personal.get_personal_warnings, "user"),
     ("GET", "/api/personal/profile", personal.get_personal_profile, "user"),

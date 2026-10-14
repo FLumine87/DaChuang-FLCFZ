@@ -145,6 +145,9 @@ export default function Dashboard() {
   const view = useMemo(() => {
     if (!data) return null;
     const records = data.screeningRecords ?? [];
+    /* 采集补充总计（挂记录 + 挂用户名下）。新账号还没做过筛查时，
+       采集内容就靠这份数据在「最近一次输入」里露脸。 */
+    const supplements = data.supplements ?? [];
     /* 左栏展示最新一次量表结果：跳过 pending（还没答完的那条） */
     const last = records.find((r) => r.status === "completed") ?? records[0];
     const def = questionnaires.find((q) => q.id === last?.questionnaire);
@@ -156,6 +159,15 @@ export default function Dashboard() {
       const k = modalityOf(r);
       counts[k] = (counts[k] ?? 0) + 1;
     });
+    /* 挂用户名下（未挂记录）的采集也计入：新账号采集后，
+       「这 30 天你记录了 N 次」与模态条形图不该还是 0。
+       挂记录的在上面已按记录计过，这里只补未挂记录的，避免重复计数。 */
+    const userSupplements = supplements.filter((s) => !s.screeningId);
+    userSupplements.forEach((s) => {
+      const k = s.kind === "audio" ? "语音" : s.kind === "image" ? "图像" : "文本";
+      counts[k] = (counts[k] ?? 0) + 1;
+    });
+    const totalRecords = records.length + userSupplements.length;
     const maxCount = Math.max(1, ...Object.values(counts));
 
     const warning = (data.warningEvents ?? []).find((w) => w.status !== "resolved");
@@ -184,13 +196,14 @@ export default function Dashboard() {
     }, {});
 
     /* 「最近一次输入」= 这张卡展示的那条记录的补充内容。
-       记录优先、草稿兜底：草稿只服务首次引导那一次；若先取草稿，用户之后再做一次
-       筛查（补充写在记录上），卡里会一直显示第一次的旧内容，与新标签也不一致。
-       取最新一条带补充的（records 本身新的在前，不能只看 records[0] ——
-       它可能没补充，而第 3 条有）。 */
+       记录优先、用户级采集兜底、草稿最后：草稿只服务首次引导那一次；
+       新账号没有筛查记录时，采集挂在用户名下（supplements），
+       用它保证"上传后一定看得到"，而不是只上传不挂靠。 */
     const draft = getDraft();
     const supplement =
-      records.find((r) => r.supplement)?.supplement ?? draft?.supplement;
+      records.find((r) => r.supplement)?.supplement ??
+      supplements[0] ??
+      draft?.supplement;
     /* 文本取原文；音频 / 图片取**与检索历史同一段**模态文字描述
        （supplementModalityText 是两处共用的唯一实现：有分析描述就是
        「语音片段特征：…」/「记录到的非言语线索：…」，没有就回退成文件名）。
@@ -199,6 +212,9 @@ export default function Dashboard() {
     const input = supplement
       ? { kind: supplement.kind, text: supplementText }
       : null;
+    /* 哈希检索引擎对这次采集的分析报告（保存时同步生成，随补充挂载）：
+       卡里展示风险等级与结论，把"采集 → 分析 → 结论"闭环带到这里 */
+    const inputAnalysis = supplement?.analysis ?? null;
 
     /* 检索结果：取相似度最高的一条，其余用「还有 N 条」带过（版面只放得下一条） */
     const ranked = [...retrievalResults].sort((a, b) => b.similarity - a.similarity);
@@ -222,10 +238,12 @@ export default function Dashboard() {
          这里对齐同一口径。 */
       name: getCurrentSession()?.username || data.userProfile?.name || "",
       input,
+      inputAnalysis,
       top: ranked[0],
       second: ranked[1],
       date: todayLabel(),
       records,
+      totalRecords,
       last,
       def,
       bands,
@@ -531,6 +549,16 @@ export default function Dashboard() {
                     「{SAMPLE_INPUT}」
                   </p>
                 )}
+                {/* 这次采集的哈希检索结论（等级 + 结论，一行压住版面） */}
+                {view.inputAnalysis?.conclusion && (
+                  <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[12.5px] leading-[1.6] text-slate-500">
+                    <span className="font-medium text-slate-600">
+                      {view.inputAnalysis.levelLabel ?? ""}
+                    </span>
+                    <span className="mx-1">·</span>
+                    {view.inputAnalysis.conclusion}
+                  </p>
+                )}
 
                 {matched && (
                   <>
@@ -685,9 +713,38 @@ export default function Dashboard() {
             </div>
           </>
         ) : (
-          <p className="mt-5 border-t border-slate-100 pt-4 text-[14px] text-slate-500">
-            还没有检测记录 —— 从下面「评估心理状态」开始，大约 3 分钟。
-          </p>
+          <>
+            <p className="mt-5 border-t border-slate-100 pt-4 text-[14px] text-slate-500">
+              还没有检测记录 —— 从下面「评估心理状态」开始，大约 3 分钟。
+            </p>
+            {/* 新账号还没做筛查时，采集内容挂在用户名下——这里也要让它露脸，
+                否则「多模态采集」传完东西、首页什么都看不到（只上传不挂靠的剩余死角）。 */}
+            {view.input && (
+              <div className="mt-4 rounded-xl border border-slate-100 p-4">
+                <p className="flex items-center gap-1.5 text-[15px] font-semibold text-slate-700">
+                  最近一次输入
+                  <span className="rounded bg-primary-50 px-1 text-[11px] font-medium text-primary-600">
+                    来自多模态采集
+                  </span>
+                </p>
+                <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-700">
+                  「{view.input.text}」
+                </p>
+                {view.inputAnalysis?.conclusion && (
+                  <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[12.5px] leading-[1.6] text-slate-500">
+                    <span className="font-medium text-slate-600">
+                      {view.inputAnalysis.levelLabel ?? ""}
+                    </span>
+                    <span className="mx-1">·</span>
+                    {view.inputAnalysis.conclusion}
+                  </p>
+                )}
+                <p className="mt-2 text-[12px] text-slate-400">
+                  完成一次筛查后，这里会显示对应的分析与建议。
+                </p>
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -705,7 +762,7 @@ export default function Dashboard() {
           </div>
 
           <p className="mt-3 text-[24px] font-semibold leading-[1.3] text-slate-900">
-            这 30 天你记录了 {view.records.length} 次
+            这 30 天你记录了 {view.totalRecords} 次
           </p>
 
           <div className="mt-5">
