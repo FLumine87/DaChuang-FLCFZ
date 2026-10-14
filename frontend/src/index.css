@@ -1338,34 +1338,33 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
 }
 
 /* 视图切换按钮常驻在最右上角（见 components/ViewModeSwitcher.tsx）。
-   那个位置原本是顶栏的「登录 / 主题切换」，所以按钮出现时给顶栏补一段右内边距，
-   把顶栏内容整体左移让位。5 个页面（落地页/登录页/首次引导/个人端/管理端）
-   的顶栏都带 .nav-blur，一条规则全覆盖，不必逐个改。
+   那个位置原本是顶栏的「登录 / 主题切换」，所以按钮出现时给顶栏补一段右内边距
+   把内容左移让位。5 个页面（落地页/登录页/首次引导/个人端/管理端）的顶栏都带
+   .nav-blur，一条规则全覆盖，不必逐个改。
 
-   数值＝页面右边距 + 按钮总宽(80px: 两个 h-9 图标 + gap-2 8px) + 间隙(8px)，
-   逐档对应顶栏自身的 px-10 / lg:px-12 / xl:px-16，这样按钮的右边距和页面的
-   左边距是同一个值，不会一边贴着屏幕边、一边留着大边距（实测过：先前
-   固定 right-2 时按钮距右边缘 8px，而页面左边距是 64px，看着就是没对齐）。
+   按钮已改成**单个**（只显示"点一下会去哪边"的那个图标，见组件里的说明），
+   所以宽度是 36px。内边距 = 页面右边距 + 36px + 间隙 8px，逐档对应顶栏自身的
+   px-10 / lg:px-12 / xl:px-16，保证按钮的右边距和页面左边距是同一个值。
 
    窄屏（<640px）按钮不显示，也就不占内边距：实测 390px 顶栏各项总宽 337px，
-   加左右内边距至少 53px 正好占满 390px、没有任何空隙，切换按钮无论怎么摆
-   都会压住主题按钮。 */
+   加左右内边距至少 53px 正好占满 390px、没有任何空隙，按钮无论怎么摆都会
+   压住主题按钮。 */
 html.view-switcher-on .nav-blur {
   padding-right: 0;
 }
 @media (min-width: 640px) {
   html.view-switcher-on .nav-blur {
-    padding-right: 8rem; /* 40 + 80 + 8 */
+    padding-right: 5.25rem; /* 40 + 36 + 8 */
   }
 }
 @media (min-width: 1024px) {
   html.view-switcher-on .nav-blur {
-    padding-right: 8.5rem; /* 48 + 80 + 8 */
+    padding-right: 5.75rem; /* 48 + 36 + 8 */
   }
 }
 @media (min-width: 1280px) {
   html.view-switcher-on .nav-blur {
-    padding-right: 9.5rem; /* 64 + 80 + 8 */
+    padding-right: 6.75rem; /* 64 + 36 + 8 */
   }
 }
 
@@ -1541,9 +1540,55 @@ html.view-switcher-on .nav-blur {
      backdrop-filter 默认到元素底边"一刀切"，毛玻璃与页面之间会留下一条
      可见的横向接缝 —— 深色下尤其明显（用户反馈"交接好突兀"）。
      用 mask-image 让模糊本身在底边前渐隐到透明，接缝就没了。
-     注意 mask 同时作用于 background 和 backdrop-filter，所以一层就够。 */
-  mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+     注意 mask 同时作用于 background 和 backdrop-filter，所以一层就够。
+
+     这里必须用**像素**而不是百分比。原先写的是 `#000 62%, transparent 100%`，
+     那是按 64px 顶栏调的（64×62% ≈ 40px 处开始渐隐）。手机端顶栏下面多了一条
+     章节胶囊行、总高约 110px，62% 就变成 68px 才开始渐隐 —— 正好把胶囊那一行
+     罩进渐隐区，底色在那里已经半透明，正文直接透上来和胶囊叠在一起
+     （2026-10-14 真机录屏：胶囊背后能看到"…再由RAG结合…"字样）。
+     改成 `calc(100% - 24px)`：无论顶栏多高，都只在最后 24px 过渡；
+     对 64px 顶栏来说起点是 40px，与原值几乎完全一致，桌面观感不变。 */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
+}
+
+/* 手机/平板：顶栏里多了一条章节胶囊行（.nav-chips，lg 以下显示），
+   整条顶栏实测 106px（主栏 64 + 胶囊行 42）。只要还挂着底边渐隐，
+   渐隐区就会落进胶囊行，胶囊背后透出正文 —— 真机录屏里能直接看到
+   "…再由RAG结合…"和胶囊叠在一起。
+   所以这里**整条去掉渐隐**，让顶栏是一块完整的不透明底色。
+   代价是底边从"渐隐"变成"硬边"，但底色就是 --color-page（与页面同色），
+   硬边在视觉上等于看不见；原来那条"突兀的接缝"是毛玻璃造成的，
+   而 Android Chrome 打开 file:// 时 backdrop-filter 本就不渲染，
+   这里只剩同色实底，不存在接缝。 */
+@media (max-width: 1023px) {
+  .nav-blur::before {
+    mask-image: none;
+    -webkit-mask-image: none;
+    /* 顶栏是 sticky 的，毛玻璃意味着滚动时**每一帧**都要重新采样背后的内容 ——
+       这是移动端滚动掉帧最经典的原因。而且实测 Android Chrome 打开 file://
+       时它根本不渲染（.nav-blur::before 的底色才是真正在起作用的那个），
+       等于白付了每帧重采样这笔账。这里直接关掉，观感不变（底色是不透明的）。 */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  /* 背景里那两个"永远在动"的层也停掉：
+       · .aurora .glass-1/2/3 —— 42~62s 的无限漂移，且基类上挂着常驻
+         will-change: transform（等于永久占着合成层）；
+       · .aurora span ×3 —— 同样 42~62s 无限漂移。
+     它们是大面积渐变/模糊形状，持续动画就是持续合成，滚动时和内容抢 GPU。
+     手机端改为静止：形状、颜色、位置都不变，只是不再漂移 ——
+     静态背景本来就看不出来"少了动画"，但滚动会明显跟手。
+     用户反馈"手机端上滑时候的卡顿"（2026-10-14 第二次反馈移动端性能）。 */
+  .aurora .glass,
+  .aurora span {
+    animation: none !important;
+  }
+  .aurora .glass {
+    will-change: auto !important;
+  }
 }
 
 /* 移动端章节胶囊条：横向可滑但不显示滚动条（手机原生滚动条又粗又碍眼），

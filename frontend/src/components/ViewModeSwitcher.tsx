@@ -29,6 +29,24 @@ const STORE_KEY = 'psych_view_mode';
 
 type Mode = 'desktop' | 'mobile';
 
+/**
+ * 是不是"真的在手机/平板上"打开的。
+ * 窄视口 + 粗指针（手指）→ 真机。只看宽度不行：桌面用户把窗口拉窄也会命中。
+ */
+function isHandheld(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  return window.matchMedia('(max-width: 767px) and (pointer: coarse)').matches;
+}
+
+/** 是不是被嵌在 iframe 里（手机视图的取景框内部）—— 那里不再重复渲染按钮 */
+function isFramed(): boolean {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true; /* 跨域取不到 top 就当作在框里，宁可不显示 */
+  }
+}
+
 function initialMode(): Mode {
   try {
     return window.localStorage.getItem(STORE_KEY) === 'mobile' ? 'mobile' : 'desktop';
@@ -54,6 +72,16 @@ export default function ViewModeSwitcher({
       /* 隐私模式不可写就退化成"不记忆"，不影响使用 */
     }
   }, [mode]);
+
+  const [handheld, setHandheld] = useState(isHandheld);
+  const [framed] = useState(isFramed);
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia('(max-width: 767px) and (pointer: coarse)');
+    const onChange = () => setHandheld(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   /* 给顶栏让位的开关（见文件头说明） */
   useEffect(() => {
@@ -106,40 +134,26 @@ export default function ViewModeSwitcher({
         </div>
       )}
 
-      {/* 切换按钮：最右上角、常驻。
-         样式**照抄旁边那两个控件**（LandingPage 的「登录」与主题切换）：
-         无底色、text-slate-500、hover 变主色、尺寸 h-9 w-9 圆角方块。
-         之前是个深色胶囊 + 蓝色选中块，既比旁边的按钮宽一倍（119px vs 76px），
-         风格也跟顶栏格格不入（用户："还是太宽了，而且要与旁边按键风格一致"）。
-         窄屏只留一个按钮（图标表示"点一下会去哪边"），宽屏两个都显示。 */}
-      {/* 与顶栏严格对齐 —— 这一排看起来"违和"，实测是两个原因叠加：
-           ① 垂直：顶栏 h-16（64px），控件是 h-9（36px），正中应是 top 14px。
-              原来写 top-2(8px)，中心落在 26px，比主题按钮的 32px 高了 6px；
-           ② 水平：容器是 position:fixed，**脱离了顶栏的 flex 流**，顶栏那组
-              的 gap-2 管不到它，于是"主题→桌面"是 0 间隙、"桌面→手机"是 8px，
-              间距忽宽忽窄。
-          现在：top-3.5(14px) 对齐垂直中线；gap-2 让三者中心距统一 44px；
-          right-10/lg:right-12/xl:right-16 与顶栏自身的
-          px-6/sm:px-10/lg:px-12/xl:px-16 逐档对应，右边距与页面左边距一致。 */}
-      <div className="fixed right-10 top-3.5 z-[9999] hidden items-center gap-2 lg:right-12 xl:right-16 sm:flex">
-        {([['desktop', '桌面端视图', Monitor], ['mobile', '手机端视图', Smartphone]] as const).map(
-          ([value, label, Icon]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setMode(value)}
-              aria-pressed={mode === value}
-              title={label}
-              className={
-                'hidden h-9 w-9 place-items-center rounded-lg transition-all duration-200 hover:bg-white/80 hover:text-primary-700 active:scale-90 active:bg-white sm:grid ' +
-                (mode === value ? 'text-primary-600' : 'text-slate-500')
-              }
-            >
-              <Icon className="h-4 w-4" />
-            </button>
-          ),
-        )}
-      </div>
+      {/* 切换按钮：最右上角、常驻、只有一个。
+         先前是两个图标（桌面 / 手机），其中"当前所在的那一个"其实是多余的 ——
+         你已经在桌面端了，"桌面端"这个按钮没有任何可做的事。
+         现在只留"点一下会去哪边"的那一个：
+           桌面模式 → 显示手机图标（点了进手机视图）
+           手机模式 → 显示桌面图标（点了回桌面视图）
+         真机（窄视口 + 手指）不显示：手机上本来就是手机版式，没有可切换的对象，
+         而且 390px 顶栏实测没有空隙容纳它。
+         iframe 内部（手机取景框里）也不显示，否则框里会再冒出一个按钮。 */}
+      {!framed && !handheld && (
+        <button
+          type="button"
+          onClick={() => setMode(mobile ? 'desktop' : 'mobile')}
+          aria-pressed={mobile}
+          title={mobile ? '切换到桌面端视图' : '切换到手机端视图'}
+          className="fixed right-10 top-3.5 z-[9999] grid h-9 w-9 place-items-center rounded-lg text-slate-500 transition-all duration-200 hover:bg-white/80 hover:text-primary-700 active:scale-90 active:bg-white lg:right-12 xl:right-16"
+        >
+          {mobile ? <Monitor className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
+        </button>
+      )}
     </>
   );
 }
