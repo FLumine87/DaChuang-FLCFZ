@@ -144,6 +144,21 @@ export interface ScaleScoreResult {
   } | null;
 }
 
+// AI 陪伴对话（2026-10-14：回复改为后端 LLM 生成，此前一直是前端本地随机文案）
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+export interface CompanionChatResult {
+  user_id: string;
+  /** mock=true 时为空串，前端回退本地兜底文案 */
+  reply: string;
+  mock: boolean;
+  /** 本轮回复是否用上了服务端个人知识图谱上下文 */
+  kg_context_used: boolean;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!PERSONAL_API_READY) {
     throw new Error(
@@ -167,6 +182,13 @@ export const api = {
     request<ExtractResult>('/api/v1/kg/extract', {
       method: 'POST',
       body: JSON.stringify({ user_id: userId, text }),
+    }),
+
+  // AI 陪伴对话：后端 LLM 生成回复（history 为最近几轮，不含本轮 user 消息）
+  chatCompanion: (userId: string, message: string, history: ChatTurn[] = []) =>
+    request<CompanionChatResult>('/api/v1/chat/companion', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, message, history }),
     }),
 
   getGraph: (userId: string) => request<GraphData>(`/api/v1/kg/graph/${encodeURIComponent(userId)}`),

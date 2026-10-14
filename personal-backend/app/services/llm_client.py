@@ -38,17 +38,23 @@ def mock_mode() -> bool:
 
 def chat(system: str, user: str) -> str:
     """通用对话。Mock 模式返回空串，由调用方回退到模板逻辑。"""
+    return chat_messages([{"role": "system", "content": system},
+                          {"role": "user", "content": user}])
+
+
+def chat_messages(messages: list[dict], temperature: float = 0.7) -> str:
+    """多轮对话（陪伴聊天等场景）。Mock 模式返回空串，由调用方回退到本地文案。
+
+    messages 为 OpenAI 格式 [{"role": ..., "content": ...}, ...]。
+    """
     if mock_mode():
         return ""
     url = settings.llm_base_url.rstrip("/") + "/chat/completions"
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
     payload = {
         "model": settings.llm_model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        "temperature": 0.3,
+        "messages": messages,
+        "temperature": temperature,
     }
     try:
         with httpx.Client(timeout=settings.llm_timeout, verify=settings.llm_verify_ssl) as client:

@@ -112,10 +112,12 @@ if (-not $SkipAgent) {
         $agentEnv    = Join-Path $agentDir ".env"
         $agentEnvEx  = Join-Path $agentDir ".env.example"
         if (-not (Test-Path $agentEnv) -and (Test-Path $agentEnvEx)) {
-            $txt = Get-Content $agentEnvEx -Raw
+            # 读/写都走 .NET UTF-8：PS5 的 Get-Content + Set-Content -Encoding ASCII
+            # 会把 .env.example 里的中文注释转成 ????（2026-10-14 修复）
+            $txt = [System.IO.File]::ReadAllText($agentEnvEx, [System.Text.Encoding]::UTF8)
             $txt = $txt -replace 'NEO4J_PASSWORD=your_password', "NEO4J_PASSWORD=$neo4jPassword"
             $txt = $txt -replace 'ENABLE_MOCK_ENGINES=False', 'ENABLE_MOCK_ENGINES=True'
-            Set-Content -Path $agentEnv -Value $txt -Encoding ASCII
+            [System.IO.File]::WriteAllText($agentEnv, $txt, (New-Object System.Text.UTF8Encoding($false)))
             Write-Host "[setup] Created $agentEnv （Neo4j 密码已对齐，默认 ENABLE_MOCK_ENGINES=True）"
         }
 

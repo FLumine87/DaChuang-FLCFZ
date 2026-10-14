@@ -226,6 +226,17 @@ npm run dev
 
 前端服务将在 `http://localhost:5173` 启动
 
+### 配置大模型 API（可选，一步搞定）
+
+项目里所有需要大模型的功能（RAG 报告生成、AI 陪伴对话、推荐语、日常问询等）共用**同一个 OpenAI 兼容接口**。
+下载项目后双击 `配置大模型API.bat`（或运行 `.\configure_api.ps1`），按提示粘贴一个 Key 即可；
+内置 DeepSeek / 通义千问 / 智谱 GLM / OpenAI 预设，也支持任意 OpenAI 兼容接口：
+
+- Key 只会写入 `backend/.env` 与 `personal-backend/.env`，两个文件均已被 `.gitignore` 忽略，
+  **不会上传到 GitHub**（脚本写入前会自动校验这一点）
+- 不配置也能完整跑通：相关功能自动降级为内置 Mock（离线演示模式）
+- 换 Key / 换服务商：重跑脚本即可；一键还原离线模式：`.\configure_api.ps1 -RestoreOffline`
+
 ### Docker部署
 ```bash
 docker-compose up -d

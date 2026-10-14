@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Send, Sparkles, RefreshCw, AlertTriangle, MessageCircleHeart, HardDrive } from 'lucide-react';
-import { api, type ExtractResult, type InferenceRunResult, type CheckinMessage } from '../../services/api';
+import { api, type ChatTurn, type ExtractResult, type InferenceRunResult, type CheckinMessage } from '../../services/api';
 import { getCurrentSession } from '../../auth/session';
 import { briefErrorMessage } from '../../services/http';
 import {
@@ -19,6 +19,8 @@ interface ChatMessage {
   extract?: ExtractResult;
   /** 这条回应是本机规则给的（后端不可达），界面上标注「离线模式」 */
   offline?: boolean;
+  /** 对话服务端处于演示模式（未配 LLM 或 Mock），回复来自本机文案 */
+  replyMock?: boolean;
 }
 
 const WELCOME = '你好，我是你的 AI 心理陪伴助手。和我聊聊最近的状态、喜欢的事或烦恼吧——我会把关键信息整理进你的个人知识图谱，并在需要时为你生成状态报告。';
@@ -59,42 +61,73 @@ export default function ChatPage() {
     setBusy(true);
 
     const userMsg: ChatMessage = { id: Date.now(), role: 'user', text };
+    /* 历史取"当前列表"的最近 6 轮（此时还没把本轮 user 消息放进去），
+       供后端 LLM 保持上下文；离线兜底消息不进历史，避免污染语境。 */
+    const history: ChatTurn[] = messages
+      .filter((m) => !m.offline)
+      .slice(-6)
+      .map((m) => ({ role: m.role, text: m.text }));
+
     setMessages((prev) => [...prev, userMsg]);
 
-    const reply = FALLBACK_REPLIES[Math.floor(Math.random() * FALLBACK_REPLIES.length)];
-    try {
-      const extract = await api.extract(userId, text);
-      if (extract.triples?.length) {
-        setLocalCount(appendLocalTriples(userId, extract.triples).triples.length);
+    /* 对话与抽取并行：
+       · 回复 → /chat/companion（后端 LLM 生成，2026-10-14 起不再是本地随机文案）
+       · 抽取 → /kg/extract（三元组进个人图谱，逻辑保持不变） */
+    const [chatRes, extractRes] = await Promise.allSettled([
+      api.chatCompanion(userId, text, history),
+      api.extract(userId, text),
+    ]);
+
+    // --- 抽取结果 ---
+    let extractData: ExtractResult | undefined;
+    let extractFailed = false;
+    let extractReason: unknown = null;
+    if (extractRes.status === 'fulfilled') {
+      extractData = extractRes.value;
+      if (extractData.triples?.length) {
+        setLocalCount(appendLocalTriples(userId, extractData.triples).triples.length);
       }
-      setMockServer(Boolean(extract.mock));
-      setMessages((prev) => [
-        ...prev,
-        { id: Date.now() + 1, role: 'assistant', text: reply, extract },
-      ]);
-    } catch (e) {
-      /* 后端不可达也要能聊：用本机关键词规则整理这条消息，回应照给，并标注离线。
-         抽取到的三元组同样写进 localStorage（图谱页会把它画出来）。 */
+      setMockServer(Boolean(extractData.mock));
+    } else {
+      extractFailed = true;
+      extractReason = extractRes.reason;
       const triples = triplesFromText(text);
       if (triples.length) setLocalCount(appendLocalTriples(userId, triples).triples.length);
-      setError(briefErrorMessage(e, '未连接到服务端'));
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          role: 'assistant',
-          text: `${reply}\n（离线模式：本条由本机规则整理，暂未连到服务端）`,
-          offline: true,
-        },
-      ]);
-    } finally {
-      setBusy(false);
     }
+
+    // --- 回复来源：后端 LLM 优先，失败/Mock 才回退本地文案 ---
+    let replyText: string;
+    let offline = false;
+    let replyMock = false;
+    if (chatRes.status === 'fulfilled' && chatRes.value.reply) {
+      replyText = chatRes.value.reply;
+      replyMock = chatRes.value.mock;
+    } else {
+      replyText = FALLBACK_REPLIES[Math.floor(Math.random() * FALLBACK_REPLIES.length)];
+      if (extractFailed) {
+        // 服务端完全不可达：维持原有离线模式提示
+        const reason = chatRes.status === 'rejected' ? chatRes.reason : extractReason;
+        setError(briefErrorMessage(reason, '未连接到服务端'));
+        offline = true;
+        replyText = `${replyText}\n（离线模式：本条由本机规则整理，暂未连到服务端）`;
+      } else {
+        // 服务端活着：mock（未配 LLM）或对话接口报错，只标注回复来源，不弹大横幅
+        replyMock = true;
+      }
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      { id: Date.now() + 1, role: 'assistant', text: replyText, extract: extractData, offline, replyMock },
+    ]);
+    setBusy(false);
   };
 
   return (
-    <div className="flex flex-col h-full max-w-3xl mx-auto">
-      <div className="ui-card p-4 flex items-center justify-between">
+    /* chat-fullheight：配合 index.css 的 :has 规则把高度链打通到视口，
+       消息少时输入框也贴在底部（主流对话软件的布局） */
+    <div className="chat-fullheight flex flex-col flex-1 min-h-0 w-full max-w-3xl mx-auto">
+      <div className="ui-card p-4 flex items-center justify-between shrink-0">
         <div>
           <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-primary-600" /> AI 心理陪伴对话
@@ -125,7 +158,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto mt-4 space-y-4 pr-1">
+      <div className="flex-1 min-h-0 overflow-y-auto mt-4 space-y-4 pr-1 app-scrollbar">
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
@@ -139,6 +172,11 @@ export default function ChatPage() {
               {m.offline && (
                 <span className="mt-2 inline-block rounded-full bg-warning-50 px-2 py-0.5 text-[11px] text-warning-600">
                   离线模式
+                </span>
+              )}
+              {m.replyMock && !m.offline && (
+                <span className="mt-2 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+                  本机文案 · 未走大模型
                 </span>
               )}
               {m.extract && m.extract.triples.length > 0 && (
@@ -166,7 +204,7 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex gap-2 shrink-0 pt-1">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.v1.alerts import router as alerts_router
+from .api.v1.chat import router as chat_router
 from .api.v1.checkin import router as checkin_router
 from .api.v1.inference import router as inference_router
 from .api.v1.kg import router as kg_router
@@ -41,6 +42,7 @@ app.include_router(kg_router, prefix="/api/v1")
 app.include_router(inference_router, prefix="/api/v1")
 app.include_router(alerts_router, prefix="/api/v1")
 app.include_router(checkin_router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health")
