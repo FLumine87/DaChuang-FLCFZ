@@ -582,22 +582,34 @@ export default function LandingPage() {
               结合心理知识库生成可追溯的筛查报告；管理端据此完成分级预警与个案跟踪。
             </p>
 
-            <ul className="mt-5 grid gap-1 border-t border-dashed border-slate-200 pt-4">
-              {[
-                "动态跨模态哈希检索：毫秒级匹配相似案例",
-                "RAG 报告生成：以检索样例与心理知识库为依据",
-                "三模态互补：文本、语音、图像同时进入评估",
-                "处置闭环：高风险自动进入人工复核并留痕",
-              ].map((point) => (
-                <li
-                  key={point}
-                  className="flex items-start gap-2 text-[14px] leading-5 text-slate-600"
-                >
-                  <Check className="h-4 w-4 shrink-0 text-success-600" />
-                  {point}
-                </li>
-              ))}
-            </ul>
+            {/* 特性列表 + 首屏「立即体验」：与右上角「登录」同一个入口（进登录页后再切换身份）。
+                按钮放在列表右侧的空白处并底对齐，不给首屏多添一行高度。 */}
+            <div className="mt-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-t border-dashed border-slate-200 pt-4">
+              <ul className="grid gap-1">
+                {[
+                  "动态跨模态哈希检索：毫秒级匹配相似案例",
+                  "RAG 报告生成：以检索样例与心理知识库为依据",
+                  "三模态互补：文本、语音、图像同时进入评估",
+                  "处置闭环：高风险自动进入人工复核并留痕",
+                ].map((point) => (
+                  <li
+                    key={point}
+                    className="flex items-start gap-2 text-[14px] leading-5 text-slate-600"
+                  >
+                    <Check className="h-4 w-4 shrink-0 text-success-600" />
+                    {point}
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={() => navigateWithTransition(navigate, "/login")}
+                className="group inline-flex shrink-0 items-center gap-2 rounded-full bg-primary-600 px-6 py-3 text-[15px] font-medium text-white shadow-[0_16px_34px_-18px_rgba(70,95,255,0.9)] transition-all duration-200 hover:bg-primary-700 active:scale-[0.97]"
+              >
+                <span className="whitespace-nowrap">立即体验</span>
+                <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </button>
+            </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary-600">

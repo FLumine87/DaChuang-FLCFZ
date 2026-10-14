@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -72,6 +73,37 @@ function prefetch(path: string) {
   void PREFETCH[path]().catch(() => prefetched.delete(path));
 }
 
+/* ── 顶栏下拉的锚定定位（portal 渲染） ───────────────────────────────────────
+   顶栏 .nav-blur 上有 mask-image（毛玻璃底部渐隐），mask 作用于整个子树，
+   留在顶栏里的下拉会被裁得看不见也点不到（2026-10-14 实测）。
+   因此下拉统一用 createPortal 挂到 document.body，按触发元素的实时位置定位。
+   顶栏是 sticky 的，滚动 / 缩放时触发元素位置会变，这里持续重算，
+   下拉 therefore 始终贴在按钮下方。 */
+function useAnchorRect(
+  open: boolean,
+  anchorRef: React.RefObject<HTMLElement | null>,
+) {
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  useLayoutEffect(() => {
+    /* 关闭时不清空 rect：渲染本就受 open 门控，旧位置不会被看到；
+       重开时 compute() 会在同一帧内刷新，避免 effect 内直接 setState。 */
+    if (!open) return;
+    const compute = () => {
+      const el = anchorRef.current;
+      if (el) setRect(el.getBoundingClientRect());
+    };
+    compute();
+    /* capture: true —— 页面在任何容器里滚动都要能听到 */
+    window.addEventListener("scroll", compute, true);
+    window.addEventListener("resize", compute);
+    return () => {
+      window.removeEventListener("scroll", compute, true);
+      window.removeEventListener("resize", compute);
+    };
+  }, [open, anchorRef]);
+  return rect;
+}
+
 export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -89,6 +121,11 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  /* portal 下拉的容器引用：脱离顶栏 DOM 后，"点外面关闭"仍要认得它们 */
+  const menuRef = useRef<HTMLDivElement>(null);
+  const searchResultsRef = useRef<HTMLDivElement>(null);
+  const menuRect = useAnchorRect(profileOpen, profileRef);
+  const searchRect = useAnchorRect(searchOpen, searchContainerRef);
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
   const isDark = theme === "dark";
   const isAdmin = mode === "admin";
@@ -275,9 +312,17 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       }
     };
     const handleOutside = (event: PointerEvent) => {
-      if (!profileRef.current?.contains(event.target as Node))
+      const target = event.target as Node;
+      /* 下拉已 portal 到 body，判断"点外面"时要把下拉自身也算作内域 */
+      if (
+        !profileRef.current?.contains(target) &&
+        !menuRef.current?.contains(target)
+      )
         setProfileOpen(false);
-      if (!searchContainerRef.current?.contains(event.target as Node))
+      if (
+        !searchContainerRef.current?.contains(target) &&
+        !searchResultsRef.current?.contains(target)
+      )
         setSearchOpen(false);
     };
     window.addEventListener("keydown", handleKey);
@@ -510,32 +555,43 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               <kbd className="pointer-events-none absolute right-2.5 top-2.5 hidden rounded border border-slate-200/80 bg-white/60 px-1.5 py-0.5 text-[12px] text-slate-400 sm:block">
                 ⌘ K
               </kbd>
-              {searchOpen && (
-                <div
-                  id="page-search-results"
-                  className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)]"
-                >
-                  <p className="px-3 py-2 text-xs text-slate-400">快速前往</p>
-                  {results.length ? (
-                    results.map((item) => (
-                      <Link
-                        className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-600 hover:bg-primary-50 hover:text-primary-600"
-                        key={item.path}
-                        to={item.path}
-                        onClick={closeNavigation}
-                      >
-                        <item.icon className="h-4 w-4" />
-                        {item.label}
-                        <ArrowUpRight className="ml-auto h-3.5 w-3.5" />
-                      </Link>
-                    ))
-                  ) : (
-                    <p className="px-3 py-4 text-sm text-slate-500">
-                      没有找到相关页面
-                    </p>
-                  )}
-                </div>
-              )}
+              {/* 搜索结果下拉：portal 到 body 定位。
+                  留在顶栏内会被 .nav-blur 的 mask 渐隐整块裁掉（2026-10-14 实测）。 */}
+              {searchOpen &&
+                searchRect &&
+                createPortal(
+                  <div
+                    id="page-search-results"
+                    ref={searchResultsRef}
+                    className="fixed z-[100] overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)]"
+                    style={{
+                      top: searchRect.bottom + 8,
+                      left: searchRect.left,
+                      width: searchRect.width,
+                    }}
+                  >
+                    <p className="px-3 py-2 text-xs text-slate-400">快速前往</p>
+                    {results.length ? (
+                      results.map((item) => (
+                        <Link
+                          className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-600 hover:bg-primary-50 hover:text-primary-600"
+                          key={item.path}
+                          to={item.path}
+                          onClick={closeNavigation}
+                        >
+                          <item.icon className="h-4 w-4" />
+                          {item.label}
+                          <ArrowUpRight className="ml-auto h-3.5 w-3.5" />
+                        </Link>
+                      ))
+                    ) : (
+                      <p className="px-3 py-4 text-sm text-slate-500">
+                        没有找到相关页面
+                      </p>
+                    )}
+                  </div>,
+                  document.body,
+                )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
@@ -559,38 +615,49 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                 </span>
                 <ChevronDown className="hidden h-4 w-4 text-slate-400 sm:block" />
               </button>
-              {profileOpen && (
-                <div className="absolute right-0 top-full mt-3 w-56 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)]">
-                  <div className="border-b border-slate-100 px-2 pb-3">
-                    <p className="truncate text-sm font-semibold text-slate-800">
-                      {username}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {isAdmin ? "管理工作空间" : "个人健康空间"}
-                    </p>
-                  </div>
-                  {/* 管理端的「案例管理」已挪到侧栏「工作空间」分组，
-                      这里只保留用户端的「我的档案」。 */}
-                  {!isAdmin && (
-                    <Link
-                      to={`${root}/cases`}
-                      onClick={closeNavigation}
-                      className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"
-                    >
-                      <UserRound className="h-4 w-4" />
-                      我的档案
-                    </Link>
-                  )}
-                  <button
-                    disabled={signingOut}
-                    onClick={handleLogout}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+              {/* 用户菜单（退出登录在这里）：同样 portal 到 body，逃离顶栏 mask */}
+              {profileOpen &&
+                menuRect &&
+                createPortal(
+                  <div
+                    ref={menuRef}
+                    className="fixed z-[100] w-56 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)]"
+                    style={{
+                      top: menuRect.bottom + 12,
+                      left: Math.max(8, menuRect.right - 224),
+                    }}
                   >
-                    <LogOut className="h-4 w-4" />
-                    {signingOut ? "正在退出…" : "退出登录"}
-                  </button>
-                </div>
-              )}
+                    <div className="border-b border-slate-100 px-2 pb-3">
+                      <p className="truncate text-sm font-semibold text-slate-800">
+                        {username}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {isAdmin ? "管理工作空间" : "个人健康空间"}
+                      </p>
+                    </div>
+                    {/* 管理端的「案例管理」已挪到侧栏「工作空间」分组，
+                        这里只保留用户端的「我的档案」。 */}
+                    {!isAdmin && (
+                      <Link
+                        to={`${root}/cases`}
+                        onClick={closeNavigation}
+                        className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+                      >
+                        <UserRound className="h-4 w-4" />
+                        我的档案
+                      </Link>
+                    )}
+                    <button
+                      disabled={signingOut}
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      {signingOut ? "正在退出…" : "退出登录"}
+                    </button>
+                  </div>,
+                  document.body,
+                )}
             </div>
             {/* 深浅色切换：与登录页/主页顶栏同一个按钮（无底框、36px 圆角方块、
                 图标 hover 旋转），三处顶栏因此完全一致。 */}

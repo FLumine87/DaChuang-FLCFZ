@@ -33,7 +33,7 @@ import {
   Square,
   ArrowLeft,
 } from 'lucide-react';
-import { getScreeningRecords, search, fetchRetrievalMedia } from '../services/mockApi';
+import { getScreeningRecords, getPersonalSupplements, search, fetchRetrievalMedia } from '../services/mockApi';
 import { USE_MOCK } from '../services/http';
 import { supplementModalityText } from '../services/localKg';
 import { getCurrentSession } from '../auth/session';
@@ -97,35 +97,51 @@ export default function Retrieval() {
   const [shown, setShown] = useState(20);
   /* 语料库历史记录的模态分类：全部 / 文本 / 语音 / 图像 */
   const [histMode, setHistMode] = useState<'all' | Modality>('all');
-  /* 自己的记录：把带 supplement 的筛查记录映射成和历史列表同一个行结构，
-     置顶显示。这样在「多模态采集」里传的语音/图像，检索页也能看到。 */
+  /* 自己的记录：两路合并后置顶显示——
+     ① 挂在筛查记录上的补充（records 上的 supplement 字段）；
+     ② 直接挂在用户名下的补充（新账号还没做过筛查时的采集，见
+        backend save_personal_supplement）。不合并的话，新账号在采集页
+        传的内容在这张列表里看不到（"只上传不挂靠"的另一面）。 */
   const [mine, setMine] = useState<typeof corpusRecords>([]);
   useEffect(() => {
     let alive = true;
-    getScreeningRecords()
-      .then((rs) => {
+    Promise.all([getScreeningRecords(), getPersonalSupplements()])
+      .then(([rs, sups]) => {
         if (!alive) return;
-        setMine(
-          rs
-            .filter((r) => r.supplement)
-            .map((r) => {
-              const sup = r.supplement!;
-              return {
-                id: r.id,
-                date: r.date,
-                themes: r.moodTag ? [r.moodTag] : [],
-                level: r.level,
-                severity: 0,
-                context: '我的记录',
-                text: sup.kind === 'text' ? (sup.text ?? '') : '',
-                /* 模态文本统一走 supplementModalityText（与首页「最近一次输入」同一处逻辑）：
-                   有分析描述就显示「语音片段特征：…」/「记录到的非言语线索：…」，
-                   没有就如实回退成文件名 */
-                audio: sup.kind === 'audio' ? supplementModalityText(sup, 'audio') : '',
-                image: sup.kind === 'image' ? supplementModalityText(sup, 'image') : '',
-              };
-            }),
-        );
+        const fromRecords = rs
+          .filter((r) => r.supplement)
+          .map((r) => {
+            const sup = r.supplement!;
+            return {
+              id: r.id,
+              date: r.date,
+              themes: r.moodTag ? [r.moodTag] : [],
+              /* 有哈希检索分析的用分析等级，没有就回退记录自身的等级 */
+              level: sup.analysis?.level ?? r.level,
+              severity: 0,
+              context: '我的记录',
+              text: sup.kind === 'text' ? (sup.text ?? '') : '',
+              /* 模态文本统一走 supplementModalityText（与首页「最近一次输入」同一处逻辑）：
+                 有分析描述就显示「语音片段特征：…」/「记录到的非言语线索：…」，
+                 没有就如实回退成文件名 */
+              audio: sup.kind === 'audio' ? supplementModalityText(sup, 'audio') : '',
+              image: sup.kind === 'image' ? supplementModalityText(sup, 'image') : '',
+            };
+          });
+        const fromUser = sups
+          .filter((s) => !s.screeningId)
+          .map((s) => ({
+            id: `SUP-${s.id}`,
+            date: s.createdAt ?? '',
+            themes: [] as string[],
+            level: s.analysis?.level ?? 'green',
+            severity: 0,
+            context: '我的采集',
+            text: s.kind === 'text' ? (s.text ?? '') : '',
+            audio: s.kind === 'audio' ? supplementModalityText(s, 'audio') : '',
+            image: s.kind === 'image' ? supplementModalityText(s, 'image') : '',
+          }));
+        setMine([...fromUser, ...fromRecords]);
       })
       .catch(() => {});
     return () => {

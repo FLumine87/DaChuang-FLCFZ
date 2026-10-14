@@ -71,6 +71,17 @@ export interface PersonalScreeningRecord {
      * 历史记录都优先展示它；没有就如实回退成文件名，不编造特征描述。
      */
     description?: string;
+    /**
+     * 哈希检索引擎的分析报告（保存补充时后端同步生成；随记录一起返回）。
+     * 首页「最近一次输入」用它展示风险等级与结论；早期数据可能没有。
+     */
+    analysis?: {
+      level: 'green' | 'yellow' | 'orange' | 'red';
+      levelLabel?: string;
+      conclusion?: string;
+      reason?: string;
+      alertId?: string | null;
+    };
   };
   /** 提交时存下的检索/RAG 快照（L1：浏览器本地） */
   retrieval?: ScreeningRetrievalSnapshot;

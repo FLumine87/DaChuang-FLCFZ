@@ -105,9 +105,13 @@ export function briefErrorMessage(reason: unknown, fallback = '服务暂时不�
 const http: AxiosInstance = axios.create({
   baseURL: BASE_URL || '/',
   timeout: 15000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  /* 不在这里写死 'Content-Type': 'application/json'。
+     axios 对普通对象会自动带上 application/json；一旦实例级写死，
+     上传（FormData）会被 transformRequest 判定为 JSON 请求并
+     JSON.stringify(formDataToJSON(...)) —— 文件内容直接丢成 {"file":{}}，
+     服务端收到的是 application/json 而非 multipart/form-data。
+     2026-10-14 实测：浏览器上传一直是 400/503，curl 同接口却正常，
+     根因就是这行（见 services/mockApi.ts 的 uploadFile）。 */
 });
 
 http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
