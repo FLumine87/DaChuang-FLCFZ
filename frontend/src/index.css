@@ -126,18 +126,25 @@
   --card-shadow: 0 20px 50px -34px rgba(0, 0, 0, 0.65);
 }
 
-/* 切换主题时的短暂过渡：只在切换的那 ~240ms 内给所有元素加颜色过渡，
-   切换完就移除，避免常驻 transition 影响 hover 等交互。 */
+/* 切换主题时的短暂过渡：只在切换的那 ~240ms 内给元素加颜色过渡，
+   切换完就移除，避免常驻 transition 影响 hover 等交互。
+
+   ⚠ 这里**刻意不含 background-color**。
+   原先背景也在过渡列表里，结果是：整页底色从深蓝 rgb(11,17,32) 插值到
+   浅灰 rgb(249,250,251)，中途必然经过一片中灰 —— 高频采样实测
+   t+369ms 时 body 就是 rgb(148,151,158)，整屏泛灰，用户看到的就是
+   "切换时会闪一下"。大面积色块做颜色过渡只会得到这种中间态，
+   所以背景一律瞬间切换；文字/描边这些细面积元素保留过渡，
+   既不会有灰屏，切换也不生硬。 */
 html.theme-switching,
 html.theme-switching *,
 html.theme-switching *::before,
 html.theme-switching *::after {
   transition:
-    background-color 200ms ease,
-    border-color 200ms ease,
-    color 200ms ease,
-    fill 200ms ease,
-    stroke 200ms ease !important;
+    border-color 160ms ease,
+    color 160ms ease,
+    fill 160ms ease,
+    stroke 160ms ease !important;
   transition-delay: 0ms !important;
 }
 
@@ -512,9 +519,9 @@ html.theme-switching *::after {
   .app-content:has(.chat-fullheight) {
     display: flex;
     flex-direction: column;
-    /* 64px = 顶栏 h-16；再留 24px，输入框不贴到视口最底边
+    /* 顶栏高度走 --topbar-height（4rem），再留 24px 让输入框不贴视口最底边
        （main 自带 32px padding，合计离底约 56px） */
-    min-height: calc(100dvh - 88px);
+    min-height: calc(100dvh - var(--topbar-height, 4rem) - 24px);
   }
   .app-content:has(.chat-fullheight) .page-body {
     flex: 1 0 auto;
@@ -838,6 +845,23 @@ h4 {
 h1.text-3xl {
   font-size: 2rem; /* 32px ← 30px（登录页/系统选择页） */
 }
+
+/* 个人首页首屏主标题：「你最近的状态，都在这里」。
+   必须写在无层级里 —— 上面那条全局 h1 { font-size } 会压过 Tailwind 的 text-*，
+   用 sm:/lg: 工具类调字号是无效的。
+   另外原来是内联 style={{ fontSize: tune.title }}，tune.title 是调参面板留下的
+   常量 54（as const，没有任何响应式逻辑），内联优先级最高所以桌面一直是对的，
+   但在 390px 手机上同样是 54px，标题撑成两行巨字、占掉近半屏。
+   这里按断点给：手机 32 / 平板 44 / 桌面 54（桌面与调参定稿一致）。 */
+.dash-hero-title {
+  font-size: 2rem; /* 32px */
+}
+@media (min-width: 640px) {
+  .dash-hero-title { font-size: 2.75rem; } /* 44px */
+}
+@media (min-width: 1024px) {
+  .dash-hero-title { font-size: 3.375rem; } /* 54px */
+}
 h2,
 h3,
 h4 {
@@ -1100,7 +1124,13 @@ h3.text-2xl {
   transition:
     opacity 900ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity, transform;
+  /* 这里**不能**常驻 will-change。
+     will-change: transform 会把元素永久提升为合成层，而合成层用不了次像素
+     抗锯齿（subpixel AA）—— 大标题会因此发虚。上面 body 那段"刻意不设
+     -webkit-font-smoothing: antialiased 以保留系统次像素抗锯齿"的意图，
+     会被这一行整个抵消掉（用户反馈"文字锐度"）。
+     正确做法：只在进场动画期间挂上（见下面 html.reveal-ready 那条），
+     动画结束（.is-inview）立刻释放回 auto。 */
 }
 
 /* 文字列**从左向右**渐入，不是上浮。
@@ -1109,12 +1139,16 @@ h3.text-2xl {
 html.reveal-ready .auth-screen [data-reveal]:not([data-visual]) > * {
   opacity: 0;
   transform: translateX(-22px);
+  /* 动画期间才提升合成层：既有 GPU 加速，又不牺牲落地后的文字锐度 */
+  will-change: opacity, transform;
 }
 
 html.reveal-ready .auth-screen.is-inview [data-reveal] > *,
 html.reveal-ready .auth-screen.is-inview [data-reveal]:not([data-visual]) > * {
   opacity: 1;
   transform: none;
+  /* 动画结束，释放合成层 → 次像素抗锯齿恢复 → 文字重新变锐 */
+  will-change: auto;
 }
 
 /* 逐级延迟：同屏内相邻居块依次登场（每级 90ms） */
@@ -1146,6 +1180,8 @@ html.reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em) {
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:not(strong):not(em) {
   opacity: 1;
   transform: none;
+  /* 与第一层同理：落地后释放合成层，否则这些文字也一直是灰度抗锯齿 */
+  will-change: auto;
 }
 
 /* 第二层整体比第一层晚 260ms 起，内部再逐项 +70ms */
@@ -1170,6 +1206,7 @@ html.reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em) {
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:not(strong):not(em) {
   opacity: 1;
   transform: none;
+  will-change: auto;
 }
 
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(1) { transition-delay: 380ms; }
@@ -1178,6 +1215,60 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(3) 
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(4) { transition-delay: 530ms; }
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(5) { transition-delay: 580ms; }
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(6) { transition-delay: 630ms; }
+
+/* ==========================================================================
+   手机 / 平板（lg 以下）：就是一张**普通网页**
+   --------------------------------------------------------------------------
+   用户的原话："手机端就不用搞那种上下滑动的动画了，就像我滑动页面那样就行了，
+   普通的页面……也不用那种有弹性用的。"
+
+   所以这里不是"把动画调轻"，而是**一条都不跑**：
+     1) 进场编排整体的终态直接生效（opacity:1 / transform:none / transition:none），
+        滚动时内容不会淡入、不会位移、不会缩放 —— 内容就在那儿；
+     2) 图标那条回弹曲线单独处理：它的 transform 用的是
+        cubic-bezier(0.34, 1.4, 0.64, 1)，第二个参数 1.4 > 1 会产生**过冲**
+        （先冲过头再弹回来），这就是用户说的"弹性"；
+     3) 关掉滚到边界时的橡皮筋（overscroll-behavior），页面拉到头就停住。
+
+   注意用 !important 是必需的：原规则大量使用 :nth-child(n) 与多层后代选择器，
+   特异度普遍高于这里的基础选择器。
+   断点 1023px ＝ 单列堆叠版式；桌面 ≥1024 完整保留那套编排，不受影响。
+   ========================================================================== */
+@media (max-width: 1023px) {
+  /* 1) 进场动画整体不跑：直接落终态 */
+  html.reveal-ready .auth-screen [data-reveal] > *,
+  html.reveal-ready .auth-screen [data-reveal]:not([data-visual]) > *,
+  html.reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em),
+  html.reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em) {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    transition-delay: 0ms !important;
+    will-change: auto !important;
+  }
+
+  /* 2) 图标：连过冲曲线一起去掉。
+        选择器覆盖**整个 .auth-screen**，不能只写 [data-reveal] svg.lucide ——
+        实测还剩 44 处过冲，就是因为有一部分 lucide 图标不在 [data-reveal] 里
+        （手机端胶囊导航、返回顶部按钮、卡片外的小图标等），
+        只写后代链会漏掉它们。!important 足以压过原来那条
+        .auth-screen [data-reveal] svg.lucide，不必再拼特异度。 */
+  html.reveal-ready .auth-screen svg,
+  html.reveal-ready .auth-screen img,
+  .auth-screen svg,
+  .auth-screen img {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+  }
+
+  /* 3) 关掉边界橡皮筋（同一条也顺便关掉下拉刷新，演示时不会误触） */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+}
 
 /* 图标：轻微缩放 + 淡入，带一点回弹（腾讯系站点常见的图标入场） */
 .auth-screen [data-reveal] svg.lucide {
@@ -1262,9 +1353,26 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
   }
 }
 
-/* 顶栏在转场中保持不动（否则整页位移会带着导航一起晃） */
+/* 顶栏在转场里**不参与淡入淡出**，直接换成新内容。
+   历史：这里先是写了 view-transition-name: app-nav —— 浏览器于是把顶栏从 root
+   快照里抠出来单独做交叉淡入，转场期间"登录页的「登录」"和"落地页的
+   「平台简介/核心技术…」"两套导航叠在一起互相 ghost，左上角看着一直在抖，
+   当时把命名去掉解决了 ghost。
+   但去掉命名之后，顶栏就跟着 root 一起交叉淡入；用户连续点按钮切换时，
+   顶栏一遍遍淡进淡出，反馈"渐入动画过于频繁，看起来像抽搐"。
+   正解是**命名 + 显式取消两端的动画**：老快照直接隐藏、新快照直接显示，
+   于是顶栏在转场中是一块稳定的、瞬间切换的导航条 —— 既没有 ghost，
+   也没有反复淡入。 */
 .nav-blur {
   view-transition-name: app-nav;
+}
+::view-transition-old(app-nav) {
+  animation: none;
+  opacity: 0;
+}
+::view-transition-new(app-nav) {
+  animation: none;
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1280,7 +1388,16 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
       这里给页面根节点一个 260ms 的淡入 + 轻微上浮；只动 opacity/transform，
       走合成层；尊重系统"减弱动态效果"设置。
    ========================================================================== */
-.page-enter {
+/* 只在**首次加载**播一次，之后的客户端路由切换一律不播。
+   原因：这个类挂在各页面的根节点上，而根节点包含顶栏 —— 每次切页都会重新挂载、
+   于是整页（含顶栏）从 opacity:0 再淡入一遍。高频采样实测：连续切 3 次页，
+   页面根透明度出现 25 次「<1」的采样（0 → 0.598 → 0.927 → 1）。
+   连点按钮时就是一遍遍重播，用户原话："上方的导航栏渐入动画过于频繁，
+   看起来像抽搐"。
+   而且路由切换本来就有 View Transition 在做交叉淡入（.vt-page-in/out），
+   这个 page-enter 是**叠加的第二层动画**，去掉它不会让切换变生硬。
+   main.tsx 在挂载 400ms 后给 <html> 加 app-booted，之后新挂载的页面不再命中。 */
+html:not(.app-booted) .page-enter {
   animation: page-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -1395,8 +1512,30 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
    之前给顶栏一块淡紫蓝（--color-header），与页面底色（--color-page）不是同一个色，
    视觉上就成了横在顶部的一条"色带"，和下方背景割裂。
    现在与页面共用同一个背景——顶栏只做模糊，像腾讯云那样"同一张背景、模糊度不同"。 */
-.nav-blur {
-  background: transparent;
+/* 毛玻璃与底边渐隐必须画在 ::before 这一层，不能直接写在 .nav-blur 上。
+   mask-image 的作用范围是元素**及其整棵子树**，而顶栏只有 64px 高：
+   渐隐从 62%（约 40px）开始、100%（64px）处全透明。顶栏里的两个下拉
+   ——搜索「快速前往」与用户菜单——都是 top-full mt-3，从 76px 才开始，
+   于是整个面板落在遮罩之外被裁成完全透明：DOM 里在、
+   getBoundingClientRect 正常、checkVisibility() 也返回 true，
+   但既不绘制也无法点击（elementsFromPoint 里根本查不到它）。
+   2026-10-14 反馈："顶部那个导航栏，之前按下它有一个列表的，现在没了。"
+   挪到没有子元素的 ::before 上，渐隐观感完全不变，下拉不再被裁。 */
+.nav-blur::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* -1 让这一层待在顶栏内容之下。顶栏自身是 sticky + z-index，已成层叠上下文，
+     负 z-index 不会掉到页面内容后面去。 */
+  z-index: -1;
+  pointer-events: none;
+  /* 底色必须常驻，不能只靠 backdrop-filter。
+     真机（Android Chrome 打开 file:// 打包版）上毛玻璃整个不渲染，
+     顶栏就变成全透明：滚动时正文的大标题直接和顶栏文字叠在一起，看着像"撞版"
+     （2026-10-14 真机录屏复现；headless 手机模拟同样复现）。
+     取与页面同一个 --color-page，所以不会出现原来那种"色带"；
+     底边由下面的 mask 一起渐隐，接缝仍然没有。 */
+  background: var(--color-page);
   /* saturate 从 180% 收到 130%：深色模式下 180% 会把背后的深蓝再"提纯"一档，
      顶栏那块因此比下方更实，边界就成了硬边。 */
   backdrop-filter: blur(14px) saturate(130%);
@@ -1405,15 +1544,73 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
      backdrop-filter 默认到元素底边"一刀切"，毛玻璃与页面之间会留下一条
      可见的横向接缝 —— 深色下尤其明显（用户反馈"交接好突兀"）。
      用 mask-image 让模糊本身在底边前渐隐到透明，接缝就没了。
-     注意 mask 同时作用于 background 和 backdrop-filter，所以一层就够。 */
-  mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+     注意 mask 同时作用于 background 和 backdrop-filter，所以一层就够。
+
+     这里必须用**像素**而不是百分比。原先写的是 `#000 62%, transparent 100%`，
+     那是按 64px 顶栏调的（64×62% ≈ 40px 处开始渐隐）。手机端顶栏下面多了一条
+     章节胶囊行、总高约 110px，62% 就变成 68px 才开始渐隐 —— 正好把胶囊那一行
+     罩进渐隐区，底色在那里已经半透明，正文直接透上来和胶囊叠在一起
+     （2026-10-14 真机录屏：胶囊背后能看到"…再由RAG结合…"字样）。
+     改成 `calc(100% - 24px)`：无论顶栏多高，都只在最后 24px 过渡；
+     对 64px 顶栏来说起点是 40px，与原值几乎完全一致，桌面观感不变。 */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
+}
+
+/* 手机/平板：顶栏里多了一条章节胶囊行（.nav-chips，lg 以下显示），
+   整条顶栏实测 106px（主栏 64 + 胶囊行 42）。只要还挂着底边渐隐，
+   渐隐区就会落进胶囊行，胶囊背后透出正文 —— 真机录屏里能直接看到
+   "…再由RAG结合…"和胶囊叠在一起。
+   所以这里**整条去掉渐隐**，让顶栏是一块完整的不透明底色。
+   代价是底边从"渐隐"变成"硬边"，但底色就是 --color-page（与页面同色），
+   硬边在视觉上等于看不见；原来那条"突兀的接缝"是毛玻璃造成的，
+   而 Android Chrome 打开 file:// 时 backdrop-filter 本就不渲染，
+   这里只剩同色实底，不存在接缝。 */
+@media (max-width: 1023px) {
+  .nav-blur::before {
+    mask-image: none;
+    -webkit-mask-image: none;
+    /* 顶栏是 sticky 的，毛玻璃意味着滚动时**每一帧**都要重新采样背后的内容 ——
+       这是移动端滚动掉帧最经典的原因。而且实测 Android Chrome 打开 file://
+       时它根本不渲染（.nav-blur::before 的底色才是真正在起作用的那个），
+       等于白付了每帧重采样这笔账。这里直接关掉，观感不变（底色是不透明的）。 */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  /* 背景里那两个"永远在动"的层也停掉：
+       · .aurora .glass-1/2/3 —— 42~62s 的无限漂移，且基类上挂着常驻
+         will-change: transform（等于永久占着合成层）；
+       · .aurora span ×3 —— 同样 42~62s 无限漂移。
+     它们是大面积渐变/模糊形状，持续动画就是持续合成，滚动时和内容抢 GPU。
+     手机端改为静止：形状、颜色、位置都不变，只是不再漂移 ——
+     静态背景本来就看不出来"少了动画"，但滚动会明显跟手。
+     用户反馈"手机端上滑时候的卡顿"（2026-10-14 第二次反馈移动端性能）。 */
+  .aurora .glass,
+  .aurora span {
+    animation: none !important;
+  }
+  .aurora .glass {
+    will-change: auto !important;
+  }
+}
+
+/* 移动端章节胶囊条：横向可滑但不显示滚动条（手机原生滚动条又粗又碍眼），
+   并去掉移动端点击时的灰色高亮块 —— 胶囊本身已经有选中态，再叠一层很脏。 */
+.nav-chips {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: transparent;
+}
+.nav-chips::-webkit-scrollbar {
+  display: none;
 }
 
 /* 浏览器不支持 backdrop-filter 时，给一层极淡的底色兜住可读性
    （仍然取自页面底色，不引入第二种颜色） */
 @supports not (backdrop-filter: blur(1px)) {
-  .nav-blur {
+  .nav-blur::before {
     background: color-mix(in srgb, var(--color-page) 88%, transparent);
   }
   /* 侧栏同样兜底：不支持毛玻璃时回到接近不透明的表面色，
@@ -1447,7 +1644,18 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
 .auth-snap .auth-section-title {
   font-size: 2.375rem; /* 38px */
   line-height: 1.2;
-  font-weight: 500;
+  /* 字号/字重照抄腾讯官网实测值（2026-10-14 用 headless 打开
+     tencent.com/zh-cn/who-we-are/ 读 computedStyle 得到，非目测）：
+       「我们一直秉承科技向善的宗旨…」这句 h3
+       46px / 600 / line-height 55.2px(=1.20) / letter-spacing 0.25px / 容器 888px
+     行高与字距本项目原本就与之一致，差的只有字号和字重，所以只动这两项。
+     桌面档 46px 就取腾讯的绝对值；字号占容器比因此从 9.8% 收到约 7.5%，
+     接近腾讯那 5.2% 的克制感。
+     为什么字重反而从 400 提到 600：腾讯的大标题实测就是 600，
+     它看着不粗是因为**字号更小**（46 而非 60）—— 绝对尺寸直接决定观感重量。
+     之前 60px + 500 显得"又粗又挤"、60px + 400 又"太细"，
+     症结在字号偏大，不在字重本身。 */
+  font-weight: 600;
   letter-spacing: 0.25px;
 }
 @media (min-width: 640px) {
@@ -1455,17 +1663,89 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
     font-size: 3.125rem; /* 50px */
   }
   .auth-snap .auth-section-title {
-    font-size: 3.75rem; /* 60px */
+    /* 腾讯实测是 46px，用户反馈"可以调大点，但不要太过"，取 52px：
+       仍在腾讯那一档的量级（占容器约 8.5%，介于腾讯 5.2% 与原 9.8% 之间），
+       比 46px 有分量，又不像 60px 那样压人。 */
+    font-size: 3.25rem; /* 52px */
+  }
+}
+
+/* 首次引导（FirstRunShell）的标题自带手工 <br>，行是**作者排好的**，
+   度量不能收紧到会把作者的分行再拆一次。
+   实测："最后一题，／请按真实感受回答。" 第二段正好 9 个字，
+   而上面统一给的度量是 9em（= 9 字）—— 卡在临界点，加上中文标点禁则，
+   末尾的"答。"被挤成第三行，孤零零一个字（用户反馈"这里的排版不好"）。
+   这里给一档更宽的度量，保证作者写的每一行都放得下。 */
+.first-run .auth-section-title {
+  max-width: min(100%, 12em);
+}
+
+/* 窄屏（手机）适配。
+   位置很关键：媒体查询**不增加权重**，同优先级下靠源码顺序决胜负。
+   所以这段必须排在上面那几条基础字号规则之后，否则会被基础值盖掉
+   —— 上面两组 max-height 字号规则（给矮屏笔记本写的）就是因为排在基础规则
+   前面，一直没生效过。
+   1) 修标题层级倒挂：分屏标题原本 38px，比首屏主标题 34px 还大，
+      手机上"二级比一级还大"很别扭，还把本就不够的一屏推得更长。
+   2) 手机是纵向长滚动，不再需要"尽量压进一屏"那套收紧留白；
+      左右也收窄一点，否则 390px 宽下正文每行只剩十来个字。 */
+@media (max-width: 639px) {
+  .auth-snap .auth-hero-title {
+    font-size: 1.875rem; /* 30px（原 34px） */
+    line-height: 1.22;
+  }
+  .auth-snap .auth-section-title {
+    font-size: 1.625rem; /* 26px（原 38px）—— 必须小于首屏主标题 */
+    line-height: 1.25;
+  }
+  .auth-snap .auth-screen > div {
+    padding-top: 1.5rem;
+    padding-bottom: 1.25rem;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+  .auth-snap #top {
+    padding-top: 1.25rem;
+    padding-bottom: 0.75rem;
   }
 }
 
 /* 标题防溢出：中文长标题不可断行时会顶出栅格、被右侧卡片盖住。
-   这里统一允许在字符间断行，并留一个兜底防止超长英文串撑破容器。 */
+   这里统一允许在字符间断行，并留一个兜底防止超长英文串撑破容器。
+
+   max-width 不能再写 100%：本文件开头那段说明过"无层级样式优先于分层工具类"，
+   而 100% 会把标题元素上 Tailwind 的 `max-w-[720px]` 整个盖掉 —— 度量控制形同
+   虚设，行宽只剩栅格列宽。栅格列宽随断点变（1440 下 609px、2xl 下 720px），
+   于是同一个标题在不同屏幕上时折时不折：
+     "三模态线索与多维评估指标" 单行要 630px —— 1440 下折两行，2xl 下挤成一行。
+   用户反馈就是"这种标题太长了，要换行"。
+   改成显式度量：52px 字号下约 10~11 字/行，11 字以上的标题稳定折两行，
+   且不会折成三行（最长的 772px / 560 ≈ 1.4 行）。 */
 .auth-snap .auth-hero-title,
 .auth-snap .auth-section-title {
-  word-break: normal;
+  /* auto-phrase：让浏览器按**词组**边界断行，而不是逐字断。
+     中文没有空格，默认 normal 会得到"动态跨模态哈希检 / 索与 RAG 生成"
+     这种把"检索"劈开的断法（用户反馈"检字之前就要换行"）。
+     auto-phrase 会利用语言模型分出词组，断点落在"哈希 / 检索"之间。
+     浏览器不支持时自动退回 normal，只是断行位置差一些，不会破版。
+     需要页面声明 lang（index.html 里是 zh-CN）才生效。 */
+  word-break: auto-phrase;
   overflow-wrap: break-word;
-  max-width: 100%;
+  /* 度量用 em，**必须跟着字号走**。
+     这里踩过一个坑：原本写死 460px，但字号是分档的（≥640 是 52px、
+     ≥1536 是 60px），于是"每行几个字"随屏幕变 —— 1440 下 8 字/行、
+     1920 下只有 7.6 字/行，同一个标题在两台电脑上断行结果完全不同，
+     1920 上甚至断成三行、末尾孤儿一个"成"字（用户要求"注意不同电脑
+     显示尺寸的兼容"）。换成 em 后，任何字号下都是固定的 9 字/行，
+     断行结果在所有尺寸上一致。
+     560px 时两行都铺满，整块看着像个"方块"；收到 9em 后右边缘有参差，
+     接近腾讯那种自然断行的观感。 */
+  max-width: min(100%, 9em);
+  /* 关掉 text-balance：它会把两行**拉成等长**（12 字 → 6+6），
+     正是"这一块太齐整"的来源。腾讯的标题右边缘是参差的，
+     所以这里改回自然断行 —— 注意必须写在无层级里才能压过
+     JSX 上的 Tailwind `text-balance` 工具类。 */
+  text-wrap: wrap;
 }
 
 /* 超宽屏（全屏 2K/4K）适配：内容上浮一档，避免"小内容飘在大屏中央" */
@@ -1474,7 +1754,8 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
     font-size: 3.75rem; /* 56 → 60px */
   }
   .auth-snap .auth-section-title {
-    font-size: 4.25rem; /* 60 → 68px */
+    /* 跟着 52px 那档同比例放大一档（原 68px） */
+    font-size: 3.75rem; /* 60px */
   }
 }
 

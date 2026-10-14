@@ -131,7 +131,15 @@ export default function FirstRunResult() {
   return (
     <FirstRunShell
       step={4}
-      wide
+      /* 这里**不能**加 wide。wide 的列定义是 [520px_1fr]，两条轨道正好铺满
+         max-w-[1440px] 的栅格，于是 lg:justify-center 失去作用 ——
+         左栏从 118px 掉到 64px（少了 54px 内缩），看着"左边贴边"；
+         同时右栏被撑到 728px 宽、再叠上 stretch 的 max-h-720，
+         卡片又宽又高而内容不长，中间空一大块（用户原话："左边的字体有点太靠边，
+         右边的表格周围空"）。用默认的 [620px_520px] 就与其他首次引导页
+         完全对齐（轨道 1204 + gap 64 < 栅格 1312，居中内缩恢复）。
+         stretch 保留：它是给带 tab 的结果卡用的 —— 面板高度随 tab 变，
+         需要卡片定高 + 内容区自己滚动，否则切 tab 会整页跳。 */
       stretch
       eyebrow="03  ·  本次结果"
       title={
@@ -261,7 +269,14 @@ export default function FirstRunResult() {
                每项只留小标题 + 状态徽标 + 一行摘要，用细分隔线分开，同样面积放更多文字。
                滚动交给 ScrollArea：滚动条可见 + 底部渐隐与「向下滚动查看更多」提示。 */
             <ScrollArea
-              className="min-h-[300px] flex-1"
+              /* min-h 从 300px 收到 200px。
+                 它对"分析依据"那种长面板是必要的（切 tab 时卡片高度别乱跳），
+                 但"结果摘要"内容很短，300px 会在文字上下各留一大块空白 ——
+                 叠加卡片本身被 stretch 拉到整行高，就形成用户说的
+                 "右边的表格周围空"。200px 仍然够托住各 tab 的高度差，
+                 短面板的洞少掉三分之一。
+                 两条 tab 都被撑到同一高度这件事本身是有意的，不改。 */
+              className="min-h-[200px] flex-1"
               innerClassName="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white px-4 text-[13.5px] leading-[1.75] text-slate-600"
             >
               <EvidenceSection

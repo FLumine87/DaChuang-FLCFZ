@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { navigateWithTransition } from "../utils/viewTransition";
+import { readDemoPreset } from "../demoPreset";
 import {
   ArrowLeft,
   Check,
@@ -33,7 +34,7 @@ const readPanel = (search: string): Panel =>
   new URLSearchParams(search).get("panel") === "admin" ? "admin" : "user";
 
 /* 独立登录页：主页左上角「登录」按钮跳到这里；主页右上角「管理员登录」带 ?panel=admin。
-   进来只做登录这一件事——作品介绍留给主页，不再一页两职。 */
+   进来只做登录这一件事——平台介绍留给主页，不再一页两职。 */
 export default function LoginPage() {
   const navigate = useNavigate();
   const { search } = useLocation();
@@ -41,8 +42,11 @@ export default function LoginPage() {
   const [tab, setTab] = useState<AuthTab>("login");
   const [panel, setPanel] = useState<Panel>(initialPanel);
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  /* 演示包（手机版）会预填演示账号：手机上打两遍账号密码很烦，
+     而演示现场常是"把手机递给别人看"。没有预设时初值仍是空串。 */
+  const preset = readDemoPreset().prefill ?? {};
+  const [username, setUsername] = useState(preset.username ?? "");
+  const [password, setPassword] = useState(preset.password ?? "");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
@@ -230,11 +234,16 @@ export default function LoginPage() {
           <div className="auth-orbit scale-[1.35]" />
           <div className="auth-orbit scale-[1.7]" />
 
-          {/* 左：与作品简介屏同一套文字格式（眉标 + 大标题 + 正文 + 要点）
-              lg:self-start —— 切到「注册」时右侧卡片会高出 234px（多两个字段），
-              网格是 items-center，整格一变高就把左栏一起往上推，
-              文字看着"跳"了一下。让左栏自己贴住行的上沿，右卡怎么长都不动它。 */}
-          <div className="relative z-10 lg:self-start">
+          {/* 左：与平台简介屏同一套文字格式（眉标 + 大标题 + 正文 + 要点）
+              垂直定位：居中后再上提一档（lg:-top-16 = 64px），做**视觉居中**而非几何居中。
+              卡片下半部分（演示账号按钮 / 管理员入口 / 底部合规说明）是次要信息，
+              卡片的视觉重心因此高于它的几何中心；文字块按几何居中会显得往下沉
+              —— 实测 1440×900 上留白 200 / 下留白 200 时反馈"又太低了不协调"。
+              上提 64px 后约 136 / 264，与卡片的视觉重心对齐。
+              相对定位偏移不影响布局（不撑高栅格行），所以不会反过来影响右卡。
+              历史：这里原先写 lg:self-start（避免切 tab 时右卡变高把左栏往上顶），
+              代价是永远贴上沿，实测上留白 85 / 下留白 314，反馈"文字向上飘"。 */}
+          <div className="relative z-10 lg:-top-16">
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
               关注状态 · 看见变化
             </p>

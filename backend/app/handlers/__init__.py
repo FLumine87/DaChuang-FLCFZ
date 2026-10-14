@@ -27,6 +27,10 @@ ROUTES = [
     ("GET", "/api/personal/supplements", personal.get_personal_supplements, "user"),
     ("GET", "/api/personal/dashboard", personal.get_personal_dashboard, "user"),
     ("GET", "/api/personal/warnings", personal.get_personal_warnings, "user"),
+    # 个人端自助改自己预警的状态。走的是展示码（ALT-…）而不是主键，
+    # 与管理端的 PUT /api/alerts/{int} 是两条不同的路：那条是 admin 角色、
+    # 面向处置流转，个人端用不了。
+    ("PUT", "/api/personal/warnings/{alert_id}", personal.update_personal_warning, "user"),
     ("GET", "/api/personal/profile", personal.get_personal_profile, "user"),
     ("POST", "/api/personal/search", personal.personal_search, "user"),
 

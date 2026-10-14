@@ -1,6 +1,7 @@
 """管理端接口 handler（保留前端响应字段结构，async）。"""
 from datetime import datetime, timedelta
 
+from app.core.dates import format_dt
 from app.core.responses import success_response
 from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
@@ -8,10 +9,6 @@ from app.db import database as db
 from app.services import alert_service
 from app.engines import get_rag_engine
 from app.handlers.retrieval import perform_search, to_frontend_hit
-
-
-def _fmt(v, fmt="%Y-%m-%d"):
-    return v.strftime(fmt) if hasattr(v, "strftime") and v else (v or "")
 
 
 async def _counselor_name(counselor_id):
@@ -104,8 +101,8 @@ async def get_admin_dashboard(ctx: RequestContext):
         "description": a.get("description") or "",
         "status": a.get("status"),
         "assignee": a.get("assignee_name") or "未分配",
-        "createdAt": _fmt(a.get("created_at"), "%Y-%m-%d %H:%M"),
-        "updatedAt": _fmt(a.get("updated_at"), "%Y-%m-%d %H:%M"),
+        "createdAt": format_dt(a.get("created_at"), "%Y-%m-%d %H:%M"),
+        "updatedAt": format_dt(a.get("updated_at"), "%Y-%m-%d %H:%M"),
     } for a in alerts]
 
     # 筛查列表：一次 JOIN 查询
@@ -125,7 +122,7 @@ async def get_admin_dashboard(ctx: RequestContext):
         "maxScore": s.get("max_score"),
         "status": s.get("status"),
         "alertLevel": s.get("alert_level"),
-        "date": _fmt(s.get("screening_date") or s.get("created_at")),
+        "date": format_dt(s.get("screening_date") or s.get("created_at")),
         "counselor": s.get("counselor_name") or "未分配",
     } for s in screenings]
 
@@ -138,7 +135,7 @@ async def get_admin_dashboard(ctx: RequestContext):
         "department": c.get("department") or "",
         "tags": [],
         "screeningCount": c.get("screening_count") or 0,
-        "lastScreening": _fmt(c.get("last_screening_date")),
+        "lastScreening": format_dt(c.get("last_screening_date")),
         "alertLevel": c.get("alert_level"),
         "status": c.get("status"),
     } for c in cases]
@@ -170,7 +167,7 @@ async def get_admin_screenings(ctx: RequestContext):
             "maxScore": s.get("max_score"),
             "status": s.get("status"),
             "alertLevel": s.get("alert_level"),
-            "date": _fmt(s.get("screening_date") or s.get("created_at")),
+            "date": format_dt(s.get("screening_date") or s.get("created_at")),
             "counselor": counselor or "未分配",
         })
     return success_response(data=items)
@@ -220,8 +217,8 @@ def _admin_alert_dict(a: dict) -> dict:
         "assignee": a.get("assignee_name") or "未分配",
         "assigneeId": a.get("assignee_id"),
         "followUpNotes": a.get("follow_up_notes") or "",
-        "createdAt": _fmt(a.get("created_at"), "%Y-%m-%d %H:%M"),
-        "updatedAt": _fmt(a.get("updated_at"), "%Y-%m-%d %H:%M"),
+        "createdAt": format_dt(a.get("created_at"), "%Y-%m-%d %H:%M"),
+        "updatedAt": format_dt(a.get("updated_at"), "%Y-%m-%d %H:%M"),
     }
 
 
@@ -247,7 +244,7 @@ async def get_admin_alert_detail(ctx: RequestContext, alert_id: str):
             "id": event["id"], "fromStatus": event.get("from_status"),
             "toStatus": event["to_status"], "note": event.get("note") or "",
             "actor": event.get("actor_name") or "未知账号",
-            "createdAt": _fmt(event.get("created_at"), "%Y-%m-%d %H:%M"),
+            "createdAt": format_dt(event.get("created_at"), "%Y-%m-%d %H:%M"),
         } for event in history],
     })
 
@@ -315,7 +312,7 @@ async def _admin_case_dict(c: dict, tags: list = None) -> dict:
         "gender": c.get("gender") or "", "department": c.get("department") or "",
         "tags": tags,
         "screeningCount": c.get("screening_count") or 0,
-        "lastScreening": _fmt(c.get("last_screening_date")),
+        "lastScreening": format_dt(c.get("last_screening_date")),
         "alertLevel": c.get("alert_level") or "green",
         "status": c.get("status") or "active",
         "notes": c.get("notes") or "",
@@ -342,24 +339,32 @@ async def get_admin_case_detail(ctx: RequestContext, case_id: str):
         "SELECT id, event_type AS type, title, description, event_date AS date "
         "FROM case_timeline WHERE case_id = ? ORDER BY event_date DESC, id DESC", (case["id"],))
     level_labels = {"green": "绿色", "yellow": "黄色", "orange": "橙色", "red": "红色"}
-    timeline = [{**event, "date": _fmt(event.get("date"), "%Y-%m-%d %H:%M")}
+    timeline = [{**event, "date": format_dt(event.get("date"), "%Y-%m-%d %H:%M")}
                 for event in follow_ups]
     timeline.extend({
         "id": f"screening:{item['id']}", "type": "screening",
         "title": f"完成{item.get('questionnaire') or '量表'}筛查",
         "description": f"得分 {item.get('score')} / {item.get('maxScore')}",
-        "date": _fmt(item.get("date"), "%Y-%m-%d %H:%M"),
+        "date": format_dt(item.get("date"), "%Y-%m-%d %H:%M"),
     } for item in screenings)
     timeline.extend({
         "id": f"alert:{item['id']}", "type": "alert",
         "title": f"产生{level_labels.get(item.get('level'), '未知等级')}预警",
         "description": f"预警编号 {item['id']}",
-        "date": _fmt(item.get("createdAt"), "%Y-%m-%d %H:%M"),
+        "date": format_dt(item.get("createdAt"), "%Y-%m-%d %H:%M"),
     } for item in alerts)
     timeline.sort(key=lambda event: event.get("date") or "", reverse=True)
+    # screenings / alerts 这里原来直接把**原始行**返回，而它们的 date/createdAt
+    # 是 sqlite 里的裸字符串（2026-10-14 13:53:29.910839），于是微秒会显示到
+    # 案例详情的"筛查记录/预警历史"里。timeline 那份虽然格式化过，但页面读的是
+    # screenings[].date，所以这里也必须格式化一遍。
     return success_response(data={
         **(await _admin_case_dict(case)),
-        "screenings": screenings, "alerts": alerts, "timeline": timeline,
+        "screenings": [{**item, "date": format_dt(item.get("date"), "%Y-%m-%d %H:%M")}
+                       for item in screenings],
+        "alerts": [{**item, "createdAt": format_dt(item.get("createdAt"), "%Y-%m-%d %H:%M")}
+                   for item in alerts],
+        "timeline": timeline,
     })
 
 

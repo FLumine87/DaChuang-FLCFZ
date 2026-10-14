@@ -556,9 +556,18 @@ export async function getWarnings(): Promise<WarningEvent[]> {
 /**
  * 更新一条预警的处理状态（标记为跟踪中 / 已缓解）。
  *
- * 真实模式走 PUT /api/alerts/{id}。注意后端 update_alert 需要数据库数字 id，
- * 而个人预警列表返回的是展示编号（WARN-…），若后端未提供 dbId，该调用会被拒绝 ——
- * 所以调用方必须处理失败并回滚界面，绝不能静默改状态。
+ * 真实模式走 **PUT /api/personal/warnings/{展示码}**（个人端专用端点）。
+ *
+ * 2026-10-14 修正：原先打的是 PUT /api/alerts/{id}，那条路个人端根本走不通，
+ * 而且不止一处不对：
+ *   1) 角色 —— 该路由注册为 admin，普通用户 token 直接被 403 拦掉；
+ *   2) id  —— 个人预警列表返回的是展示码（ALT-…），后端那条要的是数字主键；
+ *   3) 词表 —— 这里发的是前端的 'tracking'，后端状态机只认
+ *      pending/processing/resolved/closed，会判"无效的预警状态"400。
+ * 新端点按展示码寻址、在 SQL 里校验预警归属（越权查不到 → 404），
+ * 并在服务层把 tracking→processing 翻译过去，三处一起解决。
+ *
+ * 调用方仍必须处理失败并回滚界面 —— 绝不能静默改状态。
  */
 export async function updateWarningStatus(
   id: string,
@@ -568,7 +577,7 @@ export async function updateWarningStatus(
     await delay(200);
     return;
   }
-  await request.put(`/api/alerts/${encodeURIComponent(id)}`, { status });
+  await request.put(`/api/personal/warnings/${encodeURIComponent(id)}`, { status });
 }
 
 export async function getCases() {

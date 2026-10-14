@@ -20,7 +20,12 @@ import {
   AlertTriangle, Sparkles, Send, FileCheck2, ChevronRight, Loader2,
 } from 'lucide-react';
 import AlertBadge from '../../components/AlertBadge';
-import { getAdminAlerts, search } from '../../services/mockApi';
+/* /api/admin/alerts 返回 { items, total, page, pageSize } 信封，不是裸数组。
+   以前用 mockApi.getAdminAlerts() 拿到的是整个对象，下面 list.filter() 抛异常，
+   又被 .catch(() => {}) 吃掉 —— 于是队列永远显示"0 条 / 暂无需处置预警"，
+   即使库里真有待处置预警。静默失败比白屏更难发现，这里必须走分页接口。 */
+import { listAdminAlerts } from '../../services/adminApi';
+import { search } from '../../services/mockApi';
 import type { AlertRecord } from '../data/adminMockData';
 import { corpusRecords, MODALITY_META, type Modality } from '../../data/corpusRecords';
 import type { RetrievalResult } from '../../data/mockData';
@@ -65,9 +70,10 @@ export default function AdminJudgement() {
 
   useEffect(() => {
     let alive = true;
-    getAdminAlerts()
-      .then((list) => {
+    listAdminAlerts({})
+      .then((page) => {
         if (!alive) return;
+        const list = page.items;
         const queue = list.filter((a) => a.status === 'pending' || a.status === 'processing');
         setAlerts(queue);
         setActiveId((queue[0] ?? list[0])?.id ?? null);

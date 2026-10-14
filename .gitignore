@@ -7,6 +7,10 @@
 # ---- Node / 前端 ----
 node_modules/
 frontend/dist/
+# 单文件打包产物（vite.singlefile.config.ts 的输出，用于"双击打开/发到手机上"）。
+# 是生成物不是源码：每次构建都变，进库只制造噪音。
+# 配置本身（vite.singlefile.config.ts）要跟踪，产物不要。
+frontend/dist-single/
 frontend/.vite/
 npm-debug.log*
 yarn-error.log*

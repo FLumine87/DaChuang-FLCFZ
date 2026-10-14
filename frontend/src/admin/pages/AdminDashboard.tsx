@@ -18,12 +18,15 @@ import {
 } from "recharts";
 import { Link } from "react-router-dom";
 import {
-  getAdminAlerts,
   getAdminDashboardData,
   getDashboardStats,
   type AdminDashboardResponse,
   type DashboardStats,
 } from "../../services/mockApi";
+/* 预警处置概览用的是分页接口 /api/admin/alerts，返回 { items, total, page, pageSize }
+   信封而不是裸数组。以前这里用 mockApi.getAdminAlerts()（按数组返回），
+   下面 alerts.filter() 就抛 "alerts.filter is not a function"，整页白屏。 */
+import { listAdminAlerts } from "../../services/adminApi";
 import { type AlertRecord } from "../data/adminMockData";
 import {
   ChartRange,
@@ -57,9 +60,9 @@ export default function AdminDashboard() {
       })
       .catch(() => {});
     // 预警处置概览用的原始记录（与管理端预警页同一个接口，不新增后端依赖）
-    getAdminAlerts()
-      .then((rows) => {
-        if (active) setAlerts(rows);
+    listAdminAlerts({})
+      .then((page) => {
+        if (active) setAlerts(page.items);
       })
       .catch(() => {});
     return () => {

@@ -192,3 +192,55 @@ async def update_alert(alert_id: int, data: dict, actor_id: int = None) -> Optio
 
 async def resolve_alert(alert_id: int, notes: str = "", actor_id: int = None) -> Optional[dict]:
     return await update_alert(alert_id, {"status": "resolved", "follow_up_notes": notes}, actor_id)
+
+
+# 前端词汇 ↔ 后端状态机的双向映射。
+# _warning_dict（handlers/personal.py）只做了后端→前端的翻译，
+# 反向一直缺着 —— 前端把 'tracking' 直接发给后端，会被状态机判成
+# "无效的预警状态"400。这里补上反向，并把个人端能表达的两档限定住：
+# 个人只能"跟踪中 / 已缓解"，不能设 pending、更不能设 closed（那是管理端的收尾动作）。
+PERSONAL_STATUS_IN = {"new": "pending", "tracking": "processing", "resolved": "resolved"}
+
+
+async def get_alert_by_code_for_user(alert_code: str, user_id: int) -> Optional[dict]:
+    """按展示码取预警，并确认它确实属于该用户。
+
+    个人端列表返回的 id 是展示码（alerts.alert_id，如 ALT-41CA2F），
+    不是数据库自增主键；管理端那套 int 主键的接口个人端根本用不了。
+    归属校验放在 SQL 里（JOIN screenings 限定 user_id），越权访问直接查不到，
+    对外表现为 404 而不是 403 —— 不泄露"这条预警存在但不属于你"。
+    """
+    return await db.query_one_a(
+        "SELECT a.* FROM alerts a JOIN screenings s ON a.screening_id = s.id "
+        "WHERE a.alert_id = ? AND s.user_id = ?",
+        (alert_code, user_id),
+    )
+
+
+async def update_alert_by_user(alert_code: str, user_id: int, data: dict) -> Optional[dict]:
+    """个人端自助更新自己预警的状态（标记为跟踪中 / 已缓解）。
+
+    复用管理端的 update_alert，所以状态机、审计事件（alert_events）都照旧生效，
+    actor_id 记的是这个用户本人。
+    """
+    row = await get_alert_by_code_for_user(alert_code, user_id)
+    if not row:
+        return None
+
+    allowed = {"status"}
+    if set(data) - allowed:
+        raise HttpError(400, "个人端只允许更新预警状态")
+    incoming = str(data.get("status") or "").strip()
+    if incoming not in PERSONAL_STATUS_IN:
+        raise HttpError(400, "状态只能是 new / tracking / resolved")
+    target = PERSONAL_STATUS_IN[incoming]
+    if target == row["status"]:
+        return row
+
+    payload = {"status": target}
+    # 状态机要求 pending→processing→resolved 逐级流转，且解决时必须填处理记录。
+    # 个人端只点一个按钮、没有填写入口，所以这里代填一条**明确署名为自助**的记录：
+    # 既满足不变量，又不会让管理端误以为有人写过实质跟进内容。
+    if target == "resolved":
+        payload["follow_up_notes"] = "用户自助标记：已缓解"
+    return await update_alert(row["id"], payload, actor_id=user_id)

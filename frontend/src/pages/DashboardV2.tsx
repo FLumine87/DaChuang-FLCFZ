@@ -295,7 +295,7 @@ export default function DashboardV2() {
       <section className="ui-card overflow-hidden p-0">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-medium text-primary-600">作品核心链路</p>
+            <p className="text-xs font-medium text-primary-600">平台核心链路</p>
             <h3 className="mt-1.5 text-xl font-semibold text-slate-800">动态跨模态哈希检索 + RAG 心理筛查预警</h3>
             <p className="mt-2 text-sm text-slate-500">一次综合评估如何从原始记录走向可解释、可复核的预警结果</p>
           </div>

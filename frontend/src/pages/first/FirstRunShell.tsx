@@ -64,7 +64,7 @@ export default function FirstRunShell({
 
   return (
     <div
-      className={`page-enter auth-snap min-h-screen bg-page text-slate-800 ${
+      className={`page-enter auth-snap first-run min-h-screen bg-page text-slate-800 ${
         mounted ? "welcome-in" : ""
       }`}
     >
@@ -177,7 +177,13 @@ export default function FirstRunShell({
           <div
             className={`relative z-10 w-full ${
               stretch
-                ? "flex lg:mt-14 lg:[&>section]:h-full lg:[&>section]:max-h-[720px] lg:[&>section]:flex-col"
+                ? /* h-full → h-auto：原来卡片被拉到整行高（实测 702px），
+                     而"结果摘要"这类面板内容只到 ~640px，中间就空出一大块
+                     （用户反馈"右边的表格周围空"）。改成让卡片随内容高、
+                     只在超过 720px 时封顶 —— 内容短就没有洞，内容长仍由
+                     max-h 兜住并由内部 ScrollArea 滚动，切 tab 不会把整页撑开。
+                     mt-auto 吸底仍保留：内容长到触顶时底部操作条照样贴底。 */
+                  "flex lg:mt-14 lg:[&>section]:h-auto lg:[&>section]:max-h-[720px] lg:[&>section]:flex-col"
                 : ""
             }`}
           >

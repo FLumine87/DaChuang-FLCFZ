@@ -21,7 +21,7 @@ const THEME_KEY = "psych_theme";
 const readStoredTheme = (): Theme =>
   window.localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
 
-/* 主页：作品简介 + 四个章节（共 5 屏），整屏吸附翻页。
+/* 主页：平台简介 + 四个章节（共 5 屏），整屏吸附翻页。
    登录已剥离为独立页面（/login），主页左上角保留一个「登录」入口。 */
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -32,6 +32,9 @@ export default function LandingPage() {
   const glideRef = useRef<((target: number) => void) | null>(null);
   /* 滑动指示条：位置由目标按钮测量得出，悬停跟随、离开回到当前屏 */
   const navRef = useRef<HTMLElement>(null);
+  /* 顶栏高度不再写死 64：手机上顶栏下面多一条可横滑的章节胶囊条，高度会变。
+     跳屏偏移若还按 64 算，移动端点章节会正好被顶栏盖掉标题。 */
+  const headerRef = useRef<HTMLElement>(null);
   /* activeBar：当前所在屏的指示条（常驻，切屏时滑过去）
      hoverPill：跟随鼠标的浅色药丸（悬停时出现并滑动，离开隐藏）
      两个元素分工：一个表示"我在哪"，一个表示"我要去哪"，都比单项变色更有动感 */
@@ -339,10 +342,20 @@ export default function LandingPage() {
     const targets = Array.from(document.querySelectorAll<HTMLElement>(".auth-screen"));
     if (!targets.length) return;
 
-    /* 三重保险，避免"入场动画把内容藏住"：
-       1) 隐藏态只在 html.reveal-ready 下生效，观察器就绪前内容照常可见；
-       2) 观察器以很宽松的条件判定（任何相交即视为进入）；
-       3) 当前屏（active）每次都强制标记，不依赖相交回调的时机。 */
+    /* 入场编排**每个会话只播一次**。
+       原先每次挂载都会 add("reveal-ready")，于是"登录页 ↔ 落地页"来回切时，
+       整套编排每次重放：实测返回落地页后仍有 120 个动画在跑
+       （分屏标题各 900ms），用户反馈"重复切换界面时出现卡卡的感觉"。
+       首屏的第一印象要保住，所以第一次照旧播；之后直接进终态。 */
+    const REVEAL_KEY = "psych_landing_revealed";
+    const skipReveal = (() => {
+      try {
+        return sessionStorage.getItem(REVEAL_KEY) === "1";
+      } catch {
+        return false; /* 隐私模式不可写时按"首次"处理，不影响正确性 */
+      }
+    })();
+
     const mark = (el: HTMLElement, inView: boolean) => {
       el.classList.toggle("is-inview", inView);
     };
@@ -358,7 +371,21 @@ export default function LandingPage() {
       { rootMargin: "-10% 0px -10% 0px", threshold: 0 },
     );
     targets.forEach((el) => observer.observe(el));
-    document.documentElement.classList.add("reveal-ready");
+
+    /* 三重保险，避免"入场动画把内容藏住"：
+       1) 隐藏态只在 html.reveal-ready 下生效，观察器就绪前内容照常可见；
+       2) 观察器以很宽松的条件判定（任何相交即视为进入）；
+       3) 当前屏（active）每次都强制标记，不依赖相交回调的时机。
+       本会话已经播过一次时干脆不加 reveal-ready —— 没有隐藏态就没有动画，
+       内容直接可见，来回切页不再重放。 */
+    if (!skipReveal) {
+      document.documentElement.classList.add("reveal-ready");
+      try {
+        sessionStorage.setItem(REVEAL_KEY, "1");
+      } catch {
+        /* 忽略：不可写就退化成"每次都播"，与改动前一致 */
+      }
+    }
 
     return () => {
       observer.disconnect();
@@ -395,7 +422,7 @@ export default function LandingPage() {
   const goToSection = (id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
-    const target = Math.max(0, el.offsetTop - 64);
+    const target = Math.max(0, el.offsetTop - (headerRef.current?.offsetHeight ?? 64));
     if (glideRef.current) glideRef.current(target);
     else el.scrollIntoView({ behavior: "smooth", block: "start" });
     setActive(id);
@@ -412,7 +439,7 @@ export default function LandingPage() {
     <div className="page-enter min-h-screen scroll-smooth bg-page text-slate-800">
       <BackToTop />
       {/* ================= 顶部导航 ================= */}
-      <header className="nav-blur sticky top-0 z-40 px-6 sm:px-10 lg:px-12 xl:px-16">
+      <header ref={headerRef} className="nav-blur sticky top-0 z-40 px-6 sm:px-10 lg:px-12 xl:px-16">
         <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <BrandLogo showSubtitle={false} />
@@ -502,9 +529,33 @@ export default function LandingPage() {
             </button>
           </div>
         </div>
+
+        {/* 移动端章节导航：顶栏在 lg 以下放不下 5 个章节（原来整条 nav 直接 hidden），
+            手机上就完全没法跳屏 —— 只能一路滑到底。这里补一条可横向滑动的胶囊条，
+            常驻在顶栏内随页面吸顶，随时能跳。lg 以上隐藏，桌面端仍用原来的滑动指示条。 */}
+        <nav
+          className="nav-chips mx-auto -mb-px flex w-full max-w-[1440px] gap-2 overflow-x-auto pb-2.5 lg:hidden"
+          aria-label="页面章节"
+        >
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => goToSection(item.id)}
+              aria-current={active === item.id ? "true" : undefined}
+              className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-200 active:scale-[0.96] ${
+                active === item.id
+                  ? "bg-primary-600 text-white"
+                  : "bg-white/70 text-slate-600"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </header>
 
-      {/* ============ 第 2 屏：作品简介 ============ */}
+      {/* ============ 第 2 屏：平台简介 ============ */}
       <section
         id="top"
         className="auth-screen relative flex items-center overflow-hidden px-6 py-16 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)] lg:py-12"
@@ -513,10 +564,10 @@ export default function LandingPage() {
         <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
           <div data-reveal>
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
-              作品概览
+              平台概览
             </p>
             <h2 className="auth-section-title mt-6 max-w-[720px] text-balance tracking-tight text-slate-900">
-              多模态心理筛查与分级预警系统
+              多模态心理筛查与<span className="whitespace-nowrap">分级预警系统</span>
             </h2>
             {/* 首屏讲"这个产品能做什么"，技术路线留给「核心技术」屏。
                 依据申报书「使用说明」：用户经三模态采集 → 自动生成预警报告 →
@@ -577,15 +628,35 @@ export default function LandingPage() {
             <p className="text-[13px] font-medium tracking-[0.18em] text-slate-500">评估链路</p>
 
             {/* 四步链路：每格居中，正好落在下方图表的里程碑与纵向网格线上。
-                原来是绝对定位 + 右对齐，每个标签"右端贴线、左端参差"，看着就是没对齐。 */}
+                原来是绝对定位 + 右对齐，每个标签"右端贴线、左端参差"，看着就是没对齐。
+                箭头不能跟着标签走：整格是居中的，箭头贴在文字右边就落在格子中间偏左，
+                和下一格之间空出一大块（用户反馈"箭头太靠左"）。
+                桌面改为绝对定位到**格子右边界**（= 两标签之间的空隙正中，
+                也就是下方 25%/50%/75% 三条网格线的位置）。
+                窄屏是两列，只有同一行内的相邻两步（0→1、2→3）才画内联箭头，
+                否则 1→2 的箭头会指向下一行的左后方，属于误导。 */}
             <div className="mt-6 grid grid-cols-2 gap-y-2 sm:grid-cols-4">
               {["三模态采集", "哈希检索", "RAG 报告", "分级预警"].map((step, index) => (
                 <span
                   key={step}
-                  className="flex items-center justify-center whitespace-nowrap text-[14px] font-semibold text-slate-800 sm:text-[15px]"
+                  className="relative flex items-center justify-center whitespace-nowrap text-[14px] font-semibold text-slate-800 sm:text-[15px]"
                 >
                   {step}
-                  {index < 3 && <span className="ml-1.5 text-[13px] text-slate-300">→</span>}
+                  {index < 3 && (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 text-[13px] text-slate-300 sm:block"
+                      >
+                        →
+                      </span>
+                      {index % 2 === 0 && (
+                        <span aria-hidden="true" className="ml-1.5 text-[13px] text-slate-300 sm:hidden">
+                          →
+                        </span>
+                      )}
+                    </>
+                  )}
                 </span>
               ))}
             </div>
@@ -629,6 +700,15 @@ export default function LandingPage() {
               </g>
             </svg>
 
+            {/* 一句话说清这张图在表达什么。
+                上一版写成了"横轴为上面四个环节，纵轴为累计可用的判断依据……"，
+                在落地页上讲坐标轴太像规格说明书了（用户："太奇怪了，还是换掉吧"），
+                这里改成人话；末尾原本还挂了个"（示意图）"，用户要求删掉，
+                并且这句说明靠右排（text-right），与左侧的正文错开。 */}
+            <p className="mt-3 text-right text-[13px] leading-5 text-slate-500">
+              每走完一个环节，能用来判断的信息就多一层。
+            </p>
+
             <div className="mt-6 grid gap-2.5 border-t border-dashed border-slate-200 pt-5 sm:grid-cols-3">
               {[
                 { value: "3", label: "模态 · 9 类特征" },
@@ -665,7 +745,7 @@ export default function LandingPage() {
       <Section
         id="tech"
         eyebrow="关键技术与方法"
-        title="动态跨模态哈希检索与 RAG 生成"
+        title={<>动态跨模态哈希<span className="whitespace-nowrap">检索</span>与 RAG 生成</>}
         desc="针对动态心理数据环境下的概念漂移与哈希映射冲突，系统采用多哈希表增量更新、查询自适应重排序、非对称距离度量与 Hadamard 矩阵，并在在线监督集体矩阵分解（OSCMFH）框架下引入半监督伪标签与决策级融合，实现图像、语音、文本的跨模态联合检索；报告由 RAG 以检索命中样例与心理知识库为依据生成，语言模型仅承担语言组织，以降低事实性错误。"
         points={[
           "基于多哈希表系统的增量式模态哈希",
@@ -679,7 +759,7 @@ export default function LandingPage() {
       <Section
         id="assess"
         eyebrow="评估维度"
-        title="三模态线索与多维评估指标"
+        title={<>三模态线索与多维<span className="whitespace-nowrap">评估</span>指标</>}
         desc="相比依赖人工访谈与单一量表的传统筛查，系统在同一时间轴上融合三条通道的线索，形成可纵向比较的个体状态画像；量表结果仅用于辅助校准，不作为独立判据。"
         points={[
           "文本通道：认知模式与语言逻辑",
@@ -693,7 +773,7 @@ export default function LandingPage() {
       <Section
         id="alert"
         eyebrow="预警机制"
-        title="四级预警与人工复核闭环"
+        title={<>四级预警与人工<span className="whitespace-nowrap">复核闭环</span></>}
         desc="多模态信号持续偏离个体基线时，系统按四级阈值自动生成预警；达到高风险阈值的个案自动进入人工研判队列，由咨询师确认后转入个案跟踪与处置留痕。算法仅提供提示与风险排序，最终结论由专业人员确认，并可输出转介建议。"
         points={[
           "四级阈值：绿 / 黄 / 橙 / 红，按偏离基线程度自动分级",
@@ -707,7 +787,7 @@ export default function LandingPage() {
       <Section
         id="privacy"
         eyebrow="数据安全"
-        title="联邦学习与「数据不出域」"
+        title={<>联邦学习与「<span className="whitespace-nowrap">数据不出域</span>」</>}
         desc="心理数据属于敏感个人信息。系统采用联邦学习实现跨机构模型协同训练而不直接共享原始敏感数据：各参与机构在本地完成模型训练，仅上行加密后的模型更新，原始数据不离开本地，在保持模型精度的同时满足隐私合规要求。"
         points={[
           "数据不出域：原始敏感数据不离开机构本地",
