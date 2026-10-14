@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS screenings (
     counselor_id    INTEGER,
     notes           TEXT,
     screening_date  DATETIME,
+    case_id         INTEGER,
+    consent_status  TEXT DEFAULT 'unknown',
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -198,6 +200,64 @@ CREATE TABLE IF NOT EXISTS screening_supplements (
 CREATE INDEX IF NOT EXISTS ix_screening_supplements_sid ON screening_supplements(screening_id);
 -- 注意：user_id 是后加的列（旧表通过 init_db_sync 的 ALTER 迁移），
 -- 其索引必须在迁移之后创建，不能写进这里（旧表上执行会报 no such column）。
+
+-- ---- Agent 知识图谱（对应 worker/seed/002_agent_knowledge_graph.sql）----
+-- 本地早期版本漏建这组表，导致 RAG 报告 / 智能研判流程在
+-- agent_graph.ensure_seeded() 处报 "no such table: kg_entities"（2026-10-14 修复）。
+-- 建表幂等；种子数据由 app/services/agent_graph.py 的 ensure_seeded() 写入。
+CREATE TABLE IF NOT EXISTS kg_entities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_key TEXT NOT NULL UNIQUE,
+    entity_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    source TEXT,
+    source_version TEXT,
+    review_status TEXT DEFAULT 'approved',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_kg_entities_type ON kg_entities(entity_type);
+
+CREATE TABLE IF NOT EXISTS kg_relations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_key TEXT NOT NULL,
+    predicate TEXT NOT NULL,
+    object_key TEXT NOT NULL,
+    confidence REAL DEFAULT 1.0,
+    source TEXT,
+    rule_id TEXT,
+    review_status TEXT DEFAULT 'approved',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(subject_key, predicate, object_key)
+);
+CREATE INDEX IF NOT EXISTS ix_kg_relations_subject ON kg_relations(subject_key);
+CREATE INDEX IF NOT EXISTS ix_kg_relations_predicate ON kg_relations(predicate);
+
+CREATE TABLE IF NOT EXISTS kg_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_key TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    priority INTEGER DEFAULT 0,
+    condition_json TEXT NOT NULL,
+    action_json TEXT NOT NULL,
+    source TEXT,
+    review_status TEXT DEFAULT 'approved',
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS kg_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    screening_id INTEGER,
+    relation_id INTEGER,
+    evidence_type TEXT NOT NULL,
+    evidence_key TEXT,
+    evidence_value TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_kg_evidence_screening ON kg_evidence(screening_id);
 """
 
 
@@ -240,6 +300,14 @@ def init_db_sync() -> None:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN user_id INTEGER")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_screenings_user_id ON screenings(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_cases_user_id ON cases(user_id)")
+        # Agent 知识图谱迁移层（对应 worker/seed/002）：早期本地库缺这两列，
+        # 报告/研判流程会连带失败（2026-10-14 修复）
+        scr_cols = {row[1] for row in conn.execute("PRAGMA table_info(screenings)")}
+        if "case_id" not in scr_cols:
+            conn.execute("ALTER TABLE screenings ADD COLUMN case_id INTEGER")
+        if "consent_status" not in scr_cols:
+            conn.execute("ALTER TABLE screenings ADD COLUMN consent_status TEXT DEFAULT 'unknown'")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_screenings_case_id ON screenings(case_id)")
         # screening_supplements 的早期版本只有 screening_id（NOT NULL）且无 user_id。
         # SQLite 无法用 ALTER 放开 NOT NULL —— 该表是 2026-10-14 新增的、无历史包袱，
         # 直接重建为新结构并搬运数据（新库上 SCHEMA_SQL 建的就是新结构，此分支不触发）。

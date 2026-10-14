@@ -86,6 +86,8 @@ interface RagReport {
   riskLevel: string;
   sections: { title: string; content: string }[];
   recommendations: string[];
+  /** true = 结论由规则模板 + 检索命中生成（不经过大模型） */
+  mock?: boolean;
 }
 
 export default function Retrieval() {
@@ -811,13 +813,19 @@ export default function Retrieval() {
                     {report?.riskLevel && <div className="px-3 py-1 bg-slate-100 text-slate-700 rounded-md text-sm font-medium">
                       风险提示：{report.riskLevel}
                     </div>}
+                    {/* 结论来源如实标注：检索页不调大模型，按命中分布用规则模板生成 */}
+                    {report?.mock && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">
+                        规则分析 · 依据检索命中
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
 
               {!report && (
                 <p className="p-5 text-sm leading-6 text-slate-500">
-                  本次没有返回 RAG 分析结果（上面的检索命中不受影响）。可以稍后重试，或换一种描述再检索一次。
+                  本次没有返回分析结论（上面的检索命中不受影响）。可以稍后重试，或换一种描述再检索一次。
                 </p>
               )}
 

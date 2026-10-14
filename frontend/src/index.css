@@ -506,6 +506,22 @@ html.theme-switching *::after {
     margin: 0 auto;
     padding: 32px;
   }
+  /* AI 陪伴对话页：整页撑满"视口 - 顶栏(h-16)"，输入框贴底，
+     和主流大模型对话软件一致。只对带 .chat-fullheight 的页面生效，
+     其余页面保持普通文档流。 */
+  .app-content:has(.chat-fullheight) {
+    display: flex;
+    flex-direction: column;
+    /* 64px = 顶栏 h-16；再留 24px，输入框不贴到视口最底边
+       （main 自带 32px padding，合计离底约 56px） */
+    min-height: calc(100dvh - 88px);
+  }
+  .app-content:has(.chat-fullheight) .page-body {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
   .app-content > .page-body > div > .flex.gap-3 {
     flex-wrap: wrap;
   }

@@ -9,7 +9,7 @@ from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
 from app.db import database as db
 from app.services import screening_service, case_service
-from app.engines import get_rag_engine
+from app.engines.rag.mock_engine import MockRAGEngine
 from app.handlers.retrieval import perform_search, to_frontend_hit
 
 
@@ -537,8 +537,70 @@ async def get_personal_profile(ctx: RequestContext):
     })
 
 
+# 危机线索关键词：命中即判高风险（心理筛查里漏判的代价远高于误判）
+_CRISIS_KEYWORDS = ("自杀", "想死", "不想活", "轻生", "自伤", "伤害自己",
+                    "结束一切", "活着没意思", "活着没什么意思", "结束生命")
+
+
+def _hits_alert_level(raw_results: list, query: str = "") -> str:
+    """按"确有相似的命中"的风险分布给本次检索定级（纯规则，不调大模型）。
+
+    三道过滤，避免误判与语料偏斜：
+      1. 查询含危机线索 → 直接高风险（安全兜底，不等检索结果）；
+      2. 相似度低于 0.70 的命中不算"相似"，不参与定级；
+      3. 一条记录含 text/image/audio 多个单元，按 record_id 去重后统计，
+         否则同一条高风险记录会被重复计数成"多条证据"。
+    规则（预警要谨慎，高风险需多条证据）：
+      red 或 orange≥2 → 高；orange 单条或 yellow≥2 → 中；其余 → 低。
+    """
+    if any(kw in query for kw in _CRISIS_KEYWORDS):
+        return "red"
+
+    counts = {"red": 0, "orange": 0, "yellow": 0}
+    seen: set[str] = set()
+    for r in raw_results:
+        try:
+            sim = float(r.get("similarity") or r.get("score") or 0)
+        except (TypeError, ValueError):
+            sim = 0.0
+        if sim < 0.70:
+            continue
+        rid = str(r.get("record_id") or r.get("id") or "")
+        if rid:
+            if rid in seen:
+                continue
+            seen.add(rid)
+        level = str(r.get("alert_level") or "green").lower()
+        if level in counts:
+            counts[level] += 1
+    if counts["red"] or counts["orange"] >= 2:
+        return "red"
+    if counts["orange"] or counts["yellow"] >= 2:
+        return "yellow"
+    return "green"
+
+
+async def _search_report(raw_results: list, query: str = "") -> dict:
+    """检索结论：规则模板生成，不经过大模型（2026-10-14）。
+
+    原先这里跟着检索同步调 RAG 引擎出报告，真实大模型下要 20-30 秒，
+    必然撞上前端 15 秒超时、页面直接报"检索失败"。检索页要的是快，
+    结论按命中风险分布用内置模板生成即可；需要大模型深度研判的场景
+    走 /api/retrieval/report/{screening_id}（显式触发，可容忍长耗时）。
+    """
+    engine = MockRAGEngine()
+    report = await engine.generate_report({
+        "id": 0, "name": "本次检索", "questionnaire": "跨模态检索",
+        "score": 0, "max_score": 100,
+        "alert_level": _hits_alert_level(raw_results, query),
+    })
+    if isinstance(report, dict):
+        report["mock"] = True
+    return report
+
+
 async def personal_search(ctx: RequestContext):
-    """个人端检索：文本 / 图像 / 语音线索均可作为查询，返回结果 + RAG 报告。
+    """个人端检索：文本 / 图像 / 语音线索均可作为查询，返回结果 + 检索结论。
 
     查询模态由请求体的 `modality` 决定；图像/语音查询额外携带
     `media_base64`（+ `media_name`），由 perform_search 统一落盘与清理。
@@ -550,11 +612,7 @@ async def personal_search(ctx: RequestContext):
     results = [to_frontend_hit(r) for r in raw_results
                if not str(r.get("record_id") or r.get("id") or "").lower().startswith(private_prefixes)]
 
-    rag_engine = get_rag_engine()
-    report = await rag_engine.generate_report({
-        "id": 0, "name": "检索报告", "questionnaire": "综合",
-        "score": 0, "max_score": 100, "alert_level": "green",
-    })
+    report = await _search_report(raw_results, data.get("query") or "")
     if isinstance(report, dict) and "risk_level" in report:
         report["riskLevel"] = report.pop("risk_level")
 
