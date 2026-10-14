@@ -136,29 +136,30 @@ export default function AdminJudgement() {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)] lg:items-start">
       {/* ───────── 左：待处置队列 ───────── */}
-      <aside className="ui-card p-4">
+      {/* min-w-0 + overflow-hidden：内容再长也锁在卡片内，徽章不会被挤出卡片边缘 */}
+      <aside className="ui-card min-w-0 overflow-hidden p-4">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold text-slate-800">待处置队列</h2>
           <span className="text-xs tabular-nums text-slate-400">{alerts.length} 条</span>
         </div>
-        <ul className="mt-3 grid gap-1.5">
+        <ul className="mt-3 flex flex-col gap-1.5">
           {alerts.map((a) => {
             const on = a.id === activeId;
             return (
-              <li key={a.id}>
+              <li key={a.id} className="min-w-0">
                 <button
                   type="button"
                   onClick={() => setActiveId(a.id)}
-                  className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                  className={`w-full min-w-0 overflow-hidden rounded-lg border px-3 py-2.5 text-left transition-colors ${
                     on
                       ? 'border-primary-300 bg-primary-50/60'
                       : 'border-transparent hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-slate-800">{a.name}</span>
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-sm font-medium text-slate-800">{a.name}</span>
                     <AlertBadge level={a.level} size="sm" />
                   </div>
                   <p className="mt-1 truncate text-xs text-slate-500">{a.trigger}</p>
@@ -179,19 +180,19 @@ export default function AdminJudgement() {
       {!active ? (
         <div className="ui-card p-6 text-sm text-slate-500">左侧选一条预警开始研判。</div>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid min-w-0 gap-4">
           {/* ① 结论先行 */}
-          <section className="ui-card p-5">
+          <section className="ui-card min-w-0 overflow-hidden p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs text-slate-400">当前研判对象</p>
-                <h1 className="mt-1 flex items-center gap-2.5 text-xl font-semibold text-slate-900">
+                <h1 className="mt-1 flex min-w-0 items-center gap-2.5 text-xl font-semibold text-slate-900">
                   {active.name}
                   <AlertBadge level={active.level} size="sm" />
                 </h1>
-                <p className="mt-1.5 text-sm text-slate-600">{active.trigger}</p>
+                <p className="mt-1.5 break-words text-sm text-slate-600">{active.trigger}</p>
               </div>
-              <span className="rounded-lg bg-slate-50 px-3 py-2 text-right">
+              <span className="shrink-0 rounded-lg bg-slate-50 px-3 py-2 text-right">
                 <span className="block text-[11px] text-slate-400">建议动作</span>
                 <span className="text-sm font-medium text-slate-800">
                   {active.level === 'red'
@@ -208,7 +209,7 @@ export default function AdminJudgement() {
           </section>
 
           {/* ② 依据：可追溯 */}
-          <section className="ui-card p-5">
+          <section className="ui-card min-w-0 overflow-hidden p-5">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
               <FileCheck2 className="h-4 w-4 text-primary-500" />
               研判依据
@@ -216,13 +217,13 @@ export default function AdminJudgement() {
             </h2>
 
             <p className="mt-3 text-xs text-slate-400">相似历史案例（跨模态哈希检索，点得开看原文）</p>
-            <ul className="mt-2 grid gap-2">
+            <ul className="mt-2 flex flex-col gap-2">
               {(evidence ?? []).map((r) => {
                 const meta = MODALITY_META[(r.modality === 'multimodal' ? 'text' : r.modality) as Modality];
                 const lvl = (r as unknown as { alert_level?: string; alertLevel?: string });
                 const lv = lvl.alertLevel ?? lvl.alert_level ?? 'green';
                 return (
-                  <li key={r.id} className="rounded-lg border border-slate-100 p-3">
+                  <li key={r.id} className="min-w-0 rounded-lg border border-slate-100 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="flex items-center gap-2 text-xs">
                         <span className="font-medium tabular-nums text-slate-700">{r.id}</span>
@@ -281,7 +282,7 @@ export default function AdminJudgement() {
           </section>
 
           {/* ③ 处置：人工在环 */}
-          <section className="ui-card p-5">
+          <section className="ui-card min-w-0 overflow-hidden p-5">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
               <Sparkles className="h-4 w-4 text-primary-500" />
               处置方案
@@ -317,7 +318,7 @@ export default function AdminJudgement() {
           </section>
 
           {/* ④ 时间线：留痕 */}
-          <section className="ui-card p-5">
+          <section className="ui-card min-w-0 overflow-hidden p-5">
             <h2 className="text-sm font-semibold text-slate-800">处置时间线</h2>
             <ul className="mt-3 grid gap-2">
               {(timeline[active.id] ?? []).map((t, i) => (
