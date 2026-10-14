@@ -17,6 +17,12 @@ export interface DemoPreset {
   route?: string;
   /** 登录页预填的演示账号 */
   prefill?: { username?: string; password?: string };
+  /**
+   * 是否渲染「手机端 / 桌面端」视图切换外壳。
+   * 只给需要"在一台电脑上同时演示两种版式"的包用；打开后会用一个
+   * 390px 宽的 iframe 呈现真·手机版式（见 components/DemoViewToggle.tsx）。
+   */
+  viewToggle?: boolean;
 }
 
 export function readDemoPreset(): DemoPreset {

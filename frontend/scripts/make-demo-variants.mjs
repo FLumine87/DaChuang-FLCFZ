@@ -1,7 +1,8 @@
 /**
  * 把 dist-single/index.html（真·单文件产物）复制成两份演示包：
  *
- *   demo-desktop.html —— 桌面端演示：从落地页进入，给人看完整产品介绍。
+ *   demo-desktop.html —— 桌面端演示：从落地页进入，**并带「手机端 / 桌面端」切换按钮**
+ *                      （一台电脑上就能同时演示两种版式）。
  *   demo-mobile.html  —— 手机端演示：直接进登录页，并**预填演示账号**
  *                        （手机上打两遍账号密码很烦，现场常是"把手机递给别人看"）。
  *
@@ -37,7 +38,7 @@ const variants = [
   {
     file: 'demo-desktop.html',
     label: '桌面端演示',
-    preset: { route: '#/' },
+    preset: { route: '#/', viewToggle: true },
   },
   {
     file: 'demo-mobile.html',

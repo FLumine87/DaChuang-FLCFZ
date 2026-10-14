@@ -1200,6 +1200,50 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(4) 
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(5) { transition-delay: 580ms; }
 html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(6) { transition-delay: 630ms; }
 
+/* ==========================================================================
+   手机 / 平板：关掉进场位移与错峰，只留一次很淡的渐入
+   --------------------------------------------------------------------------
+   上面那套是**三层叠加**：文字列 translateX(-22px) + 面板内 translateY(12px)
+   + 组成件 translateY(10px)，错峰最长 652ms，并且动画期间每一层都挂
+   will-change 提升为合成层。桌面 GPU 扛得住，手机上就是肉眼可见的掉帧
+   （用户反馈"手机端还是很卡"，要求"不用搞那种上下滑动的动画，
+   就像我滑动页面那样就行"）。
+
+   做法：
+     · 位移全部归零 —— 页面不再"滑进来"，就是普通滚动；
+     · 错峰延迟全部归零 —— 同屏一次性淡入，不再逐条排队；
+     · 时长收到 260ms，并去掉 will-change（少一层合成层就少一次重绘）；
+     · **保留 opacity 渐入**（用户说"渐入你看情况修改"）：纯 opacity 的
+       合成开销远小于 transform，页面也不至于"啪"地一下出现。
+
+   断点取 1023px（lg 以下）＝ 单列堆叠版式，正是位移动画最没意义的场景；
+   桌面 ≥1024 完全不受影响。
+   延迟那几条必须 !important：原规则用了 :nth-child(n)，特异度高于本块的
+   基础选择器，不用 !important 压不住。
+   ========================================================================== */
+@media (max-width: 1023px) {
+  html.reveal-ready .auth-screen [data-reveal]:not([data-visual]) > *,
+  html.reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em),
+  html.reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em) {
+    transform: none !important;
+    will-change: auto !important;
+  }
+
+  html.reveal-ready .auth-screen [data-reveal] > *,
+  html.reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em),
+  html.reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em) {
+    transition: opacity 260ms ease !important;
+    transition-delay: 0ms !important;
+  }
+
+  html.reveal-ready .auth-screen.is-inview [data-reveal] > *,
+  html.reveal-ready .auth-screen.is-inview [data-reveal][data-visual] > *,
+  html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:not(strong):not(em),
+  html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:not(strong):not(em) {
+    transition-delay: 0ms !important;
+  }
+}
+
 /* 图标：轻微缩放 + 淡入，带一点回弹（腾讯系站点常见的图标入场） */
 .auth-screen [data-reveal] svg.lucide {
   transition:
