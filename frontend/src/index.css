@@ -1379,8 +1379,30 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
    之前给顶栏一块淡紫蓝（--color-header），与页面底色（--color-page）不是同一个色，
    视觉上就成了横在顶部的一条"色带"，和下方背景割裂。
    现在与页面共用同一个背景——顶栏只做模糊，像腾讯云那样"同一张背景、模糊度不同"。 */
-.nav-blur {
-  background: transparent;
+/* 毛玻璃与底边渐隐必须画在 ::before 这一层，不能直接写在 .nav-blur 上。
+   mask-image 的作用范围是元素**及其整棵子树**，而顶栏只有 64px 高：
+   渐隐从 62%（约 40px）开始、100%（64px）处全透明。顶栏里的两个下拉
+   ——搜索「快速前往」与用户菜单——都是 top-full mt-3，从 76px 才开始，
+   于是整个面板落在遮罩之外被裁成完全透明：DOM 里在、
+   getBoundingClientRect 正常、checkVisibility() 也返回 true，
+   但既不绘制也无法点击（elementsFromPoint 里根本查不到它）。
+   2026-10-14 反馈："顶部那个导航栏，之前按下它有一个列表的，现在没了。"
+   挪到没有子元素的 ::before 上，渐隐观感完全不变，下拉不再被裁。 */
+.nav-blur::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* -1 让这一层待在顶栏内容之下。顶栏自身是 sticky + z-index，已成层叠上下文，
+     负 z-index 不会掉到页面内容后面去。 */
+  z-index: -1;
+  pointer-events: none;
+  /* 底色必须常驻，不能只靠 backdrop-filter。
+     真机（Android Chrome 打开 file:// 打包版）上毛玻璃整个不渲染，
+     顶栏就变成全透明：滚动时正文的大标题直接和顶栏文字叠在一起，看着像"撞版"
+     （2026-10-14 真机录屏复现；headless 手机模拟同样复现）。
+     取与页面同一个 --color-page，所以不会出现原来那种"色带"；
+     底边由下面的 mask 一起渐隐，接缝仍然没有。 */
+  background: var(--color-page);
   /* saturate 从 180% 收到 130%：深色模式下 180% 会把背后的深蓝再"提纯"一档，
      顶栏那块因此比下方更实，边界就成了硬边。 */
   backdrop-filter: blur(14px) saturate(130%);
@@ -1394,10 +1416,22 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
   -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
 }
 
+/* 移动端章节胶囊条：横向可滑但不显示滚动条（手机原生滚动条又粗又碍眼），
+   并去掉移动端点击时的灰色高亮块 —— 胶囊本身已经有选中态，再叠一层很脏。 */
+.nav-chips {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: transparent;
+}
+.nav-chips::-webkit-scrollbar {
+  display: none;
+}
+
 /* 浏览器不支持 backdrop-filter 时，给一层极淡的底色兜住可读性
    （仍然取自页面底色，不引入第二种颜色） */
 @supports not (backdrop-filter: blur(1px)) {
-  .nav-blur {
+  .nav-blur::before {
     background: color-mix(in srgb, var(--color-page) 88%, transparent);
   }
   /* 侧栏同样兜底：不支持毛玻璃时回到接近不透明的表面色，
@@ -1440,6 +1474,36 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
   }
   .auth-snap .auth-section-title {
     font-size: 3.75rem; /* 60px */
+  }
+}
+
+/* 窄屏（手机）适配。
+   位置很关键：媒体查询**不增加权重**，同优先级下靠源码顺序决胜负。
+   所以这段必须排在上面那几条基础字号规则之后，否则会被基础值盖掉
+   —— 上面两组 max-height 字号规则（给矮屏笔记本写的）就是因为排在基础规则
+   前面，一直没生效过。
+   1) 修标题层级倒挂：分屏标题原本 38px，比首屏主标题 34px 还大，
+      手机上"二级比一级还大"很别扭，还把本就不够的一屏推得更长。
+   2) 手机是纵向长滚动，不再需要"尽量压进一屏"那套收紧留白；
+      左右也收窄一点，否则 390px 宽下正文每行只剩十来个字。 */
+@media (max-width: 639px) {
+  .auth-snap .auth-hero-title {
+    font-size: 1.875rem; /* 30px（原 34px） */
+    line-height: 1.22;
+  }
+  .auth-snap .auth-section-title {
+    font-size: 1.625rem; /* 26px（原 38px）—— 必须小于首屏主标题 */
+    line-height: 1.25;
+  }
+  .auth-snap .auth-screen > div {
+    padding-top: 1.5rem;
+    padding-bottom: 1.25rem;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+  .auth-snap #top {
+    padding-top: 1.25rem;
+    padding-bottom: 0.75rem;
   }
 }
 

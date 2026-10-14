@@ -21,7 +21,7 @@ const THEME_KEY = "psych_theme";
 const readStoredTheme = (): Theme =>
   window.localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
 
-/* 主页：作品简介 + 四个章节（共 5 屏），整屏吸附翻页。
+/* 主页：平台简介 + 四个章节（共 5 屏），整屏吸附翻页。
    登录已剥离为独立页面（/login），主页左上角保留一个「登录」入口。 */
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -32,6 +32,9 @@ export default function LandingPage() {
   const glideRef = useRef<((target: number) => void) | null>(null);
   /* 滑动指示条：位置由目标按钮测量得出，悬停跟随、离开回到当前屏 */
   const navRef = useRef<HTMLElement>(null);
+  /* 顶栏高度不再写死 64：手机上顶栏下面多一条可横滑的章节胶囊条，高度会变。
+     跳屏偏移若还按 64 算，移动端点章节会正好被顶栏盖掉标题。 */
+  const headerRef = useRef<HTMLElement>(null);
   /* activeBar：当前所在屏的指示条（常驻，切屏时滑过去）
      hoverPill：跟随鼠标的浅色药丸（悬停时出现并滑动，离开隐藏）
      两个元素分工：一个表示"我在哪"，一个表示"我要去哪"，都比单项变色更有动感 */
@@ -395,7 +398,7 @@ export default function LandingPage() {
   const goToSection = (id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
-    const target = Math.max(0, el.offsetTop - 64);
+    const target = Math.max(0, el.offsetTop - (headerRef.current?.offsetHeight ?? 64));
     if (glideRef.current) glideRef.current(target);
     else el.scrollIntoView({ behavior: "smooth", block: "start" });
     setActive(id);
@@ -412,7 +415,7 @@ export default function LandingPage() {
     <div className="page-enter min-h-screen scroll-smooth bg-page text-slate-800">
       <BackToTop />
       {/* ================= 顶部导航 ================= */}
-      <header className="nav-blur sticky top-0 z-40 px-6 sm:px-10 lg:px-12 xl:px-16">
+      <header ref={headerRef} className="nav-blur sticky top-0 z-40 px-6 sm:px-10 lg:px-12 xl:px-16">
         <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <BrandLogo showSubtitle={false} />
@@ -502,9 +505,33 @@ export default function LandingPage() {
             </button>
           </div>
         </div>
+
+        {/* 移动端章节导航：顶栏在 lg 以下放不下 5 个章节（原来整条 nav 直接 hidden），
+            手机上就完全没法跳屏 —— 只能一路滑到底。这里补一条可横向滑动的胶囊条，
+            常驻在顶栏内随页面吸顶，随时能跳。lg 以上隐藏，桌面端仍用原来的滑动指示条。 */}
+        <nav
+          className="nav-chips mx-auto -mb-px flex w-full max-w-[1440px] gap-2 overflow-x-auto pb-2.5 lg:hidden"
+          aria-label="页面章节"
+        >
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => goToSection(item.id)}
+              aria-current={active === item.id ? "true" : undefined}
+              className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-200 active:scale-[0.96] ${
+                active === item.id
+                  ? "bg-primary-600 text-white"
+                  : "bg-white/70 text-slate-600"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </header>
 
-      {/* ============ 第 2 屏：作品简介 ============ */}
+      {/* ============ 第 2 屏：平台简介 ============ */}
       <section
         id="top"
         className="auth-screen relative flex items-center overflow-hidden px-6 py-16 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)] lg:py-12"
