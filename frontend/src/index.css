@@ -1266,9 +1266,16 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
   }
 }
 
-/* 顶栏在转场中保持不动（否则整页位移会带着导航一起晃） */
+/* 顶栏**不**单独成组 —— 这里原来写着 view-transition-name: app-nav。
+   被命名之后浏览器会把顶栏从 root 快照里抠出来单独做一次交叉淡入，
+   于是转场期间会出现**两套导航内容互相 ghost**：从 /login 切到 / 时，
+   登录页的「登录」和落地页的「平台简介/核心技术…」叠在同一行，
+   左上角品牌看起来一直在抖（用户反馈"左上角那个抽搐"，录屏第 4.6s
+   那一帧能直接看到重影）。
+   当初命名是想让顶栏在转场里别跟着晃，但整页 root 快照本来就是静止的，
+   顶栏跟着一起淡入即可，观感反而干净。 */
 .nav-blur {
-  view-transition-name: app-nav;
+  view-transition-name: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
