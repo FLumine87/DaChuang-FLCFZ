@@ -1,10 +1,7 @@
 /**
  * 把 dist-single/index.html（真·单文件产物）复制成两份演示包：
  *
- *   demo-desktop.html —— 桌面端演示：从落地页进入（右上角自带手机端/桌面端切换按钮，
- *                      这是应用自带的功能，不靠预设开关）。
- *   demo-mobile.html  —— 手机端演示：直接进登录页，并**预填演示账号**
- *                        （手机上打两遍账号密码很烦，现场常是"把手机递给别人看"）。
+ *   demo.html —— 落地页起步，右上角常驻「桌面 / 手机」切换（应用自带功能）。
  *
  * 两份内容完全同源，只在 </body> 前多注入一段
  *   <script>window.__DEMO_PRESET__ = {...}</script>
@@ -36,16 +33,12 @@ function inject(source, preset) {
 
 const variants = [
   {
-    file: 'demo-desktop.html',
-    label: '桌面端演示',
+    /* 一个包就够了：右上角的视图切换常驻，桌面端为默认。
+       不再分"桌面包/手机包"—— 那是按"文件会在什么设备上打开"做的假设，
+       而构建时根本无从得知（用户已指出过这一点）。 */
+    file: 'demo.html',
+    label: '演示包',
     preset: { route: '#/' },
-  },
-  {
-    file: 'demo-mobile.html',
-    label: '手机端演示',
-    /* 不再按"这个包会在手机上打开"去关按钮 —— 构建时无从得知它在哪儿被打开。
-       按钮由 ViewModeSwitcher 运行时按 (窄视口 + 触摸) 自行判定显隐。 */
-    preset: { route: '#/login', prefill: { username: 'xiaoyu', password: '123456' } },
   },
 ];
 

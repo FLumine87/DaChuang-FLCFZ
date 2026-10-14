@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Monitor, Smartphone } from 'lucide-react';
 
 /**
- * 手机端 / 桌面端 视图切换（集成在应用内部，按钮固定在右上角）。
+ * 手机端 / 桌面端 视图切换。固定在**最右上角**，常驻显示（不按设备隐藏）。
  *
  * 为什么手机模式要用 iframe：本项目的响应式**全部建立在视口宽度上**
  * （Tailwind 的 sm/lg/2xl 断点，以及 index.css 里那几段 @media）。
@@ -12,33 +12,20 @@ import { Monitor, Smartphone } from 'lucide-react';
  * iframe 就是 ②：**iframe 内部的媒体查询按 iframe 自己的宽度求值**，
  * 所以一行 CSS 都不用改，渲染出来就是货真价实的手机版式。
  *
- * 桌面模式下**不套 iframe**，应用照常直接渲染 —— 日常使用完全不受这个开关影响，
- * 只有主动切到手机模式时才会进框。
+ * 桌面模式下**不套 iframe**，应用照常直接渲染 —— 日常使用完全不受影响。
  *
- * iframe 的源是"当前文档自己的 HTML"（main.tsx 在 React 挂载前抓下来），
- * 所以在单文件离线包里也能用，不需要额外的文件。
+ * 按钮曾经按 (窄视口 + 粗指针) 自动隐藏，现已改回常驻：那个判断在触屏笔记本、
+ * 带键盘的平板上都可能给出用户不想要的结论，而"我到底在哪个视图"应该由
+ * 使用者自己说了算，不该让浏览器替他决定。
  *
- * 用 VITE_VIEW_SWITCHER=false 可以整个关掉（默认开）。
+ * 位置冲突：最右上角原本是各页顶栏的「登录 / 主题切换 / 用户菜单」。
+ * 所以这里在 <html> 上挂 view-switcher-on，由 CSS 给所有 .nav-blur 顶栏
+ * 补一段右内边距，把顶栏内容整体左移让位 —— 比逐个改 5 个页面的顶栏可靠。
  */
 
 const PHONE_W = 390;
 const PHONE_H = 844;
 const STORE_KEY = 'psych_view_mode';
-
-/**
- * 是不是"真的在手机/平板上"打开的。
- *
- * 为什么不能构建时决定：文件在打包那一刻**根本不知道**自己将来会在什么设备上
- * 被打开 —— 同一个 HTML 既可能被拷到手机里点开，也可能在电脑上双击预览。
- * 之前我按"手机包 = 在手机上开"写死了开关，纯属假设（用户直接指出来了）。
- * 改为运行时判断，同一个文件在哪儿打开都对：
- *   · 窄视口 + 粗指针（触摸） → 真机 → 藏掉按钮（在那儿没意义，还挡内容）
- *   · 其余（桌面、带鼠标的窄窗口） → 显示按钮
- */
-function isHandheld(): boolean {
-  if (typeof window === 'undefined' || !window.matchMedia) return false;
-  return window.matchMedia('(max-width: 767px) and (pointer: coarse)').matches;
-}
 
 type Mode = 'desktop' | 'mobile';
 
@@ -57,18 +44,9 @@ export default function ViewModeSwitcher({
   appHtml: string;
   children: ReactNode;
 }) {
+  /* 以桌面端为中心：默认就是桌面，记忆里只有明确选过手机端才进手机模式 */
   const [mode, setMode] = useState<Mode>(initialMode);
-  /* 真机上整个按钮不渲染。旋转屏幕/插拔鼠标都要能跟着变，所以监听媒体查询。 */
-  const [handheld, setHandheld] = useState(isHandheld);
-  useEffect(() => {
-    if (!window.matchMedia) return;
-    const mq = window.matchMedia('(max-width: 767px) and (pointer: coarse)');
-    const onChange = () => setHandheld(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
 
-  /* 记住选择：演示时来回切，刷新后不用重选 */
   useEffect(() => {
     try {
       window.localStorage.setItem(STORE_KEY, mode);
@@ -76,6 +54,13 @@ export default function ViewModeSwitcher({
       /* 隐私模式不可写就退化成"不记忆"，不影响使用 */
     }
   }, [mode]);
+
+  /* 给顶栏让位的开关（见文件头说明） */
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('view-switcher-on');
+    return () => root.classList.remove('view-switcher-on');
+  }, []);
 
   /* 手机模式的 iframe 源。useMemo 而不是 effect —— 首次渲染就要有 src，
      否则取景框会先白一下。 */
@@ -102,7 +87,7 @@ export default function ViewModeSwitcher({
       {/* 桌面模式：应用原样渲染，不套任何容器 */}
       {!mobile && children}
 
-      {/* 手机模式：深色底 + 取景框。宽度/高度走过渡，切换时是"缩过去"不是硬切。 */}
+      {/* 手机模式：深色底 + 取景框 */}
       {mobile && (
         <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950">
           <div
@@ -121,12 +106,14 @@ export default function ViewModeSwitcher({
         </div>
       )}
 
-      {/* 切换按钮：右上方，但**压在顶栏下方**。真机上不渲染。
-         顶栏（落地页/登录页/个人端/管理端）高度 64px，右上角已经有「登录」
-         和主题切换按钮；一开始放在 top-4 直接把这两个盖住了（截图确认）。
-         下移到 72px 仍然在"右上方"，又不挡任何原有控件。 */}
-      {!handheld && <div className="fixed right-4 top-[72px] z-[9999] flex items-center gap-1 rounded-full bg-slate-900/90 p-1 shadow-lg ring-1 ring-white/15 backdrop-blur">
-        {([['desktop', '桌面端', Monitor], ['mobile', '手机端', Smartphone]] as const).map(
+      {/* 切换按钮：最右上角、常驻。
+         样式**照抄旁边那两个控件**（LandingPage 的「登录」与主题切换）：
+         无底色、text-slate-500、hover 变主色、尺寸 h-9 w-9 圆角方块。
+         之前是个深色胶囊 + 蓝色选中块，既比旁边的按钮宽一倍（119px vs 76px），
+         风格也跟顶栏格格不入（用户："还是太宽了，而且要与旁边按键风格一致"）。
+         窄屏只留一个按钮（图标表示"点一下会去哪边"），宽屏两个都显示。 */}
+      <div className="fixed right-2 top-2 z-[9999] hidden items-center sm:flex">
+        {([['desktop', '桌面端视图', Monitor], ['mobile', '手机端视图', Smartphone]] as const).map(
           ([value, label, Icon]) => (
             <button
               key={value}
@@ -135,18 +122,15 @@ export default function ViewModeSwitcher({
               aria-pressed={mode === value}
               title={label}
               className={
-                'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors duration-200 ' +
-                (mode === value
-                  ? 'bg-primary-500 text-white'
-                  : 'text-slate-300 hover:bg-white/10 hover:text-white')
+                'hidden h-9 w-9 place-items-center rounded-lg transition-all duration-200 hover:bg-white/80 hover:text-primary-700 active:scale-90 active:bg-white sm:grid ' +
+                (mode === value ? 'text-primary-600' : 'text-slate-500')
               }
             >
-              <Icon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{label}</span>
+              <Icon className="h-4 w-4" />
             </button>
           ),
         )}
-      </div>}
+      </div>
     </>
   );
 }
