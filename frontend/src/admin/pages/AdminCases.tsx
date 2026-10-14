@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { type CaseRecord } from '../data/adminMockData';
-import { getAdminCases } from '../../services/mockApi';
+/* 走 adminApi 的分页接口：后端 /api/admin/cases 返回的是 { items, total, page, pageSize }
+   信封，不是裸数组。以前这里用 mockApi.getAdminCases()，它把这个对象直接当数组返回，
+   页面再 .filter() 就抛 "caseRecords.filter is not a function"，整页白屏。 */
+import { listAdminCases } from '../../services/adminApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import AdminStatusBadge from '../components/AdminStatusBadge';
 
@@ -13,8 +16,8 @@ export default function AdminCases() {
     (async () => {
       try {
         setLoading(true);
-        const data = await getAdminCases();
-        setCaseRecords(data);
+        const data = await listAdminCases({});
+        setCaseRecords(data.items);
       } catch (e) {
         console.error('加载案例失败', e);
       } finally {
