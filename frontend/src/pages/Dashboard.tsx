@@ -374,7 +374,13 @@ export default function Dashboard() {
           </span>
           <span className="text-slate-400"> · {view.date}</span>
         </p>
-        <h1 className="font-medium leading-[1.14] tracking-[0.25px] text-slate-900" style={{ fontSize: tune.title, marginTop: tune.line1Gap }}>
+        {/* 字号走 .dash-hero-title（见 index.css）。
+            不能写 Tailwind 的 text-*：全局 `h1 { font-size: 1.625rem }` 在 @layer
+            之外，会压过分层的工具类，写了也是死代码（本文件多处已注明）。
+            原来是内联 style={{ fontSize: tune.title }}，tune.title 是调参面板留下的
+            常量 54（as const，无任何响应式逻辑），于是在 390px 手机上也是 54px，
+            撑成两行巨字、占掉近半屏。 */}
+        <h1 className="dash-hero-title font-medium leading-[1.14] tracking-[0.25px] text-slate-900" style={{ marginTop: tune.line1Gap }}>
           你最近的状态，都在这里
         </h1>
         {/* 灰体小字：一句话交代这一页有什么，避免标题后面直接跳到大卡片 */}

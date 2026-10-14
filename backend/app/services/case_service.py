@@ -2,6 +2,7 @@
 from typing import Optional
 import uuid
 
+from app.core.dates import format_dt
 from app.db import database as db
 
 
@@ -49,7 +50,8 @@ async def get_cases(page: int = 1, page_size: int = 10, alert_level: Optional[st
 
 
 def _fmt_date(v):
-    return v.strftime("%Y-%m-%d") if hasattr(v, "strftime") and v else (v or None)
+    """None 兜底（而不是空串）—— 由 app.core.dates 统一实现，见那里的说明。"""
+    return format_dt(v, fallback=None)
 
 
 async def _case_to_dict(r: dict) -> dict:

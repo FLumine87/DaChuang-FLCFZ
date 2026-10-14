@@ -829,6 +829,23 @@ h4 {
 h1.text-3xl {
   font-size: 2rem; /* 32px ← 30px（登录页/系统选择页） */
 }
+
+/* 个人首页首屏主标题：「你最近的状态，都在这里」。
+   必须写在无层级里 —— 上面那条全局 h1 { font-size } 会压过 Tailwind 的 text-*，
+   用 sm:/lg: 工具类调字号是无效的。
+   另外原来是内联 style={{ fontSize: tune.title }}，tune.title 是调参面板留下的
+   常量 54（as const，没有任何响应式逻辑），内联优先级最高所以桌面一直是对的，
+   但在 390px 手机上同样是 54px，标题撑成两行巨字、占掉近半屏。
+   这里按断点给：手机 32 / 平板 44 / 桌面 54（桌面与调参定稿一致）。 */
+.dash-hero-title {
+  font-size: 2rem; /* 32px */
+}
+@media (min-width: 640px) {
+  .dash-hero-title { font-size: 2.75rem; } /* 44px */
+}
+@media (min-width: 1024px) {
+  .dash-hero-title { font-size: 3.375rem; } /* 54px */
+}
 h2,
 h3,
 h4 {

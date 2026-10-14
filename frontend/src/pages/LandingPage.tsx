@@ -707,11 +707,10 @@ export default function LandingPage() {
             {/* 一句话说清这张图在表达什么。
                 上一版写成了"横轴为上面四个环节，纵轴为累计可用的判断依据……"，
                 在落地页上讲坐标轴太像规格说明书了（用户："太奇怪了，还是换掉吧"），
-                这里改成人话。末尾仍保留示意声明 —— 曲线路径是手写的固定坐标，
-                不是实测数据，不写清楚容易被当成真实统计。 */}
-            <p className="mt-3 text-[13px] leading-5 text-slate-500">
+                这里改成人话；末尾原本还挂了个"（示意图）"，用户要求删掉，
+                并且这句说明靠右排（text-right），与左侧的正文错开。 */}
+            <p className="mt-3 text-right text-[13px] leading-5 text-slate-500">
               每走完一个环节，能用来判断的信息就多一层。
-              <span className="text-slate-400">（示意图）</span>
             </p>
 
             <div className="mt-6 grid gap-2.5 border-t border-dashed border-slate-200 pt-5 sm:grid-cols-3">

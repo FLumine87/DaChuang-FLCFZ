@@ -4,6 +4,7 @@ import json
 import os
 import uuid
 
+from app.core.dates import format_dt
 from app.core.responses import success_response
 from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
@@ -11,10 +12,6 @@ from app.db import database as db
 from app.services import screening_service, case_service, alert_service
 from app.engines import get_rag_engine
 from app.handlers.retrieval import perform_search, to_frontend_hit
-
-
-def _fmt(v, fmt="%Y-%m-%d"):
-    return v.strftime(fmt) if hasattr(v, "strftime") and v else (v or "")
 
 
 def _warning_dict(a: dict) -> dict:
@@ -27,8 +24,8 @@ def _warning_dict(a: dict) -> dict:
         "reason": a.get("description") or "",
         "suggestion": "建议及时关注并处理",
         "status": status,
-        "createdAt": _fmt(a.get("created_at"), "%Y-%m-%d %H:%M"),
-        "updatedAt": _fmt(a.get("updated_at"), "%Y-%m-%d %H:%M"),
+        "createdAt": format_dt(a.get("created_at"), "%Y-%m-%d %H:%M"),
+        "updatedAt": format_dt(a.get("updated_at"), "%Y-%m-%d %H:%M"),
     }
 
 
@@ -41,7 +38,7 @@ def _screening_item(s: dict, qn: str) -> dict:
         "level": s.get("alert_level"),
         "status": s.get("status"),
         "moodTag": s.get("notes") or "已完成",
-        "date": _fmt(s.get("screening_date") or s.get("created_at")),
+        "date": format_dt(s.get("screening_date") or s.get("created_at")),
     }
 
 
@@ -326,7 +323,7 @@ def _supplement_dict(r: dict) -> dict:
             "description": r.get("description"),
             "screeningId": r.get("screening_id"),
             "analysis": analysis,
-            "createdAt": _fmt(r.get("created_at"), "%Y-%m-%d %H:%M"),
+            "createdAt": format_dt(r.get("created_at"), "%Y-%m-%d %H:%M"),
         }.items() if v is not None
     }
 
@@ -496,7 +493,7 @@ async def get_personal_dashboard(ctx: RequestContext):
     for s in timeline_query:
         qn = await _qn_name(s["questionnaire_id"])
         personal_timeline.append({
-            "date": _fmt(s.get("screening_date") or s.get("created_at")),
+            "date": format_dt(s.get("screening_date") or s.get("created_at")),
             "type": "screening",
             "title": f"完成{qn}筛查",
             "detail": f"得分{s.get('score')}分，风险等级:{s.get('alert_level')}",
@@ -594,7 +591,7 @@ async def get_personal_profile(ctx: RequestContext):
     for s in screenings[:5]:
         qn = await _qn_name(s["questionnaire_id"])
         personal_timeline.append({
-            "date": _fmt(s.get("screening_date") or s.get("created_at")),
+            "date": format_dt(s.get("screening_date") or s.get("created_at")),
             "type": "screening",
             "title": f"完成{qn}筛查",
             "detail": f"得分{s.get('score')}分，风险等级:{s.get('alert_level')}",
