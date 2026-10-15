@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 import { createPortal } from "react-dom";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  ArrowLeft,
   ArrowUpRight,
   BrainCircuit,
   ChevronDown,
@@ -266,6 +267,13 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
      页名就会在一屏里出现两遍 —— 这正是评审提过的重复。
      管理端首页没做改造，所以只管个人端。 */
   const hasOwnHero = isDashboard && !isAdmin;
+  /* 手机端的返回。
+     有站内历史就退一步；直接深链打开（location.key === "default"）时没有可退的
+     历史，navigate(-1) 会把用户弹出应用，所以退回该端首页。 */
+  const goBack = () => {
+    if (location.key && location.key !== "default") navigate(-1);
+    else navigate(`${root}/dashboard`);
+  };
   const results = items.filter((item) =>
     `${item.label}${item.description}`.includes(query.trim()),
   );
@@ -504,14 +512,33 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             与页面底色割裂，正是登录页那版刻意去掉的做法。 */}
         <header className="nav-blur sticky top-0 z-20 flex h-16 items-center gap-3 px-4 sm:px-7">
           <div className="flex shrink-0 items-center gap-3">
-            <button
-              className="ui-icon-button lg:hidden"
-              aria-label="打开导航"
-              aria-expanded={mobileOpen}
-              onClick={() => setMobileOpen(!mobileOpen)}
-            >
-              <Menu className="h-5 w-5" />
-            </button>
+            {/* 手机端左上角：首页给「打开导航」，二级页给「返回」。
+                这是 Material 的标准做法 —— 二级页的导航图标换成"向上/返回"，
+                抽屉从首页进入。用户反馈"手机端点开按钮跳转页面后，感觉没有做
+                返回的快捷键，毕竟手机屏幕小"，而实测顶栏左 54px 到右 286px
+                之间是一整片空白，本来就放得下。
+                两个按钮共用 .ui-icon-button，尺寸/圆角/按下反馈与旁边完全一致，
+                符合系统风格；返回用 ArrowLeft（不是 ChevronLeft）—— 前者是
+                系统返回键的通用字形。 */}
+            {isDashboard ? (
+              <button
+                className="ui-icon-button lg:hidden"
+                aria-label="打开导航"
+                aria-expanded={mobileOpen}
+                onClick={() => setMobileOpen(!mobileOpen)}
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            ) : (
+              <button
+                className="ui-icon-button lg:hidden"
+                aria-label="返回"
+                title="返回"
+                onClick={goBack}
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+            )}
             {/* 品牌 ｜ 当前页名：与登录页/主页顶栏同一做法，让人一眼知道在哪一页。
                 whitespace-nowrap 必须加，否则窄屏下 flex 会把中文逐字换行。 */}
             <span className="hidden whitespace-nowrap text-[15px] font-medium text-primary-600 sm:inline">
