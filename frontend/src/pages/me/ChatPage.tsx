@@ -85,7 +85,13 @@ export default function ChatPage() {
         const data = await api.extract(userId, text);
         if (data.triples?.length) {
           setLocalCount(appendLocalTriples(userId, data.triples).triples.length);
-      }
+        }
+        setMockServer(Boolean(data.mock));
+        // 抽取结果补到这条回复上（界面显示"已抽取 N 条..."），
+        // 因为抽取是后台跑的，到达时间通常晚于回复文本
+        setMessages((prev) =>
+          prev.map((m) => (m.id === replyId ? { ...m, extract: data } : m)),
+        );
       } catch {
         const triples = triplesFromText(text);
         if (triples.length) setLocalCount(appendLocalTriples(userId, triples).triples.length);
