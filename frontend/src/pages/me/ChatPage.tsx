@@ -102,6 +102,11 @@ export default function ChatPage() {
     let offline = false;
     let replyMock = true;
     let streamBroken = false;
+    /* 服务端**答上话了**、但处于演示/mock 模式（未配大模型 Key 或显式开启）。
+       必须与"压根连不上"分开：两者都会走到下面的本地兜底，但原因完全不同 ——
+       前者是配置问题，后者才是网络问题。原先一律报"未连接到服务端"，
+       实测服务端 /api/v1/health 明明是 {"status":"ok"}，提示却指向网络，很误导。 */
+    let serverAnsweredMock = false;
     try {
       for await (const chunk of api.streamChatCompanion(userId, text, history)) {
         if (chunk?.error) {
@@ -121,10 +126,18 @@ export default function ChatPage() {
       streamBroken = true;
     }
 
-    if (streamBroken && !offline) {
+    /* 这里原来是 `if (streamBroken && ...)` —— 只有**抛异常**才算"断流"。
+       但服务端处于 mock 模式时，流式接口返回的是 JSON 而不是 SSE：
+       解析器不会报错，只是**一个 chunk 都产不出来**，于是 streamBroken 仍是 false，
+       整个非流式回退被跳过，serverAnsweredMock 也就没机会置上 ——
+       最后落到兜底分支时只能一律报"未连接到服务端"，把"服务端在演示模式"
+       误报成"网络连不上"。
+       判据改成"断流 **或** 流没产出任何文本"，回退才真的会执行。 */
+    if ((streamBroken || !acc.trim()) && !offline) {
       /* 流式中断：自动改走非流式接口重新生成一份完整回复替换半截文本 */
       try {
         const full = await api.chatCompanion(userId, text, history);
+        if (full.mock) serverAnsweredMock = true;
         if (full.reply) {
           acc = full.reply;
           replyMock = Boolean(full.mock);
@@ -140,12 +153,17 @@ export default function ChatPage() {
     }
 
     if (!acc.trim()) {
-      /* 大模型完全不可用（Mock / 断流且重试失败）→ 本地兜底文案 */
+      /* 走到这里有两种完全不同的原因，提示必须分开 —— 见上面 serverAnsweredMock 的说明 */
       const fallback = FALLBACK_REPLIES[Math.floor(Math.random() * FALLBACK_REPLIES.length)];
-      acc = `${fallback}\n（离线模式：本条由本机规则整理，暂未连到服务端）`;
+      if (serverAnsweredMock) {
+        acc = `${fallback}\n（服务端处于演示模式：本条由本机规则整理，未调用大模型）`;
+        setError('服务端在演示模式，未生成回复');
+      } else {
+        acc = `${fallback}\n（离线模式：本条由本机规则整理，暂未连到服务端）`;
+        setError(briefErrorMessage('未连接到服务端', '未连接到服务端'));
+      }
       offline = true;
       replyMock = true;
-      setError(briefErrorMessage('未连接到服务端', '未连接到服务端'));
       setMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, text: acc } : m)));
     }
 
@@ -183,7 +201,11 @@ export default function ChatPage() {
       {error && (
         <div className="mt-3 flex items-center gap-2 text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
           <AlertTriangle className="w-4 h-4 shrink-0 text-warning-500" />
-          <span>未连接到服务端（{error}），已切到离线模式：回应由本机规则生成，抽取结果只存在本机。</span>
+          <span>
+            {error === '服务端在演示模式，未生成回复'
+              ? '服务端处于演示模式（未配置大模型 Key），回应由本机规则生成，抽取结果只存在本机。'
+              : <>未连接到服务端（{error}），已切到离线模式：回应由本机规则生成，抽取结果只存在本机。</>}
+          </span>
         </div>
       )}
 
