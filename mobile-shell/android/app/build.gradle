@@ -1,5 +1,11 @@
 apply plugin: 'com.android.application'
-apply plugin: 'com.chaquo.python'
+/* Chaquopy 只在需要时启用（构建时加 -Pchaquopy）。
+   不这样做的话，离线版和连后端版也会被打进 37 MB 用不到的 Python 运行时
+   —— 实测三个包全变成 44 MB，而离线版本来就该是 7 MB 左右。 */
+def withChaquopy = project.hasProperty("chaquopy")
+if (withChaquopy) {
+    apply plugin: 'com.chaquo.python'
+}
 
 android {
     namespace "com.dachuang.psychscreen"
@@ -14,8 +20,8 @@ android {
             真机（手机）全都是 arm64；
            去掉 x86_64 与 armeabi-v7a 后，Python 运行时 + numpy/Pillow 的
            原生库都只打一份，实测省约 24 MB。 */
-        ndk {
-            abiFilters "arm64-v8a"
+        if (withChaquopy) {
+            ndk { abiFilters "arm64-v8a" }
         }
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
@@ -75,27 +81,15 @@ try {
    15 起被移除。用旧名字的表现是：apply plugin 不报错，但块找不到方法：
      Could not find method python() ... on project ':app'  （实测踩过两次）
    第一步只验证工具链，先不装第三方包。 */
-chaquopy {
-    defaultConfig {
-        version = "3.11"
-        /* 只需要三个包 —— 这不是估算，是扫过后端全部 63 个 .py 得到的实际结果：
-             numpy     13 处（跨模态哈希的真实特征计算）
-             pillow     4 处（图像特征）
-             sqlalchemy 1 处（仅一个 Session 类型标注）
-           fastapi / uvicorn / pydantic / python-jose / bcrypt / alembic /
-           aiofiles / python-dotenv / email-validator / python-multipart
-           在 app/ 下**一次都没被 import** —— 它们是 requirements.txt 里
-           给另一套部署方式备着的，本地跑用不上。
-           密码哈希是 core/security.py 里自实现的 pbkdf2（与 passlib 格式兼容），
-           passlib 只在 try 里、且有兜底，所以也不用装。
-
-           这一条把整个方案的可行性从"卡死"变成"可行"：
-           pydantic-core 是 Rust 扩展，Chaquopy 没有 Android wheel（实测报错
-           No matching distribution found），原本以为方案要黄。 */
-        pip {
-            install "numpy"
-            install "pillow"
-            install "sqlalchemy"
+if (withChaquopy) {
+    chaquopy {
+        defaultConfig {
+            version = "3.11"
+            pip {
+                install "numpy"
+                install "pillow"
+                install "sqlalchemy"
+            }
         }
     }
 }

@@ -102,7 +102,9 @@ jobs:
         run: |
           cd ../frontend && npm run build:app:chaquopy
           cd ../mobile-shell && npx cap sync android
-          cd android && ./gradlew assembleDebug --no-daemon
+          # -Pchaquopy 打开 Chaquopy；另两个包不带这个参数，
+          # 因此不会被塞进 37 MB 用不到的 Python 运行时
+          cd android && ./gradlew assembleDebug --no-daemon -Pchaquopy
           cp app/build/outputs/apk/debug/app-debug.apk ../心理守护-Chaquopy版.apk
 
       - name: 上传三个 APK
