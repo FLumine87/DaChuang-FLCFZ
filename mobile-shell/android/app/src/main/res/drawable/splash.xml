@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 启动图。原来这里引用 @drawable/splash 但文件从来没提交过
+     （团队用 scripts-make-assets.py 生成 png，产物被 gitignore 了），
+     CI 上直接 resource linking failed。
+     改用矢量实现：一块品牌色底 —— 不引入二进制、任何分辨率都不糊，
+     与 capacitor.config.json 里 SplashScreen.backgroundColor 的取值一致。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splashBackground" />
+</layer-list>
