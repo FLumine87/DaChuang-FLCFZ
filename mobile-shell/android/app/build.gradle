@@ -6,6 +6,16 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.dachuang.psychscreen"
+
+        /* Chaquopy 强制要求显式声明 ABI（否则配置阶段直接报
+             "Chaquopy requires ndk.abiFilters"）。
+           只出 arm64-v8a + x86_64：
+             · 真机手机都是 arm64；
+             · x86_64 给模拟器用；
+             · 去掉 armeabi-v7a 能省掉近一半的原生库体积。 */
+        ndk {
+            abiFilters "arm64-v8a", "x86_64"
+        }
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         /* versionCode 必须**大于**团队已发布的 mobile-v1.0.2（那个是 3）。
