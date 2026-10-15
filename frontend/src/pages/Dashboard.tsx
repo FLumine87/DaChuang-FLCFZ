@@ -389,8 +389,15 @@ export default function Dashboard() {
         </p>
       </header>
         {/* 两个动作：从「今日行动计划」卡里拿出来，放到标题灰字下面 */}
+        {/* 手机端**不换行**、两张卡等宽等高；lg 以上恢复原来的"按内容宽度 + 可换行"。
+            原来只有 flex-wrap：390px 下可用宽度 342px，而两张卡的自然宽度是
+            168（min-w-[168px]）+ 12（gap）+ 242 = 422px，必然换行，
+            于是第一张窄、第二张宽，左边缘对不上（用户截图反馈"这两个没有对齐很奇怪"）。
+            手机端改成 flex-nowrap + 子项 flex-1 basis-0：两张各占一半、天然对齐；
+            min-w-[168px] 在手机上会让 flex-1 失效（不能收缩到 168 以下），
+            所以把它限制到 lg 以上（见 ActionStack）。 */}
         <div
-          className="flex flex-wrap items-center"
+          className="flex flex-nowrap items-stretch lg:flex-wrap lg:items-center"
           style={{
             marginTop: tune.btnPos === "bottom" ? "auto" : tune.gap,
             paddingTop: tune.btnPos === "bottom" ? tune.gap : 0,
@@ -909,7 +916,12 @@ function ActionStack({
     <Link
       to={to}
       style={{ paddingTop: padY, paddingBottom: padY }}
-      className={`grid min-w-[168px] gap-0 rounded-lg px-4 transition-colors ${
+      /* 手机端：flex-1 basis-0 让两张卡严格等分（都从 0 开始长大，所以宽度相同），
+         min-w-0 解除默认的最小内容宽度限制 —— 否则长文案"上次评估 2026-03-18 ·
+         建议每 2 周一次"会把卡片顶宽，两张就不等宽了。
+         lg 以上回到 min-w-[168px] + 不伸缩，保持桌面上"按内容宽度"的原样。
+         content-start 让标题和状态从顶部排，两卡等高时文字不会被拉伸开。 */
+      className={`grid min-w-0 flex-1 basis-0 content-start gap-0 rounded-lg px-4 transition-colors lg:flex-none lg:basis-auto lg:min-w-[168px] ${
         primary ? "ui-button-primary" : "ui-button"
       }`}
     >
