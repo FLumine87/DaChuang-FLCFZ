@@ -129,3 +129,4 @@ frontend/dist-app/
 # 每次 F5 都重新生成，入库只制造噪音。源文件 *.cpp 仍然正常跟踪。
 *.dSYM/
 Lab2/Lab2_?
+frontend/dist-app-chaquopy/

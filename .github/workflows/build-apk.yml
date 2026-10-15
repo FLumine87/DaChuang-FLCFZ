@@ -95,13 +95,24 @@ jobs:
           cd android && ./gradlew assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../心理守护-连后端版.apk
 
-      - name: 上传两个 APK
+      # 第三个包：后端跑在手机里（Chaquopy 打包的 Python + numpy + Pillow）。
+      # 与另两个的差别：离线版没有后端；连后端版的后端在电脑上；
+      # 这个版本的后端就在本机 127.0.0.1 —— 不需要电脑、不需要 WiFi。
+      - name: 打「Chaquopy 版」APK
+        run: |
+          cd ../frontend && npm run build:app:chaquopy
+          cd ../mobile-shell && npx cap sync android
+          cd android && ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../心理守护-Chaquopy版.apk
+
+      - name: 上传三个 APK
         uses: actions/upload-artifact@v4
         with:
           name: psych-screen-apk
           path: |
             mobile-shell/心理守护-离线版.apk
             mobile-shell/心理守护-连后端版.apk
+            mobile-shell/心理守护-Chaquopy版.apk
           if-no-files-found: error
 
       - name: 打 tag 时附到 Release

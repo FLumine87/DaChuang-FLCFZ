@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "build:app": "tsc -b && vite build --mode capacitor --outDir dist-app",
-    "build:app:live": "tsc -b && vite build --mode capacitor-live --outDir dist-app"
+    "build:app:live": "tsc -b && vite build --mode capacitor-live --outDir dist-app",
+    "build:app:chaquopy": "tsc -b && vite build --mode capacitor-chaquopy --outDir dist-app"
   },
   "dependencies": {
     "axios": "^1.15.1",
