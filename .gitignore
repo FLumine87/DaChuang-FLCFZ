@@ -123,3 +123,9 @@ frontend/dist-app/
 # *.png 是全局忽略（给截图用的），但安卓图标必须是 PNG —— 单独放行
 !mobile-shell/android/app/src/main/res/mipmap-*/ic_launcher.png
 !mobile-shell/android/app/src/main/res/mipmap-*/ic_launcher_round.png
+
+# ---- C++ 作业（Lab2/）的编译产物：不入库 ----
+# VS Code 的构建任务会把可执行文件和调试符号生成在源码旁边，
+# 每次 F5 都重新生成，入库只制造噪音。源文件 *.cpp 仍然正常跟踪。
+*.dSYM/
+Lab2/Lab2_?
