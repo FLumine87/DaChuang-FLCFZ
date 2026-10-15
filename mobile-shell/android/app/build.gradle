@@ -12,8 +12,8 @@ android {
            表现是"应用未安装"、装完看到的还是旧界面 —— 用户真机就踩到了这个：
            图标没变、状态栏仍被遮挡，其实新包根本没装上去。
            这里提到 10，给后面留足余量。 */
-        versionCode 10
-        versionName "1.1.0"
+        versionCode 11
+        versionName "1.1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

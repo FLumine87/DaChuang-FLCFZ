@@ -12,9 +12,18 @@ import { useLocation } from 'react-router-dom';
  * 要新增页面，在这里加一条即可（支持前缀匹配，子路由会一起命中）。
  */
 const HINT_PATHS = [
-  '/login',                       /* 登录：表单在下方，一屏装不下 */
-  '/personal/first/questionnaire',/* 首次引导的量表填写 */
-  '/personal/first/supplement',   /* 表后的"想补充些什么"记录页 */
+  /* 登录：表单在下方，一屏装不下 */
+  '/login',
+
+  /* 首次登录后的引导筛查流程 —— 用户要求"引导你做检查的那几个界面加上就行"。
+     这套流程共 4 步 4 个页面，用前缀 /personal/first 一次覆盖后三步：
+         ① 选择方向   /personal/welcome              ← 顶栏显示"首次使用"
+         ② 回答问题   /personal/first/questionnaire
+         ③ 补充记录   /personal/first/supplement
+         ④ 查看结果   /personal/first/result
+     其中①②③是"下面还要用户填/选"的界面，④是报告页、内容同样一屏放不下。 */
+  '/personal/welcome',
+  '/personal/first',
 ];
 
 const shouldHint = (pathname: string) =>
@@ -58,12 +67,20 @@ export default function ScrollHint() {
     check();
     window.addEventListener('scroll', check, { passive: true });
     window.addEventListener('resize', check);
-    /* 路由切换后内容高度会变，延迟再测一次 */
-    const t = window.setTimeout(check, 400);
+
+    /* ★ 必须监听内容高度变化，不能只靠 mount 时测一次。
+       实测踩到：首次引导那几个页面是懒加载的（Suspense + 分块），
+       mount 那一刻文档还很高、测出 remaining > 120 把提示点亮了，
+       随后内容换成真实页面、高度掉到与视口相等（remaining = 0），
+       但没有任何事件再触发复测 —— 结果"页面明明不需要滚动，提示还挂着"。
+       ResizeObserver 盯住 body，高度一变就复测。 */
+    const ro = new ResizeObserver(check);
+    ro.observe(document.body);
+
     return () => {
       window.removeEventListener('scroll', check);
       window.removeEventListener('resize', check);
-      window.clearTimeout(t);
+      ro.disconnect();
     };
   }, [enabled]);
 
