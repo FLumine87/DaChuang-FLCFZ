@@ -8,7 +8,7 @@
  * 要接后端只需改环境变量 VITE_USE_MOCK=false，组件无需改动。
  */
 
-import { request, USE_MOCK, getTokenUsername, isDemoToken } from './http';
+import { briefErrorMessage, request, USE_MOCK, getTokenUsername, isDemoToken } from './http';
 
 import {
   screeningRecords,
@@ -217,6 +217,17 @@ export interface AdminDashboardResponse {
 
 // ─── 认证 ────────────────────────────────────────────────────────────────────
 
+/* 打包成 App 后没有开发代理，请求失败时 axios 会抛出
+   "timeout of 15000ms exceeded" / "Network Error" 这类英文原文。
+   直接甩给用户看不懂，也不知道该做什么。这里统一换成能照着做的中文提示。
+   「连后端版」和「离线版」的失败原因不同，提示也分开：
+     · 连后端版：地址是电脑的局域网地址，手机不在同一 WiFi 或后端没启动就会超时
+     · 离线版：登录本不该发请求，真失败了多半是本地存储/环境异常 */
+const LIVE_BUILD = Boolean(import.meta.env.VITE_API_BASE_URL);
+const NETWORK_HINT = LIVE_BUILD
+  ? '连不上服务器：请确认手机与电脑在同一个 WiFi，且电脑上的后端已启动'
+  : '连不上服务器，请检查网络后重试';
+
 export async function apiLogin(
   username: string,
   password: string
@@ -256,7 +267,7 @@ export async function apiLogin(
       role: data.role === 'admin' ? 'admin' : 'user' as 'admin' | 'user' 
     };
   } catch (err) {
-    return { ok: false, message: (err as Error).message };
+    return { ok: false, message: briefErrorMessage(err, NETWORK_HINT) };
   }
 }
 
@@ -273,7 +284,7 @@ export async function apiRegister(
     await request.post('/api/auth/register', { username, password, name, role: "user" });
     return { ok: true };
   } catch (err) {
-    return { ok: false, message: (err as Error).message };
+    return { ok: false, message: briefErrorMessage(err, NETWORK_HINT) };
   }
 }
 
