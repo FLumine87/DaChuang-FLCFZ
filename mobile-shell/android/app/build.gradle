@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'com.chaquo.python'
 
 android {
     namespace "com.dachuang.psychscreen"
@@ -56,4 +57,11 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+/* Chaquopy：把 Python 运行时打进 APK。
+   第一步只验证工具链 —— 先不装任何第三方包，只确认 python{} 能被识别、
+   能编出一个带 Python 的 APK。确认之后再往里加 fastapi/uvicorn/numpy 等。 */
+python {
+    version "3.11"
 }
