@@ -68,58 +68,81 @@ export default function ChatPage() {
       .slice(-6)
       .map((m) => ({ role: m.role, text: m.text }));
 
-    setMessages((prev) => [...prev, userMsg]);
-
-    /* 对话与抽取并行：
-       · 回复 → /chat/companion（后端 LLM 生成，2026-10-14 起不再是本地随机文案）
-       · 抽取 → /kg/extract（三元组进个人图谱，逻辑保持不变） */
-    const [chatRes, extractRes] = await Promise.allSettled([
-      api.chatCompanion(userId, text, history),
-      api.extract(userId, text),
+    /* 先把 user 消息插进去，再插一条**空的** assistant 消息占位。
+       大模型改成流式返回后，增量文本会逐段追加到这条占位上 —— 用户几秒内
+       就能看到开头，不必干等整段生成完（2026-10-15）。 */
+    const replyId = Date.now() + 1;
+    setMessages((prev) => [
+      ...prev,
+      userMsg,
+      { id: replyId, role: 'assistant', text: '' },
     ]);
 
-    // --- 抽取结果 ---
-    let extractData: ExtractResult | undefined;
-    let extractFailed = false;
-    let extractReason: unknown = null;
-    if (extractRes.status === 'fulfilled') {
-      extractData = extractRes.value;
-      if (extractData.triples?.length) {
-        setLocalCount(appendLocalTriples(userId, extractData.triples).triples.length);
+    /* 抽取独立跑，不参与回复的等待：三元组进图谱属于后台增强，
+       不该让用户为此多等一轮大模型的时间。 */
+    void (async () => {
+      try {
+        const data = await api.extract(userId, text);
+        if (data.triples?.length) {
+          setLocalCount(appendLocalTriples(userId, data.triples).triples.length);
       }
-      setMockServer(Boolean(extractData.mock));
-    } else {
-      extractFailed = true;
-      extractReason = extractRes.reason;
-      const triples = triplesFromText(text);
-      if (triples.length) setLocalCount(appendLocalTriples(userId, triples).triples.length);
+      } catch {
+        const triples = triplesFromText(text);
+        if (triples.length) setLocalCount(appendLocalTriples(userId, triples).triples.length);
+      }
+    })();
+
+    let acc = '';
+    let offline = false;
+    let replyMock = true;
+    let streamBroken = false;
+    try {
+      for await (const chunk of api.streamChatCompanion(userId, text, history)) {
+        if (chunk?.error) {
+          // 上游流中断：不再把半截话当完整回复，转非流式重新生成
+          streamBroken = true;
+          break;
+        }
+        const delta = chunk?.delta;
+        if (!delta) continue;
+        acc += delta;
+        const text = acc.trimStart();
+        setMessages((prev) =>
+          prev.map((m) => (m.id === replyId ? { ...m, text } : m)),
+        );
+      }
+    } catch {
+      streamBroken = true;
     }
 
-    // --- 回复来源：后端 LLM 优先，失败/Mock 才回退本地文案 ---
-    let replyText: string;
-    let offline = false;
-    let replyMock = false;
-    if (chatRes.status === 'fulfilled' && chatRes.value.reply) {
-      replyText = chatRes.value.reply;
-      replyMock = chatRes.value.mock;
-    } else {
-      replyText = FALLBACK_REPLIES[Math.floor(Math.random() * FALLBACK_REPLIES.length)];
-      if (extractFailed) {
-        // 服务端完全不可达：维持原有离线模式提示
-        const reason = chatRes.status === 'rejected' ? chatRes.reason : extractReason;
-        setError(briefErrorMessage(reason, '未连接到服务端'));
-        offline = true;
-        replyText = `${replyText}\n（离线模式：本条由本机规则整理，暂未连到服务端）`;
-      } else {
-        // 服务端活着：mock（未配 LLM）或对话接口报错，只标注回复来源，不弹大横幅
+    if (streamBroken && !offline) {
+      /* 流式中断：自动改走非流式接口重新生成一份完整回复替换半截文本 */
+      try {
+        const full = await api.chatCompanion(userId, text, history);
+        if (full.reply) {
+          acc = full.reply;
+          replyMock = Boolean(full.mock);
+          setMessages((prev) =>
+            prev.map((m) => (m.id === replyId ? { ...m, text: acc, replyMock } : m)),
+          );
+        } else {
+          replyMock = true;
+        }
+      } catch {
         replyMock = true;
       }
     }
 
-    setMessages((prev) => [
-      ...prev,
-      { id: Date.now() + 1, role: 'assistant', text: replyText, extract: extractData, offline, replyMock },
-    ]);
+    if (!acc.trim()) {
+      /* 大模型完全不可用（Mock / 断流且重试失败）→ 本地兜底文案 */
+      const fallback = FALLBACK_REPLIES[Math.floor(Math.random() * FALLBACK_REPLIES.length)];
+      acc = `${fallback}\n（离线模式：本条由本机规则整理，暂未连到服务端）`;
+      offline = true;
+      replyMock = true;
+      setError(briefErrorMessage('未连接到服务端', '未连接到服务端'));
+      setMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, text: acc } : m)));
+    }
+
     setBusy(false);
   };
 
@@ -168,7 +191,20 @@ export default function ChatPage() {
                   : 'ui-card text-slate-700 rounded-bl-sm'
               }`}
             >
-              <p className="whitespace-pre-wrap">{m.text}</p>
+              {/* 流式占位：回复气泡还没拿到第一个字时，就地显示思考动画；
+                  有内容后同一气泡直接显示文本，不再有第二个"正在思考中" */}
+              {m.text ? (
+                <p className="whitespace-pre-wrap">{m.text}</p>
+              ) : (
+                <span className="inline-flex items-center gap-2 text-slate-500">
+                  正在思考中
+                  <span className="inline-flex gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:150ms]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:300ms]" />
+                  </span>
+                </span>
+              )}
               {m.offline && (
                 <span className="mt-2 inline-block rounded-full bg-warning-50 px-2 py-0.5 text-[11px] text-warning-600">
                   离线模式
@@ -201,22 +237,6 @@ export default function ChatPage() {
             </div>
           </div>
         ))}
-        {/* 大模型思考中的占位气泡（2026-10-15）：生成要 20~30 秒，
-            不能让用户对着空屏等。回复到达后随 busy=false 消失。 */}
-        {busy && (
-          <div className="flex justify-start">
-            <div className="ui-card rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-slate-500">
-              <span className="inline-flex items-center gap-2">
-                正在思考中
-                <span className="inline-flex gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:150ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:300ms]" />
-                </span>
-              </span>
-            </div>
-          </div>
-        )}
         <div ref={bottomRef} />
       </div>
 

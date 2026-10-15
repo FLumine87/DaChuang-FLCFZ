@@ -159,6 +159,54 @@ export interface CompanionChatResult {
   kg_context_used: boolean;
 }
 
+/**
+ * SSE 流式请求：逐帧解析 `data: {...}` 并 yield 解析后的对象。
+ * 只用于陪伴对话——大模型生成要 20~30 秒，必须边生成边出。
+ */
+export async function* streamRequest<T>(
+  path: string,
+  init?: RequestInit,
+): AsyncGenerator<T> {
+  if (!PERSONAL_API_READY) {
+    throw new Error(
+      '知识图谱 / 推理服务未配置：打包版没有开发代理，需要设置 VITE_PERSONAL_API_BASE ' +
+        '指向已部署的 personal-backend（FastAPI + Neo4j）。当前构建未设置，这一组功能不可用。',
+    );
+  }
+  const resp = await fetch(`${BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...init,
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`请求失败 ${resp.status}: ${text.slice(0, 200)}`);
+  }
+  if (!resp.body) return;
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // 帧与帧之间以空行分隔，最后一段可能不完整，留到下一轮再解析
+    const frames = buffer.split('\n\n');
+    buffer = frames.pop() ?? '';
+    for (const frame of frames) {
+      const line = frame.trim();
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (data === '[DONE]') return;
+      try {
+        yield JSON.parse(data) as T;
+      } catch {
+        // 单帧解析失败不打断整条流
+      }
+    }
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!PERSONAL_API_READY) {
     throw new Error(
@@ -189,6 +237,18 @@ export const api = {
     request<CompanionChatResult>('/api/v1/chat/companion', {
       method: 'POST',
       body: JSON.stringify({ user_id: userId, message, history }),
+    }),
+
+  /**
+   * AI 陪伴对话（流式）：逐帧返回增量文本，用于打字机效果。
+   * 上游断流时后端会发 error 帧（调用方据此转非流式重试），
+   * 正常结束是 [DONE] 帧。
+   */
+  streamChatCompanion: (userId: string, message: string, history: ChatTurn[] = [], signal?: AbortSignal) =>
+    streamRequest<{ delta?: string; error?: string }>('/api/v1/chat/companion/stream', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, message, history }),
+      signal,
     }),
 
   getGraph: (userId: string) => request<GraphData>(`/api/v1/kg/graph/${encodeURIComponent(userId)}`),

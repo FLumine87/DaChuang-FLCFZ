@@ -65,6 +65,48 @@ def chat_messages(messages: list[dict], temperature: float = 0.7) -> str:
         return ""
 
 
+def stream_chat_messages(messages: list[dict], temperature: float = 0.7):
+    """多轮对话（流式）：按需 yield 增量文本片段，边生成边出。
+
+    OpenAI 兼容的 SSE 流：每帧 `data: {...}`，以 `data: [DONE]` 结束，
+    文本在 `choices[0].delta.content`。Mock 模式不产出任何内容，
+    由调用方回退到本地文案（与 chat_messages 的行为保持一致）。
+
+    2026-10-15：上游连接中断不再静默吞掉 —— 之前 except 里直接 return，
+    前端会把半截回复当成完整回复渲染（比如只收到"最近"两个字）。
+    现在异常向上抛，由 SSE 层转成 error 帧通知前端自动重试。
+    """
+    if mock_mode():
+        return
+    url = settings.llm_base_url.rstrip("/") + "/chat/completions"
+    headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
+    payload = {
+        "model": settings.llm_model,
+        "messages": messages,
+        "temperature": temperature,
+        "stream": True,
+    }
+    with httpx.Client(timeout=settings.llm_timeout, verify=settings.llm_verify_ssl) as client:
+        with client.stream("POST", url, json=payload, headers=headers) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    return
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                text = (choices[0].get("delta") or {}).get("content")
+                if text:
+                    yield text
+
+
 def extract_triples(text: str) -> list[dict]:
     """抽取三元组。Mock 模式或未配置 Key 时使用关键词抽取器。"""
     if settings.enable_mock_engines or not settings.llm_api_key:
