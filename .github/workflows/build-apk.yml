@@ -40,13 +40,25 @@ jobs:
           node-version: '22'
 
       - name: Setup JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # 不装 android-actions/setup-android：它内部会执行
+      #   sdkmanager "tools" ...
+      # 而 `tools` 包在较新的 SDK 仓库里已经不存在，实测直接以
+      #   Warning: Failed to find package 'tools'
+      #   Error: sdkmanager failed with exit code 1
+      # 失败（2026-10-15 第一次跑就挂在这一步）。
+      # ubuntu-latest runner 本来就预装了 Android SDK（/usr/local/lib/android/sdk），
+      # 所以这里只需要把它指出来、并接受许可即可。
+      - name: 确认 Android SDK（runner 预装）
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls "$ANDROID_HOME" | head -20
+          ls "$ANDROID_HOME/platforms" 2>/dev/null || true
 
       - name: 构建 frontend（capacitor 模式）
         working-directory: frontend
