@@ -77,5 +77,27 @@ try {
 chaquopy {
     defaultConfig {
         version = "3.11"
+        /* 逐条列清楚，不用 -r 整体装 —— 出问题时能一眼看出是哪个包装不上。
+           已按风险排序：
+             · numpy / pillow  —— Chaquopy 官方明确支持的 C 扩展
+             · fastapi / uvicorn / sqlalchemy / passlib —— 纯 Python
+             · pydantic v2 依赖 pydantic-core（Rust），python-jose 依赖
+               cryptography（Rust）—— 这两个是最大未知数，先装上看结果。
+           uvicorn 不带 [standard]：那个 extras 会拉 uvloop / httptools
+           两个 C 扩展，在 Android 上没有现成 wheel 且没必要（并发量极低）。 */
+        pip {
+            install "fastapi==0.115.0"
+            install "uvicorn==0.32.0"
+            install "sqlalchemy==2.0.36"
+            install "pydantic==2.10.0"
+            install "pydantic-settings==2.6.1"
+            install "python-multipart==0.0.18"
+            install "passlib==1.7.4"
+            install "python-dotenv==1.0.1"
+            install "email-validator==2.1.0.post1"
+            install "aiofiles==24.1.0"
+            install "numpy"
+            install "pillow"
+        }
     }
 }
