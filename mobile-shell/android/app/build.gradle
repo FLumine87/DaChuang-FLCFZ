@@ -77,27 +77,24 @@ try {
 chaquopy {
     defaultConfig {
         version = "3.11"
-        /* 逐条列清楚，不用 -r 整体装 —— 出问题时能一眼看出是哪个包装不上。
-           已按风险排序：
-             · numpy / pillow  —— Chaquopy 官方明确支持的 C 扩展
-             · fastapi / uvicorn / sqlalchemy / passlib —— 纯 Python
-             · pydantic v2 依赖 pydantic-core（Rust），python-jose 依赖
-               cryptography（Rust）—— 这两个是最大未知数，先装上看结果。
-           uvicorn 不带 [standard]：那个 extras 会拉 uvloop / httptools
-           两个 C 扩展，在 Android 上没有现成 wheel 且没必要（并发量极低）。 */
+        /* 只需要三个包 —— 这不是估算，是扫过后端全部 63 个 .py 得到的实际结果：
+             numpy     13 处（跨模态哈希的真实特征计算）
+             pillow     4 处（图像特征）
+             sqlalchemy 1 处（仅一个 Session 类型标注）
+           fastapi / uvicorn / pydantic / python-jose / bcrypt / alembic /
+           aiofiles / python-dotenv / email-validator / python-multipart
+           在 app/ 下**一次都没被 import** —— 它们是 requirements.txt 里
+           给另一套部署方式备着的，本地跑用不上。
+           密码哈希是 core/security.py 里自实现的 pbkdf2（与 passlib 格式兼容），
+           passlib 只在 try 里、且有兜底，所以也不用装。
+
+           这一条把整个方案的可行性从"卡死"变成"可行"：
+           pydantic-core 是 Rust 扩展，Chaquopy 没有 Android wheel（实测报错
+           No matching distribution found），原本以为方案要黄。 */
         pip {
-            install "fastapi==0.115.0"
-            install "uvicorn==0.32.0"
-            install "sqlalchemy==2.0.36"
-            install "pydantic==2.10.0"
-            install "pydantic-settings==2.6.1"
-            install "python-multipart==0.0.18"
-            install "passlib==1.7.4"
-            install "python-dotenv==1.0.1"
-            install "email-validator==2.1.0.post1"
-            install "aiofiles==24.1.0"
             install "numpy"
             install "pillow"
+            install "sqlalchemy"
         }
     }
 }
