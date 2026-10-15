@@ -7,8 +7,13 @@ android {
         applicationId "com.dachuang.psychscreen"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 3
-        versionName "1.0.2"
+        /* versionCode 必须**大于**团队已发布的 mobile-v1.0.2（那个是 3）。
+           同一个包名 com.dachuang.psychscreen 下，版本号不递增的话安卓会拒绝安装，
+           表现是"应用未安装"、装完看到的还是旧界面 —— 用户真机就踩到了这个：
+           图标没变、状态栏仍被遮挡，其实新包根本没装上去。
+           这里提到 10，给后面留足余量。 */
+        versionCode 10
+        versionName "1.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
