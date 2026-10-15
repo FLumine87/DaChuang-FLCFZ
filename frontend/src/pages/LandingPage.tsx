@@ -242,7 +242,8 @@ export default function LandingPage() {
     const scheduleSettle = () => {
       window.clearTimeout(settleTimer);
       settleTimer = window.setTimeout(() => {
-        if (animating) return;
+        /* 双保险：即便有别的路径调进来，非桌面也一律不平移 */
+        if (animating || !desktop.matches || !contentFits()) return;
         const target = settleTarget();
         gestureStartY = -1;
         glideTo(target);
@@ -309,6 +310,18 @@ export default function LandingPage() {
     };
 
     const onUserInput = () => {
+      /* ★ 手机上必须是**普通滚动**，不进这套"落屏"。
+         用户反馈："这两个界面的上下滑动逻辑应该是一样的，统一为登录界面的
+         上下滑动逻辑……我在主页端都看不了下面的信息。"
+         根因就是这里原先没有 desktop 判断：touchstart / touchmove 直接
+         scheduleSettle()，而 settleTarget 的规则是"本次手势没滚过 28% 屏高
+         就回到起点那一屏" —— 手机上一次短滑就当场被弹回原处，
+         表现就是"滑下去又跳回顶部、看不到下面的内容"（录屏逐帧可见：
+         下滑 → 回标题 → 再下滑 → 再回标题）。
+         桌面端（≥1024 且 ≥600 高）保留原来的整屏落屏，观感不变。
+         这也是本次第二次修同一个现象 —— 上一轮只去掉了 CSS 的 scroll-snap，
+         而真正接管手势的是这段 JS。 */
+      if (!desktop.matches || !contentFits()) return;
       /* 记下手势起点：落点按“滚过 28% 就翻页”判断（见 settleTarget） */
       if (gestureStartY < 0) gestureStartY = window.scrollY;
       targetIdx = -1;
