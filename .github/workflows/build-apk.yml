@@ -69,24 +69,36 @@ jobs:
       - name: 安装 Capacitor 依赖
         run: npm install --no-audit --no-fund
 
-      - name: 同步 Web 产物进安卓工程
-        run: npx cap sync android
-
-      - name: 打出 debug APK
+      # 一次产出两个包，分别对应两种用法：
+      #   离线版 —— 内置演示数据，不需要任何后端、不需要联网（发给任何人都能看）
+      #   连后端版 —— 指向 frontend/.env.capacitor-live 里的局域网地址，
+      #               陪伴对话 / 知识图谱 / 推送这些真功能可用，
+      #               但要求手机与电脑同一个 WiFi、且电脑上 8000/8001 都开着
+      - name: 打「离线版」APK
         run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          cd ../frontend && npm run build:app
+          cd ../mobile-shell && npx cap sync android
+          cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../心理守护-离线版.apk
 
-      - name: 上传 APK
+      - name: 打「连后端版」APK
+        run: |
+          cd ../frontend && npm run build:app:live
+          cd ../mobile-shell && npx cap sync android
+          cd android && ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../心理守护-连后端版.apk
+
+      - name: 上传两个 APK
         uses: actions/upload-artifact@v4
         with:
           name: psych-screen-apk
-          path: mobile-shell/android/app/build/outputs/apk/debug/*.apk
+          path: |
+            mobile-shell/心理守护-离线版.apk
+            mobile-shell/心理守护-连后端版.apk
           if-no-files-found: error
 
       - name: 打 tag 时附到 Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: mobile-shell/android/app/build/outputs/apk/debug/*.apk
+          files: mobile-shell/心理守护-*.apk

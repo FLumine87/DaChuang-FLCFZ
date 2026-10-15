@@ -12,13 +12,20 @@ from .db.database import init_db
 
 app = FastAPI(title=settings.app_name, version="0.2.0")
 
-# 前端 Vite 开发服务器（5173 被占用时 Vite 会自动用 5174/5175…，全部放行）
+# 允许的来源：
+#   · 前端 Vite 开发服务器（5173 被占用时 Vite 会自动用 5174/5175…）
+#   · Capacitor 打包后的 App —— 它的 WebView 页面来源是 https://localhost
+#     （见 mobile-shell/capacitor.config.json 的 server.androidScheme）。
+#     少了这一条，App 里所有走本服务的功能（陪伴对话 / 知识图谱 / 推送）
+#     都会被浏览器按 CORS 拦掉，表现为"未连接到服务端"。
+#     capacitor://localhost 是 iOS 侧的对应约定，一并放行以备将来。
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173", "http://127.0.0.1:5173",
         "http://localhost:5174", "http://127.0.0.1:5174",
         "http://localhost:5175", "http://127.0.0.1:5175",
+        "https://localhost", "capacitor://localhost",
     ],
     allow_credentials=True,
     allow_methods=["*"],
