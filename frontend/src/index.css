@@ -1378,12 +1378,16 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
        不会平白多出留白。
    ========================================================================== */
 .nav-blur {
-  /* 顶栏内容整体下移一个状态栏高度。
-     注意**必须同时改 height**：各页顶栏写的是 h-16（固定 64px）而
-     Tailwind 默认 box-sizing: border-box —— 只加 padding-top 的话
-     padding 会从 64px 里面扣，内容区被压扁、顶栏本身并不会变高。
-     这里用 calc(4rem + 安全区) 把外层撑开，内容区仍是完整的 64px。 */
-  height: calc(4rem + env(safe-area-inset-top, 0px));
+  /* 只下移，**不要动 height**。
+     上一版我在外层加了 height: calc(4rem + 安全区)，把顶栏压出了"胶囊和正文叠在一起"
+     的破版（用户真机截图）。原因是搞错了层级：
+         <header class="nav-blur">        ← 外层，装的是**两行**
+             <div class="… h-16 …">       ← 品牌栏 64px（h-16 在这一层）
+             <div class="nav-chips …">    ← 手机端胶囊栏，约 40px
+         </header>
+     外层自然高度约 104px。写死 64px 等于把两行压成一行高，第二行的胶囊只能溢出，
+     压到下面正文上。这里只保留 padding-top（安全区为 0 时完全不影响布局），
+     高度交回给内容自然撑开。 */
   padding-top: env(safe-area-inset-top, 0px);
 }
 
