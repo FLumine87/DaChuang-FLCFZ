@@ -1364,6 +1364,42 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
    正解是**命名 + 显式取消两端的动画**：老快照直接隐藏、新快照直接显示，
    于是顶栏在转场中是一块稳定的、瞬间切换的导航条 —— 既没有 ghost，
    也没有反复淡入。 */
+/* ==========================================================================
+   安全区（状态栏 / 刘海 / 底部手势条）
+   --------------------------------------------------------------------------
+   问题：APK 里 WebView 默认铺满整屏（含状态栏区域），而项目里此前**一处
+   env(safe-area-inset-*) 都没用过** —— 于是顶栏的「品牌 / 登录 / 主题」被手机的
+   时间、信号、电量盖住（用户真机截图确认）。
+   逐机型适配不现实，正确做法是让系统把"该让开多少"报给 CSS：
+     · frontend/index.html 的 viewport 必须带 viewport-fit=cover，
+       否则 env(safe-area-inset-*) 恒为 0、这条规则等于没写；
+     · 5 个页面的顶栏都带 .nav-blur，一条规则全覆盖；
+     · 只有真机（带刘海/状态栏覆盖）才会给出非零值，桌面浏览器一律 0，
+       不会平白多出留白。
+   ========================================================================== */
+.nav-blur {
+  /* 顶栏内容整体下移一个状态栏高度。
+     注意**必须同时改 height**：各页顶栏写的是 h-16（固定 64px）而
+     Tailwind 默认 box-sizing: border-box —— 只加 padding-top 的话
+     padding 会从 64px 里面扣，内容区被压扁、顶栏本身并不会变高。
+     这里用 calc(4rem + 安全区) 把外层撑开，内容区仍是完整的 64px。 */
+  height: calc(4rem + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* 右下角浮动按钮（返回顶部）：避开底部手势条 / Home 指示条 */
+.fixed.bottom-6.right-6 {
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  right: calc(1.5rem + env(safe-area-inset-right, 0px));
+}
+
+/* 整屏分屏（登录页 / 落地页 / 首次引导，共 5 处 min-h-screen 的页面里都用了
+   .auth-screen）：在竖屏手机上把底部安全区算进去，
+   否则最后一行内容会压在手势条底下。 */
+.auth-screen {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 .nav-blur {
   view-transition-name: app-nav;
 }

@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover 必须加：不加的话 env(safe-area-inset-*) 恒为 0，
+         页面永远不知道自己被状态栏/刘海盖住了。加上之后浏览器（和安卓 WebView）
+         才会把安全区数值报给 CSS。 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#465fff" />
     <script>
       // 首屏渲染前应用主题，避免刷新时闪白。
