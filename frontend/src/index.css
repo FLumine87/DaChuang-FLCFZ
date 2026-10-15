@@ -882,14 +882,15 @@ h3.text-2xl {
 .auth-snap {
   scroll-padding-top: 4rem;
 }
-@media (hover: none) {
-  .auth-snap {
-    scroll-snap-type: y proximity;
-  }
-}
-.auth-snap .auth-screen {
-  scroll-snap-align: start;
-}
+/* 触屏**不再做原生吸附**。
+   这里原来写的是 @media (hover: none) { scroll-snap-type: y proximity } ——
+   触屏上每滑一下都会被"吸"到最近的 .auth-screen 边界，手感就是"拖动一下就回弹"。
+   桌面端本来就靠 JS 做落屏缓动（上面那段注释写了"关掉原生吸附、避免两边抢滚动"），
+   触屏则完全没有接管滚动，纯靠原生吸附 —— 于是只有手机上会弹。
+   用户对比了另一个系统（纯普通滚动）后明确要求：
+   "不要学搞那种拖动一下就回弹的机制了"。
+   去掉之后触屏就是普通滚动，与那个参考系统一致。
+   scroll-snap-align 一并删掉：没有吸附容器时它本来也不起作用。 */
 
 /* 视口较矮（常见笔记本）时收紧章节上下留白，尽量保证一屏装得下。
    2rem 而非 3rem：文案加了要点列表后，"核心技术"屏在 1280×800 下差 8px 装不下，

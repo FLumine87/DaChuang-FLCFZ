@@ -531,10 +531,18 @@ export default function LandingPage() {
         </div>
 
         {/* 移动端章节导航：顶栏在 lg 以下放不下 5 个章节（原来整条 nav 直接 hidden），
-            手机上就完全没法跳屏 —— 只能一路滑到底。这里补一条可横向滑动的胶囊条，
-            常驻在顶栏内随页面吸顶，随时能跳。lg 以上隐藏，桌面端仍用原来的滑动指示条。 */}
+            手机上就完全没法跳屏 —— 只能一路滑到底。这里补一条胶囊条，常驻顶栏内吸顶。
+            lg 以上隐藏，桌面端仍用原来的滑动指示条。
+
+            曾经是 overflow-x-auto 横滑、胶囊 shrink-0 固定宽度：5 个 × 13px 字号
+            在 390px 下需要约 364px，而可用宽度只有 342px（视口减去 px-6 两侧），
+            于是两端被裁掉 —— 用户看到的是"简介"（少了"平台"）和"隐…"，
+            反馈"跳转栏无法展示完全"。
+            现在改成**五等分铺满**：flex-1 + min-w-0 + 居中，任何宽度都完整可见，
+            不再需要横滑，也就没有"拖一下回弹"的横滑手感。
+            字号收到 12px、内边距收到 px-1，保证 360px 窄屏下 4 个汉字也放得下。 */}
         <nav
-          className="nav-chips mx-auto -mb-px flex w-full max-w-[1440px] gap-2 overflow-x-auto pb-2.5 lg:hidden"
+          className="nav-chips mx-auto -mb-px flex w-full max-w-[1440px] gap-1 pb-2.5 lg:hidden"
           aria-label="页面章节"
         >
           {navItems.map((item) => (
@@ -543,7 +551,7 @@ export default function LandingPage() {
               type="button"
               onClick={() => goToSection(item.id)}
               aria-current={active === item.id ? "true" : undefined}
-              className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-200 active:scale-[0.96] ${
+              className={`min-w-0 flex-1 truncate rounded-full px-1 py-1.5 text-center text-[12px] font-medium transition-colors duration-200 active:scale-[0.96] ${
                 active === item.id
                   ? "bg-primary-600 text-white"
                   : "bg-white/70 text-slate-600"
