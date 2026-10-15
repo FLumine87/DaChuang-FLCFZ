@@ -1,0 +1,80 @@
+# 构建安卓 APK（Capacitor 壳 + frontend 的构建产物）
+#
+# 为什么要放在 CI 上编译：本机要出 APK 得装 JDK + Android SDK（2~3 GB），
+# 而 GitHub 的 runner **预装了 Android SDK**，编完直接把 APK 作为产物给你下载。
+# 这样手机端就是"下载一个安装包装上就用"，不需要同 WiFi、不需要联网。
+#
+# 工作方式（也就是 mobile-shell/capacitor.config.json 里的机制）：
+#   1. frontend 用 capacitor 模式构建 → dist-app/
+#      （base 必须是 / 而不是 /DaChuang-FLCFZ/，否则 WebView 里资源 404、白屏）
+#   2. cap sync 把 dist-app/ 拷进 android/app/src/main/assets/public/
+#   3. gradle 打出 APK
+#
+# 触发方式：
+#   · 手动（Actions 页面点 Run workflow）
+#   · 推 tag（v*）时自动出一版 Release 附件
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-shell
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 构建 frontend（capacitor 模式）
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build:app
+
+      - name: 安装 Capacitor 依赖
+        run: npm install --no-audit --no-fund
+
+      - name: 同步 Web 产物进安卓工程
+        run: npx cap sync android
+
+      - name: 打出 debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: psych-screen-apk
+          path: mobile-shell/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: 打 tag 时附到 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: mobile-shell/android/app/build/outputs/apk/debug/*.apk

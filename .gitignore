@@ -118,3 +118,4 @@ tmp/
 
 # 设计稿演示工程的依赖，不入库
 design/home-react/node_modules/
+frontend/dist-app/

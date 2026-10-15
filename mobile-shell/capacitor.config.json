@@ -1,0 +1,19 @@
+{
+  "appId": "com.dachuang.psychscreen",
+  "appName": "心理守护",
+  "webDir": "../frontend/dist-app",
+  "android": {
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "backgroundColor": "#465fff",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    }
+  }
+}

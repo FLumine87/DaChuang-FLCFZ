@@ -9,7 +9,8 @@
     "build": "tsc -b && vite build && node -e \"require('fs').copyFileSync('dist/index.html','dist/404.html')\"",
     "build:single": "tsc -b && vite build --mode demo --config vite.singlefile.config.ts && node scripts/inline-single.mjs && node scripts/make-demo-variants.mjs",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:app": "tsc -b && vite build --mode capacitor --outDir dist-app"
   },
   "dependencies": {
     "axios": "^1.15.1",
