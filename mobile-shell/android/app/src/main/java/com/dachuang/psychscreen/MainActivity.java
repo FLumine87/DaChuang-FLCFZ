@@ -3,27 +3,27 @@ package com.dachuang.psychscreen;
 import android.os.Bundle;
 import android.util.Log;
 
-import com.chaquo.python.PyObject;
-import com.chaquo.python.Python;
-import com.chaquo.python.android.AndroidPlatform;
 import com.getcapacitor.BridgeActivity;
 
+import java.lang.reflect.Method;
+
 /**
- * App 入口：先把主后端在设备本机拉起来，再交给 Capacitor 加载前端。
+ * App 入口。如果这个包带了 Chaquopy（后端跑在手机里），就先把后端起起来。
  *
- * 为什么在 App 里跑后端：
- *   作品的卖点是"跨模态哈希检索"这类真实计算。此前离线版只能返回内置样例，
- *   演示时被问"这是真算的吗"没法回答。把后端（纯 Python + numpy + Pillow）
- *   用 Chaquopy 打进 APK 之后，检索确实在这台手机上跑 —— 且不需要任何服务器。
+ * 为什么全用反射、不直接 import com.chaquo.python.*：
+ *   同一个安卓工程要出三种包 —— 离线版 / 连后端版 / Chaquopy 版。
+ *   Chaquopy 只在 Chaquopy 版启用（Gradle 属性 -Pchaquopy 控制）。
+ *   如果这里直接 import，另外两个包里没有这些类，**编译期就过不去**
+ *   （实测报 "package com.chaquo.python does not exist"）。
+ *   反射让这份代码在三种包里都能编过：带了 Chaquopy 就找到类、正常启动后端；
+ *   没带就 ClassNotFoundException，安静跳过 —— 那两种包本来也不需要本机后端。
  *
- * 为什么要开线程：
- *   run_server 内部是 serve_forever()，会一直阻塞。放在主线程会让 App 直接卡死
- *   （黑屏、ANR），所以丢到后台守护线程。
+ * 为什么开线程：
+ *   后端的 run_server 内部是 serve_forever()，会一直阻塞，放主线程直接 ANR。
  *
  * 为什么先 start 再 super.onCreate：
- *   让服务尽早开始初始化；即使它慢一点，也不影响 WebView 的加载 ——
- *   前端那边的请求在服务没起来之前会失败，但 api 层已经做了本机降级，
- *   页面不会白屏，等服务就绪后刷新即可。
+ *   让它尽早开始初始化；即使慢，也不挡 WebView 加载 ——
+ *   前端的 api 层已有本机降级，服务没起来时页面不会白屏。
  */
 public class MainActivity extends BridgeActivity {
 
@@ -31,33 +31,49 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        startBackend();
+        startBackendIfPresent();
         super.onCreate(savedInstanceState);
     }
 
-    /** 在后台线程拉起本机后端；失败只记日志，不阻断 App 启动。 */
-    private void startBackend() {
+    private void startBackendIfPresent() {
         try {
-            if (!Python.isStarted()) {
-                Python.start(new AndroidPlatform(getApplicationContext()));
+            final Class<?> pythonCls = Class.forName("com.chaquo.python.Python");
+            final Class<?> platformCls = Class.forName("com.chaquo.python.android.AndroidPlatform");
+
+            // Python.start(new AndroidPlatform(context)) —— 只能启动一次
+            Object isStarted = pythonCls.getMethod("isStarted").invoke(null);
+            if (!Boolean.TRUE.equals(isStarted)) {
+                Object platform = platformCls.getConstructor(android.content.Context.class)
+                        .newInstance(getApplicationContext());
+                pythonCls.getMethod("start", platformCls).invoke(null, platform);
             }
-            final Python py = Python.getInstance();
+            final Object py = pythonCls.getMethod("getInstance").invoke(null);
+            final Method getModule = pythonCls.getMethod("getModule", String.class);
+
             new Thread(new Runnable() {
                 @Override
                 public void run() {
                     try {
-                        PyObject mod = py.getModule("start_server");
-                        String smoke = mod.callAttr("smoke").toString();
-                        Log.i(TAG, "后端冒烟: " + smoke);
-                        String r = mod.callAttr("start_background", 8000).toString();
-                        Log.i(TAG, "后端启动: " + r);
+                        Object mod = getModule.invoke(py, "start_server");
+                        Method smoke = mod.getClass().getMethod("callAttr", String.class);
+                        Object smokeOut = smoke.invoke(mod, "smoke");
+                        Log.i(TAG, "后端自检: " + String.valueOf(smokeOut));
+                        Object started = mod.getClass()
+                                .getMethod("callAttr", String.class, Object[].class)
+                                .invoke(mod, "start_background", new Object[]{new Object[]{8000}});
+                        Log.i(TAG, "后端启动: " + String.valueOf(started));
                     } catch (Throwable t) {
-                        Log.e(TAG, "后端启动失败", t);
+                        Log.e(TAG, "后端线程异常", t);
                     }
                 }
             }, "psych-backend").start();
+
+            Log.i(TAG, "检测到 Chaquopy，已请求启动本机后端");
+        } catch (ClassNotFoundException e) {
+            // 正常情况：离线版 / 连后端版没有 Chaquopy
+            Log.i(TAG, "本包未包含 Chaquopy，跳过本机后端");
         } catch (Throwable t) {
-            Log.e(TAG, "Python 初始化失败", t);
+            Log.e(TAG, "启动本机后端失败（不影响 App 使用）", t);
         }
     }
 }
