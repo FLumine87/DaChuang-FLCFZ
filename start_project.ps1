@@ -28,7 +28,9 @@ $portNeoBrowser = 7474
 $neo4jContainer = "personal-kg-neo4j"
 # 首次由本脚本创建容器时使用的本地开发密码（并写入 personal-backend\.env）
 $neo4jPassword  = "personal_dev_pwd"
-$kgMarker       = Join-Path $agentDir ".kg_seeded"
+# 注：不再用 .kg_seeded 文件判断"是否已播种"（2026-10-15）——文件标记不区分
+# 连的是本机 Neo4j 还是 Docker 容器，换库后会误判为已播种导致图谱是空的。
+# 现在改为直接查库里的节点数（见 Test-KgHasData）。
 
 Write-Host "== Mental Screening System : one-click start =="
 if ($SkipAgent) { Write-Host "[mode ] -SkipAgent : 仅启动原后端(:8000)+前端" }
@@ -169,27 +171,26 @@ if (-not $SkipAgent -and $agentPython) {
         $neo4jSource = "external"
         Write-Host "[ok   ] 检测到 :$portNeo4j 已在监听，视为本机 Neo4j（Desktop/独立安装），跳过 Docker"
     } else {
-        # 注意：本脚本 $ErrorActionPreference="Stop"，而 docker 出错时走 stderr，
-        # PS5 下对原生命令做 2>$null 重定向会把 stderr 包装成终止错误。
-        # 统一经此封装调用：合并 stderr、临时放宽 EAP，仅以退出码判定结果。
-        function Invoke-Docker {
-            param([Parameter(ValueFromRemainingArguments = $true)][string[]]$DockerArgs)
-            $prevEap = $ErrorActionPreference
-            $ErrorActionPreference = "Continue"
-            try {
-                & docker @DockerArgs 2>&1 | Out-Null
-                return $LASTEXITCODE
-            } finally {
-                $ErrorActionPreference = $prevEap
-            }
-        }
-
+        # 2026-10-15 修复：docker 调用**不要封装成 PowerShell 函数**。
+        # 有两个坑，都会让"首次建容器"这条分支永远走不通：
+        #   ① 写成 Invoke-Docker run -d -e "..." 时，`-e` 会被当成函数自身的参数名
+        #      参与绑定，PowerShell 发现有多个以 e 开头的通用参数（-ErrorAction /
+        #      -ErrorVariable），抛 AmbiguousParameter 终止错误；
+        #   ② 即便改成数组传参，$LASTEXITCODE 在函数作用域里也会被 docker 写到
+        #      stderr 的告警干扰（实测同样命令直接调用 exit 0、套一层函数就变 1），
+        #      于是守护进程被误判为 down。
+        # 因此这里统一：直接调用原生命令 + 临时放宽 EAP，并用**输出内容**判定结果。
         function Test-DockerDaemon {
             $cli = Get-Command docker -ErrorAction SilentlyContinue
             if (-not $cli) { return "no-cli" }
-            $code = Invoke-Docker info --format "{{.ServerVersion}}"
-            if ($code -eq 0) { return "up" } else { return "down" }
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            # docker info 成功会打印服务端版本号（如 29.8.2），据此判定比退出码可靠
+            $out = (& docker info --format '{{.ServerVersion}}' 2>$null | Out-String).Trim()
+            $ErrorActionPreference = $prevEap
+            if ($out -match '\d+\.\d+') { return "up" } else { return "down" }
         }
+
 
         $dockerState = Test-DockerDaemon
         if ($dockerState -eq "down") {
@@ -217,14 +218,23 @@ if (-not $SkipAgent -and $agentPython) {
             Write-Host "        可先在 Neo4j Desktop 中启动数据库，或手动打开 Docker Desktop 后重跑本脚本"
         } else {
             $neo4jSource = "docker"
-            $exists = (Invoke-Docker container inspect $neo4jContainer) -eq 0
+            # 内联调用原生命令：参数不会参与函数绑定，$LASTEXITCODE 在本作用域也可靠
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            & docker container inspect $neo4jContainer 2>&1 | Out-Null
+            $exists = ($LASTEXITCODE -eq 0)
+            $ErrorActionPreference = $prevEap
 
             if (-not $exists) {
                 Write-Host "[boot ] 首次创建 Neo4j 容器（需拉取 neo4j:5-community 镜像，请耐心等待）..."
-                $runCode = Invoke-Docker run -d --name $neo4jContainer `
+                $prevEap = $ErrorActionPreference
+                $ErrorActionPreference = "Continue"
+                & docker run -d --name $neo4jContainer `
                     -p "${portNeoBrowser}:7474" -p "${portNeo4j}:7687" `
                     -e "NEO4J_AUTH=neo4j/$neo4jPassword" `
-                    neo4j:5-community
+                    neo4j:5-community 2>&1 | Out-Null
+                $runCode = $LASTEXITCODE
+                $ErrorActionPreference = $prevEap
                 if ($runCode -ne 0) {
                     Write-Host "[warn ] Neo4j 容器创建失败，知识图谱功能本次不可用"
                     $neo4jSource = "none"
@@ -239,7 +249,10 @@ if (-not $SkipAgent -and $agentPython) {
                 }
                 if ($running -ne "true") {
                     Write-Host "[boot ] 启动已有 Neo4j 容器 $neo4jContainer ..."
-                    $null = Invoke-Docker start $neo4jContainer
+                    $prevEap = $ErrorActionPreference
+                    $ErrorActionPreference = "Continue"
+                    & docker start $neo4jContainer 2>&1 | Out-Null
+                    $ErrorActionPreference = $prevEap
                 } else {
                     Write-Host "[ok   ] Neo4j 容器已在运行"
                 }
@@ -275,27 +288,104 @@ function Wait-Port {
     return $false
 }
 
+# 从 personal-backend\.env 取 Neo4j 密码（本机 Neo4j Desktop 的密码是用户自己设的，
+# 不一定等于脚本建容器用的 $neo4jPassword，所以以 .env 为准）
+function Get-Neo4jPassword {
+    $envFile = Join-Path $agentDir ".env"
+    if (Test-Path $envFile) {
+        $line = Get-Content $envFile -Encoding UTF8 | Where-Object { $_ -match '^\s*NEO4J_PASSWORD=' } | Select-Object -First 1
+        if ($line) { return ($line -split '=', 2)[1].Trim() }
+    }
+    return $neo4jPassword
+}
+$neo4jPwd = Get-Neo4jPassword
+
+# bolt 端口开了 ≠ 可以认证：容器首次启动内部还要初始化几十秒，
+# 此时启动 agent 会拿到 neo4j_connected=False（2026-10-15 修复）。
+# 这里用真实连接探测，确认能认证再往下走。
+function Wait-Neo4jAuth {
+    param($Tries = 90)
+    $probe = @'
+import sys
+from neo4j import GraphDatabase
+try:
+    d = GraphDatabase.driver("bolt://localhost:" + sys.argv[1], auth=("neo4j", sys.argv[2]))
+    d.verify_connectivity()
+    d.close()
+    print("ok")
+except Exception:
+    pass
+'@
+    $probeFile = Join-Path $env:TEMP "kg_probe_connect.py"
+    [System.IO.File]::WriteAllText($probeFile, $probe, (New-Object System.Text.UTF8Encoding($false)))
+    for ($i = 0; $i -lt $Tries; $i++) {
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $out = (& $agentPython $probeFile "$portNeo4j" $neo4jPwd 2>$null | Out-String).Trim()
+        $ErrorActionPreference = $prevEap
+        if ($out -eq "ok") { return $true }
+        Start-Sleep -Seconds 2
+    }
+    return $false
+}
+
+# 库里有没有数据：直接查节点数，不靠 .kg_seeded 这类文件标记。
+# 这样"本机 Neo4j"和"Docker 容器"是两个独立的库，各自判断该不该播种，
+# 换库（比如删掉容器重建）也不会因为旧标记而漏掉种子导入（2026-10-15）。
+function Test-KgHasData {
+    $probe = @'
+import sys
+from neo4j import GraphDatabase
+try:
+    d = GraphDatabase.driver("bolt://localhost:" + sys.argv[1], auth=("neo4j", sys.argv[2]))
+    with d.session() as s:
+        n = s.run("MATCH (n) RETURN count(n) AS c").single()["c"]
+    d.close()
+    print(int(n))
+except Exception:
+    print(-1)
+'@
+    $probeFile = Join-Path $env:TEMP "kg_probe_count.py"
+    [System.IO.File]::WriteAllText($probeFile, $probe, (New-Object System.Text.UTF8Encoding($false)))
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $out = (& $agentPython $probeFile "$portNeo4j" $neo4jPwd 2>$null | Out-String).Trim()
+    $ErrorActionPreference = $prevEap
+    $count = 0
+    if (-not [int]::TryParse($out, [ref]$count)) { return $false }
+    return ($count -gt 0)
+}
+
 if (-not $SkipAgent -and $agentPython -and $neo4jSource -ne "none" -and -not $agentBusy) {
     $neo4jReady = Wait-Port $portNeo4j "Neo4j bolt" -Tries 180
-    if ($neo4jReady -and -not (Test-Path $kgMarker)) {
-        Write-Host "[setup] 初始化个人 KG 约束 + 导入领域种子（仅首次）..."
-        Push-Location $agentDir
-        try {
-            & $agentPython scripts\init_kg.py
-            $rc1 = $LASTEXITCODE
-            & $agentPython scripts\seed_domain_kg.py
-            $rc2 = $LASTEXITCODE
-            if ($rc1 -eq 0 -and $rc2 -eq 0) {
-                Set-Content -Path $kgMarker -Value "seeded" -Encoding ASCII
-                Write-Host "[ok   ] 知识图谱初始化完成"
+    if ($neo4jReady) {
+        # 端口就绪后再等认证可用，否则 agent 起早了会连不上
+        $authOk = Wait-Neo4jAuth
+        if (-not $authOk) {
+            Write-Host "[warn ] Neo4j 端口已开但认证未就绪（多为 .env 的 NEO4J_PASSWORD 与实际密码不一致）"
+            Write-Host "        已跳过种子导入；请核对 personal-backend\.env 的 NEO4J_PASSWORD"
+        } else {
+            Write-Host "[ok   ] Neo4j 认证可用（来源：$neo4jSource）"
+            if (Test-KgHasData) {
+                Write-Host "[ok   ] 该 Neo4j 库已有数据，跳过种子导入"
             } else {
-                Write-Host "[warn ] KG 初始化脚本返回非 0（多为密码不匹配）；请让 personal-backend\.env 的 NEO4J_PASSWORD 与你在 Neo4j Desktop/容器中设置的密码一致"
+                Write-Host "[setup] 该 Neo4j 库为空，初始化约束 + 导入领域种子 ..."
+                Push-Location $agentDir
+                try {
+                    & $agentPython scripts\init_kg.py
+                    $rc1 = $LASTEXITCODE
+                    & $agentPython scripts\seed_domain_kg.py
+                    $rc2 = $LASTEXITCODE
+                    if ($rc1 -eq 0 -and $rc2 -eq 0) {
+                        Write-Host "[ok   ] 知识图谱初始化完成"
+                    } else {
+                        Write-Host "[warn ] KG 初始化脚本返回非 0（多为密码不匹配）；请让 personal-backend\.env 的 NEO4J_PASSWORD 与你在 Neo4j Desktop/容器中设置的密码一致"
+                    }
+                } finally {
+                    Pop-Location
+                }
             }
-        } finally {
-            Pop-Location
         }
-    } elseif ($neo4jReady -and (Test-Path $kgMarker)) {
-        Write-Host "[ok   ] 知识图谱已初始化过（跳过种子；如换了空库请删除 personal-backend\.kg_seeded 重跑）"
     }
 }
 
