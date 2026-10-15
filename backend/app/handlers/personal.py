@@ -10,7 +10,9 @@ from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
 from app.db import database as db
 from app.services import screening_service, case_service, alert_service
+# 检索结论用规则模板（MockRAGEngine）秒出；RAG 报告走 get_rag_engine（大模型，前端异步取）
 from app.engines import get_rag_engine
+from app.engines.rag.mock_engine import MockRAGEngine
 from app.handlers.retrieval import perform_search, to_frontend_hit
 
 
@@ -605,8 +607,70 @@ async def get_personal_profile(ctx: RequestContext):
     })
 
 
+# 危机线索关键词：命中即判高风险（心理筛查里漏判的代价远高于误判）
+_CRISIS_KEYWORDS = ("自杀", "想死", "不想活", "轻生", "自伤", "伤害自己",
+                    "结束一切", "活着没意思", "活着没什么意思", "结束生命")
+
+
+def _hits_alert_level(raw_results: list, query: str = "") -> str:
+    """按"确有相似的命中"的风险分布给本次检索定级（纯规则，不调大模型）。
+
+    三道过滤，避免误判与语料偏斜：
+      1. 查询含危机线索 → 直接高风险（安全兜底，不等检索结果）；
+      2. 相似度低于 0.70 的命中不算"相似"，不参与定级；
+      3. 一条记录含 text/image/audio 多个单元，按 record_id 去重后统计，
+         否则同一条高风险记录会被重复计数成"多条证据"。
+    规则（预警要谨慎，高风险需多条证据）：
+      red 或 orange≥2 → 高；orange 单条或 yellow≥2 → 中；其余 → 低。
+    """
+    if any(kw in query for kw in _CRISIS_KEYWORDS):
+        return "red"
+
+    counts = {"red": 0, "orange": 0, "yellow": 0}
+    seen: set[str] = set()
+    for r in raw_results:
+        try:
+            sim = float(r.get("similarity") or r.get("score") or 0)
+        except (TypeError, ValueError):
+            sim = 0.0
+        if sim < 0.70:
+            continue
+        rid = str(r.get("record_id") or r.get("recordId") or r.get("id") or "")
+        if rid:
+            if rid in seen:
+                continue
+            seen.add(rid)
+        level = str(r.get("alert_level") or r.get("alertLevel") or "green").lower()
+        if level in counts:
+            counts[level] += 1
+    if counts["red"] or counts["orange"] >= 2:
+        return "red"
+    if counts["orange"] or counts["yellow"] >= 2:
+        return "yellow"
+    return "green"
+
+
+async def _search_report(raw_results: list, query: str = "") -> dict:
+    """检索结论：规则模板生成，不经过大模型（2026-10-14）。
+
+    原先这里跟着检索同步调 RAG 引擎出报告，真实大模型下要 20-30 秒，
+    必然撞上前端 15 秒超时、页面直接报"检索失败"。检索页要的是快，
+    结论按命中风险分布用内置模板生成即可；需要大模型深度研判的场景
+    走 /api/retrieval/report/{screening_id}（显式触发，可容忍长耗时）。
+    """
+    engine = MockRAGEngine()
+    report = await engine.generate_report({
+        "id": 0, "name": "本次检索", "questionnaire": "跨模态检索",
+        "score": 0, "max_score": 100,
+        "alert_level": _hits_alert_level(raw_results, query),
+    })
+    if isinstance(report, dict):
+        report["mock"] = True
+    return report
+
+
 async def personal_search(ctx: RequestContext):
-    """个人端检索：文本 / 图像 / 语音线索均可作为查询，返回结果 + RAG 报告。
+    """个人端检索：文本 / 图像 / 语音线索均可作为查询，返回结果 + 检索结论。
 
     查询模态由请求体的 `modality` 决定；图像/语音查询额外携带
     `media_base64`（+ `media_name`），由 perform_search 统一落盘与清理。
@@ -618,11 +682,7 @@ async def personal_search(ctx: RequestContext):
     results = [to_frontend_hit(r) for r in raw_results
                if not str(r.get("record_id") or r.get("id") or "").lower().startswith(private_prefixes)]
 
-    rag_engine = get_rag_engine()
-    report = await rag_engine.generate_report({
-        "id": 0, "name": "检索报告", "questionnaire": "综合",
-        "score": 0, "max_score": 100, "alert_level": "green",
-    })
+    report = await _search_report(raw_results, data.get("query") or "")
     if isinstance(report, dict) and "risk_level" in report:
         report["riskLevel"] = report.pop("risk_level")
 
@@ -630,3 +690,69 @@ async def personal_search(ctx: RequestContext):
         "results": results, "report": report, "query": data.get("query"),
         "modality": modality, "modality_filter": mf, "index": info,
     })
+
+
+def _hits_context(hits: list, top_n: int = 5) -> str:
+    """把检索命中拼成给大模型的 RAG 上下文（这正是"检索增强"的增强部分）。
+
+    前端传来的命中是 camelCase（recordId / alertLevel），按记录去重后
+    取相似度最高的前 top_n 条，每条附上风险等级与摘要。
+    """
+    seen: dict[str, tuple[float, dict]] = {}
+    for h in hits:
+        if not isinstance(h, dict):
+            continue
+        rid = str(h.get("recordId") or h.get("record_id") or h.get("id") or "")
+        if not rid or rid in seen:
+            continue
+        try:
+            sim = float(h.get("similarity") or h.get("score") or 0)
+        except (TypeError, ValueError):
+            sim = 0.0
+        seen[rid] = (sim, h)
+    top = sorted(seen.items(), key=lambda kv: kv[1][0], reverse=True)[:top_n]
+    lines = []
+    for rid, (sim, h) in top:
+        level = str(h.get("alertLevel") or h.get("alert_level") or "green")
+        level_name = {"green": "稳定", "yellow": "关注", "orange": "警告", "red": "高危"}.get(level, level)
+        desc = str(h.get("summary") or h.get("text") or h.get("explain") or "").strip()[:100]
+        lines.append(f"- 案例 {rid}（哈希相似度 {sim:.2f}，风险等级：{level_name}）{('：' + desc) if desc else ''}")
+    return "\n".join(lines) if lines else "（本次检索没有返回命中详情）"
+
+
+async def personal_rag_report(ctx: RequestContext):
+    """检索页的 RAG 深度报告：大模型结合知识库与检索命中生成（约 20~30 秒）。
+
+    与检索接口分离（2026-10-14 产品口径）：检索结果必须秒出（哈希检索的优势），
+    由前端先渲染结果、在报告区显示"大模型思考中"，再单独请求本接口；
+    大模型回来后替换展示。无 Key 或调用失败时引擎自动降级规则模板，
+    mock 标记如实返回，前端兜底显示规则分析并标注来源。
+    """
+    data = ctx.body or {}
+    query = str(data.get("query") or "")
+    hits = data.get("hits") or []
+
+    rag_engine = get_rag_engine()
+    await rag_engine.initialize()
+
+    screening_data = {
+        "id": 0,
+        "name": (query or "本次检索")[:40],
+        "questionnaire": "跨模态检索",
+        "score": 0,
+        "max_score": 100,
+        "alert_level": _hits_alert_level(hits, query),
+        # RAG 的"增强"部分：哈希检索命中的相似案例摘要
+        "retrieval_context": _hits_context(hits),
+        "hit_count": len(hits),
+    }
+
+    report = await rag_engine.generate_report(screening_data)
+    if isinstance(report, dict) and "risk_level" in report:
+        report["riskLevel"] = report.pop("risk_level")
+    # 来源取报告自身的标记（引擎如实写：真大模型 mock=False，降级 mock=True）。
+    # 不能再用"配置文件里有没有 Key"来判断——Key 存在不代表这次调用成功（2026-10-15）。
+    mock = bool((report or {}).get("mock", True))
+    if isinstance(report, dict):
+        report["mock"] = mock
+    return success_response(data={"report": report, "mock": mock})

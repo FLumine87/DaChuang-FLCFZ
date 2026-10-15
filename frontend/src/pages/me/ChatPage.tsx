@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Send, Sparkles, RefreshCw, AlertTriangle, MessageCircleHeart, HardDrive } from 'lucide-react';
-import { api, type ExtractResult, type InferenceRunResult, type CheckinMessage } from '../../services/api';
+import { api, type ChatTurn, type ExtractResult, type InferenceRunResult, type CheckinMessage } from '../../services/api';
 import { getCurrentSession } from '../../auth/session';
 import { briefErrorMessage } from '../../services/http';
 import {
@@ -19,6 +19,8 @@ interface ChatMessage {
   extract?: ExtractResult;
   /** 这条回应是本机规则给的（后端不可达），界面上标注「离线模式」 */
   offline?: boolean;
+  /** 对话服务端处于演示模式（未配 LLM 或 Mock），回复来自本机文案 */
+  replyMock?: boolean;
 }
 
 const WELCOME = '你好，我是你的 AI 心理陪伴助手。和我聊聊最近的状态、喜欢的事或烦恼吧——我会把关键信息整理进你的个人知识图谱，并在需要时为你生成状态报告。';
@@ -49,7 +51,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, busy]); // busy 也要滚：思考占位出现时把气泡滚进视口
 
   const send = async () => {
     const text = input.trim();
@@ -59,42 +61,102 @@ export default function ChatPage() {
     setBusy(true);
 
     const userMsg: ChatMessage = { id: Date.now(), role: 'user', text };
-    setMessages((prev) => [...prev, userMsg]);
+    /* 历史取"当前列表"的最近 6 轮（此时还没把本轮 user 消息放进去），
+       供后端 LLM 保持上下文；离线兜底消息不进历史，避免污染语境。 */
+    const history: ChatTurn[] = messages
+      .filter((m) => !m.offline)
+      .slice(-6)
+      .map((m) => ({ role: m.role, text: m.text }));
 
-    const reply = FALLBACK_REPLIES[Math.floor(Math.random() * FALLBACK_REPLIES.length)];
-    try {
-      const extract = await api.extract(userId, text);
-      if (extract.triples?.length) {
-        setLocalCount(appendLocalTriples(userId, extract.triples).triples.length);
+    /* 先把 user 消息插进去，再插一条**空的** assistant 消息占位。
+       大模型改成流式返回后，增量文本会逐段追加到这条占位上 —— 用户几秒内
+       就能看到开头，不必干等整段生成完（2026-10-15）。 */
+    const replyId = Date.now() + 1;
+    setMessages((prev) => [
+      ...prev,
+      userMsg,
+      { id: replyId, role: 'assistant', text: '' },
+    ]);
+
+    /* 抽取独立跑，不参与回复的等待：三元组进图谱属于后台增强，
+       不该让用户为此多等一轮大模型的时间。 */
+    void (async () => {
+      try {
+        const data = await api.extract(userId, text);
+        if (data.triples?.length) {
+          setLocalCount(appendLocalTriples(userId, data.triples).triples.length);
+        }
+        setMockServer(Boolean(data.mock));
+        // 抽取结果补到这条回复上（界面显示"已抽取 N 条..."），
+        // 因为抽取是后台跑的，到达时间通常晚于回复文本
+        setMessages((prev) =>
+          prev.map((m) => (m.id === replyId ? { ...m, extract: data } : m)),
+        );
+      } catch {
+        const triples = triplesFromText(text);
+        if (triples.length) setLocalCount(appendLocalTriples(userId, triples).triples.length);
       }
-      setMockServer(Boolean(extract.mock));
-      setMessages((prev) => [
-        ...prev,
-        { id: Date.now() + 1, role: 'assistant', text: reply, extract },
-      ]);
-    } catch (e) {
-      /* 后端不可达也要能聊：用本机关键词规则整理这条消息，回应照给，并标注离线。
-         抽取到的三元组同样写进 localStorage（图谱页会把它画出来）。 */
-      const triples = triplesFromText(text);
-      if (triples.length) setLocalCount(appendLocalTriples(userId, triples).triples.length);
-      setError(briefErrorMessage(e, '未连接到服务端'));
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          role: 'assistant',
-          text: `${reply}\n（离线模式：本条由本机规则整理，暂未连到服务端）`,
-          offline: true,
-        },
-      ]);
-    } finally {
-      setBusy(false);
+    })();
+
+    let acc = '';
+    let offline = false;
+    let replyMock = true;
+    let streamBroken = false;
+    try {
+      for await (const chunk of api.streamChatCompanion(userId, text, history)) {
+        if (chunk?.error) {
+          // 上游流中断：不再把半截话当完整回复，转非流式重新生成
+          streamBroken = true;
+          break;
+        }
+        const delta = chunk?.delta;
+        if (!delta) continue;
+        acc += delta;
+        const text = acc.trimStart();
+        setMessages((prev) =>
+          prev.map((m) => (m.id === replyId ? { ...m, text } : m)),
+        );
+      }
+    } catch {
+      streamBroken = true;
     }
+
+    if (streamBroken && !offline) {
+      /* 流式中断：自动改走非流式接口重新生成一份完整回复替换半截文本 */
+      try {
+        const full = await api.chatCompanion(userId, text, history);
+        if (full.reply) {
+          acc = full.reply;
+          replyMock = Boolean(full.mock);
+          setMessages((prev) =>
+            prev.map((m) => (m.id === replyId ? { ...m, text: acc, replyMock } : m)),
+          );
+        } else {
+          replyMock = true;
+        }
+      } catch {
+        replyMock = true;
+      }
+    }
+
+    if (!acc.trim()) {
+      /* 大模型完全不可用（Mock / 断流且重试失败）→ 本地兜底文案 */
+      const fallback = FALLBACK_REPLIES[Math.floor(Math.random() * FALLBACK_REPLIES.length)];
+      acc = `${fallback}\n（离线模式：本条由本机规则整理，暂未连到服务端）`;
+      offline = true;
+      replyMock = true;
+      setError(briefErrorMessage('未连接到服务端', '未连接到服务端'));
+      setMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, text: acc } : m)));
+    }
+
+    setBusy(false);
   };
 
   return (
-    <div className="flex flex-col h-full max-w-3xl mx-auto">
-      <div className="ui-card p-4 flex items-center justify-between">
+    /* chat-fullheight：配合 index.css 的 :has 规则把高度链打通到视口，
+       消息少时输入框也贴在底部（主流对话软件的布局） */
+    <div className="chat-fullheight flex flex-col flex-1 min-h-0 w-full max-w-3xl mx-auto">
+      <div className="ui-card p-4 flex items-center justify-between shrink-0">
         <div>
           <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-primary-600" /> AI 心理陪伴对话
@@ -125,7 +187,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto mt-4 space-y-4 pr-1">
+      <div className="flex-1 min-h-0 overflow-y-auto mt-4 space-y-4 pr-1 app-scrollbar">
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
@@ -135,10 +197,28 @@ export default function ChatPage() {
                   : 'ui-card text-slate-700 rounded-bl-sm'
               }`}
             >
-              <p className="whitespace-pre-wrap">{m.text}</p>
+              {/* 流式占位：回复气泡还没拿到第一个字时，就地显示思考动画；
+                  有内容后同一气泡直接显示文本，不再有第二个"正在思考中" */}
+              {m.text ? (
+                <p className="whitespace-pre-wrap">{m.text}</p>
+              ) : (
+                <span className="inline-flex items-center gap-2 text-slate-500">
+                  正在思考中
+                  <span className="inline-flex gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:150ms]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:300ms]" />
+                  </span>
+                </span>
+              )}
               {m.offline && (
                 <span className="mt-2 inline-block rounded-full bg-warning-50 px-2 py-0.5 text-[11px] text-warning-600">
                   离线模式
+                </span>
+              )}
+              {m.replyMock && !m.offline && (
+                <span className="mt-2 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+                  本机文案 · 未走大模型
                 </span>
               )}
               {m.extract && m.extract.triples.length > 0 && (
@@ -166,7 +246,7 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex gap-2 shrink-0 pt-1">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}

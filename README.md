@@ -20,16 +20,29 @@
 - 筛查结果分析
 
 ### 多模态数据采集
-- 文本采集（结构化问卷 + 开放式文本）
+- 文本采集（结构化问卷 + 开放式文本日记）
 - 语音采集（录音上传，用于情感分析）
 - 图像采集（绘画测试图片上传）
+- 采集后即时出检索报告，达到预警线自动挂载到相应页面
 - 数据预览与确认
+
+### AI 陪伴对话与个人知识图谱
+- 陪伴对话由大模型生成：拼接人设、个人知识图谱上下文与最近对话历史后调用 OpenAI 兼容接口
+- 对话内容抽取为知识图谱三元组，写入个人图谱（Neo4j），图谱随记录生长
+- 未配置 Key 或后端不可达时自动回退本地文案，界面如实标注「本机文案 · 未走大模型」
+- 配套能力：今日关怀问询、心理状况推理报告、个性化内容推送
 
 ### 跨模态哈希检索与RAG分析
 - 跨模态相似案例检索（基于哈希编码的快速匹配）：文本 / 图像 / 语音三种查询都可以发起
 - 检索结果展示（相似度、模态来源、跨模态标识、内联媒体缩略图、哈希过程信息）
-- RAG智能分析报告生成
-- 分析报告结构化展示
+- 检索结论：按命中的风险分布用规则生成，实测 0.4 ~ 0.7 秒返回
+- 大模型深度研判报告（RAG）：独立接口按需生成，结构化展示
+
+> **检索与大模型是分开的两条路，别混为一谈**：
+> 检索页要的是快，结论由规则模板按命中分布生成（相似度门槛、按记录去重、危机线索兜底），
+> 不调用大模型，所以配不配 Key 都一样快；需要大模型深度研判时走
+> `GET /api/retrieval/report/{screening_id}` 显式触发，单次 20 ~ 30 秒。
+> 界面上会如实标注结论来源，不会把规则输出说成模型输出。
 
 ## 动态跨模态哈希检索（真实数据集）
 
@@ -124,6 +137,12 @@ python scripts/eval_retrieval.py   # 评测：mAP / 跨模态类别一致率 / �
 - 案例时间线展示
 - 案例标签分类
 
+### 智能研判台（管理端）
+- 待处置预警队列，选中一条进入研判
+- 结论先行：当前研判对象、风险等级、建议动作与时间要求
+- 研判依据：相似历史案例（跨模态哈希检索，可点开看原文）、群体共现主题分布
+- 处置与留痕：处置动作、协作记录全程可追溯
+
 ## 技术架构
 
 ### 前端技术栈
@@ -138,15 +157,17 @@ python scripts/eval_retrieval.py   # 评测：mAP / 跨模态类别一致率 / �
 | Lucide React | - | 图标库 |
 
 ### 后端技术栈
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Python | 3.11+ | 编程语言 |
-| FastAPI | 0.115.x | Web框架 |
-| SQLAlchemy | 2.0.x | ORM框架 |
-| Alembic | 1.14.x | 数据库迁移 |
-| Pydantic | 2.10.x | 数据验证 |
-| SQLite | - | 默认数据库 |
-| Uvicorn | 0.32.x | ASGI服务器 |
+
+项目有两个后端服务，职责不同：
+
+**主后端 `backend/`**：筛查、检索、预警、案例、上传。Python 标准库 HTTP 服务，不依赖 Web 框架；
+本地用 SQLite，线上跑 Cloudflare Workers + D1（同一套代码，双模式数据访问层）。
+表结构变更由启动时自动补齐 + `backend/worker/seed/*.sql` 完成，不使用 Alembic。
+
+**个人端 Agent 服务 `personal-backend/`**：陪伴对话、个人知识图谱、推理报告。
+FastAPI + Uvicorn，图谱存 Neo4j，大模型走 OpenAI 兼容接口。
+
+两个服务共同依赖 Python 3.11+、Pydantic 数据校验、numpy + Pillow 多模态特征。
 
 ### 核心引擎
 - **动态跨模态哈希检索引擎**: CMFH（协同矩阵分解哈希）+ 「时间窗 × 位带」多哈希表，已落地
@@ -170,11 +191,16 @@ DaChuang-FLCFZ/
 │   │   ├── services/          # 业务服务
 │   │   ├── config.py          # 配置文件
 │   │   └── main.py            # 应用入口
-│   ├── alembic/               # 数据库迁移
 │   ├── uploads/               # 上传文件存储
+│   ├── scripts/               # 语料构建、检索演示、评测脚本
+│   ├── worker/                # Cloudflare Worker 部署代码与 seed 迁移
 │   ├── requirements.txt       # Python依赖
 │   ├── Dockerfile             # 后端Docker配置
 │   └── .env.example           # 环境变量示例
+├── personal-backend/           # 个人端 Agent 服务（FastAPI + Neo4j + LLM）
+│   ├── app/api/v1/           # 对话 / 图谱 / 推理 / 问询 / 预警
+│   ├── app/services/         # LLM 客户端、知识图谱、推理与推荐 Agent
+│   └── scripts/              # 知识图谱初始化与领域种子导入
 ├── frontend/                   # 前端代码
 │   ├── src/
 │   │   ├── components/        # 公共组件
@@ -190,6 +216,11 @@ DaChuang-FLCFZ/
 ├── docs/                       # 文档
 │   ├── PRD.md                 # 产品需求文档
 │   └── API.md                 # API接口文档
+├── 启动项目.bat                # 一键启动三个服务（Windows 双击）
+├── 配置大模型API.bat           # 一键配置大模型 API（Windows 双击）
+├── start_project.ps1           # 一键启动脚本本体
+├── stop_project.ps1            # 停止服务
+├── configure_api.ps1           # API 配置脚本本体
 ├── docker-compose.yml          # Docker Compose配置
 └── README.md                   # 项目说明
 ```
@@ -203,28 +234,59 @@ DaChuang-FLCFZ/
 
 ### 本地开发
 
-#### 后端启动
-```bash
-cd backend
+#### 一键启动（推荐）
 
-# Windows
-start.bat
+Windows 下双击根目录的 `启动项目.bat`，或运行：
 
-# Linux/macOS
-chmod +x start.sh
-./start.sh
+```powershell
+.\start_project.ps1            # 起全部服务并打开浏览器
+.\start_project.ps1 -NoBrowser # 只起服务
+.\start_project.ps1 -SkipAgent # 只起主后端 + 前端
 ```
 
-后端服务将在 `http://localhost:8000` 启动，API文档地址：`http://localhost:8000/docs`
+脚本会依次：补齐 Python 环境与 numpy/pillow、创建 personal-backend 的 venv 与 `.env`、
+判断 Neo4j 来源（本机已在跑就用本机的，否则尝试 Docker）、首次灌知识图谱种子、
+启动三个服务并逐端口等待就绪、最后打开浏览器。已占用的端口会跳过，不会重复启动。
 
-#### 前端启动
+启动后：
+
+| 服务 | 地址 |
+|------|------|
+| 前端 | http://localhost:5173 |
+| 主后端 | http://localhost:8000 |
+| 个人端 Agent | http://localhost:8001 |
+| Neo4j 浏览器 | http://localhost:7474 |
+
+停止：`.\stop_project.ps1`，或直接关掉对应的最小化控制台窗口。
+
+#### 手动启动
+
 ```bash
+# 主后端
+cd backend
+start.bat            # Windows
+./start.sh           # Linux/macOS，先 chmod +x
+
+# 个人端 Agent（可选，陪伴对话与知识图谱需要）
+cd personal-backend
+uvicorn app.main:app --port 8001
+
+# 前端
 cd frontend
 npm install
 npm run dev
 ```
 
-前端服务将在 `http://localhost:5173` 启动
+### 配置大模型 API（可选，一步搞定）
+
+项目里所有需要大模型的功能（RAG 报告生成、AI 陪伴对话、推荐语、日常问询等）共用**同一个 OpenAI 兼容接口**。
+下载项目后双击 `配置大模型API.bat`（或运行 `.\configure_api.ps1`），按提示粘贴一个 Key 即可；
+内置 DeepSeek / 通义千问 / 智谱 GLM / OpenAI 预设，也支持任意 OpenAI 兼容接口：
+
+- Key 只会写入 `backend/.env` 与 `personal-backend/.env`，两个文件均已被 `.gitignore` 忽略，
+  **不会上传到 GitHub**（脚本写入前会自动校验这一点）
+- 不配置也能完整跑通：相关功能自动降级为内置 Mock（离线演示模式）
+- 换 Key / 换服务商：重跑脚本即可；一键还原离线模式：`.\configure_api.ps1 -RestoreOffline`
 
 ### Docker部署
 ```bash
@@ -235,11 +297,9 @@ docker-compose up -d
 
 ## API文档
 
-启动后端服务后，可通过以下地址访问API文档：
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-详细的API接口说明请参考 [API.md](./docs/API.md)
+接口说明见 [API.md](./docs/API.md)。主后端是标准库 HTTP 服务，不带 Swagger 页面，
+健康检查可直接访问 `http://localhost:8000/health`；个人端 Agent 服务自带
+FastAPI 交互式文档：http://localhost:8001/docs 。
 
 ## 配置说明
 
@@ -319,15 +379,16 @@ npm run build
 npm run preview
 ```
 
-### 数据库迁移
+### 数据库结构变更
+
+本地 SQLite 库在启动时自动补齐缺失的表与列（`backend/app/db/database.py` 的迁移守卫），
+改表结构通常不需要手工操作。
+
+线上 D1 需要在 `backend/worker/` 下新增 `seed/` 里的迁移 SQL 并执行：
+
 ```bash
-cd backend
-
-# 生成迁移文件
-alembic revision --autogenerate -m "description"
-
-# 执行迁移
-alembic upgrade head
+cd backend/worker
+npx wrangler d1 execute mental-screening-db --remote --file=seed/00X_xxx.sql
 ```
 
 ## 许可证

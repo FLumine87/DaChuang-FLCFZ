@@ -620,10 +620,6 @@ export default function LandingPage() {
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1.5 text-[13px] font-medium text-primary-600">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary-500" />
-                心理筛查与健康管理平台
-              </span>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-500">
                 国家级大创立项 · 2026-06
               </span>

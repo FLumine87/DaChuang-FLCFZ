@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Search, Sparkles, Loader2 } from 'lucide-react';
+import { Search, Sparkles, Loader2, Camera } from 'lucide-react';
 import { adminSearch } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
+import CameraCapture from '../../components/CameraCapture';
 import type { RetrievalResult } from '../data/adminMockData';
 import { corpusRecords } from '../../data/corpusRecords';
 
@@ -26,6 +27,8 @@ export default function AdminRetrieval() {
   const [modality, setModality] = useState<'text' | 'image' | 'audio'>('text');
   const [media, setMedia] = useState<{ name: string; base64: string } | null>(null);
   const [mediaError, setMediaError] = useState('');
+  /** 现场拍照（摄像头）：拍完与文件选择走同一条 pickMedia 链路 */
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   /** 选择图像 / 语音文件：读成 base64（去掉 dataURL 前缀）后随查询提交 */
   const pickMedia = (kind: 'image' | 'audio', file: File | null) => {
@@ -111,6 +114,19 @@ export default function AdminRetrieval() {
           </button>
           <button
             type="button"
+            onClick={() => setCameraOpen(true)}
+            title="现场拍照作为图像查询线索"
+            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-sm transition-colors inline-flex items-center gap-1.5 ${
+              modality === 'image'
+                ? 'border-primary-500 bg-primary-50 text-primary-600'
+                : 'border-slate-200 text-slate-600 hover:border-primary-300'
+            }`}
+          >
+            <Camera className="h-4 w-4" />
+            拍照查询
+          </button>
+          <button
+            type="button"
             onClick={() => document.getElementById('admin-media-audio')?.click()}
             className={`cursor-pointer rounded-lg border px-3 py-2.5 text-sm transition-colors ${
               modality === 'audio'
@@ -189,8 +205,8 @@ export default function AdminRetrieval() {
                     />
                   </div>
                   <span className="text-xs font-medium text-primary-600">{(result.similarity * 100).toFixed(0)}%</span>
-                </div>
-              </div>
+          </div>
+        </div>
             ))}
           </div>
 
@@ -272,6 +288,13 @@ export default function AdminRetrieval() {
           )}
         </div>
       )}
+
+      {/* 现场拍照：拍完与"图像查询"走同一条 pickMedia 链路 */}
+      <CameraCapture
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={(file) => pickMedia('image', file)}
+      />
     </div>
   );
 }

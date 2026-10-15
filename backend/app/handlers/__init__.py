@@ -33,6 +33,9 @@ ROUTES = [
     ("PUT", "/api/personal/warnings/{alert_id}", personal.update_personal_warning, "user"),
     ("GET", "/api/personal/profile", personal.get_personal_profile, "user"),
     ("POST", "/api/personal/search", personal.personal_search, "user"),
+    # RAG 深度报告（大模型，20~30s）：与检索接口分离，前端先渲染检索结果、
+    # 报告区显示"大模型思考中"，再异步请求本接口
+    ("POST", "/api/personal/rag-report", personal.personal_rag_report, "user"),
 
     # ---- 管理端 ----
     ("GET", "/api/admin/test", admin.test_admin, "admin"),
