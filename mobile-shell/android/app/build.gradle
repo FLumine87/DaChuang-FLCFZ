@@ -1,14 +1,10 @@
 apply plugin: 'com.android.application'
-apply plugin: 'com.chaquo.python'
 
 android {
     namespace "com.dachuang.psychscreen"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.dachuang.psychscreen"
-        ndk {
-            abiFilters "arm64-v8a", "x86_64"
-        }
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         /* versionCode 必须**大于**团队已发布的 mobile-v1.0.2（那个是 3）。
@@ -60,29 +56,4 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
-}
-
-/* Chaquopy：Python 运行时配置。
-   · version 用 3.11 —— 与后端 requirements 里的依赖版本兼容；
-   · pip 里装的是"后端真正需要的包"，不装多余的，控制 APK 体积；
-   · abiFilters 只出 arm64-v8a + x86_64：
-       真机（手机）都是 arm64，x86_64 给模拟器；
-       去掉 armeabi-v7a 能省掉近一半的 .so 体积。 */
-python {
-    version "3.11"
-    pip {
-        install "fastapi==0.115.0"
-        install "uvicorn==0.32.0"
-        install "sqlalchemy==2.0.36"
-        install "pydantic==2.10.0"
-        install "pydantic-settings==2.6.1"
-        install "python-multipart==0.0.18"
-        install "python-jose[cryptography]==3.3.0"
-        install "passlib==1.7.4"
-        install "bcrypt==4.0.1"
-        install "python-dotenv==1.0.1"
-        install "email-validator==2.1.0.post1"
-        install "numpy"
-        install "pillow"
-    }
 }
