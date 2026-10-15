@@ -1,5 +1,6 @@
 ext {
-    minSdkVersion = 23
+    /* Chaquopy 17 要求 minSdk ≥ 24（原来是 23，构建会被拒） */
+    minSdkVersion = 24
     compileSdkVersion = 35
     targetSdkVersion = 35
     androidxActivityVersion = '1.9.2'

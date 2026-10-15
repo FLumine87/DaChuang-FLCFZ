@@ -60,8 +60,12 @@ try {
 }
 
 /* Chaquopy：把 Python 运行时打进 APK。
-   第一步只验证工具链 —— 先不装任何第三方包，只确认 python{} 能被识别、
-   能编出一个带 Python 的 APK。确认之后再往里加 fastapi/uvicorn/numpy 等。 */
-python {
-    version "3.11"
+   注意块名是 chaquopy，不是 python —— python 是 Chaquopy 14 之前的废弃 DSL，
+   15 起被移除。用旧名字的表现是：apply plugin 不报错，但块找不到方法：
+     Could not find method python() ... on project ':app'  （实测踩过两次）
+   第一步只验证工具链，先不装第三方包。 */
+chaquopy {
+    defaultConfig {
+        version = "3.11"
+    }
 }
