@@ -2138,3 +2138,37 @@ html:not(.app-booted) .page-enter {
 @media (prefers-reduced-motion: reduce) {
   .hero-stagger > * { animation: none; }
 }
+
+/* ==========================================================================
+   下拉提醒（ScrollHint）—— 仅手机端
+   --------------------------------------------------------------------------
+   手机屏幕短，登录页 / 首次引导 / 量表填写这类页面一屏装不下，
+   而用户看不出"下面还有内容"，容易以为页面就这些。
+   这个胶囊在底部提示，滚到底自动消失。
+   ========================================================================== */
+.scroll-hint-pill {
+  /* 轻微的上下浮动：1.6s 一次、幅度 3px —— 是"提示"不是"闪烁" */
+  animation: scroll-hint-bob 1.6s ease-in-out infinite;
+}
+
+@keyframes scroll-hint-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(3px); }
+}
+
+/* 箭头稍微快半拍，和胶囊错开，看起来像"往下带一下" */
+.scroll-hint-arrow {
+  animation: scroll-hint-arrow 1.6s ease-in-out infinite;
+}
+
+@keyframes scroll-hint-arrow {
+  0%, 100% { transform: translateY(-1px); opacity: 0.75; }
+  50%      { transform: translateY(1px);  opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-hint-pill,
+  .scroll-hint-arrow {
+    animation: none !important;
+  }
+}

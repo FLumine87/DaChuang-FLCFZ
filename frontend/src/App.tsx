@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense, type ReactElement } from 'react';
 import Layout from './components/Layout';
+import ScrollToTop from './components/ScrollToTop';
+import ScrollHint from './components/ScrollHint';
 import Dashboard from './pages/Dashboard';
 import DashboardV2 from './pages/DashboardV2';
 import Screening from './pages/Screening';
@@ -63,6 +65,12 @@ function RouteFallback() {
 export default function App() {
   return (
     <Suspense fallback={<RouteFallback />}>
+    {/* 路由切换即滚回顶部：单页应用不会自动复位滚动位置，
+        否则从翻到中间的页面点进登录/首次引导/量表页，会停在上一页的高度上。
+        放在 Suspense 内、Routes 之前，保证每次路径变化都执行。 */}
+    <ScrollToTop />
+    {/* 「下面还有内容」的底部提醒，仅手机端显示；滚到底自动消失 */}
+    <ScrollHint />
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
