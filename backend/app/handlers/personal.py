@@ -31,9 +31,53 @@ def _warning_dict(a: dict) -> dict:
     }
 
 
+async def _build_user_profile(ctx, user_id: int, screenings: list) -> dict:
+    """组装个人资料（首页「我的档案」与「我的个案」页共用）。
+
+    为什么抽成一个函数
+    ----------------
+    get_personal_dashboard 与 get_personal_profile 原先各写了一份 user_profile，
+    两份都把 campus / major / stage / emergencyContact 写死成空串，
+    于是首页与个案页的资料区都是空的。两处重复必然再次不同步，故统一到这里。
+
+    取值规则（不改表结构，兼容既有库）：
+      · name / gender / age   —— 优先 users 表，其次最近一次筛查记录
+      · campus / major        —— users.department
+      · stage（年级）          —— 从 department 里解析，约定写成
+                                 "外国语学院 大三" → campus="外国语学院"、stage="大三"
+      · emergencyContact      —— users.phone（留空时前端显示「未填写」）
+    """
+    import re
+
+    user = await db.query_one_a(
+        "SELECT name, department, phone, email FROM users WHERE id = ?", (user_id,))
+    first_scr = screenings[0] if screenings else {}
+
+    dep = (first_scr.get("department") or (user["department"] if user else "") or "").strip()
+    m = re.match(r"^(.*?)[\s·／/]*((?:大[一二三四五]|研[一二三]|博[一二三四]))$", dep)
+    campus, stage = (m.group(1).strip(), m.group(2)) if m else (dep, "")
+
+    profile = {
+        "name": (user["name"] if user else "") or "用户",
+        "age": first_scr.get("age") or 0,
+        "gender": first_scr.get("gender") or "",
+        "campus": campus,
+        "major": campus,
+        "stage": stage,
+        "emergencyContact": (user["phone"] if user else "") or first_scr.get("phone") or "",
+    }
+    # 显示名以 users 表为准（筛查记录仅作兜底），否则新账号永远显示「用户」
+    profile_name = await _current_user_name(ctx)
+    if screenings:
+        profile["name"] = profile_name or first_scr.get("name") or "用户"
+        profile["gender"] = first_scr.get("gender") or ""
+    elif profile_name:
+        profile["name"] = profile_name
+    return profile
+
+
 def _screening_item(s: dict, qn: str) -> dict:
-    return {
-        "id": s.get("screening_id"),
+    return {        "id": s.get("screening_id"),
         "questionnaire": qn,
         "score": s.get("score"),
         "maxScore": s.get("max_score"),
@@ -494,23 +538,16 @@ async def get_personal_dashboard(ctx: RequestContext):
     personal_timeline = []
     for s in timeline_query:
         qn = await _qn_name(s["questionnaire_id"])
+        # 量表名本身可能已含「筛查」（如"PHQ-9 抑郁筛查"），避免拼成"…筛查筛查"
+        qn_label = qn if str(qn).endswith("筛查") else f"{qn}筛查"
         personal_timeline.append({
             "date": format_dt(s.get("screening_date") or s.get("created_at")),
             "type": "screening",
-            "title": f"完成{qn}筛查",
+            "title": f"完成{qn_label}",
             "detail": f"得分{s.get('score')}分，风险等级:{s.get('alert_level')}",
         })
 
-    user = await db.query_one_a("SELECT name FROM users WHERE id = ?", (user_id,))
-    user_profile = {"name": user["name"] if user else "用户", "age": 0, "gender": "", "campus": "",
-                    "major": "", "stage": "", "emergencyContact": ""}
-    # 显示名以 users 表为准（筛查记录仅作兜底），否则新账号永远显示「用户」
-    profile_name = await _current_user_name(ctx)
-    if screenings:
-        user_profile["name"] = profile_name or screenings[0].get("name") or "用户"
-        user_profile["gender"] = screenings[0].get("gender") or ""
-    elif profile_name:
-        user_profile["name"] = profile_name
+    user_profile = await _build_user_profile(ctx, user_id, screenings)
 
     # 采集补充列表（含挂用户名下、未挂记录的）：首页「最近一次输入」
     # 在记录级补充之外用它兜底，新账号首次采集也能在首页看到。
@@ -578,24 +615,17 @@ async def get_personal_profile(ctx: RequestContext):
         (user_id, user_id))
     warning_events = [_warning_dict(a) for a in alerts]
 
-    user = await db.query_one_a("SELECT name FROM users WHERE id = ?", (user_id,))
-    user_profile = {"name": user["name"] if user else "用户", "age": 0, "gender": "", "campus": "",
-                    "major": "", "stage": "", "emergencyContact": ""}
-    # 显示名以 users 表为准（筛查记录仅作兜底），否则新账号永远显示「用户」
-    profile_name = await _current_user_name(ctx)
-    if screenings:
-        user_profile["name"] = profile_name or screenings[0].get("name") or "用户"
-        user_profile["gender"] = screenings[0].get("gender") or ""
-    elif profile_name:
-        user_profile["name"] = profile_name
+    user_profile = await _build_user_profile(ctx, user_id, screenings)
 
     personal_timeline = []
     for s in screenings[:5]:
         qn = await _qn_name(s["questionnaire_id"])
+        # 量表名本身可能已含「筛查」（如"PHQ-9 抑郁筛查"），避免拼成"…筛查筛查"
+        qn_label = qn if str(qn).endswith("筛查") else f"{qn}筛查"
         personal_timeline.append({
             "date": format_dt(s.get("screening_date") or s.get("created_at")),
             "type": "screening",
-            "title": f"完成{qn}筛查",
+            "title": f"完成{qn_label}",
             "detail": f"得分{s.get('score')}分，风险等级:{s.get('alert_level')}",
         })
 

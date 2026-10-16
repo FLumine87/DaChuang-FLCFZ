@@ -13,11 +13,22 @@ env/
 dist/
 
 # 数据库文件 - 默认全部忽略（工作库含真实生成数据，不上传）
-# 但放行随项目发布的检索语料（仅含合成数据，无账号/敏感数据）
+# 但下面三个放行，都只含**演示/合成数据**，不含真实用户隐私：
+#   data/retrieval_seed.db      检索语料种子（合成）
+#   data/hashing/corpus.db      合成语料（回退用）
+#   data/dev.db                 ⚠ 本地主库 —— 放行是为了让别人 clone 后
+#                                **直接看到演示账号 xiaoyu 的历史数据**
+#                                （18 条筛查 2025-06~2026-10、16 条预警、1 个个案）。
+#                                该库由 scripts/seed_xiaoyu_demo.py 生成，内容
+#                                完全自包含（无绝对路径、无媒体文件引用），
+#                                密码哈希为 pbkdf2_sha256（salt 内嵌），换机器可登录。
+#   ⚠ 注意：若你在本地用真实数据跑过系统，请先删掉 data/dev.db 再提交，
+#     或执行 python scripts/seed_xiaoyu_demo.py --reset 覆盖成纯演示数据。
 *.db
 *.db-journal
 !data/retrieval_seed.db
 !data/hashing/corpus.db
+!data/dev.db
 
 # 哈希引擎运行状态：可由 corpus.db 重建，且体积较大，不入库
 data/hashing/hashing_state.json
