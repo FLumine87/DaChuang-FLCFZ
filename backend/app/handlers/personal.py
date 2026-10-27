@@ -189,6 +189,8 @@ async def save_screening_supplement(ctx: RequestContext, screening_id):
          data.get("url"), data.get("description")),
     )
     report = await _analyze_collection(ctx, sup_id, kind, data, user_id, row)
+    # 分析先于入索引：否则检索会命中自己（相似度 1.0），每次都判高风险
+    await _index_supplement(sup_id, kind, data, user_id)
     return success_response(data={"id": sup_id, "report": report}, message="补充已保存")
 
 
@@ -212,6 +214,7 @@ async def save_personal_supplement(ctx: RequestContext):
          data.get("url"), data.get("description")),
     )
     report = await _analyze_collection(ctx, row_id, kind, data, user_id, None)
+    await _index_supplement(row_id, kind, data, user_id)
     return success_response(data={"id": row_id, "report": report}, message="已保存到你的档案")
 
 
@@ -252,6 +255,39 @@ def _report_hit(h: dict) -> dict:
     }
 
 
+async def _index_supplement(sup_id, kind: str, data: dict, user_id: int) -> None:
+    """把一次采集写入哈希索引，等待管理端审核。
+
+    采集内容此前只落业务表，索引里没有对应单元，审核页自然看不到。
+    新数据以 reviewing 入池：本人可检索，他人不可见，不进训练。
+    """
+    try:
+        from app.engines import get_hashing_engine
+        text = (data.get("text") or "").strip()
+        media_path = (_resolve_upload_path(data.get("url") or "")
+                      if kind in ("audio", "image") else None)
+        summary = text
+        if not summary:
+            label = _KIND_LABEL.get(kind, kind)
+            summary = f"{label}采集 {data.get('filename') or ''} {data.get('description') or ''}".strip()
+        if not summary:
+            return
+        get_hashing_engine().index_case_sync({
+            "id": f"sup-{sup_id}",
+            "record_id": f"sup-{sup_id}",
+            "user_id": user_id,
+            "modality": kind,
+            "summary": summary,
+            "media_path": media_path,
+            "date": datetime.now().date().isoformat(),
+            "scope": "reviewing",
+            "source": "runtime",
+        })
+    except Exception:
+        # 索引失败不影响采集本身，下次重训或人工补录可恢复
+        pass
+
+
 async def _analyze_collection(ctx: RequestContext, sup_id, kind: str, data: dict,
                               user_id: int, screening_row) -> dict | None:
     """对一次采集跑哈希检索引擎，生成检索报告；达到预警级别时生成预警记录。
@@ -274,6 +310,7 @@ async def _analyze_collection(ctx: RequestContext, sup_id, kind: str, data: dict
         results, info = await engine.search_with_info(
             query=query, modality=kind, top_k=5, modality_filter=None,
             media_path=media_path,
+            viewer={"user_id": user_id, "role": (ctx.user or {}).get("role") or "user"},
         )
         hits = sorted([_report_hit(h) for h in (results or [])],
                       key=lambda h: h.get("similarity") or 0, reverse=True)

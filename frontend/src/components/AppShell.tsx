@@ -189,6 +189,18 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             group: "智能心理助手",
           },
         ]),
+    /* 数据审核只属于管理端：新数据进公共池与训练池前的人工闸门 */
+    ...(isAdmin
+      ? [
+          {
+            path: `${root}/review`,
+            label: "数据审核",
+            description: "新数据进公共池与训练池前的人工把关。",
+            icon: ShieldCheck,
+            group: "工作空间",
+          },
+        ]
+      : []),
     {
       path: `${root}/retrieval`,
       label: "检索与分析",

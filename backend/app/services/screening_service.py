@@ -102,6 +102,8 @@ async def create_screening(data: dict) -> dict:
     # 方案 1：新建筛查后增量写入哈希索引（Worker 下引擎为 Mock，幂等无副作用）
     await _index_into_hashing({
         "id": f"scr-{row['id']}",
+        "record_id": f"scr-{row['id']}",
+        "user_id": row.get("user_id"),
         "summary": f"{row['name']}。{row['answers'] or ''} {row['notes'] or ''}",
         "alert_level": row["alert_level"],
         "modality": "text",
@@ -152,6 +154,8 @@ async def complete_screening(screening_id: int, score: int) -> Optional[dict]:
     await _create_alert_if_needed(row)
     await _index_into_hashing({
         "id": f"scr-{row['id']}",
+        "record_id": f"scr-{row['id']}",
+        "user_id": row.get("user_id"),
         "summary": f"{row['name']}。{row['answers'] or ''} {row['notes'] or ''}",
         "alert_level": row["alert_level"],
         "modality": "text",
@@ -201,6 +205,8 @@ async def _create_alert_if_needed(screening: dict) -> None:
             "alert_level": alert["level"],
             "modality": "text",
             "date": str(alert["created_at"])[:10] if alert["created_at"] else "",
+            # 预警是系统由筛查结果派生的数据，不含新的用户输入，无需再过人工审核
+            "scope": "public",
         })
 
 

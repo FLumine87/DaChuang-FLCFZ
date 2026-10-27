@@ -8,7 +8,7 @@ from app.core.auth import RequestContext
 from app.db import database as db
 from app.services import alert_service
 from app.engines import get_rag_engine
-from app.handlers.retrieval import perform_search, to_frontend_hit
+from app.handlers.retrieval import perform_search, to_frontend_hit, viewer_of
 
 
 async def _counselor_name(counselor_id):
@@ -415,7 +415,8 @@ async def admin_search(ctx: RequestContext):
     """管理端检索：与个人端共用跨模态检索链路（文本 / 图像 / 语音查询）。"""
     data = ctx.body or {}
     query = data.get("query", "")
-    raw_results, info, modality, mf = await perform_search(data, default_top_k=10)
+    raw_results, info, modality, mf = await perform_search(
+        data, default_top_k=10, viewer=viewer_of(ctx))
     results = [to_frontend_hit(r) for r in raw_results]
 
     rag_engine = get_rag_engine()

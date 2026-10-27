@@ -1,6 +1,6 @@
 """检索与分析接口 handler（动态跨模态哈希检索 + RAG 报告）。"""
 from app.core.responses import success_response
-from app.core.auth import RequestContext
+from app.core.auth import RequestContext, get_current_user
 from app.core.exceptions import HttpError
 from app.services import screening_service, agent_graph
 from app.db import database as db
@@ -12,6 +12,16 @@ from app.engines.hashing.query_media import (
 
 # 前端可选的检索范围：全部 / 文本 / 图像 / 语音
 _MODALITY_FILTERS = ("text", "image", "audio")
+
+
+def viewer_of(ctx: RequestContext) -> dict:
+    """把登录态转成检索可见性身份。管理员看全部，普通用户看公共池加本人数据。"""
+    user = get_current_user(ctx)
+    try:
+        uid = int(user.get("sub"))
+    except (TypeError, ValueError):
+        uid = None
+    return {"user_id": uid, "role": user.get("role") or "user"}
 
 
 def _params(data: dict, default_top_k: int = 5):
@@ -31,12 +41,13 @@ def _params(data: dict, default_top_k: int = 5):
     return modality, mf, max(1, min(50, top_k))
 
 
-async def perform_search(data: dict, default_top_k: int = 5):
+async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None):
     """执行一次跨模态检索，返回 (命中列表, 过程信息, 查询模态, 模态过滤)。
 
     图像 / 语音查询：把请求体里的 base64（`media_base64`，兼容 `media`）
     落盘成临时文件供特征抽取，检索结束（含异常）即删除。
     查询文本 `query` 始终参与主题抽取与"为什么相似"解释，图像/语音查询也可以带。
+    viewer 为调用者身份；为 None 时不做可见性过滤（仅内部调用）。
     """
     modality, modality_filter, top_k = _params(data, default_top_k)
     engine = get_hashing_engine()
@@ -51,6 +62,7 @@ async def perform_search(data: dict, default_top_k: int = 5):
         results, info = await engine.search_with_info(
             query=data.get("query", ""), modality=modality,
             top_k=top_k, modality_filter=modality_filter, media_path=tmp_path,
+            viewer=viewer,
         )
     finally:
         remove_media_query(tmp_path)
@@ -84,7 +96,8 @@ async def search(ctx: RequestContext):
     查询码、命中主题、数据来源），供前端展示"哈希命中率"与可解释信息。
     """
     data = ctx.body or {}
-    results, info, modality, modality_filter = await perform_search(data)
+    results, info, modality, modality_filter = await perform_search(
+        data, viewer=viewer_of(ctx))
     return success_response(data={
         "query": data.get("query"),
         "modality": modality,
@@ -137,6 +150,7 @@ async def analyze(ctx: RequestContext):
         results, info = await engine.search_with_info(
             query=f"{screening.get('name')} {screening.get('questionnaire_name') or ''}",
             modality=modality, top_k=top_k, modality_filter=modality_filter,
+            viewer=viewer_of(ctx),
         )
         retrieval_results = {
             "query": initial_pack["local_retrieval_query"], "results": results,

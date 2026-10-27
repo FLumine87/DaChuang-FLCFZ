@@ -32,8 +32,8 @@ except Exception:  # pragma: no cover
 
 class MultiTableHashIndex:
     def __init__(self, code_length=64, band_bits=8, rho_min=0.10,
-                 sigma_min=0.02, epoch="2025-08-01", window_days=122,
-                 probe_bits=2):
+                 sigma_min=0.02, epoch="2025-01-01", window_days=30,
+                 probe_bits=2, cold_start_min=30):
         self.K = int(code_length)
         self.band_bits = max(1, int(band_bits))
         self.num_bands = max(1, math.ceil(self.K / self.band_bits))
@@ -43,6 +43,9 @@ class MultiTableHashIndex:
         self.guaranteed_radius = self.num_bands * self.probe_bits
         self.rho_min = rho_min
         self.sigma_min = sigma_min
+        # 冷启动保护：样本量不足的窗口无法可靠评估质量，直接判死会让新数据
+        # 永远检索不到（新窗口只有十几条时 rho 必然偏低）。这类窗口强制保留。
+        self.cold_start_min = int(cold_start_min)
         self.epoch = epoch
         self.window_days = int(window_days)
 
@@ -219,9 +222,11 @@ class MultiTableHashIndex:
                                 for o in neighbors) / len(neighbors))
             rho = sum(rhos) / len(rhos) if rhos else 0.0
 
-            active = (rho >= self.rho_min) and (sigma >= self.sigma_min)
+            active = ((rho >= self.rho_min) and (sigma >= self.sigma_min)) \
+                or (size < self.cold_start_min)
             rec = {"window": window, "size": size, "sigma": round(sigma, 4),
                    "rho": round(rho, 4), "active": active,
+                   "cold_start": size < self.cold_start_min,
                    "trust": round(rho, 4)}
             self.table_stats[window] = rec
             stats.append(rec)
@@ -296,7 +301,8 @@ class MultiTableHashIndex:
         return out
 
     def search(self, query_code, top_k=5, modality_filter=None,
-               exclude_ids=None, windows=None, query_vec=None):
+               exclude_ids=None, windows=None, query_vec=None,
+               allowed_ids=None):
         """检索，返回 (ids, similarities, info)。
 
         modality_filter : 只保留该模态的结果（text/image/audio），None 表示不限
@@ -304,6 +310,8 @@ class MultiTableHashIndex:
         windows         : 只探测指定时间窗，None 表示探测所有活跃窗口
         query_vec       : 查询的连续向量；给了就走**非对称距离**排序，
                           否则退化为"两边都二值化"的对称汉明排序
+        allowed_ids     : 可见性白名单（按 scope 与调用者身份算出的单元集合）。
+                          None 表示不做过滤（内部评测 / 全库扫描）。
         """
         exclude = set(exclude_ids or [])
         probe_windows = list(windows) if windows is not None else self._active_windows()
@@ -321,15 +329,27 @@ class MultiTableHashIndex:
                     for uid in bands[b].get(key, ()):
                         cand.add(uid)
         cand -= exclude
+        if allowed_ids is not None:
+            cand &= allowed_ids
 
         # 候选不足时线性回退（保证一定能填满结果列表）：
         # 位带探测保证 radius = num_bands × probe_bits 内不漏召回，
         # 超出该半径、或探测键命中率过低时，用全量回退兜底。
+        # 回退范围同样受可见性限制，否则未审核数据会从这个口子漏出去。
         min_need = max(int(top_k), 20)
         scanned_all = False
         if len(cand) < min_need:
             scanned_all = True
-            cand = {uid for uid in self.records if uid not in exclude}
+            pool = self.records
+            if windows is not None:
+                # 限定窗口检索时，回退也只能落在这些窗口内。
+                # 否则每个窗口都会拿到全库结果，融合时互相覆盖，
+                # 表现为"所有命中都归属于最后扫描的那个窗口"。
+                probe = set(probe_windows)
+                pool = {uid: r for uid, r in self.records.items() if r.get("window") in probe}
+            cand = {uid for uid in pool if uid not in exclude}
+            if allowed_ids is not None:
+                cand &= allowed_ids
 
         if modality_filter:
             cand = {uid for uid in cand

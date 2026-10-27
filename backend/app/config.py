@@ -59,9 +59,29 @@ class Settings:
     HASHING_PROBE_BITS: int = 2            # 位带内可翻转比特数：保证半径 = 8×2 = 16 位内不漏召回
     HASHING_TABLE_RHO_MIN: float = 0.10    # 时间窗表"语义一致性"下限，低于则不再参与探测
     HASHING_TABLE_SIGMA_MIN: float = 0.02  # 时间窗表"编码信息量"下限
-    HASHING_WINDOW_DAYS: int = 122         # 时间窗长度（约 4 个月）
-    HASHING_EPOCH: str = "2025-08-01"      # 时间窗起算日
+    # 时间窗划分：必须与语料构建脚本一致（scripts/datasets/base.py 的 EPOCH / WINDOW_DAYS），
+    # 否则运行时新增数据会算进历史窗口，与旧数据混在同一张表里。
+    HASHING_WINDOW_DAYS: int = 30          # 时间窗长度（与语料 30 天窗口对齐）
+    HASHING_EPOCH: str = "2025-01-01"      # 时间窗起算日（与语料一致）
     HASHING_TRAIN_MAX: int = 300           # 训练抽样上限（配对记录数）
+    HASHING_WINDOW_TRAIN_MAX: int = 150    # 每个时间窗独立训练时的抽样上限
+    HASHING_DECAY_TAU_DAYS: int = 365      # 表权重的时效衰减常数（天，约一学年）
+    HASHING_MAX_TABLES: int = 0            # 活跃时间窗表上限；0 表示不淘汰（淘汰需先迁移该窗数据）
+    # 审核通过的数据攒到这个数量就自动后台重训；0 表示只手动触发
+    HASHING_AUTO_RETRAIN_MIN: int = 10
+    # 查询自适应重排序：按查询与各窗口的适配度微调融合权重
+    HASHING_QUERY_ADAPTIVE: bool = True
+    # 错误哈希样本校正：把映射冲突样本重复纳入下一轮训练
+    HASHING_ERROR_CORRECTION: bool = True
+    # 双指标表权重：交叉熵（语义-汉明一致性）与余弦冗余度共同决定权重
+    HASHING_DUAL_METRIC_WEIGHT: bool = True
+    # Hadamard 正交化：训练后对码做正交旋转，提升位独立性
+    HASHING_HADAMARD: bool = False
+    # 训练采样的有标签比例；0 表示不裁剪，保留全部无标签样本参与重构。
+    # 仅评测复现项目书实验口径（70%）时才设成 0.7。
+    HASHING_LABELED_RATIO: float = 0
+    # 无标签窗口的表权重下限：覆盖率 0 时打这个折扣，避免无监督模型与有监督同权
+    HASHING_LABEL_COVERAGE_FLOOR: float = 0.55
     # 混合视图（未指定结果模态）是否按模态轮转交错排序：
     # 真实语料下同模态码更相近，纯全局排序会让 top-k 被查询模态占满，
     # 跨模态命中被挤出结果页；置 False 回到纯相似度排序（做对照实验用）

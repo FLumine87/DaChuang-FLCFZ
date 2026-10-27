@@ -13,6 +13,7 @@ import AdminLayout from './admin/components/AdminLayout';
 import AdminDashboard from './admin/pages/AdminDashboard';
 import AdminScreening from './admin/pages/AdminScreening';
 import AdminDataCollection from './admin/pages/AdminDataCollection';
+import AdminReview from './admin/pages/AdminReview';
 import AdminRetrieval from './admin/pages/AdminRetrieval';
 import AdminAlerts from './admin/pages/AdminAlerts';
 import AdminCases from './admin/pages/AdminCases';
@@ -133,6 +134,7 @@ export default function App() {
         <Route path="me/feed" element={<FeedPage />} />
         <Route path="screening" element={<AdminScreening />} />
         <Route path="data-collection" element={<AdminDataCollection />} />
+        <Route path="review" element={<AdminReview />} />
         <Route path="retrieval" element={<AdminRetrieval />} />
         <Route path="alerts" element={<AdminAlerts />} />
         <Route path="cases" element={<AdminCases />} />

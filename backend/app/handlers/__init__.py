@@ -3,7 +3,8 @@
 auth_level: None=公开 / 'user'=需登录 / 'admin'=需管理员
 """
 from app.handlers import (auth, screening, alerts, cases, retrieval, upload,
-                          dashboard, personal, admin, knowledge_graph, warning_agent, agent_workspace)
+                          dashboard, personal, admin, knowledge_graph, warning_agent,
+                          agent_workspace, review)
 
 ROUTES = [
     ("POST", "/api/agent-workspace/cases/{case_id}/runs", agent_workspace.run_case, "admin"),
@@ -51,6 +52,17 @@ ROUTES = [
     ("POST", "/api/admin/cases/{case_id}/timeline", admin.add_admin_case_event, "admin"),
     ("POST", "/api/admin/search", admin.admin_search, "admin"),
     ("GET", "/api/admin/data-collection", admin.get_admin_data_collection, "admin"),
+    # ---- 数据审核（新数据进公共池 / 训练池的闸门）----
+    ("GET", "/api/admin/review/pending", review.pending, "admin"),
+    ("GET", "/api/admin/review/stats", review.stats, "admin"),
+    ("POST", "/api/admin/review/batch", review.batch, "admin"),
+    ("GET", "/api/admin/review/labels", review.labels, "admin"),
+    ("POST", "/api/admin/review/tags", review.set_tags, "admin"),
+    ("POST", "/api/admin/review/suggest-tags", review.suggest_tags, "admin"),
+    ("POST", "/api/admin/hashing/retrain", review.retrain, "admin"),
+    ("GET", "/api/admin/hashing/status", review.retrain_status, "admin"),
+    ("GET", "/api/admin/hashing/drift", review.drift, "admin"),
+    ("POST", "/api/personal/scope", review.set_scope, "user"),
 
     # ---- 筛查管理 ----
     ("GET", "/api/screening/questionnaires", screening.list_questionnaires, "user"),

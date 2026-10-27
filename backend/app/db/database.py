@@ -385,6 +385,24 @@ def init_db_sync() -> None:
             " SELECT s.user_id FROM screenings s WHERE s.id = alerts.screening_id"
             ") WHERE (user_id IS NULL OR user_id = 0) AND screening_id IS NOT NULL"
         )
+        # 审核字段（2026-10-27）：新数据写入索引后默认待审，管理端通过后才进公共池与训练池。
+        # 两张表都加，ALTER 幂等；历史数据默认 approved，不改变现有可见性。
+        for table in ("screenings", "screening_supplements"):
+            cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+            for col, ddl in (
+                ("review_status", "TEXT DEFAULT 'pending'"),
+                ("reviewed_by", "INTEGER"),
+                ("reviewed_at", "DATETIME"),
+                ("review_note", "TEXT"),
+            ):
+                if col not in cols:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+                    if col == "review_status":
+                        # 刚加的列：表内全是历史数据，它们在加审核之前就已公开，
+                        # 统一标为已通过；之后新插入的行走 DEFAULT 'pending'。
+                        conn.execute(f"UPDATE {table} SET review_status = 'approved'")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_screenings_review ON screenings(review_status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_supplements_review ON screening_supplements(review_status)")
         _seed_demo_accounts(conn)
         conn.commit()
 
