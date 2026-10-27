@@ -41,6 +41,54 @@ def _params(data: dict, default_top_k: int = 5):
     return modality, mf, max(1, min(50, top_k))
 
 
+def _image_corpus_search(data: dict, top_k: int):
+    """图像搜图像：走全量 FER2013 独立索引，不经过跨模态引擎。"""
+    from app.engines import get_image_index
+    from app.engines.hashing import real_features as RF
+
+    index = get_image_index()
+    if index is None:
+        raise HttpError(503, "图像库未就绪，请先运行 scripts/build_image_corpus.py")
+    raw = data.get("media_base64") or data.get("media")
+    tmp_path = None
+    if raw:
+        try:
+            tmp_path = decode_media_query(raw, data.get("media_name") or "", "image")
+        except MediaQueryError as exc:
+            raise HttpError(400, str(exc)) from exc
+    try:
+        items = index.search(path=tmp_path or "", top_k=top_k)
+    finally:
+        remove_media_query(tmp_path)
+
+    hits = []
+    for it in items:
+        label = it.get("label") or ""
+        hits.append({
+            "id": it["image_id"], "record_id": it["image_id"],
+            "modality": "image", "modality_label": "图像",
+            "similarity": it["similarity"],
+            "summary": f"FER2013 · {label}",
+            "tags": [label] if label else [],
+            "alert_level": "green", "date": "",
+            "cross_modal": False,
+            "media": RF.media_data_url(it.get("path"), "image"),
+            "media_kind": "image",
+            "media_meta": {"label": label, "dataset": "FER2013"},
+            "data_source": "fer-image-corpus", "dataset": "FER2013",
+            "explain": {
+                "hamming_distance": None,
+                "hamming_similarity": it["similarity"],
+                "asymmetric_score": it["similarity"],
+                "code_hex": "", "query_code_hex": "",
+                "window": None, "shared_themes": [], "source": "fer-image-corpus",
+            },
+        })
+    info = {"corpus": "image", "index_size": len(index.meta),
+            "candidates": len(items), "probed_windows": [], "scoring": "image-only"}
+    return hits, info, "image", "image"
+
+
 async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None):
     """执行一次跨模态检索，返回 (命中列表, 过程信息, 查询模态, 模态过滤)。
 
@@ -50,6 +98,8 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
     viewer 为调用者身份；为 None 时不做可见性过滤（仅内部调用）。
     """
     modality, modality_filter, top_k = _params(data, default_top_k)
+    if (data.get("corpus") or "").strip() == "image" and modality == "image":
+        return _image_corpus_search(data, top_k)
     engine = get_hashing_engine()
     tmp_path = None
     try:

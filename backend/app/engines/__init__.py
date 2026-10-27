@@ -29,6 +29,37 @@ def get_multimodal_processor():
 
 
 _HASHING_ENGINE = None
+_IMAGE_INDEX = None
+
+
+def get_image_index():
+    """全量图像库（FER2013）的独立单模态索引，只服务图像搜图像。
+
+    与主跨模态引擎分开：主索引里的图像是按情绪弱配对挂到文本语音记录上的
+    1686 张；这里覆盖全部 35887 张，不参与跨模态配对训练。
+    """
+    global _IMAGE_INDEX
+    if _IMAGE_INDEX is not None:
+        return _IMAGE_INDEX
+    from app.core import runtime
+    if runtime.is_worker():
+        return None
+    try:
+        import os
+        from app.engines.hashing.image_index import ImageHashIndex
+        from app.config import settings
+        base = settings.HASHING_DATA_DIR
+        idx = ImageHashIndex(
+            corpus_db=os.path.join(base, "image_corpus.db"),
+            state_path=os.path.join(base, "image_state.json"),
+            code_length=int(getattr(settings, "HASHING_CODE_LENGTH", 64)),
+        )
+        if not os.path.exists(idx.corpus_db) or not idx.build():
+            return None
+        _IMAGE_INDEX = idx
+    except Exception:
+        return None
+    return _IMAGE_INDEX
 
 
 def get_hashing_engine():
