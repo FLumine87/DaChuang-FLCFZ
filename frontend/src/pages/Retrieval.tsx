@@ -212,9 +212,8 @@ export default function Retrieval() {
     setMediaFile(file);
     setMediaPreview(URL.createObjectURL(file));
     setQueryModality(modality);
-    // 图像/语音查询默认做「同模态近邻」：这是"最相似"唯一有严格定义的场景
-    // （同一模态的码空间可比）。想看跨模态结果可手动切回「全部模态」。
-    setScope(modality);
+    // 上传后保持「全部模态」默认：先给用户完整的跨模态结果，
+    // 想只看同模态近邻再手动切。之前自动切到对应模态，用户反馈不需要。
     setError(null);
   };
 
