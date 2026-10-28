@@ -57,7 +57,10 @@ class Settings:
     HASHING_LAMBDA_S: float = 0.6          # 语义监督项权重
     HASHING_BAND_BITS: int = 8             # 位带宽度（K=64 → 8 张位带表）
     HASHING_PROBE_BITS: int = 2            # 位带内可翻转比特数：保证半径 = 8×2 = 16 位内不漏召回
-    HASHING_TABLE_RHO_MIN: float = 0.10    # 时间窗表"语义一致性"下限，低于则不再参与探测
+    # 时间窗表"语义一致性"下限，低于则不再参与探测。
+    # 换成 bge 531 维特征后各窗口 ρ 实测 0.11~0.13，原 0.10 的余量只有一成，
+    # 新数据进来稍一波动就会整窗退出检索，因此降到 0.07 留出缓冲。
+    HASHING_TABLE_RHO_MIN: float = 0.07
     HASHING_TABLE_SIGMA_MIN: float = 0.02  # 时间窗表"编码信息量"下限
     # 时间窗划分：必须与语料构建脚本一致（scripts/datasets/base.py 的 EPOCH / WINDOW_DAYS），
     # 否则运行时新增数据会算进历史窗口，与旧数据混在同一张表里。

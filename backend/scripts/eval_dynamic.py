@@ -69,19 +69,26 @@ def _run_async(coro):
     return _LOOP.run_until_complete(coro)
 
 
-def evaluate(engine, batch, top_k=10):
-    """用当前批次的文本视图作查询，评估对全库的检索质量。"""
-    aps = []
-    for rec in batch:
-        text = next((u["content"] for u in rec["units"] if u["modality"] == "text"), "")
-        if not text:
-            continue
-        hits, _ = _run_async(engine.search_with_info(text, top_k=top_k))
-        ranked = [h["record_id"] for h in hits]
-        own = rec["record_id"]
-        themes = set(rec.get("themes") or [])
+def evaluate(engine, batch, top_k=10, query_limit=0):
+    """四格评测：文本/音频查询 × 文本/音频结果。
 
-        def rel(rid, own=own, themes=themes):
+    旧实现只给文本查询的混合 mAP，看不出「文搜文」与「文搜音」各自水平，
+    也无法回答「文本特征换成 531 维后，小窗口下是否稳定」。这里按结果模态
+    拆开统计，跨步曲线即可反映各能力随增量训练的变化。
+    """
+    qs = batch[: query_limit] if query_limit else batch
+    cells = {"tt": [], "ta": [], "at": [], "aa": []}
+
+    def one(query, modality, media_path, themes, own):
+        kw = {"top_k": 30, "viewer": None}
+        if media_path:
+            kw["media_path"] = media_path
+        try:
+            hits, _ = _run_async(engine.search_with_info(query, modality=modality, **kw))
+        except Exception:
+            return {}
+
+        def rel(rid):
             if rid == own:
                 return False
             other = engine.records.get(rid) or {}
@@ -89,10 +96,47 @@ def evaluate(engine, batch, top_k=10):
             union = themes | ot
             return bool(union) and len(themes & ot) / len(union) >= 0.5
 
-        aps.append(average_precision(ranked, rel, top_k))
+        out = {}
+        for rmod in ("text", "audio"):
+            seen, ranked = set(), []
+            for h in hits:
+                if h.get("modality") != rmod:
+                    continue
+                rid = h.get("record_id") or h.get("id")
+                if rid in seen:
+                    continue
+                seen.add(rid)
+                ranked.append(rid)
+            out[rmod] = average_precision(ranked, rel, top_k)
+        return out
+
+    for rec in qs:
+        text = next((u["content"] for u in rec["units"] if u["modality"] == "text"), "")
+        audio = next((u for u in rec["units"] if u["modality"] == "audio"), None)
+        own = rec["record_id"]
+        themes = set(rec.get("themes") or [])
+        if text:
+            r = one(text, "text", None, themes, own)
+            if r:
+                cells["tt"].append(r["text"])
+                cells["ta"].append(r["audio"])
+        if audio and audio.get("media_path"):
+            r = one(text or "", "audio", audio["media_path"], themes, own)
+            if r:
+                cells["at"].append(r["text"])
+                cells["aa"].append(r["audio"])
+
+    def avg(x):
+        return round(sum(x) / len(x), 4) if x else 0.0
+
     return {
-        "map@10": round(sum(aps) / len(aps), 4) if aps else 0.0,
-        "queries": len(aps),
+        "map@10": avg(cells["tt"] + cells["ta"]),
+        "text2text": avg(cells["tt"]),
+        "text2audio": avg(cells["ta"]),
+        "audio2text": avg(cells["at"]),
+        "audio2audio": avg(cells["aa"]),
+        "queries": len(cells["tt"]),
+        "audio_queries": len(cells["at"]),
     }
 
 
@@ -113,7 +157,8 @@ def make_engine(workdir: str, mode: str):
     return engine
 
 
-def run(mode: str, steps: int, corpus: str, workdir: str, quick: bool = False):
+def run(mode: str, steps: int, corpus: str, workdir: str, quick: bool = False,
+        query_limit: int = 60):
     records = load_corpus_records(corpus)
     batches = split_batches(records, steps)
     engine = make_engine(workdir, mode)
@@ -138,14 +183,15 @@ def run(mode: str, steps: int, corpus: str, workdir: str, quick: bool = False):
                 engine.retrain()
         else:
             engine.retrain_pending()
-        metrics = evaluate(engine, batch)
+        metrics = evaluate(engine, batch, query_limit=query_limit)
         metrics["step"] = step
         metrics["date"] = step_date(step)
         metrics["elapsed"] = round(time.time() - t0, 1)
         series.append(metrics)
         print(f"[{mode}] step {step:02d} {metrics['date']} "
-              f"mAP@10={metrics['map@10']:.4f} q={metrics['queries']} "
-              f"({metrics['elapsed']}s)", flush=True)
+              f"文搜文={metrics['text2text']:.3f} 文搜音={metrics['text2audio']:.3f} "
+              f"音搜文={metrics['audio2text']:.3f} 音搜音={metrics['audio2audio']:.3f} "
+              f"q={metrics['queries']} ({metrics['elapsed']}s)", flush=True)
 
     maps = [m["map@10"] for m in series]
     mean = sum(maps) / len(maps)
@@ -172,6 +218,8 @@ def main():
     ap.add_argument("--corpus", default="")
     ap.add_argument("--quick", action="store_true", help="每步只用 30 条查询，快速冒烟")
     ap.add_argument("--keep", action="store_true", help="保留临时索引目录")
+    ap.add_argument("--query-limit", type=int, default=60,
+                    help="每步评测的查询条数（0=全部，默认 60 控制总耗时）")
     ap.add_argument("--out", default="")
     args = ap.parse_args()
 
@@ -181,7 +229,8 @@ def main():
     for mode in modes:
         workdir = tempfile.mkdtemp(prefix=f"eval_{mode}_")
         try:
-            results.append(run(mode, args.steps, corpus, workdir, quick=args.quick))
+            results.append(run(mode, args.steps, corpus, workdir,
+                               quick=args.quick, query_limit=args.query_limit))
         finally:
             if not args.keep:
                 shutil.rmtree(workdir, ignore_errors=True)

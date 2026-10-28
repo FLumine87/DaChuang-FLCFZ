@@ -15,7 +15,8 @@
 
 2. **真实模态特征**：图像走 `real_features.image_feature`（强度分块 ⊕ HOG，192 维），
    语音走 `real_features.audio_feature`（MFCC ⊕ 韵律，64 维），
-   文本走 `features.semantic_feature`（256 桶 ⊕ 主题语义，275 维）。
+   文本走 `features.semantic_feature`（bge 512 维 ⊕ 主题 19 维 = 531 维；
+   可用 HASHING_TEXT_BACKEND=tf 切回 256 桶 ⊕ 主题的 275 维实现）。
    三个模态维度不同，各自由 CMFH 学一个投影矩阵 W_m。
    旧实现里图像/语音特征是由文本派生的占位，所谓"跨模态"其实是自证。
 
@@ -1741,10 +1742,12 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         旧实现每次增量写入都要重写数 MB 的 JSON，写入成本随库增长线性上升。
         """
         os.makedirs(settings.HASHING_DATA_DIR, exist_ok=True)
+        from app.engines.hashing import features as _F
         state = {
             "version": STATE_VERSION,
             "feature_dim": self._feature_dim(),
             "code_length": self.code_length,
+            "text_backend": _F.TEXT_BACKEND,
             "lambda_s": self.model.lambda_s,
             "modalities": self.model.modalities,
             "W": self.model.W,
@@ -1776,6 +1779,11 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         # 特征维度变化（换特征提取器）会让投影矩阵失配，必须重训，
         # 否则编码会静默退化成全零码（所有相似度都相等，检索质量崩掉）。
         if state.get("feature_dim") != self._feature_dim():
+            return False
+        # 文本后端切换（tf 275 维 / bge 531 维）同样要重训：
+        # 维度校验已能拦住两者，这里再加一道显式判断，防止将来出现同维度的后端
+        from app.engines.hashing import features as _F
+        if state.get("text_backend") not in (None, _F.TEXT_BACKEND):
             return False
         W = state.get("W") or {}
         if not W:

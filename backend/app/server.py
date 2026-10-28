@@ -95,6 +95,14 @@ def run_server(host: str = "0.0.0.0", port: int = 8000) -> None:
     from app.db.database import init_db_sync
     os.makedirs(UPLOAD_ROOT, exist_ok=True)
     init_db_sync()
+    # 预热哈希引擎：否则首个检索请求要现场加载 bge 模型（91MB）并构建
+    # 13938 个单元的位带索引，实测首屏等待 1.74 秒，后续只要 0.05 秒。
+    try:
+        from app.engines import get_hashing_engine
+        get_hashing_engine()._do_initialize()
+    except Exception as exc:
+        print(f"[warn] 哈希引擎预热失败，首次检索将现场初始化: {exc}")
+
     httpd = ThreadingHTTPServer((host, port), ApiHandler)
     print(f"轻量后端已启动: http://{host}:{port}")
     try:

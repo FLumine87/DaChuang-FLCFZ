@@ -33,8 +33,12 @@ dist/
 # 哈希引擎运行状态：可由 corpus.db 重建，且体积较大，不入库
 data/hashing/hashing_state.json
 data/hashing/image_state.json
+# 对照实验的状态备份（每个 5-7MB，可由重建复现）
+data/hashing/hashing_state_*.json
 # 训练权重体积大，重新训练可复现；导出后的 onnx 保留
 models/*.pth
+# bge 导出原料：PyTorch 权重 92MB 不随仓库分发，ONNX 与分词器才是部署所需
+models/bge-small-zh/pytorch_model.bin
 # 评测脚本的临时工作目录（eval_retrieval.py 每次运行重建）
 data/hashing/_eval_tmp/
 
