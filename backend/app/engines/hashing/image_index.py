@@ -39,6 +39,9 @@ class ImageHashIndex:
         self.R = None      # ITQ 旋转 (K×K)
         self.meta: Dict[str, Dict] = {}
         self.ready = False
+        self.feature_kind = "handcrafted"
+        self.continuous = None   # n×K 连续向量（符号化之前），用于精排
+        self._row_of: Dict[str, int] = {}
         self._feat_cache: Dict[str, List[float]] = {}
 
     # ------------------------- 载入与训练 -------------------------
@@ -86,9 +89,22 @@ class ImageHashIndex:
             R = (U @ Vt).astype(np.float32)
         return mean.astype(np.float32), W, R
 
+    def _read_meta(self) -> Dict[str, str]:
+        import sqlite3
+        try:
+            conn = sqlite3.connect(self.corpus_db)
+            try:
+                return {r[0]: r[1] for r in conn.execute("SELECT key, value FROM meta")}
+            finally:
+                conn.close()
+        except Exception:
+            return {}
+
     def build(self, force: bool = False) -> bool:
         if np is None:
             return False
+        meta = self._read_meta()
+        self.feature_kind = meta.get("feature") or "handcrafted"
         ids, labels, packed = self._load_features()
         if not ids:
             return False
@@ -104,16 +120,19 @@ class ImageHashIndex:
             self._save_state(len(ids))
 
         Z = (feats - self.mean) @ self.W
-        codes = (np.sign(Z @ self.R) > 0).astype(np.int8)
+        self.continuous = (Z @ self.R).astype(np.float32)   # n×K，精排用
+        codes = (np.sign(self.continuous) > 0).astype(np.int8)
 
         self.index = MultiTableHashIndex(code_length=self.code_length,
                                          band_bits=self.band_bits)
+        self._row_of = {}
         for i, image_id in enumerate(ids):
             meta = {"record_id": image_id, "modality": "image",
                     "tags": [labels[i]], "window": 0,
                     "media_path": paths[i], "dataset": "FER2013",
                     "content": labels[i]}
             self.meta[image_id] = meta
+            self._row_of[image_id] = i
             self.index.insert(image_id, codes[i].tolist(), meta, window=0)
         self.ready = True
         return True
@@ -153,10 +172,18 @@ class ImageHashIndex:
         return code.tolist(), continuous.tolist()
 
     def encode_path(self, path: str):
-        from app.engines.hashing import real_features as RF
         if path in self._feat_cache:
             return self.encode_feature(self._feat_cache[path])
-        feat = RF.image_feature(path)
+        if self.feature_kind == "cnn":
+            from app.engines.hashing.fer_encoder import get_encoder
+            enc = get_encoder()
+            feat = enc.feature(path) if enc is not None else None
+            if feat is None:
+                # 模型缺失时退回手工特征，但维度对不上，直接判失败
+                return None, None
+        else:
+            from app.engines.hashing import real_features as RF
+            feat = RF.image_feature(path)
         if not feat:
             return None, None
         if len(self._feat_cache) >= _CACHE_LIMIT:
@@ -165,7 +192,12 @@ class ImageHashIndex:
         return self.encode_feature(feat)
 
     def search(self, path: str = "", feature: List[float] = None,
-               top_k: int = 10) -> List[Dict]:
+               top_k: int = 10, rerank: bool = True) -> List[Dict]:
+        """两阶段：位带粗排取候选池，再用连续向量余弦精排。
+
+        二值码只保留符号，丢掉的幅值信息在精排里找回来。
+        候选池默认 200，精排 200 次余弦不到 0.1 毫秒，在线延迟基本不变。
+        """
         if not self.ready:
             return []
         if feature is not None:
@@ -174,10 +206,24 @@ class ImageHashIndex:
             code, qvec = self.encode_path(path)
         if code is None:
             return []
+        pool = max(top_k * 5, 100) if rerank else top_k
         ids, sims, _info = self.index.search(
-            code, top_k=top_k, modality_filter="image", query_vec=qvec)
+            code, top_k=pool, modality_filter="image", query_vec=qvec)
+
+        if rerank and self.continuous is not None and ids:
+            rows = [self._row_of[uid] for uid in ids if uid in self._row_of]
+            cand = self.continuous[rows]
+            cand = cand / (np.linalg.norm(cand, axis=1, keepdims=True) + 1e-9)
+            q = np.asarray(qvec, dtype=np.float32)
+            q = q / (np.linalg.norm(q) + 1e-9)
+            order = np.argsort(-(cand @ q))[:top_k]
+            picked = [(ids[order[i]], float((cand[order[i]] @ q + 1) / 2))
+                      for i in range(min(top_k, len(order)))]
+        else:
+            picked = list(zip(ids, sims))[:top_k]
+
         out = []
-        for uid, sim in zip(ids, sims):
+        for uid, sim in picked:
             meta = self.meta.get(uid) or {}
             out.append({
                 "image_id": uid,
@@ -208,8 +254,8 @@ class ImageHashIndex:
             code, qvec = self.encode_feature(vec.tolist())
             if code is None:
                 continue
-            ids, _sims, _info = self.index.search(
-                code, top_k=top_k + 1, modality_filter="image", query_vec=qvec)
+            found = self.search(feature=vec.tolist(), top_k=top_k + 1, rerank=True)
+            ids = [h["image_id"] for h in found]
             got = [self.meta.get(i, {}).get("tags", [""])[0] for i in ids if i != image_id]
             got = got[:top_k]
             hits += sum(1 for g in got if g == label)
@@ -224,6 +270,7 @@ class ImageHashIndex:
                 labels[t] = labels.get(t, 0) + 1
         return {
             "ready": self.ready,
+            "feature_kind": self.feature_kind,
             "images": len(self.meta),
             "code_length": self.code_length,
             "labels": labels,

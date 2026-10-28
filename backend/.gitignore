@@ -33,6 +33,8 @@ dist/
 # 哈希引擎运行状态：可由 corpus.db 重建，且体积较大，不入库
 data/hashing/hashing_state.json
 data/hashing/image_state.json
+# 训练权重体积大，重新训练可复现；导出后的 onnx 保留
+models/*.pth
 # 评测脚本的临时工作目录（eval_retrieval.py 每次运行重建）
 data/hashing/_eval_tmp/
 

@@ -21,6 +21,7 @@ BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BACKEND)
 
 from app.engines.hashing import real_features as RF  # noqa: E402
+from app.engines.hashing.fer_encoder import get_encoder  # noqa: E402
 
 DEFAULT_ROOT = r"D:\DaChuang\FER2013"
 DEFAULT_OUT = os.path.join(BACKEND, "data", "hashing", "image_corpus.db")
@@ -63,6 +64,8 @@ def main():
     ap.add_argument("--out", default=DEFAULT_OUT)
     ap.add_argument("--limit", type=int, default=0, help="最多处理多少张，0 表示全量")
     ap.add_argument("--resume", action="store_true", help="跳过已入库的图片")
+    ap.add_argument("--feature", choices=("handcrafted", "cnn"), default="handcrafted",
+                    help="handcrafted=192 维手工描述子；cnn=微调 MobileNet 的 1280 维")
     args = ap.parse_args()
 
     items = list(iter_images(args.root))
@@ -78,12 +81,19 @@ def main():
         done = {r[0] for r in conn.execute("SELECT image_id FROM images")}
         print(f"已存在 {len(done)} 条，将跳过")
 
+    encoder = None
+    if args.feature == "cnn":
+        encoder = get_encoder()
+        if encoder is None:
+            raise SystemExit("CNN 特征不可用：请先导出 models/mobilenetv2-fer.onnx")
+        print(f"使用 CNN 特征（{encoder.size}×{encoder.size} 输入）")
+
     t0 = time.time()
     batch, ok, fail = [], 0, 0
     for idx, (split, label, path, image_id) in enumerate(items, 1):
         if image_id in done:
             continue
-        feat = RF.image_feature(path)
+        feat = encoder.feature(path) if encoder is not None else RF.image_feature(path)
         if not feat:
             fail += 1
             continue
@@ -104,7 +114,8 @@ def main():
         conn.commit()
 
     conn.executemany("INSERT OR REPLACE INTO meta(key, value) VALUES(?,?)", [
-        ("root", args.root), ("dim", "192"),
+        ("root", args.root), ("feature", args.feature),
+        ("dim", str(len(get_encoder().feature(items[0][2]) or [])) if encoder is not None else "192"),
         ("count", str(conn.execute("SELECT COUNT(*) FROM images").fetchone()[0])),
         ("built_at", time.strftime("%Y-%m-%dT%H:%M:%S")),
     ])
