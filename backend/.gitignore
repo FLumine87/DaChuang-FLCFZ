@@ -39,8 +39,8 @@ data/hashing/hashing_state_*.json
 models/*.pth
 # bge 导出原料：PyTorch 权重 92MB 不随仓库分发，ONNX 与分词器才是部署所需
 models/bge-small-zh/pytorch_model.bin
-# 91MB，超出仓库合理体积，用 scripts/fetch_bge_model.py 获取
-models/bge-small-zh.onnx
+# 注：bge-small-zh.onnx（91MB）随仓库分发，便于开箱可用；
+# 若需轻量分发可改用 scripts/fetch_bge_model.py 现场获取
 # 评测脚本的临时工作目录（eval_retrieval.py 每次运行重建）
 data/hashing/_eval_tmp/
 
