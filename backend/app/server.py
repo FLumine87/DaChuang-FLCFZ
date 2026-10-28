@@ -103,6 +103,17 @@ def run_server(host: str = "0.0.0.0", port: int = 8000) -> None:
     except Exception as exc:
         print(f"[warn] 哈希引擎预热失败，首次检索将现场初始化: {exc}")
 
+    # 模型缺失会静默退回 TF 275 维，检索精度明显下降但不报错。
+    # 这里显式告警，避免用户把"效果差"误判成别的原因。
+    try:
+        from app.engines.hashing.text_encoder import get_text_encoder
+        if get_text_encoder() is None:
+            print("[warn] 未找到 bge 文本模型，当前使用 TF 275 维特征，")
+            print("       检索精度会低于设计值。获取方式：")
+            print("       python scripts/fetch_bge_model.py")
+    except Exception:
+        pass
+
     httpd = ThreadingHTTPServer((host, port), ApiHandler)
     print(f"轻量后端已启动: http://{host}:{port}")
     try:
