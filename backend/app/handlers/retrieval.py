@@ -98,7 +98,16 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
     viewer 为调用者身份；为 None 时不做可见性过滤（仅内部调用）。
     """
     modality, modality_filter, top_k = _params(data, default_top_k)
-    if (data.get("corpus") or "").strip() == "image" and modality == "image":
+    # 路由规则：
+    #   上传图像 + 范围「仅图像线索」→ 全量图像库（同模态近邻，35887 张）
+    #   上传图像 + 范围「全部模态」  → 主引擎（跨模态，图搜文/图搜语音）
+    #   文字 / 语音查询              → 主引擎（跨模态）
+    # 前端上传图像时默认把范围设为「仅图像线索」，因此图搜图自动走新库，
+    # 无需前端改动；corpus=image 仍保留为显式覆盖入口。
+    has_media = bool(data.get("media_base64") or data.get("media"))
+    if modality == "image" and has_media and (
+            modality_filter == "image"
+            or (data.get("corpus") or "").strip() == "image"):
         return _image_corpus_search(data, top_k)
     engine = get_hashing_engine()
     tmp_path = None
