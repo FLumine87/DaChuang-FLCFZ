@@ -1,0 +1,16 @@
+{
+ "image_feature": "hand",
+ "lambda_s": 0.6,
+ "code_length": 64,
+ "train_rows": 3000,
+ "文搜图": {
+  "map@10": 0.1228,
+  "queries": 397
+ },
+ "图搜文": {
+  "map@10": 0.1806,
+  "queries": 93
+ },
+ "units": 6000,
+ "records": 3000
+}
