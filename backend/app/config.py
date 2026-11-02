@@ -91,12 +91,15 @@ class Settings:
     HASHING_LABELED_RATIO: float = 0
     # 参与「配对训练」的模态集合。共享码空间要求各模态视图真同源
     # （同一对象的文字/语音/图像），弱配对的视图会污染共享码空间：
-    # FER2013 是纯图像集，与文本/语音没有任何同源关系，仅按情绪语义对齐挂接，
-    # 把这类视图纳入训练会让模型学到虚假的对应关系，拉低本该正确的文-音对齐。
-    # 因此默认只训 text + audio（真同源），图像走独立单模态库
-    # （image_index.py，MobileNet + PCA + ITQ），不参与跨模态配对。
-    # 置为 ("text", "image", "audio") 可恢复旧行为做对照实验。
-    HASHING_TRAIN_MODALITIES: tuple = ("text", "audio")
+    # FER2013 是纯图像集，与文本/语音没有任何同源关系，仅按情绪语义对齐挂接。
+    #
+    # 但默认仍保持 ("text","image","audio")（队长原行为），实测理由：
+    # 排除 image 后图像单元没有自己的投影矩阵，查询侧只能退回文本编码器
+    # （实测图像码与同记录文本码 100% 相同，图搜文实为文本查询的镜像，
+    #  指标虚高而图像模态没有独立检索能力）。
+    # → 图像要用弱监督桥接另建通道，而不是在共享码空间里「摘出去」。
+    # 置为 ("text","audio") 仅供对照实验，须同时把图像查询路由到独立图像库。
+    HASHING_TRAIN_MODALITIES: tuple = ("text", "image", "audio")
     # 主引擎的图像特征来源："hand" = 192 维手工描述子（强度分块 ⊕ HOG）；
     # "cnn" = 微调 MobileNetV2 的 1280 维表情特征（models/mobilenetv2-fer.onnx）。
     # 两者有真实权衡（实测同语料 653 查询）：
