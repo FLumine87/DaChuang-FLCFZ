@@ -99,10 +99,15 @@ class Settings:
     HASHING_TRAIN_MODALITIES: tuple = ("text", "audio")
     # 主引擎的图像特征来源："hand" = 192 维手工描述子（强度分块 ⊕ HOG）；
     # "cnn" = 微调 MobileNetV2 的 1280 维表情特征（models/mobilenetv2-fer.onnx）。
-    # 手工特征抓不住表情细节（实测 top-10 同类率贴着随机线），
-    # CNN 特征在独立图像库上同类率 0.501。设为 "cnn" 让主引擎也用上它。
-    # 模型文件缺失或 onnxruntime 不可用时自动退回 "hand"，不报错。
-    HASHING_IMAGE_FEATURE: str = "cnn"
+    # 两者有真实权衡（实测同语料 653 查询）：
+    #   hand: 图搜图 0.197 / 图搜文 0.331 / 图搜音 0.257
+    #   cnn : 图搜图 0.362 / 图搜文 0.162 / 图搜音 0.132
+    # CNN 让图像自身检索大涨（同模态），却让图像查文本/语音崩塌 —— CNN 特征
+    # 由 FER 的 7 类表情定义，与文本语义空间不同构，强行放进共享码空间会偏。
+    # 因此主引擎默认保持 "hand"（队长原行为，跨模态可用），
+    # 图像单模态检索走独立图像库（image_index.py，CNN + PCA + ITQ）。
+    # 模型文件缺失或 onnxruntime 不可用时自动退回，不报错。
+    HASHING_IMAGE_FEATURE: str = "hand"
     # 无标签窗口的表权重下限：覆盖率 0 时打这个折扣，避免无监督模型与有监督同权
     HASHING_LABEL_COVERAGE_FLOOR: float = 0.55
     # 混合视图（未指定结果模态）是否按模态轮转交错排序：

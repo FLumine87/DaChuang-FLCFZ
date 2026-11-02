@@ -37,6 +37,7 @@
 import asyncio
 import datetime
 import json
+import logging
 import math
 import os
 import random
@@ -80,6 +81,7 @@ except Exception:  # 依赖未安装时（如独立跑算法脚本）使用兜�
 # v6：单元新增 media_meta（图像/语音命中展示真实文件名与数据集自带标注）
 STATE_VERSION = 6
 TRAIN_MODALITIES = ("text", "image", "audio")
+logger = logging.getLogger(__name__)
 # 微调 MobileNetV2 的表情特征维度（models/mobilenetv2-fer.onnx 的输出）
 _CNN_IMAGE_DIM = 1280
 MODALITY_LABEL = {"text": "文本", "image": "图像", "audio": "语音"}
@@ -1079,6 +1081,16 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                  else RF.audio_feature(src) if modality == "audio" and src else None)
             if f:
                 return {modality: f}
+        elif modality in ("image", "audio"):
+            # 该模态没有自己的编码器：静默退回文本会把「图像查询」变成
+            # 「用图片路径当文本查」，检索结果与文本查询完全相同 ——
+            # 指标看着高，实际图像模态根本没参与检索。
+            # 这里显式告警，调用方应把这类查询路由到该模态的独立通道。
+            logger.warning(
+                "模态 %s 无投影矩阵（模型只训了 %s），本次查询退回文本编码器；"
+                "该模态的检索结果不具备独立意义，应改走独立通道。",
+                modality, sorted((self.model.W or {}).keys()),
+            )
         return {"text": F.semantic_feature(text or (src or ""))}
 
     async def encode(self, data: Any, modality: str) -> List[int]:
