@@ -119,8 +119,44 @@ class ImageTextBridge:
         self.model.fit(feats, sim)
         self.trained = True
         self.feature_spec = feature_spec or {}
+        self._last_S = sim
 
         # 建索引：每条记录两个单元，两个模态各一
+        from .multi_table_index import MultiTableHashIndex
+        self.index = MultiTableHashIndex(
+            code_length=self.K, band_bits=self.band_bits,
+            probe_bits=self.probe_bits, rho_min=0.0, sigma_min=0.0,
+        )
+        self.units = {}
+        self.records = {}
+        for i, r in enumerate(rows):
+            rid = r.get("record_id") or f"BR-{i:06d}"
+            self.records[rid] = {"record_id": rid, "tags": r.get("tags") or []}
+            for mod in (q_mod, i_mod):
+                code = self.model.encode({mod: feats[mod][i]})
+                uid = f"{rid}-{mod}"
+                meta = {"record_id": rid, "modality": mod,
+                        "tags": r.get("tags") or [], "window": 0}
+                self.units[uid] = dict(meta, code=list(code))
+                self.index.insert(uid, list(code), meta, window=0)
+        return True
+
+    def _fit_with_S(self, rows: List[Dict], feats: Dict[str, List[List[float]]],
+                    S: List[List[float]], pair: Tuple[str, str] = ("text", "image")):
+        """用外部给定的监督矩阵 S 训练（供 S 构造方案的对照实验使用）。
+
+        与 fit 的区别只是 S 的来源：fit 用主题标签 Jaccard 自动构造，
+        这里由调用方决定怎么造（语义余弦 / 混合 / 加连续强度等）。
+        """
+        q_mod, i_mod = pair
+        self.pair = (q_mod, i_mod)
+        n = len(rows)
+        if len(S) != n:
+            return False
+        self.model.fit(feats, S)
+        self.trained = True
+        self._last_S = [list(r) for r in S]
+
         from .multi_table_index import MultiTableHashIndex
         self.index = MultiTableHashIndex(
             code_length=self.K, band_bits=self.band_bits,
