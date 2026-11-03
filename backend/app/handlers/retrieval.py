@@ -42,6 +42,88 @@ def _params(data: dict, default_top_k: int = 5):
     return modality, mf, max(1, min(50, top_k))
 
 
+def _bridge_search(data: dict, modality: str, result_modality: str,
+                   top_k: int, tmp_path, viewer: dict):
+    """走弱监督桥接检索（图↔文 / 图↔音）。
+
+    桥接是独立码空间，与主引擎完全隔离：主引擎的文-音共享码空间里，
+    图像视图是情绪弱配对（FER2013 与文本/语音无同源关系），
+    图搜文只有 0.2231；桥接用同一套 CMFH 公式但只喂两个模态、
+    并把监督权重 λ 提到 20/50，图搜文实测 0.5776、图搜音 0.4193。
+
+    桥接模型未构建时返回 None，由调用方降级到主引擎。
+    """
+    from app.engines.hashing.bridge_manager import get_bridge_manager
+    from app.engines.hashing import features as F
+    from app.engines.hashing import real_features as RF
+    from app.engines.hashing.fer_encoder import FerEncoder
+
+    mgr = get_bridge_manager()
+    channel, payload = mgr.route(modality, result_modality)
+    if channel != "bridge":
+        return None
+    _pair, br = payload
+
+    # 查询侧特征：与训练侧同口径（bge 531 维 / MFCC / CNN 1280 维）
+    try:
+        if modality == "text":
+            feat = list(F.semantic_feature(data.get("query") or ""))
+        elif modality == "audio":
+            feat = RF.audio_feature(tmp_path) if tmp_path else None
+        else:
+            enc = FerEncoder()
+            feat = enc.feature(tmp_path) if (enc.available and tmp_path) else None
+    except Exception:
+        feat = None
+    if not feat:
+        import logging
+        logging.getLogger(__name__).warning(
+            "桥接检索：查询特征抽取失败（modality=%s, 有临时文件=%s），降级主引擎",
+            modality, bool(tmp_path))
+        return None
+
+    # 桥接索引里的单元是语料单元；可见性过滤交回主引擎的规则
+    hits = br.search(feat, modality, top_k=max(top_k * 3, 20),
+                     result_modality=result_modality)
+    if not hits:
+        import logging
+        logging.getLogger(__name__).warning(
+            "桥接检索无命中（modality=%s -> %s, 特征维度=%s），降级主引擎",
+            modality, result_modality, len(feat))
+        return None
+
+    # 取回主引擎的记录级信息（告警等级、主题、窗口）以便前端展示
+    engine = get_hashing_engine()
+    results = []
+    for h in hits:
+        rid = h.get("record_id")
+        rec = (engine.records or {}).get(rid) or {}
+        results.append({
+            "record_id": rid,
+            "unit_id": h.get("unit_id"),
+            "modality": h.get("modality"),
+            "score": h.get("sim"),
+            "similarity": h.get("sim"),
+            "alert_level": rec.get("alert_level", "green"),
+            "tags": rec.get("tags") or h.get("tags") or [],
+            "window": rec.get("window"),
+            "scope": rec.get("scope"),
+            "source": "bridge",
+            "explain": {
+                "route": f"bridge:{_pair[0]}-{_pair[1]}",
+                "note": "弱监督桥接码空间（该模态对无真同源数据，走独立桥接）",
+            },
+        })
+    info = {
+        "route": f"bridge:{_pair[0]}-{_pair[1]}",
+        "index_size": len(br.units),
+        "code_length": br.K,
+        "lambda_s": br.lambda_s,
+        "bridge_stats": mgr.status(),
+    }
+    return results[:top_k], info
+
+
 def _image_corpus_search(data: dict, top_k: int):
     """图像搜图像：走全量 FER2013 独立索引，不经过跨模态引擎。"""
     from app.engines import get_image_index
@@ -105,8 +187,9 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
     modality, modality_filter, top_k = _params(data, default_top_k)
     # 路由规则：
     #   上传图像 + 范围「仅图像线索」→ 全量图像库（同模态近邻，35887 张）
+    #   图↔文 / 图↔音              → 弱监督桥接（独立码空间，图搜文实测 0.5776）
+    #   其余（文↔文、文↔音、音↔音）→ 主引擎共享码空间（真同源，四格 0.44）
     #   上传图像 + 范围「全部模态」  → 主引擎（跨模态，图搜文/图搜语音）
-    #   文字 / 语音查询              → 主引擎（跨模态）
     # 前端上传图像时默认把范围设为「仅图像线索」，因此图搜图自动走新库，
     # 无需前端改动；corpus=image 仍保留为显式覆盖入口。
     has_media = bool(data.get("media_base64") or data.get("media"))
@@ -123,6 +206,13 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
                 tmp_path = decode_media_query(raw, data.get("media_name") or "", modality)
             except MediaQueryError as exc:
                 raise HttpError(400, str(exc)) from exc
+        # 桥接分支：只在结果模态明确指定且与查询模态构成桥接对时启用
+        if modality_filter and modality_filter != modality:
+            bridged = _bridge_search(data, modality, modality_filter,
+                                     top_k, tmp_path, viewer)
+            if bridged is not None:
+                results, info = bridged
+                return results, info, modality, modality_filter
         results, info = await engine.search_with_info(
             query=data.get("query", ""), modality=modality,
             top_k=top_k, modality_filter=modality_filter, media_path=tmp_path,
