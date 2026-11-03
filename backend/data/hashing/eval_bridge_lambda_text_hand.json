@@ -1,0 +1,45 @@
+{
+ "pair": "text",
+ "K": 64,
+ "results": [
+  {
+   "lambda_s": 5.0,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.1109,
+    "queries": 397
+   },
+   "i2q": {
+    "map@10": 0.1898,
+    "queries": 93
+   },
+   "seconds": 27.1
+  },
+  {
+   "lambda_s": 20.0,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.142,
+    "queries": 397
+   },
+   "i2q": {
+    "map@10": 0.1613,
+    "queries": 93
+   },
+   "seconds": 27.2
+  },
+  {
+   "lambda_s": 50.0,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.1798,
+    "queries": 397
+   },
+   "i2q": {
+    "map@10": 0.1969,
+    "queries": 93
+   },
+   "seconds": 27.9
+  }
+ ]
+}

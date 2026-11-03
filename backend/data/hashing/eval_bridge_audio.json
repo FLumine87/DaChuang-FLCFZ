@@ -1,0 +1,65 @@
+[
+ {
+  "pair": "audio-image",
+  "K": 64,
+  "lambda_s": 0.6,
+  "image_feature": "cnn",
+  "train_rows": 3000,
+  "q2i": {
+   "map@10": 0.1063,
+   "queries": 163
+  },
+  "i2q": {
+   "map@10": 0.144,
+   "queries": 93
+  }
+ },
+ {
+  "pair": "text-image",
+  "K": 64,
+  "lambda_s": 0.6,
+  "image_feature": "cnn",
+  "train_rows": 3000,
+  "q2i": {
+   "map@10": 0.1799,
+   "queries": 397
+  },
+  "i2q": {
+   "map@10": 0.4452,
+   "queries": 93
+  },
+  "seconds": 39.3
+ },
+ {
+  "pair": "text-image",
+  "K": 128,
+  "lambda_s": 0.6,
+  "image_feature": "cnn",
+  "train_rows": 3000,
+  "q2i": {
+   "map@10": 0.1632,
+   "queries": 397
+  },
+  "i2q": {
+   "map@10": 0.4246,
+   "queries": 93
+  },
+  "seconds": 65.1
+ },
+ {
+  "pair": "text-image",
+  "K": 256,
+  "lambda_s": 0.6,
+  "image_feature": "cnn",
+  "train_rows": 3000,
+  "q2i": {
+   "map@10": 0.1463,
+   "queries": 397
+  },
+  "i2q": {
+   "map@10": 0.4431,
+   "queries": 93
+  },
+  "seconds": 110.4
+ }
+]
