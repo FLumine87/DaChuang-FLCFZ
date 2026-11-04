@@ -127,6 +127,40 @@ async def main():
     print(f"  （主引擎基线 0.6394，应基本不变）")
     print(f"\n  路由汇总: {routes}")
 
+    # --- 图查询 + 「全部模态」（前端默认）→ 应走多通道合并 ---
+    aps3, routes3 = [], {}
+    for q in img_q:
+        path = q.get("media_path")
+        if not path or not os.path.exists(path):
+            continue
+        with open(path, "rb") as f:
+            b64 = _b64(f.read())
+        data = {"query": q.get("text") or "", "modality": "image",
+                "top_k": TOP_K, "media_base64": b64,
+                "media_name": os.path.basename(path)}
+        results, info, *_ = await retrieval.perform_search(
+            data, default_top_k=TOP_K, viewer=None)
+        r = info.get("route", "?")
+        routes3[r] = routes3.get(r, 0) + 1
+        ranked, seen = [], set()
+        for h in results:
+            rid = h.get("record_id")
+            if rid in seen:
+                continue
+            seen.add(rid)
+            ranked.append(rid)
+        th = _norm(q.get("themes"))
+
+        def rel(rid, own=q.get("record_id"), t=th):
+            if rid == own:
+                return False
+            return _jac(t, recs.get(rid) or []) >= 0.5
+        aps3.append(_ap(ranked, rel, TOP_K))
+    m3 = sum(aps3) / len(aps3) if aps3 else 0
+    print(f"\n【图查询 + 全部模态】走接口 mAP@10 = {m3:.4f}  ({len(aps3)} 查询)")
+    print(f"  路由分布: {routes3}")
+    print(f"  （集成前主引擎 0.2231；桥接离线 0.5776）")
+
 
 def _b64(data: bytes) -> str:
     import base64
