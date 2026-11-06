@@ -275,6 +275,17 @@ async def _analyze_collection(ctx: RequestContext, sup_id, kind: str, data: dict
             query=query, modality=kind, top_k=5, modality_filter=None,
             media_path=media_path,
         )
+        if isinstance(info, dict) and info.get("mode") == "mock":
+            report = {
+                "modality": kind, "query": query[:120], "level": None, "levelLabel": "未评估",
+                "isAlert": False, "alertId": None, "hits": [], "index": info,
+                "reason": "当前检索引擎为演示模式",
+                "conclusion": "采集已保存。当前为演示检索，不生成业务风险结论或预警。",
+                "createdAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            }
+            await db.execute_a("UPDATE screening_supplements SET analysis=? WHERE id=?",
+                               (json.dumps(report, ensure_ascii=False), sup_id))
+            return report
         hits = sorted([_report_hit(h) for h in (results or [])],
                       key=lambda h: h.get("similarity") or 0, reverse=True)
 

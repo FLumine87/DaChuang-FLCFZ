@@ -202,6 +202,8 @@ DaChuang-FLCFZ/
 | 2026-09-30 | **文档与配置更新**：README 新增「动态跨模态哈希检索（真实数据集）」章节（三档体验、语料构建、指标复现、索引行为）；`.env.example` 补充 `HASHING_BALANCE_MODALITIES` / `HASHING_CORPUS_DB` / `HASHING_FALLBACK_CORPUS_DB` 说明 | README.md、DEVELOP.md、backend/.env.example | 三档：档0 合成语料开箱即用 / 档1 真实语料跨模态 / 档2 指标复现；真实数据不入库，引擎缺失时自动回退 |
 | 2026-10-07 | **管理端仪表盘、预警、案例闭环**：统计由数据库聚合；预警支持筛选、分页、详情、分配、顺序处置与审计；案例按账号关联筛查/预警并生成时间线，可更新状态和记录跟进；个人自助作答由服务端复算；修复公开注册提权、跨用户数据可见与异步漏 await；前端补加载、空态、错误、演示数据标识及重复提交防护 | backend/app/{db,handlers,services}、backend/worker/seed、frontend/src/{admin,components,pages,services}、backend/scripts/test_admin_workflow.py、docs/ADMIN_CONSOLE_GUIDE.md | 仅本地隔离分支与临时数据库验证，尚未推送/部署；既有 D1 须先执行一次 003 迁移，旧记录 user_id 为空时不按姓名强行关联 |
 
+| 2026-11-06 | 业务联动第二轮：修正线上公开演示账号提示；新增真实今日待办；统一案例与 Agent 数据归属、采集及独立预警；保存研判材料快照并提示变化；修复模拟检索参数兼容及模拟结果边界 | backend/app、frontend/src/admin、登录配置与测试；详见 docs/ADMIN_WORKFLOW_2026-11-06.md | 独立分支 codex/admin-workflow-20261106，交队长审阅合并；本地临时数据库及真实 HTTP 链路验证，未部署 |
+
 ---
 
 ## 六、技术要点与风险备忘

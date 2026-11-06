@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
 import { apiLogin, apiRegister } from "../services/mockApi";
+import { adminDemo } from "../auth/demoCredentials";
 import { saveDisplayName, saveSessionToken } from "../auth/session";
 import { resolveEntryPath } from "../auth/entryPath";
 
@@ -125,8 +126,8 @@ export default function LoginPage() {
 
   const fillDemo = (next: Panel) => {
     if (next === "admin") {
-      setUsername("adminer");
-      setPassword("admin");
+      setUsername(adminDemo.username);
+      setPassword(adminDemo.password);
     } else {
       setUsername("xiaoyu");
       setPassword("123456");
@@ -510,7 +511,7 @@ export default function LoginPage() {
               >
                 <span>{isAdmin ? "管理端 · 咨询师" : "演示账号"}</span>
                 <code className="font-mono text-slate-800">
-                  {isAdmin ? "adminer / admin" : "xiaoyu / 123456"}
+                  {isAdmin ? `${adminDemo.username} / ${adminDemo.password}` : "xiaoyu / 123456"}
                 </code>
               </button>
 

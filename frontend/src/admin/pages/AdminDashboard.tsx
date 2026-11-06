@@ -36,6 +36,7 @@ import {
   PanelHeading,
 } from "../../components/DashboardUI";
 import AdminAlertBadge from "../components/AdminAlertBadge";
+import TodayWork from "../components/TodayWork";
 
 export default function AdminDashboard() {
   const [data, setData] = useState<AdminDashboardResponse | null>(null);
@@ -119,6 +120,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
+      <TodayWork />
       {/* 注：顶部「待处理预警 / 本月完成率」等指标及其变化幅度目前是前端常量，
           未接入 /api/dashboard/stats；下方趋势与分布来自真实聚合查询。 */}
       {/* 首行按「要做的 → 风险总量 → 整体进度」排序：

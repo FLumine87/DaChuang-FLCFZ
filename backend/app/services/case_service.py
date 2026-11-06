@@ -117,7 +117,10 @@ async def create_case(data: dict) -> dict:
 
 async def sync_personal_case(user_id: int, screening: dict) -> None:
     """按账号维护档案统计；不通过姓名匹配旧档案。"""
-    case = await db.query_one_a("SELECT id FROM cases WHERE user_id = ?", (user_id,))
+    cases = await db.query_a("SELECT id FROM cases WHERE user_id = ?", (user_id,))
+    if len(cases) > 1:
+        return  # Ambiguous historical ownership must be reviewed, not guessed.
+    case = cases[0] if cases else None
     if not case:
         await create_case({
             "user_id": user_id, "name": screening["name"],
@@ -135,6 +138,9 @@ async def sync_personal_case(user_id: int, screening: dict) -> None:
         "alert_level = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (count["c"], latest["screening_date"], latest["alert_level"], case["id"]),
     )
+    await db.execute_a(
+        "UPDATE screenings SET case_id=? WHERE id=? AND user_id=? AND case_id IS NULL",
+        (case["id"], screening["id"], user_id))
 
 
 async def update_case(case_id: int, data: dict) -> Optional[dict]:

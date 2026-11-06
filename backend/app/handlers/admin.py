@@ -1,5 +1,5 @@
 """管理端接口 handler（保留前端响应字段结构，async）。"""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.core.dates import format_dt
 from app.core.responses import success_response
@@ -280,8 +280,12 @@ async def get_admin_cases(ctx: RequestContext):
     except (ValueError, TypeError):
         page = 1
     total_row = await db.query_one_a("SELECT COUNT(*) AS c FROM cases c" + clause, params)
+    owned = ("FROM screenings s WHERE (s.case_id=c.id AND (s.user_id IS NULL OR c.user_id IS NULL OR s.user_id=c.user_id)) "
+             "OR (s.case_id IS NULL AND s.user_id=c.user_id AND (SELECT COUNT(*) FROM cases x WHERE x.user_id=c.user_id)=1)")
     rows = await db.query_a(
-        "SELECT c.* FROM cases c" + clause +
+        f"SELECT c.*, (SELECT COUNT(*) {owned}) AS actual_count, "
+        f"(SELECT COALESCE(s.screening_date,s.created_at) {owned} ORDER BY s.created_at DESC,s.id DESC LIMIT 1) AS actual_latest, "
+        f"(SELECT s.alert_level {owned} ORDER BY s.created_at DESC,s.id DESC LIMIT 1) AS actual_level FROM cases c" + clause +
         " ORDER BY c.updated_at DESC, c.id DESC LIMIT 50 OFFSET ?", params + [(page - 1) * 50])
     tags_by_case = {case["id"]: [] for case in rows}
     if rows:
@@ -311,9 +315,9 @@ async def _admin_case_dict(c: dict, tags: list = None) -> dict:
         "name": c.get("name") or "", "age": c.get("age"),
         "gender": c.get("gender") or "", "department": c.get("department") or "",
         "tags": tags,
-        "screeningCount": c.get("screening_count") or 0,
-        "lastScreening": format_dt(c.get("last_screening_date")),
-        "alertLevel": c.get("alert_level") or "green",
+        "screeningCount": c.get("actual_count", c.get("screening_count")) or 0,
+        "lastScreening": format_dt(c.get("actual_latest", c.get("last_screening_date"))),
+        "alertLevel": c.get("actual_level") or c.get("alert_level") or "green",
         "status": c.get("status") or "active",
         "notes": c.get("notes") or "",
     }
@@ -323,18 +327,27 @@ async def get_admin_case_detail(ctx: RequestContext, case_id: str):
     case = await db.query_one_a("SELECT * FROM cases WHERE case_id = ?", (case_id,))
     if not case:
         raise HttpError(404, "案例不存在")
-    user_id = case.get("user_id")
-    screenings, alerts = [], []
-    if user_id is not None:
-        screenings = await db.query_a(
-            "SELECT s.screening_id AS id, s.score, s.max_score AS maxScore, "
-            "s.alert_level AS alertLevel, s.screening_date AS date, q.name AS questionnaire "
-            "FROM screenings s LEFT JOIN questionnaires q ON s.questionnaire_id = q.id "
-            "WHERE s.user_id = ? ORDER BY s.created_at DESC LIMIT 50", (user_id,))
-        alerts = await db.query_a(
-            "SELECT a.alert_id AS id, a.level, a.status, a.created_at AS createdAt "
-            "FROM alerts a JOIN screenings s ON a.screening_id = s.id "
-            "WHERE s.user_id = ? ORDER BY a.created_at DESC LIMIT 50", (user_id,))
+    from app.services import case_context, agent_workspace
+    from app.handlers.personal import _supplement_dict
+    context = await case_context.load(case)
+    case["actual_count"] = len(context["screenings"])
+    case["actual_latest"] = (context["screenings"][0].get("screening_date") or context["screenings"][0].get("created_at")) if context["screenings"] else None
+    case["actual_level"] = context["screenings"][0].get("alert_level") if context["screenings"] else None
+    screenings = [{"id": s["screening_id"], "score": s["score"], "maxScore": s["max_score"],
+                   "alertLevel": s["alert_level"], "date": s["screening_date"] or s["created_at"],
+                   "questionnaire": s["questionnaire"]} for s in context["screenings"]]
+    alerts = [{"id": a["alert_id"], "level": a["level"], "status": a["status"],
+               "createdAt": a["created_at"]} for a in context["alerts"]]
+    supplements = []
+    for row in context["supplements"]:
+        item = _supplement_dict(row)
+        item.pop("url", None)
+        supplements.append(item)
+    subject = f"case:{case['id']}"
+    state = await case_context.assessment_state(subject)
+    tasks = [task for task in await agent_workspace.tasks_for("live")
+             if task["subject"] == subject] if await db.query_one_a(
+                 "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_workspace_tasks'") else []
     follow_ups = await db.query_a(
         "SELECT id, event_type AS type, title, description, event_date AS date "
         "FROM case_timeline WHERE case_id = ? ORDER BY event_date DESC, id DESC", (case["id"],))
@@ -353,6 +366,17 @@ async def get_admin_case_detail(ctx: RequestContext, case_id: str):
         "description": f"预警编号 {item['id']}",
         "date": format_dt(item.get("createdAt"), "%Y-%m-%d %H:%M"),
     } for item in alerts)
+    timeline.extend({"id": f"supplement:{item['id']}", "type": "supplement",
+                     "title": {"text": "新增文本采集", "audio": "新增语音采集", "image": "新增图像采集"}.get(item["kind"], "新增采集"),
+                     "description": item.get("filename") or item.get("description") or "",
+                     "date": item["createdAt"]} for item in supplements)
+    task_actions = {"proposed": "生成任务草案", "confirm": "确认分配", "modify": "调整任务",
+                    "reject": "拒绝草案", "complete": "完成任务", "followup": "记录随访"}
+    timeline.extend({"id": f"task:{task['id']}:{index}", "type": "task",
+                     "title": task_actions.get(event.get("action"), "任务更新"),
+                     "description": task["title"] + (" · " + event["note"] if event.get("note") else ""),
+                     "date": format_dt(event.get("at"), "%Y-%m-%d %H:%M")}
+                    for task in tasks for index, event in enumerate(task["events"]))
     timeline.sort(key=lambda event: event.get("date") or "", reverse=True)
     # screenings / alerts 这里原来直接把**原始行**返回，而它们的 date/createdAt
     # 是 sqlite 里的裸字符串（2026-10-14 13:53:29.910839），于是微秒会显示到
@@ -365,6 +389,30 @@ async def get_admin_case_detail(ctx: RequestContext, case_id: str):
         "alerts": [{**item, "createdAt": format_dt(item.get("createdAt"), "%Y-%m-%d %H:%M")}
                    for item in alerts],
         "timeline": timeline,
+        "supplements": supplements, "tasks": tasks, "agentSubject": subject,
+        "assessmentState": state, "ownershipAmbiguous": context["ambiguous"],
+    })
+
+
+async def get_admin_work_queue(ctx: RequestContext):
+    from app.services import agent_workspace
+    await agent_workspace.ensure_schema()
+    today = datetime.now(timezone(timedelta(hours=8))).date().isoformat()
+    counts = await db.query_one_a(
+        "SELECT COUNT(*) AS open, SUM(CASE WHEN assignee_id IS NULL THEN 1 ELSE 0 END) AS unassigned "
+        "FROM alerts WHERE status IN ('pending','processing')")
+    tasks = await agent_workspace.tasks_for("live")
+    active = [t for t in tasks if t["state"] not in ("completed", "rejected")]
+    overdue = [t for t in active if t["due_at"] < today]
+    due = [t for t in active if t["due_at"] == today]
+    case_codes = {f"case:{c['id']}": c["case_id"] for c in await db.query_a("SELECT id,case_id FROM cases")}
+    return success_response(data={
+        "date": today, "timezone": "Asia/Shanghai",
+        "openAlerts": counts["open"] or 0, "unassignedAlerts": counts["unassigned"] or 0,
+        "dueToday": len(due), "overdue": len(overdue),
+        "pendingReview": sum(t["state"] == "proposed" for t in active),
+        "tasks": [{**t, "caseId": case_codes.get(t["subject"])} for t in
+                  sorted(active, key=lambda t: (t["due_at"], t["id"]))],
     })
 
 
