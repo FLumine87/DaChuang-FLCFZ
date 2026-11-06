@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Search, Sparkles, Loader2, Camera } from 'lucide-react';
 import { adminSearch } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import CameraCapture from '../../components/CameraCapture';
+import { useAudioRecorder } from '../../hooks/useAudioRecorder';
+import { toCorpusWavFile } from '../../utils/audioRecorder';
 import type { RetrievalResult } from '../data/adminMockData';
 import { corpusRecords } from '../../data/corpusRecords';
 
@@ -29,32 +31,55 @@ export default function AdminRetrieval() {
   const [mediaError, setMediaError] = useState('');
   /** 现场拍照（摄像头）：拍完与文件选择走同一条 pickMedia 链路 */
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const busy = useRef(false);
+  const mediaVersion = useRef(0);
+  const recorder = useAudioRecorder((file) => { void pickMedia('audio', file); });
 
   /** 选择图像 / 语音文件：读成 base64（去掉 dataURL 前缀）后随查询提交 */
-  const pickMedia = (kind: 'image' | 'audio', file: File | null) => {
+  const pickMedia = async (kind: 'image' | 'audio', file: File | null) => {
+    const version = ++mediaVersion.current;
     setMediaError('');
     if (!file) return;
-    if (kind === 'image' && !file.type.startsWith('image/')) {
-      setMediaError('请选择图像文件');
+    setMedia(null);
+    setModality('text');
+    if (file.size > 8 * 1024 * 1024 || !file.size) {
+      setMediaError('请选择大小在 0～8MB 之间的文件');
       return;
     }
-    if (kind === 'audio' && !file.type.startsWith('audio/')) {
-      setMediaError('请选择音频文件');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const raw = String(reader.result || '');
-      setMedia({ name: file.name, base64: raw.includes('base64,') ? raw.split('base64,')[1] : raw });
+    setReading(true);
+    try {
+      let ready = file;
+      if (kind === 'image') {
+        if (!/\.(png|jpe?g|bmp|webp)$/i.test(file.name)) throw new Error('图像支持 PNG、JPG、BMP、WebP');
+        const bitmap = await createImageBitmap(file);
+        bitmap.close();
+      } else {
+        ready = await toCorpusWavFile(file, file.name.replace(/\.[^.]+$/, '') + '.wav');
+      }
+      if (ready.size > 8 * 1024 * 1024) throw new Error('转换后的音频超过 8MB，请选择较短片段');
+      const raw = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('文件读取失败，请重试'));
+        reader.readAsDataURL(ready);
+      });
+      if (version !== mediaVersion.current) return;
+      setMedia({ name: ready.name, base64: raw.split('base64,')[1] });
       setModality(kind);
-    };
-    reader.onerror = () => setMediaError('文件读取失败，请重试');
-    reader.readAsDataURL(file);
+    } catch (error) {
+      if (version === mediaVersion.current) setMediaError(error instanceof Error ? error.message : '媒体处理失败');
+    } finally {
+      if (version === mediaVersion.current) setReading(false);
+    }
   };
 
   const handleSearch = async () => {
-    if (!query.trim()) return;
+    if (busy.current || reading || recorder.recording || (!query.trim() && !media)) return;
+    busy.current = true;
     setLoading(true);
+    setSearchError('');
     setResults(null);
     setReport(null);
     try {
@@ -65,7 +90,10 @@ export default function AdminRetrieval() {
       });
       setResults(res.results as RetrievalResult[]);
       setReport(res.report as RagReport);
+    } catch (error) {
+      setSearchError(error instanceof Error ? error.message : '检索失败，请重试');
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   };
@@ -90,16 +118,16 @@ export default function AdminRetrieval() {
           <input
             id="admin-media-image"
             type="file"
-            accept="image/*"
+            accept=".png,.jpg,.jpeg,.bmp,.webp"
             className="hidden"
-            onChange={(e) => pickMedia('image', e.target.files?.[0] ?? null)}
+            onChange={(e) => { void pickMedia('image', e.target.files?.[0] ?? null); e.target.value = ''; }}
           />
           <input
             id="admin-media-audio"
             type="file"
             accept="audio/*"
             className="hidden"
-            onChange={(e) => pickMedia('audio', e.target.files?.[0] ?? null)}
+            onChange={(e) => { void pickMedia('audio', e.target.files?.[0] ?? null); e.target.value = ''; }}
           />
           <button
             type="button"
@@ -138,12 +166,22 @@ export default function AdminRetrieval() {
           </button>
           <button
             onClick={handleSearch}
-            disabled={loading || (!query.trim() && !media)}
+            disabled={loading || reading || recorder.recording || (!query.trim() && !media)}
             className="px-6 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             {loading ? '检索中...' : '检索'}
           </button>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+          {recorder.recording ? <>
+            <span role="status">正在录音 {recorder.seconds} 秒</span>
+            <button type="button" onClick={recorder.stop} className="ui-button">停止并使用录音</button>
+            <button type="button" onClick={recorder.cancel} className="ui-button">取消录音</button>
+          </> : <button type="button" disabled={!recorder.supported || loading || reading} onClick={() => void recorder.start()} className="ui-button">录音查询</button>}
+          {reading && <span role="status">正在读取并转换媒体…</span>}
+          {recorder.error && <p role="alert" className="text-danger-600">{recorder.error}</p>}
+          {searchError && <p role="alert" className="text-danger-600">检索失败：{searchError}，可以重新点击检索。</p>}
         </div>
 
         {(media || mediaError) && (
@@ -156,6 +194,8 @@ export default function AdminRetrieval() {
                 <button
                   type="button"
                   onClick={() => {
+                    mediaVersion.current += 1;
+                    setReading(false);
                     setMedia(null);
                     setModality('text');
                   }}

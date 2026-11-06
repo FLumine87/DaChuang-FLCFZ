@@ -202,6 +202,8 @@ DaChuang-FLCFZ/
 | 2026-09-30 | **文档与配置更新**：README 新增「动态跨模态哈希检索（真实数据集）」章节（三档体验、语料构建、指标复现、索引行为）；`.env.example` 补充 `HASHING_BALANCE_MODALITIES` / `HASHING_CORPUS_DB` / `HASHING_FALLBACK_CORPUS_DB` 说明 | README.md、DEVELOP.md、backend/.env.example | 三档：档0 合成语料开箱即用 / 档1 真实语料跨模态 / 档2 指标复现；真实数据不入库，引擎缺失时自动回退 |
 | 2026-10-07 | **管理端仪表盘、预警、案例闭环**：统计由数据库聚合；预警支持筛选、分页、详情、分配、顺序处置与审计；案例按账号关联筛查/预警并生成时间线，可更新状态和记录跟进；个人自助作答由服务端复算；修复公开注册提权、跨用户数据可见与异步漏 await；前端补加载、空态、错误、演示数据标识及重复提交防护 | backend/app/{db,handlers,services}、backend/worker/seed、frontend/src/{admin,components,pages,services}、backend/scripts/test_admin_workflow.py、docs/ADMIN_CONSOLE_GUIDE.md | 仅本地隔离分支与临时数据库验证，尚未推送/部署；既有 D1 须先执行一次 003 迁移，旧记录 user_id 为空时不按姓名强行关联 |
 
+| 2026-11-06 | 管理端四项建议落地：首页预警直达、卡片引导、多模态采集查询、媒体检索修复及录音入口 | backend/app/handlers、frontend/src/admin、frontend/src/services/adminApi.ts、测试和 docs/ADMIN_IMPROVEMENTS_2026-11-06.md | 基于 ec75988；8 项后端测试、4 项浏览器回归和构建通过；独立分支交队长合并，未部署 |
+
 ---
 
 ## 六、技术要点与风险备忘

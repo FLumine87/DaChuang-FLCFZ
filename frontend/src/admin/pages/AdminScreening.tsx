@@ -5,8 +5,10 @@ import { getAdminScreeningRecords } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import AdminStatusBadge from '../components/AdminStatusBadge';
 import AdminScreeningDetail from './AdminScreeningDetail';
+import AdminSupplements from './AdminSupplements';
 
 export default function AdminScreening() {
+  const [mode, setMode] = useState<'questionnaire' | 'multimodal'>('questionnaire');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -42,6 +44,11 @@ export default function AdminScreening() {
 
   return (
     <div className="space-y-4">
+      <div className="flex gap-3" aria-label="筛查数据类型">
+        <button className="ui-button" aria-pressed={mode === 'questionnaire'} onClick={() => setMode('questionnaire')}>问卷筛查</button>
+        <button className="ui-button" aria-pressed={mode === 'multimodal'} onClick={() => setMode('multimodal')}>多模态采集与分析</button>
+      </div>
+      {mode === 'multimodal' ? <AdminSupplements /> : <>
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -111,6 +118,7 @@ export default function AdminScreening() {
           </tbody>
         </table></div>
       </div>
+      </>}
     </div>
   );
 }

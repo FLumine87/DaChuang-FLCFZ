@@ -19,6 +19,25 @@ from app.handlers import personal  # noqa: E402
 
 
 class AdminWorkflowTest(unittest.IsolatedAsyncioTestCase):
+    async def test_admin_supplements_include_independent_and_linked_records(self):
+        db.execute("INSERT INTO screening_supplements (user_id, kind, text, analysis) VALUES (?, 'text', ?, ?)",
+                   (self.user_id, "独立文本", json.dumps({"levelLabel": "关注", "conclusion": "测试结论"})))
+        db.execute("INSERT INTO screening_supplements (user_id, screening_id, kind, filename, url) VALUES (?, ?, 'audio', ?, ?)",
+                   (self.user_id, "SCR-TEST-A", "sample.wav", "/uploads/private.wav"))
+        status, response = await self.call("GET", "/api/admin/supplements")
+        self.assertEqual(status, 200, response)
+        self.assertEqual(response["data"]["total"], 2)
+        self.assertEqual({item["kind"] for item in response["data"]["items"]}, {"text", "audio"})
+        self.assertTrue(all("url" not in item for item in response["data"]["items"]))
+        status, response = await self.call("GET", "/api/admin/supplements", query="kind=audio&keyword=sample")
+        self.assertEqual(status, 200, response)
+        self.assertEqual(response["data"]["total"], 1)
+        self.assertEqual(response["data"]["items"][0]["screeningId"], "SCR-TEST-A")
+        status, _ = await self.call("GET", "/api/admin/supplements", role="user")
+        self.assertEqual(status, 403)
+        status, _ = await self.call("GET", "/api/admin/supplements", query="kind=invalid")
+        self.assertEqual(status, 400)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.original_url = settings.DATABASE_URL

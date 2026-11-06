@@ -41,6 +41,7 @@ ROUTES = [
     ("GET", "/api/admin/test", admin.test_admin, "admin"),
     ("GET", "/api/admin/dashboard", admin.get_admin_dashboard, "admin"),
     ("GET", "/api/admin/screenings", admin.get_admin_screenings, "admin"),
+    ("GET", "/api/admin/supplements", admin.get_admin_supplements, "admin"),
     ("GET", "/api/admin/alerts", admin.get_admin_alerts, "admin"),
     ("GET", "/api/admin/alerts/{alert_id}", admin.get_admin_alert_detail, "admin"),
     ("PUT", "/api/admin/alerts/{alert_id}", admin.update_admin_alert, "admin"),
