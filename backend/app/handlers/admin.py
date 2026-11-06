@@ -375,7 +375,7 @@ async def get_admin_case_detail(ctx: RequestContext, case_id: str):
     timeline.extend({"id": f"task:{task['id']}:{index}", "type": "task",
                      "title": task_actions.get(event.get("action"), "任务更新"),
                      "description": task["title"] + (" · " + event["note"] if event.get("note") else ""),
-                     "date": format_dt(event.get("at"), "%Y-%m-%d %H:%M")}
+                     "date": format_dt(str(event.get("at") or "").replace("T", " "), "%Y-%m-%d %H:%M")}
                     for task in tasks for index, event in enumerate(task["events"]))
     timeline.sort(key=lambda event: event.get("date") or "", reverse=True)
     # screenings / alerts 这里原来直接把**原始行**返回，而它们的 date/createdAt

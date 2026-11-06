@@ -80,6 +80,8 @@ class AdminContextTests(unittest.IsolatedAsyncioTestCase):
         db.execute("DELETE FROM screening_supplements WHERE id=?", (sup,))
         self.assertEqual((await case_context.assessment_state(f"case:{self.case}"))["removedRecords"], 1)
         self.assertEqual(db.query_one("SELECT COUNT(*) AS c FROM agent_workspace_case_runs")["c"], 2)
+        admin_detail = (await admin.get_admin_case_detail(RequestContext("GET", "/"), "CASE-CONTEXT"))["data"]
+        self.assertTrue(all("T" not in e["date"] for e in admin_detail["timeline"]))
 
     async def test_legacy_report_is_unknown(self):
         await agent_individual.ensure_schema()

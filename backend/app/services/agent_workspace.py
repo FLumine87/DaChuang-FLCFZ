@@ -214,7 +214,8 @@ async def propose_tasks(scope, subjects, actor):
         task_id = f"{scope}:{item['subject']}:{kind}"
         event = [{"at": now(), "actor": actor, "action": "proposed",
                   "evidence_ids": item["evidence_ids"],
-                  "note": "由工作流生成待审核草案；期限为演示配置，待人工调整"}]
+                  "note": "由工作流生成待审核草案；期限为默认计划，待人工调整" if scope == "live"
+                          else "由工作流生成待审核草案；期限为演示配置，待人工调整"}]
         inserted = await db.mutate_returning_a(
             "INSERT OR IGNORE INTO agent_workspace_tasks "
             "(id,scope,subject,kind,title,state,due_at,events,created_at,updated_at) "
