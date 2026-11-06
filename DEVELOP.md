@@ -203,6 +203,7 @@ DaChuang-FLCFZ/
 | 2026-10-07 | **管理端仪表盘、预警、案例闭环**：统计由数据库聚合；预警支持筛选、分页、详情、分配、顺序处置与审计；案例按账号关联筛查/预警并生成时间线，可更新状态和记录跟进；个人自助作答由服务端复算；修复公开注册提权、跨用户数据可见与异步漏 await；前端补加载、空态、错误、演示数据标识及重复提交防护 | backend/app/{db,handlers,services}、backend/worker/seed、frontend/src/{admin,components,pages,services}、backend/scripts/test_admin_workflow.py、docs/ADMIN_CONSOLE_GUIDE.md | 仅本地隔离分支与临时数据库验证，尚未推送/部署；既有 D1 须先执行一次 003 迁移，旧记录 user_id 为空时不按姓名强行关联 |
 
 | 2026-11-06 | 业务联动第二轮：修正线上公开演示账号提示；新增真实今日待办；统一案例与 Agent 数据归属、采集及独立预警；保存研判材料快照并提示变化；修复模拟检索参数兼容及模拟结果边界 | backend/app、frontend/src/admin、登录配置与测试；详见 docs/ADMIN_WORKFLOW_2026-11-06.md | 独立分支 codex/admin-workflow-20261106，交队长审阅合并；本地临时数据库及真实 HTTP 链路验证，未部署 |
+| 2026-11-06 | 复查闭环：工作人员预览并发送已审核任务，个人收件、确认及提交问卷，结果回传供工作人员复核；两端站内通知、内部备注隔离、重复提交防护及事务提交 | backend/app/services/review_service.py、复查与通知页面、007_review_requests.sql；详见 docs/PERSONAL_REVIEW_2026-11-06.md | 分支 codex/personal-review-notifications-20261106，依赖 PR #4；25+7 项后端测试、1 项真实双端浏览器验收、前端构建及修改文件 ESLint 通过；未合并、未部署，Agent 文字摘要/增强草案留后续 |
 
 ---
 
