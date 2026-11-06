@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import DashboardV2 from './pages/DashboardV2';
 import Screening from './pages/Screening';
+import ReviewTasks from './pages/ReviewTasks';
 import DataCollection from './pages/DataCollection';
 import Retrieval from './pages/Retrieval';
 import Alerts from './pages/Alerts';
@@ -114,6 +115,7 @@ export default function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="dashboard-v2" element={<DashboardV2 />} />
         <Route path="screening" element={<Screening />} />
+        <Route path="reviews" element={<ReviewTasks />} />
         <Route path="data-collection" element={<DataCollection />} />
         <Route path="retrieval" element={<Retrieval />} />
         <Route path="alerts" element={<Alerts />} />

@@ -31,6 +31,7 @@ def main():
         uid = db.execute("INSERT INTO users(username,password_hash,name,role) VALUES('flow-user',?,'验收成员','user')",
                          (get_password_hash("test123"),))
         q = db.execute("INSERT INTO questionnaires(code,name,max_score) VALUES('FLOW','验收量表',27)")
+        db.execute("INSERT OR IGNORE INTO questionnaires(code,name,max_score) VALUES('PHQ-9','PHQ-9',27)")
         db.execute("INSERT INTO cases(case_id,user_id,name) VALUES('CASE-FLOW',?,'验收成员')", (uid,))
         db.execute("INSERT INTO screenings(screening_id,user_id,name,questionnaire_id,score,max_score,status,alert_level,screening_date) "
                    "VALUES('SCR-FLOW',?,'验收成员',?,18,27,'completed','orange',CURRENT_TIMESTAMP)", (uid, q))

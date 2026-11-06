@@ -4,8 +4,17 @@ auth_level: None=公开 / 'user'=需登录 / 'admin'=需管理员
 """
 from app.handlers import (auth, screening, alerts, cases, retrieval, upload,
                           dashboard, personal, admin, knowledge_graph, warning_agent, agent_workspace)
+from app.handlers import reviews
 
 ROUTES = [
+    ("POST", "/api/admin/reviews", reviews.send, "admin"),
+    ("GET", "/api/admin/reviews", reviews.staff_list, "admin"),
+    ("PUT", "/api/admin/reviews/{request_id}", reviews.staff_action, "admin"),
+    ("GET", "/api/personal/reviews", reviews.personal_list, "user"),
+    ("POST", "/api/personal/reviews/{request_id}/acknowledge", reviews.acknowledge, "user"),
+    ("POST", "/api/personal/reviews/{request_id}/submit", reviews.submit, "user"),
+    ("GET", "/api/notifications", reviews.notifications, "user"),
+    ("PUT", "/api/notifications/{notification_id}/read", reviews.read, "user"),
     ("POST", "/api/agent-workspace/cases/{case_id}/runs", agent_workspace.run_case, "admin"),
     ("GET", "/api/agent-workspace", agent_workspace.overview, "admin"),
     ("POST", "/api/agent-workspace/runs", agent_workspace.run, "admin"),

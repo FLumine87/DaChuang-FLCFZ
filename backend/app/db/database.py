@@ -505,3 +505,21 @@ async def execute_a(sql: str, params=()) -> int:
         meta = res.get("meta", {}) or {}
         return meta.get("last_row_id", 0)
     return execute(sql, params)
+
+
+async def batch_a(statements):
+    """Commit a business operation atomically in local SQLite or D1."""
+    if runtime.is_worker():
+        env = runtime.get_worker_env()
+        return await env.DB.batch([env.DB.prepare(sql).bind(*_norm_params(params))
+                                   for sql, params in statements])
+    with _local_lock:
+        conn = _get_local_conn()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            for sql, params in statements:
+                conn.execute(sql, _norm_params(params))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise

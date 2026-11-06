@@ -30,6 +30,7 @@ import { getCurrentSession, logout } from "../auth/session";
 import Aurora from "./Aurora";
 import BrandLogo from "./BrandLogo";
 import BackToTop from './BackToTop';
+import NotificationBell from './NotificationBell';
 
 interface NavigationItem {
   path: string;
@@ -236,6 +237,10 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           },
         ]
       : []),
+    ...(!isAdmin ? [{
+      path: '/personal/reviews', label: '我的复查任务', description: '查看工作人员发来的复查任务与完成状态。',
+      icon: ClipboardList, group: '健康管理',
+    }] : []),
     /* 用户端保留「我的档案」——
        那是筛查记录的入口，首次引导落库后要靠它回看。 */
     ...(isAdmin
@@ -529,6 +534,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               {active.group}
             </span>
           </div>
+          <NotificationBell />
           <div className="flex min-w-0 flex-1 justify-center px-1">
             <div className="relative w-full max-w-xs" ref={searchContainerRef}>
               <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
