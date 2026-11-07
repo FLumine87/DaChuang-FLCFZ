@@ -429,6 +429,14 @@ html.theme-switching *::after {
   .app-shell[data-collapsed="true"] .sidebar-label {
     display: none;
   }
+  /* 矮屏（笔记本 700–820px）侧栏放不下 9 个导航项 + 这张纯装饰的卡片：
+     卡片会把「健康管理」整组挤到滚动区外，看起来像菜单缺了一项。
+     这一档直接收起装饰卡，把高度让给导航本身（收起态它本来就不显示）。 */
+  @media (max-height: 820px) {
+    .sidebar-promo {
+      display: none;
+    }
+  }
   .sidebar-link {
     display: flex;
     align-items: center;
@@ -524,6 +532,21 @@ html.theme-switching *::after {
     min-height: calc(100dvh - var(--topbar-height, 4rem) - 24px);
   }
   .app-content:has(.chat-fullheight) .page-body {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  /* 知识图谱页：与对话页共用"撑满视口 - 顶栏"的高度链。
+     图谱卡 flex-1 吃掉剩余高度，图例固定在页面底部——
+     空态不再靠固定 520px 把图例顶到首屏之外，也不会在底部留一大块空白。 */
+  .app-content:has(.kg-fullheight) {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100dvh - var(--topbar-height, 4rem) - 24px);
+  }
+  .app-content:has(.kg-fullheight) .page-body {
     flex: 1 0 auto;
     display: flex;
     flex-direction: column;
@@ -859,7 +882,13 @@ h1.text-3xl {
 @media (min-width: 640px) {
   .dash-hero-title { font-size: 2.75rem; } /* 44px */
 }
+/* 1024–1439：内容区被 290px 侧栏吃掉后只剩 ~670–1090px，
+   54px 的 11 字标题要 ~600px，会和右侧「今日行动计划」叠在一起。
+   这一档先给 44px；1440 以上空间够了再放到 54px。 */
 @media (min-width: 1024px) {
+  .dash-hero-title { font-size: 2.75rem; } /* 44px */
+}
+@media (min-width: 1440px) {
   .dash-hero-title { font-size: 3.375rem; } /* 54px */
 }
 h2,
@@ -2125,15 +2154,7 @@ html:not(.app-booted) .page-enter {
    「有不如死掉或用某种方式 / 伤害自己的念头」就是这么被折断的。
    自然折行会先把第一行填满再换行，读起来才是一个完整的短语。
    写在未分层区域，确保压得过任何 text-* 工具类。 */
-.first-run-question {
-  text-wrap: normal;
-  overflow-wrap: break-word;
-  word-break: normal;
-  hyphens: none;
-  /* 题干字号沿用原来的视觉（全局 h3 的 17px）。 */
-}
-
-/* 首次引导 02–04 的左侧主标题。
+/* 02–04 的左侧主标题。
    必须用类选择器显式给字号：全局 h1 { font-size: 1.625rem } 在无层级区域，
    会压过 Tailwind 的 text-[52px]（和题干 h3 是同一类问题）。
    52px 与入口页的 60px 拉开一档，但明显高于原来的 26px。 */
@@ -2152,6 +2173,14 @@ html:not(.app-booted) .page-enter {
   .first-run-title {
     font-size: 3.25rem; /* 52px */
   }
+}
+
+.first-run-question {
+  text-wrap: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+  /* 题干字号沿用原来的视觉（全局 h3 的 17px）。 */
 }
 
 /* 换题时的题目淡入：只动 opacity/transform，避免整卡重排 */
@@ -2348,5 +2377,48 @@ html:not(.app-booted) .page-enter {
   .scroll-hint-pill,
   .scroll-hint-arrow {
     animation: none !important;
+  }
+}
+
+/* ============================================================================
+   主页首屏在「矮屏」上的收紧（2026-11-07）
+   背景：13–16 寸笔记本加上浏览器工具栏后，可视高度常常只有 700–820px；
+   首屏原本按 900+ 设计，矮屏时「立即体验」下面的两个立项标签会被推到
+   首屏之外，看起来像"页面没做完/被切掉"。这里只收紧首屏 (#top)，
+   其它章节的节奏不动：标题小一档、正文行高与字号收一档、纵向留白压一压，
+   目标是 700px 高度内也能完整看到 CTA 与标签。
+   ========================================================================== */
+@media (max-height: 820px) {
+  #top {
+    padding-top: 1.25rem;
+    padding-bottom: 1.5rem;
+  }
+  #top .auth-section-title {
+    font-size: 2.5rem; /* 40px，原 52px */
+    line-height: 1.15;
+    margin-top: 1rem;
+  }
+  #top .hero-body {
+    margin-top: 1.25rem;
+    font-size: 1rem;
+    line-height: 1.75;
+  }
+  #top .hero-badges {
+    margin-top: 0.85rem;
+  }
+}
+
+/* 更矮（约 700px，13 寸全屏 + 工具栏）：再收一档字号 */
+@media (max-height: 740px) {
+  #top .auth-section-title {
+    font-size: 2.15rem;
+    line-height: 1.15;
+  }
+  #top .hero-body {
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+  #top .hero-badges {
+    margin-top: 0.65rem;
   }
 }

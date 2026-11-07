@@ -222,8 +222,8 @@ export default function KgPage() {
   const selNode = nodes.find((n) => n.id === selected);
 
   return (
-    <div className="space-y-4">
-      <div className="ui-card p-4 flex items-center justify-between">
+    <div className="kg-fullheight flex flex-1 min-h-0 flex-col gap-4">
+      <div className="ui-card p-4 flex shrink-0 items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
             <Network className="w-4 h-4 text-primary-600" /> 我的个人知识图谱
@@ -254,18 +254,17 @@ export default function KgPage() {
 
       {/* 服务端图谱取不到时的如实说明：只说人话，不放原始响应体 */}
       {serverNotice && (
-        <div className="flex items-center gap-2 text-sm text-slate-600 ui-card px-3 py-2">
+        <div className="flex shrink-0 items-center gap-2 text-sm text-slate-600 ui-card px-3 py-2">
           <AlertTriangle className="w-4 h-4 shrink-0 text-warning-500" />
           <span>{serverNotice}</span>
         </div>
       )}
 
-      <div className="ui-card overflow-hidden">
-        {/* 空态不再占 520px 高：整页会因此把图例挤到首屏之外，
-            用户要滚动才能看到下面一行。这里收成 260px，图例与说明直接落在首屏内；
-            有节点时仍由 SVG 的 viewBox 决定高度。 */}
+      {/* 图谱卡吃掉页面剩余高度：空态不再固定 520/260，
+          图例用 shrink-0 固定在底部，首屏即可看到，页面底部也不留空白。 */}
+      <div className="ui-card flex min-h-[260px] flex-1 flex-col overflow-hidden">
         {!data || nodes.length === 0 || links.length === 0 ? (
-          <div className="h-[260px] flex flex-col items-center justify-center gap-3 text-sm text-slate-400">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-slate-400">
             {loading ? (
               '加载中…'
             ) : (
@@ -281,7 +280,7 @@ export default function KgPage() {
             )}
           </div>
         ) : (
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto block" style={{ background: `linear-gradient(135deg,${palette.canvasFrom},${palette.canvasTo})` }}>
+          <svg viewBox={`0 0 ${W} ${H}`} className="block h-full w-full" style={{ background: `linear-gradient(135deg,${palette.canvasFrom},${palette.canvasTo})` }}>
             {/* 边 */}
             {links.map((l, i) => (
               <line
@@ -325,7 +324,7 @@ export default function KgPage() {
       </div>
 
       {/* 图例 */}
-      <div className="ui-card p-4 flex flex-wrap gap-3 items-center">
+      <div className="ui-card flex shrink-0 flex-wrap items-center gap-3 p-4">
         <span className="text-xs font-medium text-slate-500 mr-1">图例：</span>
         {Object.entries(LABEL_NAME).map(([k, v]) => (
           <span key={k} className="inline-flex items-center gap-1.5 text-xs text-slate-600">
@@ -337,7 +336,7 @@ export default function KgPage() {
 
       {/* 选中详情 */}
       {selNode && (
-        <div className="ui-card p-4">
+        <div className="ui-card shrink-0 p-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-800">
               节点：{selNode.name}
