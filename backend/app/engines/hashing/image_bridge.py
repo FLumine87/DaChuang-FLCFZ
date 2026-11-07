@@ -135,11 +135,32 @@ class ImageTextBridge:
             for mod in (q_mod, i_mod):
                 code = self.model.encode({mod: feats[mod][i]})
                 uid = f"{rid}-{mod}"
-                meta = {"record_id": rid, "modality": mod,
-                        "tags": r.get("tags") or [], "window": 0}
+                meta = self._unit_meta(r, rid, mod)
                 self.units[uid] = dict(meta, code=list(code))
                 self.index.insert(uid, list(code), meta, window=0)
         return True
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _unit_meta(row: Dict, rid: str, modality: str) -> Dict:
+        """单元元信息：保留标签溯源需要的字段。
+
+        不能只留 record_id / modality / tags —— 队长的 label_provenance
+        要靠 dataset、alert_level、media_path 等字段判断「这是 FER 表情
+        还是 EATD 的 SDS 筛查样本」。缺了这些，桥接结果就会给错告警等级
+        （FER 表情图本应是 unknown，按记录级给 green 是错的）。
+        """
+        keep = ("dataset", "alert_level", "media_path", "media_kind",
+                "media_meta", "emotion_label", "screening_label",
+                "label_source", "label_validity", "pairing_type",
+                "screening_usable", "date", "created_at", "severity")
+        meta = {"record_id": rid, "modality": modality,
+                "tags": row.get("tags") or [], "window": 0}
+        for k in keep:
+            v = row.get(k)
+            if v is not None:
+                meta[k] = v
+        return meta
 
     def _fit_with_S(self, rows: List[Dict], feats: Dict[str, List[List[float]]],
                     S: List[List[float]], pair: Tuple[str, str] = ("text", "image")):
@@ -170,8 +191,7 @@ class ImageTextBridge:
             for mod in (q_mod, i_mod):
                 code = self.model.encode({mod: feats[mod][i]})
                 uid = f"{rid}-{mod}"
-                meta = {"record_id": rid, "modality": mod,
-                        "tags": r.get("tags") or [], "window": 0}
+                meta = self._unit_meta(r, rid, mod)
                 self.units[uid] = dict(meta, code=list(code))
                 self.index.insert(uid, list(code), meta, window=0)
         return True
@@ -215,6 +235,9 @@ class ImageTextBridge:
                 "modality": meta.get("modality"),
                 "sim": sim, "score": sim,
                 "tags": meta.get("tags") or [],
+                # 单元级元信息：调用方用它做标签溯源（队长的 label_provenance）
+                "unit_meta": {k: v for k, v in meta.items()
+                              if k not in ("code",)},
             })
             if len(out) >= top_k:
                 break

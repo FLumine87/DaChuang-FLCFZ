@@ -161,6 +161,33 @@ async def main():
     print(f"  路由分布: {routes3}")
     print(f"  （集成前主引擎 0.2231；桥接离线 0.5776）")
 
+    # --- 文查询 + 范围「图像」→ 应走主引擎 + 桥接的分数合并 ---
+    aps4, routes4 = [], {}
+    for q in txt_q:
+        data = {"query": q.get("text") or "", "modality": "text",
+                "modality_filter": "image", "top_k": TOP_K}
+        results, info, *_ = await retrieval.perform_search(
+            data, default_top_k=TOP_K, viewer=None)
+        routes4[info.get("route", "main")] = routes4.get(info.get("route", "main"), 0) + 1
+        ranked, seen = [], set()
+        for h in results:
+            rid = h.get("record_id")
+            if rid in seen:
+                continue
+            seen.add(rid)
+            ranked.append(rid)
+        th = _norm(q.get("themes"))
+
+        def rel(rid, own=q.get("record_id"), t=th):
+            if rid == own:
+                return False
+            return _jac(t, recs.get(rid) or []) >= 0.5
+        aps4.append(_ap(ranked, rel, TOP_K))
+    m4 = sum(aps4) / len(aps4) if aps4 else 0
+    print(f"\n【文搜图（范围=图像）】走接口 mAP@10 = {m4:.4f}  ({len(aps4)} 查询)")
+    print(f"  路由分布: {routes4}")
+    print(f"  （合并实验：main 0.2351 / bridge 0.2756 / w0.5 0.3292）")
+
 
 def _b64(data: bytes) -> str:
     import base64

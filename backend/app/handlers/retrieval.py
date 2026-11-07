@@ -10,6 +10,7 @@ from app.engines.agent import build_evidence_pack
 from app.engines.hashing.query_media import (
     MediaQueryError, decode_media_query, remove_media_query,
 )
+from app.engines.hashing.label_provenance import reference_labels
 
 # 前端可选的检索范围：全部 / 文本 / 图像 / 语音
 _MODALITY_FILTERS = ("text", "image", "audio")
@@ -40,6 +41,115 @@ def _params(data: dict, default_top_k: int = 5):
     except (TypeError, ValueError):
         top_k = default_top_k
     return modality, mf, max(1, min(50, top_k))
+
+
+def _merged_score(main_score: float, bridge_score: float,
+                  weight: float) -> float:
+    """主引擎与桥接的分数线性加权。
+
+    实测（文搜图，同一实验内对比）：
+        main 0.2351 / bridge 0.2756 / w0.5 0.3292
+    两个通道看到的是不同的相关性（主引擎靠弱语义图像特征 + 文-音锚点，
+    桥接靠 CNN 判别特征 + 大 λ 的主题结构），互补而非冗余。
+    权重 0.5 最优；RRF 与交错合并都更差（rrf 0.2242 / interleave 0.2105）。
+    """
+    return weight * main_score + (1.0 - weight) * bridge_score
+
+
+async def _merged_search(data: dict, modality: str, result_modality: str,
+                         top_k: int, tmp_path, viewer: dict):
+    """主引擎与桥接的合并检索（文→图 / 音→图）。
+
+    单通道都不够好：主引擎文搜图 0.2351、桥接 0.2756，
+    分数线性加权（w=0.5）后 0.3292（同一实验内对比，+9.4 点）。
+    两通道的相关性来源不同，互补而非冗余。
+
+    桥接不可用时返回 None，由调用方降级到纯主引擎。
+    """
+    from app.engines.hashing.bridge_manager import get_bridge_manager
+
+    mgr = get_bridge_manager()
+    pair = (modality, "image")
+    br = mgr.get(pair)
+    if br is None:
+        return None
+    feat = _bridge_query_feature(modality, data, tmp_path)
+    if not feat:
+        return None
+
+    engine = get_hashing_engine()
+    # 主引擎侧：取混合命中后按结果模态过滤（与九格评测同口径）
+    main_hits, _ = await engine.search_with_info(
+        query=data.get("query", ""), modality=modality,
+        top_k=max(top_k * 6, 60), viewer=viewer, media_path=tmp_path,
+    )
+    main_score, main_order = {}, []
+    for h in main_hits:
+        if h.get("modality") != result_modality:
+            continue
+        rid = h.get("record_id") or h.get("id")
+        if rid in main_score:
+            continue
+        main_score[rid] = float(h.get("score") or h.get("similarity") or 0.0)
+        main_order.append(rid)
+    if not main_order:
+        return None
+
+    # 桥接侧
+    bhits = br.search(feat, modality, top_k=max(top_k * 6, 60),
+                      result_modality=result_modality)
+    bridge_score, bridge_order = {}, []
+    for h in bhits:
+        rid = h["record_id"]
+        if rid in bridge_score:
+            continue
+        bridge_score[rid] = float(h.get("sim") or 0.0)
+        bridge_order.append(rid)
+    if not bridge_order:
+        return None
+
+    # 分数线性加权合并（w=0.5 最优，见 _merged_score 注释）
+    weight = 0.5
+    keys = set(main_order) | set(bridge_order)
+    merged = []
+    for rid in keys:
+        merged.append((_merged_score(main_score.get(rid, 0.0),
+                                     bridge_score.get(rid, 0.0), weight), rid))
+    merged.sort(key=lambda x: -x[0])
+
+    unit_meta_by_rid = {}
+    for h in bhits:
+        unit_meta_by_rid.setdefault(h["record_id"], h.get("unit_meta") or {})
+
+    results = []
+    for score, rid in merged[:top_k]:
+        rec = (engine.records or {}).get(rid) or {}
+        umeta = unit_meta_by_rid.get(rid) or {}
+        prov = reference_labels(umeta) if umeta else {}
+        results.append({
+            "record_id": rid,
+            "unit_id": (umeta.get("unit_id") or ""),
+            "modality": result_modality,
+            "score": round(score, 4),
+            "similarity": round(score, 4),
+            "tags": prov.get("tags") or rec.get("tags") or [],
+            "window": rec.get("window"),
+            "scope": rec.get("scope"),
+            "source": "merged",
+            **prov,
+            "explain": {
+                "route": f"merged:main+bridge:{pair[0]}-{pair[1]}",
+                "note": "主引擎与弱监督桥接的分数加权合并",
+            },
+        })
+    info = {
+        "route": f"merged:main+bridge:{pair[0]}-{pair[1]}",
+        "merge_weight": weight,
+        "main_candidates": len(main_order),
+        "bridge_candidates": len(bridge_order),
+        "bridge_stats": mgr.status(),
+    }
+    return results, info
 
 
 def _bridge_query_feature(modality: str, data: dict, tmp_path):
@@ -104,17 +214,21 @@ def _bridge_search(data: dict, modality: str, result_modality: str,
     for h in hits:
         rid = h.get("record_id")
         rec = (engine.records or {}).get(rid) or {}
+        unit_meta = h.get("unit_meta") or {}
+        # 标签溯源按**单元**算，不按记录：同一条记录里 FER 表情图只有表情标签、
+        # EATD 文本才有 SDS 筛查标签，按记录给 alert_level 会把两者混为一谈。
+        prov = reference_labels(unit_meta) if unit_meta else {}
         results.append({
             "record_id": rid,
             "unit_id": h.get("unit_id"),
             "modality": h.get("modality"),
             "score": h.get("sim"),
             "similarity": h.get("sim"),
-            "alert_level": rec.get("alert_level", "green"),
-            "tags": rec.get("tags") or h.get("tags") or [],
+            "tags": prov.get("tags") or rec.get("tags") or h.get("tags") or [],
             "window": rec.get("window"),
             "scope": rec.get("scope"),
             "source": "bridge",
+            **prov,
             "explain": {
                 "route": f"bridge:{_pair[0]}-{_pair[1]}",
                 "note": "弱监督桥接码空间（该模态对无真同源数据，走独立桥接）",
@@ -184,13 +298,15 @@ def _bridge_search_all(data: dict, modality: str, top_k: int,
                     "modality": h.get("modality"), "score": score,
                     "similarity": score, "_route": route,
                     "tags": h.get("tags") or [],
+                    "unit_meta": h.get("unit_meta") or {},
                 }
                 order.append(rid)
             elif score > prev["score"]:
                 prev.update({"unit_id": h.get("unit_id"),
                              "modality": h.get("modality"),
                              "score": score, "similarity": score,
-                             "_route": route})
+                             "_route": route,
+                             "unit_meta": h.get("unit_meta") or prev.get("unit_meta")})
     if not order:
         return None
 
@@ -199,17 +315,18 @@ def _bridge_search_all(data: dict, modality: str, top_k: int,
     for rid in order[:top_k]:
         m = merged[rid]
         rec = (engine.records or {}).get(rid) or {}
+        prov = reference_labels(m.get("unit_meta") or {}) if m.get("unit_meta") else {}
         results.append({
             "record_id": rid,
             "unit_id": m.get("unit_id"),
             "modality": m.get("modality"),
             "score": m.get("score"),
             "similarity": m.get("similarity"),
-            "alert_level": rec.get("alert_level", "green"),
-            "tags": rec.get("tags") or m.get("tags") or [],
+            "tags": prov.get("tags") or rec.get("tags") or m.get("tags") or [],
             "window": rec.get("window"),
             "scope": rec.get("scope"),
             "source": "bridge",
+            **prov,
             "explain": {
                 "route": m.get("_route"),
                 "note": "弱监督桥接码空间（该模态对无真同源数据，走独立桥接）",
@@ -307,9 +424,21 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
                 raise HttpError(400, str(exc)) from exc
         # 桥接分支：
         #   结果模态明确指定且与查询模态构成桥接对 → 走对应桥接
+        #   文→图 且结果模态是「图像」          → 主引擎 + 桥接分数合并
         #   结果模态不限（「全部模态」）且查询是图像 → 多通道合并
-        #     （主引擎的图文对齐弱，图搜文仅 0.2231；混排会挤掉桥接命中的文本）
+        #     （主引擎的图文对齐弱，图搜文仅 0.26；混排会挤掉桥接命中的文本）
         if modality_filter and modality_filter != modality:
+            if modality_filter == "image" and modality == "text":
+                # 只对文→图启用合并：实测文搜图合并 +9.4 点
+                # （main 0.2351 / bridge 0.2756 / w0.5 0.3292），
+                # 而音→图合并是负收益（main 0.1664 / bridge 0.1118 /
+                # 所有合并策略 0.104~0.117）—— 桥接在音搜图上本身更弱，
+                # 合并进来只会稀释主引擎的结果。
+                merged = await _merged_search(data, modality, modality_filter,
+                                              top_k, tmp_path, viewer)
+                if merged is not None:
+                    results, info = merged
+                    return results, info, modality, modality_filter
             bridged = _bridge_search(data, modality, modality_filter,
                                      top_k, tmp_path, viewer)
             if bridged is not None:

@@ -1,0 +1,15 @@
+{
+ "pair": "audio-image",
+ "lambda_s": 100.0,
+ "results": {
+  "main": 0.1664,
+  "bridge": 0.1118,
+  "rrf": 0.1064,
+  "max": 0.1168,
+  "interleave": 0.1045,
+  "w0.2": 0.1087,
+  "w0.5": 0.1167,
+  "w0.8": 0.1075
+ },
+ "best": "main"
+}

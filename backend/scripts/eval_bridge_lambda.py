@@ -194,7 +194,7 @@ def main():
     print("\n" + "=" * 62)
     print(f"λ 扫描汇总（{q_mod}-图桥接，K={args.K}）")
     print("=" * 62)
-    base = {"text": (0.4404, 0.2231), "audio": (0.2566, 0.2439)}[q_mod]
+    base = {"text": (0.4316, 0.2609), "audio": (0.3192, 0.2718)}[q_mod]
     print(f"  主引擎基线：{q_mod}搜图 {base[0]:.4f}   图搜{q_mod} {base[1]:.4f}")
     for r in results:
         star = "  ★" if (r["q2i"]["map@10"] > base[0]
