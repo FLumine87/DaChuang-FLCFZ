@@ -12,6 +12,7 @@ import {
   activateOfflineDemo,
   briefErrorMessage,
   request,
+  STRICT_BACKEND,
   USE_MOCK,
   getTokenUsername,
   isDemoToken,
@@ -286,6 +287,8 @@ function isServerFailure(reason: unknown): boolean {
  * 后续请求统一走本机数据，避免"一半真一半假"的会话。
  */
 function fallbackToDemo(reason: unknown): boolean {
+  /* 严格后端模式：失败就是失败，不能换成演示数据 */
+  if (STRICT_BACKEND) return false;
   if (isDemoToken()) return true;
   if (!isServerFailure(reason)) return false;
   activateOfflineDemo();
@@ -343,6 +346,14 @@ export async function apiLogin(
        切到本机演示数据，用演示账号完成登录（界面会标注「离线演示」）。
        后端恢复后退出登录重进，就会重新走真实接口。 */
     if (isConnectivityError(err)) {
+      if (STRICT_BACKEND) {
+        return {
+          ok: false,
+          message:
+            '连不上后端服务（当前是严格后端模式，不会使用演示数据）。' +
+            '请确认主后端已在 8000 端口启动，然后重试。',
+        };
+      }
       activateOfflineDemo();
       const fallback = mockLoginResult(username, password);
       if (!fallback.ok) {
@@ -372,6 +383,14 @@ export async function apiRegister(
     return { ok: true };
   } catch (err) {
     if (isConnectivityError(err)) {
+      if (STRICT_BACKEND) {
+        return {
+          ok: false,
+          message:
+            '连不上后端服务（当前是严格后端模式，不会在本机创建演示账号）。' +
+            '请确认主后端已在 8000 端口启动，然后重试。',
+        };
+      }
       activateOfflineDemo();
       const fallback = mockAuthRegister(username, password);
       return {

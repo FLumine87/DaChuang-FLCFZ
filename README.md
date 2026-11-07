@@ -22,13 +22,39 @@
 
 ## 本机运行
 
+### 连真实后端（完整功能，推荐）
+
+macOS 双击根目录的 **「启动本地环境-连后端.command」** 即可：脚本会依次确保主后端
+`:8000`、侧车后端 `:8001`、前端 `:5173` 就绪，然后打开浏览器。前端以
+`--mode backend` 启动（`VITE_STRICT_BACKEND=1`）：**所有数据走真实后端，接口失败会
+直接报错，不会静默回退演示数据**。
+
+手动启动等价于：
+
+```bash
+# 1. 主后端（登录 / 筛查 / 检索 / 预警 / 案例 / 管理端）
+cd backend && ./venv/bin/python -m app.main
+
+# 2. 侧车后端（AI 对话 / 知识图谱 / 推理 / 推送）
+cd personal-backend && ./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001
+
+# 3. 前端（连后端模式）
+cd frontend
+npm install
+npm run dev -- --mode backend    # http://127.0.0.1:5173/
+```
+
+账号：普通用户 `xiaoyu / 123456`；管理端 `adminer / admin` 或 `admin / admin123`。
+知识图谱需要 Neo4j（未启动时显示本机记录）；AI 对话要真实大模型需在
+`personal-backend/.env` 填真实 `LLM_API_KEY` 并把 `ENABLE_MOCK_ENGINES` 改为 `False`。
+
+### 纯前端演示（不需要后端）
+
 ```bash
 cd frontend
 npm install
-npm run dev          # http://127.0.0.1:5173/
+npm run dev:demo     # http://127.0.0.1:5174/，内置演示数据
 ```
-
-演示账号：普通用户 `xiaoyu / 123456`，管理员 `adminer / admin`（本地 mock 数据，无需后端）。
 
 ## 原型直开
 

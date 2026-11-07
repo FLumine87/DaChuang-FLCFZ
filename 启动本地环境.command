@@ -5,7 +5,8 @@
 #  依次确保以下服务在跑，全部就绪后自动打开浏览器：
 #      主后端        :8000   （筛查 / 检索 / 预警 / 案例 / 管理端）
 #      侧车后端      :8001   （AI 陪伴对话 / 知识图谱 / 推理 / 推送）
-#      前端（演示）  :5174   （--mode demo，内置数据）
+#      前端          :5174（演示，内置数据）/ :5173（连后端，真实数据）
+#                      由 MODE=demo|backend 决定，默认 demo
 #      Neo4j         :7687   （可选，只有知识图谱需要）
 #
 #  设计要点：
@@ -22,6 +23,21 @@ cd "$(dirname "$0")" || exit 1
 ROOT="$(pwd)"
 LOGS="$ROOT/logs"
 mkdir -p "$LOGS"
+
+# 前端模式：
+#   demo（默认）   :5174  内置演示数据，不需要后端，适合纯界面展示
+#   backend       :5173  --mode backend，所有数据走 8000/8001，严格模式不回退
+# 由包装脚本「启动本地环境-连后端.command」设置 MODE=backend 后调用本脚本。
+MODE="${MODE:-demo}"
+if [ "$MODE" = "backend" ]; then
+  FE_PORT=5173
+  FE_MODE="backend"
+  FE_LABEL="连后端模式（数据来自 8000/8001，不使用演示数据）"
+else
+  FE_PORT=5174
+  FE_MODE="demo"
+  FE_LABEL="演示模式（内置数据，不需要后端）"
+fi
 
 # ── 颜色 ──────────────────────────────────────────────────────────────────
 if [ -t 1 ]; then
@@ -149,15 +165,15 @@ else
 fi
 say ""
 
-# ── 4. 前端 :5174 ─────────────────────────────────────────────────────────
-say "${B}[4/4] 前端 :5174（演示模式）${N}"
-if port_busy 5174; then
+# ── 4. 前端 ───────────────────────────────────────────────────────────────
+say "${B}[4/4] 前端 :${FE_PORT}（${FE_LABEL}）${N}"
+if port_busy "$FE_PORT"; then
   ok "已在运行"
 elif [ -n "$NODE_BIN" ] && [ -f "$ROOT/frontend/node_modules/vite/bin/vite.js" ]; then
   info "启动中…"
   (cd "$ROOT/frontend" && nohup "$NODE_BIN" node_modules/vite/bin/vite.js \
-      --mode demo --host 0.0.0.0 --port 5174 --strictPort > "$LOGS/frontend.log" 2>&1 </dev/null &)
-  if wait_http "http://127.0.0.1:5174/" 60; then
+      --mode "$FE_MODE" --host 0.0.0.0 --port "$FE_PORT" --strictPort > "$LOGS/frontend.log" 2>&1 </dev/null &)
+  if wait_http "http://127.0.0.1:$FE_PORT/" 60; then
     ok "启动成功"
   else
     bad "启动失败"
@@ -173,8 +189,8 @@ say ""
 IP="$(ipconfig getifaddr en0 2>/dev/null || echo '')"
 say "────────────────────────────────────────────────────────"
 say "${G}访问地址${N}"
-say "  电脑：  ${B}http://127.0.0.1:5174/${N}"
-[ -n "$IP" ] && say "  手机：  ${B}http://$IP:5174/${N}   ${D}（需同一个 WiFi）${N}"
+say "  电脑：  ${B}http://127.0.0.1:$FE_PORT/${N}"
+[ -n "$IP" ] && say "  手机：  ${B}http://$IP:$FE_PORT/${N}   ${D}（需同一个 WiFi）${N}"
 say ""
 say "${D}演示账号：xiaoyu / 123456　　管理端：admin / admin123${N}"
 say "${D}日志目录：logs/　　关掉本窗口不会停止服务${N}"
@@ -183,7 +199,7 @@ say ""
 
 # 打开浏览器
 if [ "${SKIP_OPEN:-0}" != "1" ]; then
-  open "http://127.0.0.1:5174/" 2>/dev/null || true
+  open "http://127.0.0.1:$FE_PORT/" 2>/dev/null || true
 fi
 
 # 双击运行时保留窗口，方便看上面的自检结果

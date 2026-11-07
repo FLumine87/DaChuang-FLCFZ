@@ -14,6 +14,15 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 export const ENV_MOCK = String(import.meta.env.VITE_USE_MOCK ?? 'true').toLowerCase() === 'true';
 
 /**
+ * 严格后端模式：接口失败就如实报错，**绝不**退回演示数据。
+ *
+ * 用于"这套前端必须连真实后端"的验收/答辩场景：一旦网线掉了、后端没起、
+ * 或 D1 结构不对，界面会直接暴露问题，而不是悄悄换成演示数据让人误以为
+ * 后端是通的。构建/启动时设 `VITE_STRICT_BACKEND=1` 打开（见 .env.backend）。
+ */
+export const STRICT_BACKEND = String(import.meta.env.VITE_STRICT_BACKEND ?? '') === '1';
+
+/**
  * 当前是否走内置演示数据。
  *
  * 为什么是 `let` 而不是 `const`：线上部署配置的是真实后端地址（Cloudflare

@@ -145,8 +145,10 @@ export default function Cases() {
               还没有时间线事件。完成筛查、记录情绪或产生预警后会自动生成。
             </p>
           )}
-          {personalTimeline.map((event) => (
-            <div key={`${event.date}-${event.title}`} className="relative">
+          {personalTimeline.map((event, index) => (
+            /* 同一天可能有多条同标题事件（例如同一天完成两次同一量表），
+               只用 date+title 会撞 key；index 只作为同 key 时的区分，排序不变。 */
+            <div key={`${event.date}-${event.title}-${index}`} className="relative">
               <span className="absolute -left-[18px] w-3 h-3 rounded-full bg-primary-500 border-2 border-white" />
               <p className="text-xs text-slate-400">{event.date}</p>
               <p className="text-sm text-slate-800 mt-1">{event.title}</p>
