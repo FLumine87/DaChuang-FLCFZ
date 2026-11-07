@@ -2133,15 +2133,21 @@ html:not(.app-booted) .page-enter {
   /* 字号必须写在这里：全局 h3 { font-size: 1.0625rem } 在无层级区域，
      会压过 Tailwind 的 text-* 工具类（之前 text-[22px] 实际显示成 17px）。
      26px 让题干成为卡片里最醒目的阅读对象；手机收一档到 22px。 */
-  font-size: 1.375rem; /* 22px */
-  line-height: 2.125rem; /* 34px */
+  font-size: 1.625rem; /* 26px */
+  line-height: 2.375rem; /* 38px */
 }
 
 @media (min-width: 1024px) {
   .first-run-question {
-    font-size: 1.625rem; /* 26px */
-    line-height: 2.5rem; /* 40px */
+    font-size: 2rem; /* 32px */
+    line-height: 3rem; /* 48px */
   }
+}
+
+/* 答题卡的操作按钮也跟题面一起放大一档；
+   .ui-button 的无层级规则写死了 14px，这里用同等权重、靠后覆盖。 */
+.first-run-action {
+  font-size: 1rem;
 }
 
 /* 换题时的题目淡入：只动 opacity/transform，避免整卡重排 */
