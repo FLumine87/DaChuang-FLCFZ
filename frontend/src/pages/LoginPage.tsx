@@ -241,29 +241,25 @@ export default function LoginPage() {
         <Aurora variant="calm" />
         <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,620px)_minmax(0,450px)] lg:justify-center lg:gap-[72px] 2xl:grid-cols-[minmax(0,720px)_minmax(0,500px)] 2xl:gap-[96px]">
 
-          {/* 左：与平台简介屏同一套文字格式（眉标 + 大标题 + 正文 + 要点）
-              垂直定位：居中后再上提一档（lg:-top-16 = 64px），做**视觉居中**而非几何居中。
-              卡片下半部分（演示账号按钮 / 管理员入口 / 底部合规说明）是次要信息，
-              卡片的视觉重心因此高于它的几何中心；文字块按几何居中会显得往下沉
-              —— 实测 1440×900 上留白 200 / 下留白 200 时反馈"又太低了不协调"。
-              上提 64px 后约 136 / 264，与卡片的视觉重心对齐。
-              相对定位偏移不影响布局（不撑高栅格行），所以不会反过来影响右卡。
-              历史：这里原先写 lg:self-start（避免切 tab 时右卡变高把左栏往上顶），
-              代价是永远贴上沿，实测上留白 85 / 下留白 314，反馈"文字向上飘"。 */}
-          <div className="relative z-10 lg:-top-16">
+          {/* 左：与平台简介屏同一套文字格式（眉标 + 大标题 + 正文 + 要点）。
+              不再整体上提：那段偏移是为旧的短卡片调的，现在卡片更高、左栏内容更短，
+              上提会把空白全堆到下方，深色模式下尤其显得空。
+              改为几何居中，并把眉标/标题/正文/要点的间距各放大一档，
+              让文字块在竖直方向铺开，与右侧卡片等高对齐。 */}
+          <div className="relative z-10">
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
               关注状态 · 看见变化
             </p>
-            <h2 className="auth-section-title mt-6 max-w-[720px] text-balance tracking-tight text-slate-900">
+            <h2 className="auth-section-title mt-8 max-w-[720px] text-balance tracking-tight text-slate-900">
               从了解自己开始，照顾好每一天。
             </h2>
-            <p className="mt-8 max-w-[600px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
+            <p className="mt-10 max-w-[620px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.15]">
               连接筛查、记录与分析，让每一份关注都能得到回应；
               <br />
               登录后可查看筛查记录、状态趋势与评估报告。
             </p>
 
-            <ul className="mt-6 grid gap-1.5 border-t border-dashed border-slate-200 pt-5">
+            <ul className="mt-10 grid gap-2.5 border-t border-dashed border-slate-200 pt-7">
               {[
                 "三模态采集：文本、语音、图像",
                 "持续记录：状态趋势与量表同步归档",

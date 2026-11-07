@@ -162,8 +162,11 @@ export default function FirstRunShell({
             </p>
             <h1
               className={
-                tight
-                  ? "mt-6 max-w-[560px] text-[36px] font-medium leading-[1.3] tracking-tight text-slate-900"
+                /* 02–04 的左侧标题统一回到接近入口页的尺度。
+                   字号写在 .first-run-title 里（显式类，避免被全局 h1 的
+                   26px 覆盖）；手机 38 / 平板 44 / 桌面 52。 */
+                step
+                  ? "first-run-title mt-6 max-w-[620px] font-medium tracking-tight text-slate-900"
                   : "auth-section-title mt-6 max-w-[720px] text-slate-900"
               }
             >

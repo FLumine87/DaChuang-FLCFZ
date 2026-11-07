@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -56,6 +56,18 @@ export default function FirstRunQuestionnaire() {
   const [introOpen, setIntroOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  /* 选完自动翻页的待执行定时器；组件卸载时清掉，避免在别的页面改状态 */
+  const pendingAdvance = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (pendingAdvance.current !== null) {
+        window.clearTimeout(pendingAdvance.current);
+        pendingAdvance.current = null;
+      }
+    },
+    [],
+  );
 
   /* 进来就落一份草稿：中途回主页/刷新，02、03 还能接着走 */
   useEffect(() => {
@@ -99,16 +111,35 @@ export default function FirstRunQuestionnaire() {
   /* PHQ-9 第 9 题（伤害自己的念头）：需要就地给出支持信息 */
   const isSafetyItem = definition.id === "PHQ-9" && question.id === 9;
 
-  /* 翻页只由用户确认：选完选项后停在当前题，方便核对频率词再点「下一题」。
-     之前"选完 180ms 自动翻页"在心理筛查里容易来不及确认，问卷也未提供返回修改的
-     明确停顿；现在与 NHS 的问答模式一致：回答 → 继续。
-     具体操作在卡片底部：上一题 / 下一题（最后一题是提交）。 */
+  /* 选完自动翻到下一题（180ms，让选中态先被看见）。
+     这是实际试用后保留的手感：一屏一题时每题都要再点一次「下一题」太累；
+     想核对或回改时，仍可用「上一题」或底部题号跳回，自动翻页不会锁死。
+     最后一题不自动翻——提交按钮就在下面，避免误提交。 */
+  const cancelPendingAdvance = () => {
+    if (pendingAdvance.current !== null) {
+      window.clearTimeout(pendingAdvance.current);
+      pendingAdvance.current = null;
+    }
+  };
+
+  /* 手动点「下一题」、按回车、跳题都走这里：先取消待执行的自动翻页，
+     否则"选完排了 180ms 翻页 + 立刻手动翻"会一次跳两题、漏答一题。 */
   const goNextNow = () => {
+    cancelPendingAdvance();
     setCurrent((index) => Math.min(total - 1, index + 1));
+  };
+
+  const scheduleAdvance = () => {
+    cancelPendingAdvance();
+    pendingAdvance.current = window.setTimeout(() => {
+      pendingAdvance.current = null;
+      setCurrent((index) => Math.min(total - 1, index + 1));
+    }, 180);
   };
 
   const choose = (value: number) => {
     setAnswers((prev) => ({ ...prev, [question.id]: value }));
+    if (!isLast) scheduleAdvance();
   };
 
   const submit = async () => {
@@ -303,7 +334,10 @@ export default function FirstRunQuestionnaire() {
                 <button
                   key={index}
                   type="button"
-                  onClick={() => setCurrent(index)}
+                  onClick={() => {
+                    cancelPendingAdvance();
+                    setCurrent(index);
+                  }}
                   className="rounded-lg border border-warning-500/40 bg-white px-2.5 py-1 text-[12px] text-slate-600 transition-colors hover:border-warning-500 hover:text-warning-600"
                 >
                   第 {index + 1} 题
@@ -325,7 +359,10 @@ export default function FirstRunQuestionnaire() {
         <div className="mt-6 flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setCurrent((value) => Math.max(0, value - 1))}
+            onClick={() => {
+              cancelPendingAdvance();
+              setCurrent((value) => Math.max(0, value - 1));
+            }}
             disabled={current === 0 || saving}
             className="ui-button h-12 flex-1 rounded-xl border-slate-300 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -337,7 +374,10 @@ export default function FirstRunQuestionnaire() {
           {isLast || allAnswered ? (
             <button
               type="button"
-              onClick={submit}
+              onClick={() => {
+                cancelPendingAdvance();
+                void submit();
+              }}
               disabled={!allAnswered || saving}
               className="ui-button ui-button-primary h-12 flex-[1.6] rounded-xl disabled:cursor-not-allowed disabled:opacity-50"
             >
