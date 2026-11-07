@@ -25,9 +25,11 @@ import {
   Sun,
   TriangleAlert,
   UserRound,
+  WifiOff,
   type LucideIcon,
 } from "lucide-react";
 import { getCurrentSession, logout } from "../auth/session";
+import { isOfflineDemo } from "../services/http";
 import Aurora from "./Aurora";
 import BrandLogo from "./BrandLogo";
 import BackToTop from './BackToTop';
@@ -686,6 +688,21 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                   document.body,
                 )}
             </div>
+            {/* 离线演示标记：登录时后端连不上、自动切到本机演示数据后出现。
+                不做静默降级——用户必须知道「下面的数据不是服务器上的」。
+                点击 = 退出这次演示会话，回到登录页重新尝试连接真实后端。 */}
+            {isOfflineDemo() && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={signingOut}
+                title="当前为离线演示模式（后端连不上）。点击退出，回到登录页重新连接后端。"
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-warning-500/40 bg-warning-50 px-2.5 text-[12px] font-medium text-warning-600 transition-colors hover:border-warning-500/70 disabled:opacity-60"
+              >
+                <WifiOff className="h-4 w-4" />
+                <span className="hidden sm:inline">离线演示</span>
+              </button>
+            )}
             {/* 深浅色切换：与登录页/主页顶栏同一个按钮（无底框、36px 圆角方块、
                 图标 hover 旋转），三处顶栏因此完全一致。 */}
             <button

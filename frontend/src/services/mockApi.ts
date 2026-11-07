@@ -8,7 +8,14 @@
  * 要接后端只需改环境变量 VITE_USE_MOCK=false，组件无需改动。
  */
 
-import { briefErrorMessage, request, USE_MOCK, getTokenUsername, isDemoToken } from './http';
+import {
+  activateOfflineDemo,
+  briefErrorMessage,
+  request,
+  USE_MOCK,
+  getTokenUsername,
+  isDemoToken,
+} from './http';
 
 import {
   screeningRecords,
@@ -173,11 +180,18 @@ export interface LoginResult {
   role?: 'admin' | 'user';
   name?: string;
   message?: string;
+  /**
+   * true = 这次登录是因为"连不上后端"才用本机演示数据完成的。
+   * 登录页据此把提示写成"已切到离线演示"，而不是假装连上了。
+   */
+  offline?: boolean;
 }
 
 export interface RegisterResult {
   ok: boolean;
   message?: string;
+  /** 同 LoginResult.offline：账号只建在本机。 */
+  offline?: boolean;
 }
 
 export interface SearchResponse<T> {
@@ -222,11 +236,59 @@ export interface AdminDashboardResponse {
    直接甩给用户看不懂，也不知道该做什么。这里统一换成能照着做的中文提示。
    「连后端版」和「离线版」的失败原因不同，提示也分开：
      · 连后端版：地址是电脑的局域网地址，手机不在同一 WiFi 或后端没启动就会超时
-     · 离线版：登录本不该发请求，真失败了多半是本地存储/环境异常 */
-const LIVE_BUILD = Boolean(import.meta.env.VITE_API_BASE_URL);
-const NETWORK_HINT = LIVE_BUILD
+     · 线上部署：地址是公网后端（Cloudflare Worker）；网络不通/服务异常与手机无关，
+       不能再提示"和电脑同一个 WiFi"——2026-11-07 线上就出现了这句误导性提示 */
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const LIVE_BUILD = Boolean(API_BASE);
+const API_IS_LAN = /\/\/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.0\.0\.0)/.test(
+  API_BASE,
+);
+const NETWORK_HINT = API_IS_LAN
   ? '连不上服务器：请确认手机与电脑在同一个 WiFi，且电脑上的后端已启动'
-  : '连不上服务器，请检查网络后重试';
+  : LIVE_BUILD
+    ? '连不上后端服务：网络不通或服务暂不可用，请稍后重试'
+    : '连不上服务器，请检查网络后重试';
+
+/** 登录/注册只等这么久：后端是公网服务时 8 秒足够；再久就该切离线演示，别让用户干等。 */
+const AUTH_TIMEOUT = 8000;
+
+/**
+ * 只有"请求根本没到后端"才允许降级到演示数据。
+ *
+ * 必须把 401（密码错误）、404（接口不存在）这类**后端已应答**的情况排除掉：
+ * 否则输错密码也会被"放行"进演示模式，等于把鉴权绕过。
+ */
+function isConnectivityError(reason: unknown): boolean {
+  const raw = reason instanceof Error ? reason.message : String(reason ?? '');
+  return /Network Error|Failed to fetch|Load failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|timeout of|status code 5(0[234]|2[1234])/i.test(
+    raw,
+  );
+}
+
+/** 构造标准 JWT 三段式演示 token：<header>.<payload>.<sig>，session.ts 解码第二段。 */
+function buildDemoToken(username: string, role: 'admin' | 'user'): string {
+  const header = btoa(JSON.stringify({ alg: 'none', typ: 'JWT' }));
+  const payload = btoa(
+    JSON.stringify({
+      username,
+      role,
+      exp: Date.now() + 24 * 3600 * 1000,
+    }),
+  );
+  return `${header}.${payload}.mock`;
+}
+
+function mockLoginResult(username: string, password: string): LoginResult {
+  const result = mockAuthLogin(username, password);
+  if (!result.ok) return { ok: false, message: result.message };
+  const role = result.role ?? 'user';
+  return {
+    ok: true,
+    token: buildDemoToken(username, role),
+    role,
+    name: role === 'admin' ? '管理员' : username,
+  };
+}
 
 export async function apiLogin(
   username: string,
@@ -234,31 +296,14 @@ export async function apiLogin(
 ): Promise<LoginResult> {
   if (USE_MOCK) {
     await delay();
-    const result = mockAuthLogin(username, password);
-    if (!result.ok) return { ok: false, message: result.message };
-
-    // 构造一个标准 JWT 三段式 mock token：<header>.<payload>.<sig>
-    // 前端 session.ts 会解码第二段获取 username / role / exp
-    const header = btoa(JSON.stringify({ alg: 'none', typ: 'JWT' }));
-    const payload = btoa(
-      JSON.stringify({
-        username,
-        role: result.role,
-        exp: Date.now() + 24 * 3600 * 1000,
-      })
-    );
-    return {
-      ok: true,
-      token: `${header}.${payload}.mock`,
-      role: result.role,
-      name: result.role === 'admin' ? '管理员' : username,
-    };
+    return mockLoginResult(username, password);
   }
 
   try {
     const data = await request.post<{ token: string; role: string; name: string }>(
       '/api/auth/login',
-      { username, password }
+      { username, password },
+      { timeout: AUTH_TIMEOUT }
     );
     // 后端返回的role可能是'admin'或'counselor'，前端统一处理
     return { 
@@ -267,6 +312,21 @@ export async function apiLogin(
       role: data.role === 'admin' ? 'admin' : 'user' as 'admin' | 'user' 
     };
   } catch (err) {
+    /* 后端不可达时不再把用户挡在登录页：
+       切到本机演示数据，用演示账号完成登录（界面会标注「离线演示」）。
+       后端恢复后退出登录重进，就会重新走真实接口。 */
+    if (isConnectivityError(err)) {
+      activateOfflineDemo();
+      const fallback = mockLoginResult(username, password);
+      if (!fallback.ok) {
+        return {
+          ok: false,
+          offline: true,
+          message: `连不上后端服务，无法校验这个账号。可先用页面下方的演示账号离线体验。`,
+        };
+      }
+      return { ...fallback, offline: true };
+    }
     return { ok: false, message: briefErrorMessage(err, NETWORK_HINT) };
   }
 }
@@ -281,9 +341,20 @@ export async function apiRegister(
     return mockAuthRegister(username, password);
   }
   try {
-    await request.post('/api/auth/register', { username, password, name, role: "user" });
+    await request.post('/api/auth/register', { username, password, name, role: "user" }, { timeout: AUTH_TIMEOUT });
     return { ok: true };
   } catch (err) {
+    if (isConnectivityError(err)) {
+      activateOfflineDemo();
+      const fallback = mockAuthRegister(username, password);
+      return {
+        ...fallback,
+        offline: true,
+        message: fallback.ok
+          ? '后端连不上，已在本机创建演示账号（数据只保存在这台设备）'
+          : fallback.message,
+      };
+    }
     return { ok: false, message: briefErrorMessage(err, NETWORK_HINT) };
   }
 }

@@ -10,7 +10,44 @@ import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig, type In
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
-export const USE_MOCK = String(import.meta.env.VITE_USE_MOCK ?? 'true').toLowerCase() === 'true';
+/** 构建时就定死的"演示模式"（离线包 / 本地演示）。 */
+export const ENV_MOCK = String(import.meta.env.VITE_USE_MOCK ?? 'true').toLowerCase() === 'true';
+
+/**
+ * 当前是否走内置演示数据。
+ *
+ * 为什么是 `let` 而不是 `const`：线上部署配置的是真实后端地址（Cloudflare
+ * Worker 等），一旦这个地址在当前网络里不可达（跨境线路被重置、代理断了、
+ * Worker 临时 5xx），用户就会**卡死在登录页**——2026-11-07 线上就是这样：
+ * 页面能打开，点登录报"连不上服务器"，但 Worker 本身是好的（curl 直接
+ * 200 返回 token）。仅靠构建期开关的话，遇到这种网络问题没有退路。
+ *
+ * 现在登录层在确认"请求根本没到后端"之后，会调 activateOfflineDemo() 把
+ * 这个开关**在运行时**打开，用本机演示数据继续（见 mockApi.apiLogin）。
+ * 界面会显示「离线演示」标记，不会假装数据来自后端。
+ */
+export let USE_MOCK = ENV_MOCK;
+
+/**
+ * 把当前会话切到本机演示数据（仅在"连不上后端"时由登录层调用）。
+ *
+ * 演示 token 是 alg=none 的三段式（见 mockApi 的 buildDemoToken），刷新后
+ * isDemoToken() 仍能认出来，因此模块末尾会据此恢复离线状态，避免出现
+ * "演示 token 去打真实接口"的半真半假会话。
+ */
+export function activateOfflineDemo(): void {
+  USE_MOCK = true;
+}
+
+/** 当前是否处于"后端连不上而降级到演示数据"的状态（区别于构建期就定的演示包）。 */
+export function isOfflineDemo(): boolean {
+  return USE_MOCK && !ENV_MOCK;
+}
+
+/** 退出演示会话后回到"照常尝试真实后端"的状态；构建期演示包不受影响。 */
+export function resetOfflineDemo(): void {
+  if (!ENV_MOCK) USE_MOCK = false;
+}
 
 const TOKEN_KEY_PERSISTENT = 'psych_token_persistent';
 const TOKEN_KEY_TEMP = 'psych_token_temp';
@@ -239,5 +276,14 @@ http.interceptors.response.use(
     return Promise.reject(new Error(message));
   }
 );
+
+/* ── 刷新后保持离线 ─────────────────────────────────────────────────────────
+   上次登录如果已经降级成演示 token（alg=none），说明当时后端连不上。
+   刷新页面后如果把 USE_MOCK 重置回 false，就会出现"演示 token 打真实接口"
+   的半真半假状态：部分页面退回演示数据、部分页面报错。这里按 token 类型
+   恢复模式；退出登录（session.logout → resetOfflineDemo）后会重新尝试后端。 */
+if (!ENV_MOCK && typeof window !== 'undefined' && isDemoToken()) {
+  USE_MOCK = true;
+}
 
 export default http;

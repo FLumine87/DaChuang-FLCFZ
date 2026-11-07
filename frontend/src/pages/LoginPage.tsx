@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
 import { apiLogin, apiRegister } from "../services/mockApi";
+import { isOfflineDemo } from "../services/http";
 import { saveDisplayName, saveSessionToken } from "../auth/session";
 import { resolveEntryPath } from "../auth/entryPath";
 
@@ -145,7 +146,14 @@ export default function LoginPage() {
       }
       saveSessionToken(result.token, rememberMe);
       saveDisplayName(result.name);
-      setMessage("登录成功，正在进入系统…");
+      /* 连不上后端时 apiLogin 会自动用本机演示数据完成登录（result.offline）。
+         这里不再把它说成"登录成功"，而是如实说明进入了离线演示；
+         工作台顶栏也会挂着「离线演示」标记（AppShell）。 */
+      setMessage(
+        result.offline
+          ? "后端暂时连不上，已进入离线演示模式…"
+          : "登录成功，正在进入系统…",
+      );
       /* 直接跳，不再 setTimeout 等 500ms：那句话是给"跳转前"看的，
          但真实体感就是登录后干等半秒（用户提过等待太久）。
          个人账号第一次登录先进欢迎页；判据是账号的引导状态，不是"有没有筛查记录"：
@@ -173,7 +181,7 @@ export default function LoginPage() {
         setError(result.message || "注册失败");
         return;
       }
-      setMessage("注册成功，请使用新账号登录");
+      setMessage(result.message || "注册成功，请使用新账号登录");
       setTab("login");
       setPassword("");
       setConfirmPassword("");
@@ -295,6 +303,15 @@ export default function LoginPage() {
                       : "建立属于你的健康档案，开始持续记录。"}
                 </p>
               </div>
+
+              {/* 后端连不上时如实说明：当前看到的是本机演示数据，不是服务器数据。
+                  放在表单上方而不是错误条，因为它描述的是整页的运行状态。 */}
+              {isOfflineDemo() && (
+                <p className="mb-4 rounded-xl border border-warning-500/40 bg-warning-50 px-4 py-3 text-sm leading-6 text-warning-600">
+                  后端暂时连不上，当前使用<strong className="font-semibold">离线演示数据</strong>
+                  （只保存在这台设备）。用下方演示账号可直接进入；退出登录后会重新尝试连接后端。
+                </p>
+              )}
 
               {!isAdmin && (
                 <div
