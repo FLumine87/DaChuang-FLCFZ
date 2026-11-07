@@ -23,9 +23,11 @@ import {
   loadFirstRunEvidence,
   relationLabel,
   topMatched,
+  toRetrievalSnapshot,
   type FirstRunEvidence,
 } from "../../services/firstRunRetrieval";
 import { getCurrentSession } from "../../auth/session";
+import { saveScreeningRetrieval, type CollectionAnalysis } from "../../services/mockApi";
 import ScrollArea from "../../components/ScrollArea";
 import FirstRunShell from "./FirstRunShell";
 import { firstRunSteps } from "./firstRunSteps";
@@ -45,8 +47,8 @@ import { firstRunSteps } from "./firstRunSteps";
  *      量表范围 0–40"，配一条 0–40 的简单刻度（表示量表得分，不是百分比）。
  *      PHQ-9 / GAD-7 / ISI 有通行的严重程度分档，仍显示分档条。
  *   2. 没有历史数据就不画趋势、不提"比上次改善"。
- *   3. 哈希检索与 RAG 尚未参与本次结果：放在「分析依据」里作为可展开的
- *      「了解分析技术」条目，并写明尚未参与；不把它们摆在结论里冒充依据。
+ *   3. 哈希候选与图谱解释分开标注来源；量表计分、安全复核和检索相关性
+ *      不互相替代。保存补充后，真实分析建议可在摘要回看。
  */
 export default function FirstRunResult() {
   const draft = getDraft();
@@ -63,36 +65,40 @@ export default function FirstRunResult() {
   /* 「分析依据」里的真实检索数据。挂载即发起：后端不可达/处于演示模式时，
      下面三个条目会各自给出如实说明，而不是留空或假装有结果。 */
   const ready = Boolean(draft?.recordId && draft.score !== undefined);
-  const [evidence, setEvidence] = useState<FirstRunEvidence | null>(null);
-  const [evidenceLoading, setEvidenceLoading] = useState(ready);
+  const savedAnalysisJson = JSON.stringify(draft?.supplement?.analysis ?? null);
+  const requestKey = JSON.stringify([draft?.recordId, draft?.scaleId, draft?.score, supplementText, savedAnalysisJson]);
+  const [loadedEvidence, setLoadedEvidence] = useState<{ key: string; value: FirstRunEvidence } | null>(null);
+  const evidence = loadedEvidence?.key === requestKey ? loadedEvidence.value : null;
+  const evidenceLoading = ready && loadedEvidence?.key !== requestKey;
   useEffect(() => {
     if (!ready) return;
     let active = true;
     const userId = getCurrentSession()?.username ?? "demo_user";
-    loadFirstRunEvidence(userId, draft?.supplement?.text)
-      .then((result) => {
-        if (active) setEvidence(result);
+    loadFirstRunEvidence(userId, draft?.supplement?.text, {
+      recordId: draft?.recordId, scaleId: draft?.scaleId, score: draft?.score,
+      savedAnalysis: (JSON.parse(savedAnalysisJson) as CollectionAnalysis | null) ?? undefined,
+    })
+      .then(async (result) => {
+        if (draft?.recordId) await saveScreeningRetrieval(draft.recordId, toRetrievalSnapshot(result));
+        if (active) setLoadedEvidence({ key: requestKey, value: result });
       })
       .catch(() => {
         /* loadFirstRunEvidence 内部已把三种模式都收敛成状态，正常不会走到这里；
            真走到了也按"暂不可用"处理，绝不留一个转不完的圈。 */
         if (active) {
-          setEvidence({
+          setLoadedEvidence({ key: requestKey, value: {
             mode: "unreachable",
             neo4jConnected: false,
             inferenceOk: false,
             matchedOmitted: 0,
-          });
+          } });
         }
-      })
-      .finally(() => {
-        if (active) setEvidenceLoading(false);
       });
     return () => {
       active = false;
     };
     // 依赖只取"本次筛查身份"与补充正文：换一条记录才重新检索
-  }, [ready, draft?.recordId, draft?.supplement?.text]);
+  }, [ready, draft?.recordId, draft?.scaleId, draft?.score, draft?.supplement?.text, requestKey, savedAnalysisJson]);
 
   if (!draft?.recordId || !definition || draft.score === undefined || draft.maxScore === undefined) {
     return (
@@ -125,6 +131,14 @@ export default function FirstRunResult() {
   const maxScore = draft.maxScore ?? 0;
   const result = definition.scoring(score);
   const isPss = definition.id === "PSS-10";
+  const supplementAnalysis = supplement?.analysis;
+  const supplementAssessment = supplementAnalysis?.assessment;
+  const followupConclusion = supplementAssessment?.conclusion ?? supplementAnalysis?.conclusion;
+  const followupLabel = supplementAssessment?.levelLabel ?? supplementAnalysis?.levelLabel;
+  const followupParams = new URLSearchParams({ screeningId: draft.recordId });
+  const supplementId = supplementAssessment?.supplementId ?? supplementAnalysis?.supplementId;
+  if (supplementId) followupParams.set('assessmentSupplementId', String(supplementId));
+  if (supplementText) followupParams.set('q', supplementText);
   /* 用 completedAt（量表提交时刻）而不是 updatedAt：后者在 02 补充后会被刷新 */
   const completedAt = formatTime(draft.completedAt ?? draft.updatedAt);
 
@@ -203,6 +217,14 @@ export default function FirstRunResult() {
           )}
         </div>
 
+        {followupConclusion && (
+          <div className="mt-4 rounded-xl border border-slate-200 p-3" role="status">
+            <p className="text-sm font-medium text-slate-800">本次复核建议{followupLabel ? `：${followupLabel}` : ''}</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{followupConclusion}</p>
+            <Link to={`/personal/retrieval?${followupParams.toString()}`} className="mt-2 inline-flex text-sm text-primary-600">查看本次参考用途与下一步</Link>
+          </div>
+        )}
+
         {/* 内容导航 */}
         <div
           className="mt-6 flex gap-1 rounded-xl bg-slate-100 p-1"
@@ -256,9 +278,14 @@ export default function FirstRunResult() {
               </p>
               <p className="text-[12px] leading-5 text-slate-400">
                 {isPss
-                  ? "PSS-10 不用于诊断心理疾病，也没有统一的临床分界值；上面的分组是系统参考分组，不是临床结论。"
+                  ? "PSS-10 不用于诊断心理疾病，也没有统一临床分界值；此处展示连续分数，不作疾病或危机分级。"
                   : "筛查结果仅供自我了解，不等同于医学诊断。"}
               </p>
+              {definition.id === 'PHQ-9' && (draft.answers?.['9'] ?? 0) > 0 && (
+                <p role="status" className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm leading-6 text-slate-700">
+                  第 9 题提示需要独立安全复核，无论总分多少，都建议尽快联系专业人员进一步了解当前情况。
+                </p>
+              )}
             </div>
           )}
 
@@ -317,7 +344,7 @@ export default function FirstRunResult() {
 
               <EvidenceSection
                 icon={BookOpen}
-                title="RAG 参考资料"
+                title="图谱参考与解释"
                 summary={ragState.summary}
                 badge={ragState.badge}
                 loading={evidenceLoading}
@@ -345,7 +372,7 @@ export default function FirstRunResult() {
 
           {tab === "advice" && (
             <ul className="grid gap-4">
-              {adviceList(result.level).map((item) => (
+              {adviceList(draft.level ?? result.level).map((item) => (
                 <li key={item.title} className="flex items-start gap-3">
                   <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary-50 text-primary-600">
                     <Sparkles className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -444,16 +471,16 @@ function ModeNotice({ evidence }: { evidence: FirstRunEvidence }) {
   if (evidence.mode === "mock") {
     return (
       <p>
-        当前为{MOCK_BADGE}：报告正文由后端模板整理（尚未配置大模型 Key），不是大模型输出。
+        当前为{MOCK_BADGE}：图谱参考正文由后端模板整理，不是大模型输出。
         {evidence.neo4jConnected
-          ? "本次没有匹配到图谱里的相似线索。"
-          : "后端未连接个人知识图谱（Neo4j），本次没有图谱相似线索。"}
+          ? "图谱已连接，具体匹配以接口返回为准；哈希检索另行标注来源。"
+          : "后端未连接个人知识图谱（Neo4j）；哈希检索另行标注来源。"}
       </p>
     );
   }
   return (
     <p>
-      这一版尚未参与本次结果：检索服务未接入本次筛查，接通后会在这里给出本次检索到的相关线索摘要。
+      个人图谱服务暂不可用，本次没有图谱参考；量表结果与主后端哈希检索分别展示。
     </p>
   );
 }
@@ -485,26 +512,16 @@ function UnavailableNotice({
    绝不能出现"摘要说没检索到、右栏说服务挂了"这种自相矛盾。 */
 
 function hashRetrievalState(evidence: FirstRunEvidence | null, loading: boolean) {
-  const rows = topMatched(evidence?.report, MAX_ROWS);
+  const rows = evidence?.hashResults ?? [];
   const summary = loading
     ? "正在检索…"
     : rows.length
-      ? `命中 ${rows.length + (evidence?.matchedOmitted ?? 0)} 条相似线索`
-      : evidence?.mode === "live" && evidence.inferenceError
+      ? `召回 ${rows.length + (evidence?.hashOmitted ?? 0)} 条候选参考`
+      : evidence?.hashError
         ? "检索服务暂不可用"
-        : evidence?.mode === "live"
-          ? "本次未检索到高相似线索"
-          : evidence?.mode === "mock"
-            ? evidence.neo4jConnected
-              ? "本次未检索到高相似线索"
-              : "演示模式 · 未连接图谱，无相似线索"
-            : "多模态线索的相似模式匹配";
+        : evidence?.hashRequested ? "本次未取得相关候选" : "未补充检索材料，本次未发起哈希检索";
   const badge =
-    evidence?.mode === "mock"
-      ? MOCK_BADGE
-      : !loading && evidence?.mode !== "live"
-        ? "了解分析技术"
-        : undefined;
+    evidence?.hashMode === "mock" ? '演示检索' : evidence?.hashMode === 'live' ? '主后端哈希检索' : undefined;
   return { rows, summary, badge };
 }
 
@@ -517,7 +534,7 @@ function ragReferenceState(evidence: FirstRunEvidence | null, loading: boolean) 
   const summary = loading
     ? "正在整理…"
     : hasAny
-      ? `${factors.length} 条风险因素 · ${recs.length} 条建议依据`
+      ? `${factors.length} 条图谱因素 · ${recs.length} 条参考建议`
       : evidence?.mode === "live" && evidence.inferenceError
         ? "检索服务暂不可用"
         : evidence?.mode === "live"
@@ -549,8 +566,8 @@ function knowledgeLinkState(evidence: FirstRunEvidence | null, loading: boolean)
 
 /**
  * 动态跨模态哈希检索（右栏内容）。
- * 命中的相似线索 = 后端 matched_disorders（按 score 降序），只展示摘要字段：
- * 名称、匹配到的症状/诱因、相似度评分、覆盖率。接口没有的字段一律不显示。
+ * 只展示主后端真实哈希查询或保存补充时返回的 hits。
+ * 图谱 matched_disorders 在下方单独显示，不冒充哈希结果。
  */
 function HashRetrievalContent({
   evidence,
@@ -569,55 +586,46 @@ function HashRetrievalContent({
 
       {!loading && !enabled && <p>本次没有可用的筛查记录，未发起检索。</p>}
 
-      {!loading && enabled && evidence && evidence.mode !== "live" && (
-        <ModeNotice evidence={evidence} />
-      )}
-
-      {!loading && evidence?.mode === "live" && evidence.inferenceError && (
-        <UnavailableNotice reason={evidence.inferenceError} />
-      )}
-
-      {/* 出错与"无命中"互斥：服务都没答上来，就不能再说一句"本次未检索到"，
-          否则等于替一次失败的检索下了结论。 */}
-      {!loading && evidence?.mode === "live" && !evidence.inferenceError && rows.length === 0 && (
-        <p>本次未检索到高相似线索：个人图谱里还没有足够的线索，暂时无法给出相似匹配。</p>
-      )}
+      {!loading && enabled && !evidence?.hashRequested && <p>没有补充可检索材料，本次仅完成量表；未用图谱匹配代替哈希结果。</p>}
+      {!loading && evidence?.hashError && <UnavailableNotice reason={evidence.hashError} />}
+      {!loading && evidence?.hashRequested && !evidence.hashError && rows.length === 0 && <p>本次没有取得可展示的相关候选，不补造参考。</p>}
+      {!loading && evidence?.hashMode === 'mock' && <p className="text-slate-500">演示模式：以下为演示检索返回，未执行真实哈希查询。</p>}
 
       {!loading && rows.length > 0 && (
         <div className="grid gap-2">
           {rows.map((row) => (
             <div
-              key={row.name}
+              key={row.id}
               className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5"
             >
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-[13.5px] font-medium text-slate-800">{row.name}</span>
+                <span className="text-[13.5px] font-medium text-slate-800">参考 {row.id}</span>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
-                  相似度 {row.score}
+                  检索相似度 {Math.round(row.similarity * 100)}%
                 </span>
                 <span className="text-[11px] text-slate-400">
-                  覆盖 {Math.round((row.coverage ?? 0) * 100)}%
+                  {row.modality === 'audio' ? '语音' : row.modality === 'image' ? '图像' : '文本'}参考
                 </span>
               </div>
-              {row.matched_symptoms.length > 0 && (
+              {row.summary && (
                 <p className="mt-1.5 text-[13px] leading-[1.7] text-slate-500">
-                  匹配症状：{row.matched_symptoms.join("、")}
+                  {row.summary}
                 </p>
               )}
-              {row.matched_triggers.length > 0 && (
+              {row.tags.length > 0 && (
                 <p className="mt-0.5 text-[13px] leading-[1.7] text-slate-500">
-                  匹配诱因：{row.matched_triggers.join("、")}
+                  参考标签：{row.tags.join("、")}
                 </p>
               )}
             </div>
           ))}
-          {(evidence?.matchedOmitted ?? 0) > 0 && (
+          {(evidence?.hashOmitted ?? 0) > 0 && (
             <p className="text-[11px] text-slate-400">
-              其余 {evidence?.matchedOmitted} 条略。
+              其余 {evidence?.hashOmitted} 条略。
             </p>
           )}
           <p className="text-[11px] leading-5 text-slate-400">
-            只展示线索摘要，不展示其他人的原始资料。
+            候选参考用于说明相关性和支持后续核实；检索相似度、参考标签均不是本人的风险结论。
           </p>
         </div>
       )}
@@ -642,6 +650,7 @@ function RagReferenceContent({
   enabled: boolean;
 }) {
   const { factors, recs, reportSummary, hasAny } = ragReferenceState(evidence, loading);
+  const graphMatches = topMatched(evidence?.report, MAX_ROWS);
 
   return (
     <div className="grid gap-3">
@@ -664,6 +673,13 @@ function RagReferenceContent({
 
       {!loading && hasAny && (
         <div className="grid gap-3">
+          <p className="text-[12px] leading-5 text-slate-500">来源：个人图谱与领域图谱。以下是参考匹配及解释，独立于哈希检索，不替代后端量表分层。</p>
+          {graphMatches.length > 0 && (
+            <div>
+              <p className="text-[13px] font-medium text-slate-700">图谱匹配参考</p>
+              {graphMatches.map(row => <p key={row.name} className="mt-1 text-[13px] text-slate-600">{row.name}：{[...row.matched_symptoms, ...row.matched_triggers].join('、') || '未提供具体匹配项'}</p>)}
+            </div>
+          )}
           {/* 报告正文：后端返回的 summary 原样展示（接口给什么就显示什么） */}
           {reportSummary && (
             <div>
@@ -676,7 +692,7 @@ function RagReferenceContent({
 
           {factors.length > 0 && (
             <div>
-              <p className="text-[13px] font-medium text-slate-700">风险因素</p>
+              <p className="text-[13px] font-medium text-slate-700">图谱参考因素</p>
               <ul className="mt-1 grid gap-1">
                 {factors.map((factor) => (
                   <li key={factor} className="flex gap-1.5 text-[13.5px] leading-[1.7] text-slate-600">
@@ -875,7 +891,7 @@ function adviceList(level: AlertLevel) {
   list.push({
     title: "补一条近况记录",
     desc: "文字、语音或图片都可以，让后面的分析多一条线索。",
-    action: { label: "去多模态采集", to: "/personal/data-collection" },
+    action: { label: "去心理筛查", to: "/personal/screening?tab=text" },
   });
 
   /* 只留两条：第三条原本是"回看完整记录"，指向的旧记录页已经不再从引导里进入 */

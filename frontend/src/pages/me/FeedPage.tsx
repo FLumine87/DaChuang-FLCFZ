@@ -61,8 +61,8 @@ export default function FeedPage() {
     }
     setAlerts(alertResult.status === 'fulfilled' ? alertResult.value : []);
 
-    /* 绿级或稳定期同时加载兴趣推送；服务端没有就用本机条目 */
-    if (feedResult.status === 'fulfilled' && feedResult.value.report.risk_level === 'green') {
+    /* Interests do not require inferring that an unknown graph status is healthy. */
+    if (feedResult.status === 'fulfilled' && (feedResult.value.report.reference_only || feedResult.value.report.risk_level === 'unknown' || feedResult.value.report.risk_level === 'green')) {
       try {
         setInterestFeed(await api.getInterestFeed(userId, 4));
       } catch {
@@ -133,19 +133,20 @@ export default function FeedPage() {
       {feed && (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div className="ui-card p-4">
-            <p className="text-xs text-slate-500">当前状态</p>
+            <p className="text-xs text-slate-500">参考来源</p>
             <p className={`text-lg font-bold mt-1 ${
+              feed.report.reference_only || feed.report.risk_level === 'unknown' || source === 'local' ? 'text-slate-700' :
               feed.report.risk_level === 'red' ? 'text-danger-600' :
               feed.report.risk_level === 'orange' ? 'text-orange-600' :
               feed.report.risk_level === 'yellow' ? 'text-warning-600' : 'text-success-600'
-            }`}>{feed.report.risk_label}</p>
-            <p className="text-xs text-slate-400 mt-1">综合分 {feed.report.overall_score}</p>
+            }`}>{source === 'local' ? '本机记录参考' : feed.report.reference_only || feed.report.risk_level === 'unknown' ? '图谱参考，待标准筛查' : feed.report.risk_label}</p>
+            <p className="text-xs text-slate-400 mt-1">参考匹配分不作为本人风险分数</p>
           </div>
           <div className="ui-card p-4">
             <p className="text-xs text-slate-500">本次更新</p>
             <p className="text-lg font-bold mt-1 text-slate-700">{feed.report.created_at.slice(5, 16)}</p>
             <p className="text-xs text-slate-400 mt-1">
-              {feed.report.alert_created ? '已同步生成预警' : '未触发预警'}
+              {feed.report.reference_only || feed.report.risk_level === 'unknown' || source === 'local' ? '仅更新参考，不据此生成风险结论' : feed.report.alert_created ? '已同步生成预警' : '未触发预警'}
             </p>
           </div>
           <div className="ui-card p-4 col-span-2 md:col-span-1">
@@ -202,9 +203,7 @@ export default function FeedPage() {
             <FeedItems items={interestItems} />
           ) : (
             <p className="text-sm text-slate-400 py-4 text-center">
-              {feed?.report.risk_level === 'green'
-                ? '暂无兴趣画像数据，去对话页聊聊你的爱好吧'
-                : '当前状态不适合兴趣推送，先关注状态推荐'}
+              暂无可用兴趣画像数据，可以去对话页补充自己的爱好。
             </p>
           )}
         </div>

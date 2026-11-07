@@ -116,12 +116,12 @@ class DeepSeekRAGEngine(RAGEngineInterface):
             return await self._fallback_report(screening_data)
 
         try:
-            knowledge = await self.retrieve(
+            assessment = screening_data.get("screening_assessment") or {}
+            knowledge_query = " ".join(str(item.get("value") or "") for item in assessment.get("evidence", [])) if assessment.get("analysisMode") == "retrieval" else (
                 f"{screening_data.get('questionnaire', '量表')} "
                 f"{screening_data.get('name', '')} "  # 检索场景下 name 即查询词
-                f"{screening_data.get('alert_level', '')}",
-                top_k=3,
-            )
+                f"{screening_data.get('alert_level', '')}")
+            knowledge = await self.retrieve(knowledge_query, top_k=3)
             knowledge_text = "\n".join(
                 [f"{d['title']}: {d['content']}" for d in knowledge]
             )
@@ -134,6 +134,9 @@ class DeepSeekRAGEngine(RAGEngineInterface):
                 content = await asyncio.to_thread(self._call_deepseek, prompt)
             report = self._parse_json(content)
             if report:
+                if screening_data.get("screening_assessment"):
+                    from app.services.screening_assessment import lock_report
+                    report = lock_report(report, screening_data["screening_assessment"])
                 report["subject"] = screening_data.get("name", "被试")
                 report["date"] = datetime.now().strftime("%Y-%m-%d")
                 # 如实标记：这一段只有真正拿到大模型输出才会走到
@@ -153,6 +156,9 @@ class DeepSeekRAGEngine(RAGEngineInterface):
     # ----------------------------- 内部方法 -----------------------------
 
     def _build_prompt(self, screening_data: Dict, knowledge_text: str) -> str:
+        if screening_data.get("screening_assessment"):
+            from app.services.screening_assessment import assessment_prompt
+            return assessment_prompt(screening_data["screening_assessment"], knowledge_text, screening_data.get("original_input"))
         score = screening_data.get("score", 0)
         max_score = screening_data.get("max_score", 100)
         alert_level = screening_data.get("alert_level", "green")
@@ -218,7 +224,7 @@ class DeepSeekRAGEngine(RAGEngineInterface):
             "messages": [
                 {
                     "role": "system",
-                    "content": "你是一名严谨的心理健康评估专家，只依据提供的量表得分与参考知识库作答，"
+                    "content": "你是一名严谨的心理筛查分析助手，只依据提供的筛查结果、获准使用的本人输入与参考知识作答，"
                                "不替代临床诊断，并在高风险时强调危机干预与专业转介。",
                 },
                 {"role": "user", "content": prompt},
@@ -256,7 +262,7 @@ class DeepSeekRAGEngine(RAGEngineInterface):
             "messages": [
                 {
                     "role": "system",
-                    "content": "你是一名严谨的心理健康评估专家，只依据提供的量表得分与参考知识库作答，"
+                    "content": "你是一名严谨的心理筛查分析助手，只依据提供的筛查结果、获准使用的本人输入与参考知识作答，"
                                "不替代临床诊断，并在高风险时强调危机干预与专业转介。",
                 },
                 {"role": "user", "content": prompt},

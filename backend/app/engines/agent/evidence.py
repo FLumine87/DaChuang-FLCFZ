@@ -6,6 +6,7 @@ import hmac
 from typing import Any, Dict, Iterable, List, Optional
 
 from app.config import settings
+from app.services.screening_assessment import build_symptom_query
 
 EVIDENCE_SCHEMA_VERSION = "1.0"
 HUMAN_REVIEW_LEVELS = frozenset({"orange", "red"})
@@ -75,7 +76,6 @@ def _retrieval_summary(retrieval_results: Optional[Dict]) -> Dict:
             high_risk_match_count += 1
         explain = hit.get("explain") or {}
         themes.update(str(theme) for theme in (explain.get("shared_themes") or []) if theme)
-        themes.update(str(tag) for tag in (hit.get("tags") or []) if tag)
 
     return {
         "available": True,
@@ -116,11 +116,7 @@ def build_evidence_pack(
         "screening_date": str(screening.get("screening_date") or screening.get("created_at") or "")[:19],
         "consent_status": consent_status,
     }
-    local_query = (
-        f"{screening_summary['questionnaire']} "
-        f"得分{screening_summary['score']}/{screening_summary['max_score']} "
-        f"{alert_level}预警"
-    )
+    local_query = screening.get("symptom_query") or build_symptom_query(screening)
 
     return {
         "schema_version": EVIDENCE_SCHEMA_VERSION,

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
-import { questionnaires } from "../data/questionnaireData";
+import { calculateQuestionnaireScore, questionnaires } from "../data/questionnaireData";
 import type { QuestionnaireDefinition } from "../data/questionnaireData";
 import AlertBadge from "./AlertBadge";
 
@@ -53,7 +53,7 @@ export default function QuestionnaireForm({
   const answeredCount = Object.keys(answers).length;
   const allAnswered = answeredCount === totalQuestions;
 
-  const totalScore = Object.values(answers).reduce((sum, v) => sum + v, 0);
+  const totalScore = calculateQuestionnaireScore(questionnaireId, answers);
   const maxScore = qDef.questions.reduce(
     (sum, q) => sum + Math.max(...q.options.map((o) => o.value)),
     0,

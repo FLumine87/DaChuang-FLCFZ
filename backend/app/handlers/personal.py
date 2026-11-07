@@ -10,10 +10,11 @@ from app.core.exceptions import HttpError
 from app.core.auth import RequestContext
 from app.db import database as db
 from app.services import screening_service, case_service, alert_service
-# 检索结论用规则模板（MockRAGEngine）秒出；RAG 报告走 get_rag_engine（大模型，前端异步取）
+# 筛查结论由统一后端规则生成，RAG仅解释同一份证据。
 from app.engines import get_rag_engine
-from app.engines.rag.mock_engine import MockRAGEngine
-from app.handlers.retrieval import perform_search, to_frontend_hit
+from app.handlers.retrieval import perform_search, to_frontend_hit, viewer_of
+from app.services import screening_assessment as assessment_service
+from app.services import retrieval_screening as retrieval_service
 
 
 def _warning_dict(a: dict) -> dict:
@@ -77,7 +78,13 @@ async def _build_user_profile(ctx, user_id: int, screenings: list) -> dict:
 
 
 def _screening_item(s: dict, qn: str) -> dict:
+    stored = assessment_service._json(s.get("answers"))
+    answer_values = stored.get("values", stored)
+    metadata = assessment_service._json(stored.get("_meta"))
     return {        "id": s.get("screening_id"),
+        "answers": answer_values,
+        "questionnaireVersion": metadata.get("questionnaireVersion") or s.get("questionnaireVersion"),
+        "answerEncoding": metadata.get("answerEncoding") or s.get("answerEncoding"),
         "questionnaire": qn,
         "score": s.get("score"),
         "maxScore": s.get("max_score"),
@@ -177,7 +184,7 @@ async def save_screening_supplement(ctx: RequestContext, screening_id):
         raise HttpError(400, "补充类型必须是 text / audio / image")
     user_id = int(ctx.user["sub"])
     row = await db.query_one_a(
-        "SELECT id FROM screenings WHERE screening_id = ? AND user_id = ?",
+        "SELECT * FROM screenings WHERE screening_id = ? AND user_id = ?",
         (str(screening_id), user_id),
     )
     if not row:
@@ -207,21 +214,31 @@ async def save_personal_supplement(ctx: RequestContext):
     if kind not in ("text", "audio", "image"):
         raise HttpError(400, "补充类型必须是 text / audio / image")
     user_id = int(ctx.user["sub"])
+    retrieval_source = retrieval_service.open_snapshot(data["retrievalToken"], user_id) if data.get("retrievalToken") else None
+    if retrieval_source and (retrieval_source["modality"] != kind or (kind == "text" and retrieval_source["query"].strip() != str(data.get("text") or "").strip())):
+        raise HttpError(400, "保存内容与本次检索依据不一致，请重新检索")
     row_id = await db.execute_a(
         "INSERT INTO screening_supplements (user_id, screening_id, kind, text, filename, url, description) "
         "VALUES (?, NULL, ?, ?, ?, ?, ?)",
         (user_id, kind, data.get("text"), data.get("filename"),
          data.get("url"), data.get("description")),
     )
-    report = await _analyze_collection(ctx, row_id, kind, data, user_id, None)
+    if retrieval_source:
+        observations = await db.query_a("SELECT kind,text,created_at FROM screening_supplements WHERE user_id=? ORDER BY id DESC LIMIT 500", (user_id,))
+        assessment = retrieval_service.build_retrieval_screening(retrieval_source["query"], retrieval_source["hits"],
+            modality=kind, supplement_id=row_id, observations=observations)
+        assessment["retrievalToken"] = data["retrievalToken"]
+        report = await _collection_report(ctx, assessment, retrieval_source["hits"], {}, kind, retrieval_source["query"])
+        report["retrievalSnapshot"] = retrieval_source
+        await assessment_service.save_assessment({"id": row_id, "user_id": user_id}, assessment, report=report)
+    else:
+        report = await _analyze_collection(ctx, row_id, kind, data, user_id, None)
     await _index_supplement(row_id, kind, data, user_id)
     return success_response(data={"id": row_id, "report": report}, message="已保存到你的档案")
 
 
 # ─── 采集的哈希检索分析 ────────────────────────────────────────────────────────
 
-_SEVERITY = {"green": 0, "yellow": 1, "orange": 2, "red": 3}
-_LEVEL_LABEL = {"green": "稳定", "yellow": "关注", "orange": "警告", "red": "高危"}
 _KIND_LABEL = {"text": "文本", "audio": "语音", "image": "图像"}
 
 
@@ -243,14 +260,23 @@ def _report_hit(h: dict) -> dict:
     return {
         k: v for k, v in {
             "id": h.get("id"),
+            "recordId": h.get("record_id") or h.get("recordId"),
             "modality": h.get("modality"),
             "modalityLabel": h.get("modality_label"),
             "summary": h.get("summary"),
             "similarity": round(float(h.get("similarity") or 0), 4),
-            "alertLevel": h.get("alert_level") or "green",
+            "alertLevel": h.get("alert_level") or h.get("alertLevel") or "unknown",
             "tags": h.get("tags") or [],
             "date": h.get("date"),
             "explain": h.get("explain"),
+            "emotionLabel": h.get("emotion_label") or h.get("emotionLabel"),
+            "screeningLabel": h.get("screening_label") or h.get("screeningLabel"),
+            "labelSource": h.get("label_source") or h.get("labelSource"),
+            "labelValidity": h.get("label_validity") or h.get("labelValidity"),
+            "pairingType": h.get("pairing_type") or h.get("pairingType"),
+            "screeningUsable": h.get("screening_usable", h.get("screeningUsable")),
+            "referenceOnly": h.get("reference_only", h.get("referenceOnly")),
+            "labelDescription": h.get("label_description") or h.get("labelDescription"),
         }.items() if v is not None
     }
 
@@ -290,100 +316,123 @@ async def _index_supplement(sup_id, kind: str, data: dict, user_id: int) -> None
 
 async def _analyze_collection(ctx: RequestContext, sup_id, kind: str, data: dict,
                               user_id: int, screening_row) -> dict | None:
-    """对一次采集跑哈希检索引擎，生成检索报告；达到预警级别时生成预警记录。
-
-    评估口径（相似度 × 风险等级 双条件，避免每次检索都误报）：
-      · 最高相似记录 sim >= 0.75 且其等级为 orange/red → 取该等级（生成预警）
-      · 最高相似记录 sim >= 0.65 且等级非 green → yellow（关注，不生成预警记录，
-        与筛查预警的既有口径一致：只有 orange/red 才建档）
-      · 其余 → green
-    分析失败（引擎未就绪等）返回 None，不影响补充本身的挂载。
-    """
+    """保存后再评估本人证据；参考标签绝不直接转为本人的风险。"""
+    from app.engines import get_hashing_engine
+    query = (data.get("text") or "").strip()
+    results, info = [], {}
     try:
-        from app.engines import get_hashing_engine
-
         engine = get_hashing_engine()
-        media_path = None
-        if kind in ("audio", "image"):
-            media_path = _resolve_upload_path(data.get("url") or "")
-        query = (data.get("text") or "").strip()
         results, info = await engine.search_with_info(
             query=query, modality=kind, top_k=5, modality_filter=None,
-            media_path=media_path,
-            viewer={"user_id": user_id, "role": (ctx.user or {}).get("role") or "user"},
+            media_path=_resolve_upload_path(data.get("url") or "") if kind in ("audio", "image") else None,
+            viewer=viewer_of(ctx),
         )
-        hits = sorted([_report_hit(h) for h in (results or [])],
-                      key=lambda h: h.get("similarity") or 0, reverse=True)
-
-        top = hits[0] if hits else None
-        sim = (top.get("similarity") or 0) if top else 0
-        top_level = (top.get("alertLevel") or "green") if top else "green"
-
-        if top and sim >= 0.75 and _SEVERITY.get(top_level, 0) >= 2:
-            level = top_level
-        elif top and sim >= 0.65 and _SEVERITY.get(top_level, 0) >= 1:
-            level = "yellow"
-        else:
-            level = "green"
-
-        reason = (
-            f"最相似记录（{top.get('id')}）相似度 {sim:.2f}，风险等级{_LEVEL_LABEL.get(top_level)}"
-            if top else "未检索到相似记录"
-        )
-        # 结论：把命中规模、最高相似度和处置建议写成一段话
-        high_count = sum(1 for h in hits if _SEVERITY.get(h.get("alertLevel"), 0) >= 2)
-        parts = [f"在真实跨模态语料库中检索到 {len(hits)} 条相似记录，最高相似度 {sim:.2f}。"]
-        if high_count:
-            parts.append(f"其中 {high_count} 条为高风险等级记录，与本次输入存在情绪风险特征重合。")
-        if level in ("orange", "red"):
-            parts.append("已生成预警并同步到预警中心，建议尽快完成一次量表筛查或联系咨询师。")
-        elif level == "yellow":
-            parts.append("存在一定风险信号，建议持续记录并关注情绪变化。")
-        else:
-            parts.append("暂未发现明显风险信号，请继续保持记录习惯。")
-        conclusion = "".join(parts)
-
-        # 达到预警级别（orange/red）→ 建档挂载；x/y 为补充所在记录（可空）
-        alert_id = None
-        if level in ("orange", "red"):
-            name = await _current_user_name(ctx) or "用户"
-            alert_id = f"ALT-{uuid.uuid4().hex[:6].upper()}"
-            await db.execute_a(
-                "INSERT INTO alerts (alert_id, screening_id, user_id, name, level, trigger, description, "
-                "status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)",
-                (
-                    alert_id,
-                    screening_row["id"] if screening_row else None,
-                    user_id, name, level,
-                    f"多模态采集 · {_KIND_LABEL[kind]}线索与{_LEVEL_LABEL[level]}案例高度相似（相似度 {sim:.2f}）",
-                    conclusion,
-                ),
-            )
-
-        report = {
-            "modality": kind,
-            "query": (query[:120] or data.get("filename") or ""),
-            "level": level,
-            "levelLabel": _LEVEL_LABEL[level],
-            "isAlert": level in ("orange", "red"),
-            "reason": reason,
-            "conclusion": conclusion,
-            "hits": hits,
-            "alertId": alert_id,
-            "index": info if isinstance(info, dict) else None,
-            "createdAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        }
-        # 回写到补充记录上：首页/检索页/采集页都从这里取「结论」
-        await db.execute_a(
-            "UPDATE screening_supplements SET analysis = ? WHERE id = ?",
-            (json.dumps(report, ensure_ascii=False), sup_id),
-        )
-        return report
     except Exception:
-        # 分析失败不阻塞挂载（服务端无访问日志，打印堆栈便于本地排查）
         import traceback
         traceback.print_exc()
-        return None
+        info = {"source": "unavailable", "message": "参考检索暂不可用，仍可依据本人信息继续筛查"}
+    screening, supplement, observations = await assessment_service.owned_context(
+        user_id, (screening_row or {}).get("screening_id"), sup_id)
+    previous = assessment_service._json(supplement.get("analysis"))
+    assessment = assessment_service.build_assessment(query, screening=screening, observations=observations,
+        hits=results, supplement_id=sup_id, previous=previous.get("assessment"))
+    report = await _collection_report(ctx, assessment, results, info, kind, query, previous)
+    await assessment_service.save_assessment(supplement, assessment, report=report)
+    return report
+
+
+async def _collection_report(ctx, assessment, results, info, kind, query, previous=None):
+    previous = previous or {}
+    alert_id = previous.get("alertId")
+    if assessment["level"] in ("orange", "red"):
+        # One open assessment alert per supplement, even after repeated refresh/follow-up.
+        trigger = f"筛查证据复核 · 补充#{assessment['supplementId']}"
+        existing = await db.query_one_a("SELECT alert_id FROM alerts WHERE user_id=? AND trigger=? AND status IN ('pending','processing') ORDER BY id DESC LIMIT 1", (int(ctx.user["sub"]), trigger))
+        if existing:
+            alert_id = existing["alert_id"]
+        else:
+            alert_id = f"ALT-{uuid.uuid4().hex[:6].upper()}"
+            screening_pk = await db.query_one_a("SELECT id FROM screenings WHERE screening_id=? AND user_id=?", (assessment.get("screeningId"), int(ctx.user["sub"]))) if assessment.get("screeningId") else None
+            await db.execute_a("INSERT INTO alerts (alert_id, screening_id, user_id, name, level, trigger, description, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)",
+                (alert_id, screening_pk["id"] if screening_pk else None, int(ctx.user["sub"]), await _current_user_name(ctx) or "用户", assessment["level"], trigger, assessment["conclusion"]))
+    return {"modality": kind, "query": query[:500], "level": assessment["level"] or "unknown",
+            "levelLabel": assessment["levelLabel"], "isAlert": assessment["level"] in ("orange", "red"),
+            "reason": assessment["retrievalContribution"], "conclusion": assessment["conclusion"],
+            "hits": [_report_hit(hit) for hit in results], "alertId": alert_id,
+            "index": info, "assessment": assessment, "supplementId": assessment.get("supplementId"),
+            "createdAt": datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+
+async def personal_retrieval_assessment(ctx: RequestContext):
+    """Preview or update the owned, persisted retrieval → follow-up → assessment chain."""
+    data = ctx.body or {}
+    user_id = int(ctx.user["sub"])
+    supplement_id = data.get("supplementId")
+    if supplement_id is not None:
+        if type(supplement_id) is not int or supplement_id <= 0:
+            raise HttpError(400, "补充记录编号无效")
+    followups = data.get("followupAnswers") or {}
+    if not isinstance(followups, dict) or set(followups) - assessment_service.FOLLOWUP_FIELDS:
+        raise HttpError(400, "追问答案字段无效")
+    if any(not isinstance(value, str) or len(value) > 160 for value in followups.values()):
+        raise HttpError(400, "追问答案无效")
+    if any(field in assessment_service.FOLLOWUP_OPTIONS and value not in assessment_service.FOLLOWUP_OPTIONS[field]
+           for field, value in followups.items()):
+        raise HttpError(400, "追问选项无效，请从当前问题的选项中选择")
+    screening, supplement, observations = await assessment_service.owned_context(user_id, data.get("screeningId"), supplement_id)
+    if followups and not supplement:
+        raise HttpError(400, "请先保存本次输入，再补充追问答案")
+    query = str(supplement.get("text") or "") if supplement else str(data.get("query") or "")[:6000]
+    previous = assessment_service._json(supplement.get("analysis")) if supplement else {}
+    results = previous.get("hits") or []
+    info = previous.get("index") or {}
+    if not results:
+        search_data = {"query": assessment_service.build_symptom_query({"notes": query}), "modality": "text", "top_k": 5}
+        try:
+            results, info, _, _ = await perform_search(search_data, viewer=viewer_of(ctx))
+        except Exception:
+            info = {"source": "unavailable"}
+    assessment = assessment_service.build_assessment(query, screening=screening, observations=observations,
+        hits=results, followup_answers=followups, supplement_id=supplement_id, previous=previous.get("assessment"))
+    if supplement:
+        report = await _collection_report(ctx, assessment, results, info, supplement["kind"], query, previous)
+        await assessment_service.save_assessment(supplement, assessment, report=report)
+    return success_response(data={"assessment": assessment})
+
+
+async def _retrieval_context(ctx):
+    """Use this exact search's signed snapshot, never client-supplied labels."""
+    data = ctx.body or {}
+    uid = int(ctx.user["sub"])
+    supplement = None
+    if data.get("supplementId") is not None:
+        if type(data["supplementId"]) is not int or data["supplementId"] <= 0:
+            raise HttpError(400, "补充记录编号无效")
+        supplement = await db.query_one_a("SELECT * FROM screening_supplements WHERE id=? AND user_id=?", (data["supplementId"], uid))
+        if not supplement:
+            raise HttpError(404, "补充记录不存在或不属于本人")
+    previous = assessment_service._json((supplement or {}).get("analysis"))
+    if data.get("retrievalToken"):
+        source = retrieval_service.open_snapshot(data["retrievalToken"], uid)
+    elif supplement:
+        source = previous.get("retrievalSnapshot") or retrieval_service.snapshot(
+            supplement.get("text") or "", previous.get("hits") or [], supplement["kind"])
+    else:
+        raise HttpError(400, "请先执行多模态检索")
+    observations = await db.query_a("SELECT kind,text,created_at FROM screening_supplements WHERE user_id=? ORDER BY id DESC LIMIT 500", (uid,))
+    assessment = retrieval_service.build_retrieval_screening(source["query"], source["hits"],
+        modality=source["modality"], supplement_id=(supplement or {}).get("id"), observations=observations)
+    assessment["retrievalToken"] = retrieval_service.seal_snapshot(uid, source)
+    return assessment, source, supplement, previous
+
+
+async def personal_retrieval_screening(ctx: RequestContext):
+    assessment, source, supplement, previous = await _retrieval_context(ctx)
+    if supplement:
+        report = await _collection_report(ctx, assessment, source["hits"], {}, source["modality"], source["query"], previous)
+        report["retrievalSnapshot"] = source
+        await assessment_service.save_assessment(supplement, assessment, report=report)
+    return success_response(data={"assessment": assessment})
 
 
 def _supplement_dict(r: dict) -> dict:
@@ -432,24 +481,12 @@ async def submit_personal_screening(ctx: RequestContext):
     q = await db.query_one_a("SELECT * FROM questionnaires WHERE code = ?", (data.get("questionnaire", ""),))
     if not q:
         raise HttpError(400, "问卷不存在")
-    # 自助筛查以原始作答为准，不能相信浏览器上传的总分或风险等级。
-    scale = {
-        "PHQ-9": (9, 3, (4, 9, 14)),
-        "GAD-7": (7, 3, (4, 9, 14)),
-        "ISI": (7, 4, (7, 14, 21)),
-        "PSS-10": (10, 4, (13, 26, 33)),
-    }.get(q["code"])
-    if not scale:
-        raise HttpError(400, "该量表暂不支持个人自助提交")
     answers = data.get("answers")
-    question_count, option_max, thresholds = scale
-    if not isinstance(answers, dict) or set(answers) != {str(i) for i in range(1, question_count + 1)}:
-        raise HttpError(400, "问卷答案不完整")
-    if any(type(value) is not int or value < 0 or value > option_max for value in answers.values()):
-        raise HttpError(400, "问卷答案无效")
-    score = sum(answers.values())
-    alert_level = next((level for limit, level in zip(thresholds, ("green", "yellow", "orange"))
-                        if score <= limit), "red")
+    result = assessment_service.score_questionnaire(q["code"], answers,
+        version=data.get("questionnaireVersion"), encoding=data.get("answerEncoding"))
+    score, alert_level = result["score"], result["level"]
+    stored_answers = {"values": answers, "_meta": {
+        "questionnaireVersion": result["version"], "answerEncoding": result["answerEncoding"]}}
     row = await screening_service.create_screening({
         "user_id": user_id,
         "name": user["name"] if user else "用户",
@@ -458,7 +495,8 @@ async def submit_personal_screening(ctx: RequestContext):
         "department": data.get("department"),
         "questionnaire_id": q["id"],
         "score": score,
-        "answers": json.dumps(answers, ensure_ascii=False, sort_keys=True),
+        "max_score": result["maxScore"],
+        "answers": json.dumps(stored_answers, ensure_ascii=False, sort_keys=True),
         "status": "completed",
         "alert_level": alert_level,
         "screening_date": datetime.now(),
@@ -471,6 +509,12 @@ async def submit_personal_screening(ctx: RequestContext):
         "id": row.get("screening_id"),
         "status": "success",
         "riskLevel": alert_level,
+        "score": score,
+        "maxScore": result["maxScore"],
+        "symptomSeverity": result["symptomSeverity"],
+        "safetyStatus": result["safetyStatus"],
+        "requiresHumanReview": result["requiresHumanReview"],
+        "questionnaireVersion": result["version"],
     })
 
 
@@ -674,66 +718,13 @@ async def get_personal_profile(ctx: RequestContext):
     })
 
 
-# 危机线索关键词：命中即判高风险（心理筛查里漏判的代价远高于误判）
-_CRISIS_KEYWORDS = ("自杀", "想死", "不想活", "轻生", "自伤", "伤害自己",
-                    "结束一切", "活着没意思", "活着没什么意思", "结束生命")
-
-
 def _hits_alert_level(raw_results: list, query: str = "") -> str:
-    """按"确有相似的命中"的风险分布给本次检索定级（纯规则，不调大模型）。
-
-    三道过滤，避免误判与语料偏斜：
-      1. 查询含危机线索 → 直接高风险（安全兜底，不等检索结果）；
-      2. 相似度低于 0.70 的命中不算"相似"，不参与定级；
-      3. 一条记录含 text/image/audio 多个单元，按 record_id 去重后统计，
-         否则同一条高风险记录会被重复计数成"多条证据"。
-    规则（预警要谨慎，高风险需多条证据）：
-      red 或 orange≥2 → 高；orange 单条或 yellow≥2 → 中；其余 → 低。
-    """
-    if any(kw in query for kw in _CRISIS_KEYWORDS):
-        return "red"
-
-    counts = {"red": 0, "orange": 0, "yellow": 0}
-    seen: set[str] = set()
-    for r in raw_results:
-        try:
-            sim = float(r.get("similarity") or r.get("score") or 0)
-        except (TypeError, ValueError):
-            sim = 0.0
-        if sim < 0.70:
-            continue
-        rid = str(r.get("record_id") or r.get("recordId") or r.get("id") or "")
-        if rid:
-            if rid in seen:
-                continue
-            seen.add(rid)
-        level = str(r.get("alert_level") or r.get("alertLevel") or "green").lower()
-        if level in counts:
-            counts[level] += 1
-    if counts["red"] or counts["orange"] >= 2:
-        return "red"
-    if counts["orange"] or counts["yellow"] >= 2:
-        return "yellow"
-    return "green"
+    """Compatibility shim: candidate risk labels never determine a user's level."""
+    return assessment_service.build_assessment(query)["level"] or "unknown"
 
 
 async def _search_report(raw_results: list, query: str = "") -> dict:
-    """检索结论：规则模板生成，不经过大模型（2026-10-14）。
-
-    原先这里跟着检索同步调 RAG 引擎出报告，真实大模型下要 20-30 秒，
-    必然撞上前端 15 秒超时、页面直接报"检索失败"。检索页要的是快，
-    结论按命中风险分布用内置模板生成即可；需要大模型深度研判的场景
-    走 /api/retrieval/report/{screening_id}（显式触发，可容忍长耗时）。
-    """
-    engine = MockRAGEngine()
-    report = await engine.generate_report({
-        "id": 0, "name": "本次检索", "questionnaire": "跨模态检索",
-        "score": 0, "max_score": 100,
-        "alert_level": _hits_alert_level(raw_results, query),
-    })
-    if isinstance(report, dict):
-        report["mock"] = True
-    return report
+    return assessment_service.assessment_report(assessment_service.build_assessment(query, hits=raw_results))
 
 
 async def personal_search(ctx: RequestContext):
@@ -743,19 +734,20 @@ async def personal_search(ctx: RequestContext):
     `media_base64`（+ `media_name`），由 perform_search 统一落盘与清理。
     """
     data = ctx.body or {}
-    raw_results, info, modality, mf = await perform_search(data)
+    raw_results, info, modality, mf = await perform_search(data, viewer=viewer_of(ctx))
     # 本地检索引擎还可能包含真实筛查、预警和案例。个人端只展示语料命中。
     private_prefixes = ("scr-", "alt-", "case-")
     results = [to_frontend_hit(r) for r in raw_results
                if not str(r.get("record_id") or r.get("id") or "").lower().startswith(private_prefixes)]
 
-    report = await _search_report(raw_results, data.get("query") or "")
-    if isinstance(report, dict) and "risk_level" in report:
-        report["riskLevel"] = report.pop("risk_level")
+    source = retrieval_service.snapshot(data.get("query"), results, modality)
+    assessment = retrieval_service.build_retrieval_screening(source["query"], source["hits"], modality=modality)
+    assessment["retrievalToken"] = retrieval_service.seal_snapshot(int(ctx.user["sub"]), source)
+    report = assessment_service.assessment_report(assessment)
 
     return success_response(data={
         "results": results, "report": report, "query": data.get("query"),
-        "modality": modality, "modality_filter": mf, "index": info,
+        "modality": modality, "modality_filter": mf, "index": info, "assessment": assessment,
     })
 
 
@@ -796,23 +788,54 @@ async def personal_rag_report(ctx: RequestContext):
     mock 标记如实返回，前端兜底显示规则分析并标注来源。
     """
     data = ctx.body or {}
-    query = str(data.get("query") or "")
-    hits = data.get("hits") or []
+    if data.get("analysisMode") == "retrieval":
+        assessment, source, _, _ = await _retrieval_context(ctx)
+        include_original = data.get("includeOriginalInput", True)
+        if type(include_original) is not bool:
+            raise HttpError(400, "原始输入分析开关必须为布尔值")
+        # Use the owned snapshot's actual query, never a different browser-supplied query.
+        original_text = str(source.get("query") or "").strip()[:6000] if include_original else ""
+        engine = get_rag_engine()
+        await engine.initialize()
+        report = await engine.generate_report({"name": "多模态检索初筛", "screening_assessment": assessment,
+            "original_input": {"enabled": include_original, "text": original_text, "modality": source["modality"]},
+            "alert_level": assessment["level"] or "unknown"})
+        if isinstance(report, dict) and "risk_level" in report:
+            report["riskLevel"] = report.pop("risk_level")
+        if isinstance(report, dict):
+            used = bool(original_text) and not bool(report.get("mock", True))
+            if not include_original:
+                notice = "已关闭原始输入分析，仅依据检索筛查结果生成。"
+            elif source["modality"] in ("image", "audio"):
+                notice = ("已结合附带文字；" if used else "") + "当前大模型不直接解读原始图片或语音，本次媒体线索依据检索结果分析。"
+            elif used:
+                notice = "已结合本次原始文字与检索筛查结果分析。"
+            else:
+                notice = "本次未使用原始文字生成大模型分析，保留检索证据结论。"
+            report["originalInput"] = {"enabled": include_original, "used": used, "modality": source["modality"], "notice": notice}
+        return success_response(data={"report": report, "mock": bool((report or {}).get("mock", True))})
+    user_id = int(ctx.user["sub"])
+    screening, supplement, observations = await assessment_service.owned_context(user_id, data.get("screeningId"), data.get("supplementId"))
+    query = str(supplement.get("text") or "") if supplement else str(data.get("query") or "")
+    saved_report = assessment_service._json((supplement or {}).get("analysis"))
+    # References are server results; never trust risk labels or evidence passed by the browser.
+    hits = saved_report.get("hits") or []
+    if not hits:
+        try:
+            hits, _, _, _ = await perform_search({"query": query, "modality": "text", "top_k": 5}, viewer=viewer_of(ctx))
+        except Exception:
+            hits = []
+    assessment = assessment_service.build_assessment(query, screening=screening, observations=observations,
+        hits=hits, supplement_id=(supplement or {}).get("id"), previous=saved_report.get("assessment"))
 
     rag_engine = get_rag_engine()
     await rag_engine.initialize()
 
-    screening_data = {
-        "id": 0,
-        "name": (query or "本次检索")[:40],
-        "questionnaire": "跨模态检索",
-        "score": 0,
-        "max_score": 100,
-        "alert_level": _hits_alert_level(hits, query),
-        # RAG 的"增强"部分：哈希检索命中的相似案例摘要
-        "retrieval_context": _hits_context(hits),
-        "hit_count": len(hits),
-    }
+    screening_data = {"name": "本次筛查", "screening_assessment": assessment,
+        "questionnaire": (assessment.get("scaleResult") or {}).get("code") or "尚未完成量表",
+        "score": (assessment.get("scaleResult") or {}).get("score"),
+        "max_score": (assessment.get("scaleResult") or {}).get("maxScore"),
+        "alert_level": assessment["level"] or "unknown"}
 
     report = await rag_engine.generate_report(screening_data)
     if isinstance(report, dict) and "risk_level" in report:
@@ -822,4 +845,4 @@ async def personal_rag_report(ctx: RequestContext):
     mock = bool((report or {}).get("mock", True))
     if isinstance(report, dict):
         report["mock"] = mock
-    return success_response(data={"report": report, "mock": mock})
+    return success_response(data={"report": report, "mock": mock, "assessment": assessment})

@@ -1,19 +1,21 @@
-"""心理状况推理 Agent（阶段 2 核心，阶段 3.5 升级，2026-10-12 加时间衰减）。
+"""个人知识图谱参考 Agent（不承担主业务的心理筛查定级）。
 
 流程（对应论文 Agent 2 "情绪识别 + 结果组装"的个性化升级版）：
 1. 聚合个人 KG：症状频次、情绪均值、事件、诱因、应对有效性、兴趣画像
 2. 对照领域 KG：匹配各 Disorder 的 HAS_SYMPTOM / HAS_TRIGGER
-3. 可解释评分 v2 + 时间衰减：
+3. 兼容旧版匹配支持分及参考排序：
    - 量表得分（PHQ-9/GAD-7/SCL-90）× 权重 40%，半衰期 7 天
    - 症状频次与匹配分 × 权重 35%，半衰期 30 天
    - 情绪强度（多次低强度负面情绪）× 权重 25%，半衰期 14 天
    - 诱因/生活事件半衰期 21 天
    - 兴趣画像不衰减；危机关键词永不衰减（保安全）
-   加权综合，映射 绿/黄/橙/红 四级
+   加权数值仅供旧客户端兼容，不映射心理风险等级
 4. 兴趣感知推荐：领域 KG 的应对建议按用户 LIKES 的兴趣类别优先排序
 5. 报告组装：优先 LLM 生成自然语言报告，Mock/失败时回退模板
 
-纯 Cypher 规则推理，Neo4j 可用即可运行，不依赖 LLM。
+纯 Cypher 图谱参考，Neo4j 可用即可运行，不依赖 LLM。
+下文保留旧匹配支持分兼容历史客户端，但不再将该启发式分数输出为心理风险等级；
+标准量表及本人多日观察的统一筛查判断由主业务后端负责。
 """
 
 import time
@@ -30,11 +32,6 @@ from ..schemas.inference import (
 from . import llm_client, recommendation_agent
 
 DISCLAIMER = "本报告由系统基于个人知识图谱自动生成，仅作参考，不构成医学诊断。如有需要请联系学校心理咨询中心或专业医疗机构。"
-
-# 评分阈值（加权综合分）
-THRESHOLD_YELLOW = 1.5
-THRESHOLD_ORANGE = 3.0
-THRESHOLD_RED = 5.0
 
 # 权重（量表:症状:情绪 = 40:35:25）
 W_SCALE = 0.40
@@ -183,22 +180,20 @@ def _run_mock(user_id: str) -> RiskReport:
     那就该走一条**明确标注**的通路，而不是假装能推理：
 
       · 只用本地 SQLite 里确实存在的记录（当前是预警记录），不编造分数与历史；
-      · 没有任何本地记录时，factors 里如实写明"没有可评分的数据"，风险等级取绿；
+      · 没有任何本地记录时，如实写明"没有可评分的数据"，筛查状态未知；
       · 报告正文仍走 _assemble_summary（Mock 下 llm_client.chat 返回空串 → 模板文案）；
       · 建议列表用 recommendation_agent 的仓库内置内容（reason 里标注演示模式）；
       · report.mock = True，界面据此标注"演示模式 · 模板生成"。
 
-    真实通路（Neo4j 可用）完全不受影响，仍是下面 run_inference 里那套图谱推理。
+    与真实图谱通路一样，本模块仅提供参考，不覆盖主业务后端的筛查判断。
     """
     alerts = _local_alert_records(user_id)
 
     factors: list[str] = [MOCK_NOTICE]
-    level = "green"
+    level = "unknown"
     if alerts:
-        # list_alerts 按 id 倒序，第一条即最近一条。等级与标题都来自这条真实记录，
-        # 不是重新评估出来的——所以下面 factors 里必须写清出处。
+        # 最近历史记录仅作为有出处的参考，不迁移为当前用户的风险等级。
         latest = alerts[0]
-        level = latest.get("level") or "green"
         factors.append(
             f"本地最近一条预警记录：{latest.get('created_at', '')} {latest.get('title', '')}"
         )
@@ -210,7 +205,7 @@ def _run_mock(user_id: str) -> RiskReport:
     report = RiskReport(
         user_id=user_id,
         risk_level=level,  # type: ignore[arg-type]
-        risk_label=RISK_LABELS.get(level, RISK_LABELS["green"]),
+        risk_label=RISK_LABELS[level],
         overall_score=0.0,  # 没跑评分：0 表示"未评分"，不表示"很健康"
         crisis=False,
         factors=factors,
@@ -314,29 +309,23 @@ def run_inference(user_id: str) -> RiskReport:
 
     overall_score = round(weighted_scale + weighted_symptom + weighted_emotion, 2)
 
-    # 4. 风险等级
-    if crisis_hits or overall_score >= THRESHOLD_RED:
-        level = "red"
-    elif overall_score >= THRESHOLD_ORANGE:
-        level = "orange"
-    elif overall_score >= THRESHOLD_YELLOW:
-        level = "yellow"
-    else:
-        level = "green"
+    # 图谱匹配不承担标准筛查分层。固定权重/时间衰减只是参考排序机制，
+    # 不能与主后端量表、本人观察的判断竞争，也不能自动生成风险预警。
+    level = "unknown"
 
     # 5. 可解释风险因素
     factors: list[str] = []
     if scale_name and scale_raw is not None:
-        factors.append(f"最近量表「{scale_name}」得分 {scale_raw:.0f}（归一化 {scale_score:.1f}/10，权重 {W_SCALE:.0%}）")
+        factors.append(f"图谱记录中的量表「{scale_name}」原始得分 {scale_raw:.0f}；当前筛查结论以业务后端为准")
     for d in matched_disorders[:3]:
         factors.append(f"症状匹配「{d.name}」：{ '、'.join(d.matched_symptoms) }"
                        + (f"（诱因：{'、'.join(d.matched_triggers)}）" if d.matched_triggers else ""))
     for r in low_emotions:
         factors.append(f"情绪「{r['name']}」多次出现且强度偏低（均值 {r['avg_value']:.1f}，共 {r['cnt']} 次）")
     if crisis_hits:
-        factors.append(f"命中危机信号：{'、'.join(crisis_hits)}")
+        factors.append(f"图谱存在待核实的安全线索：{'、'.join(crisis_hits)}；需核实本人、时间与语境")
     if not factors:
-        factors.append("个人图谱中暂无明显风险信号")
+        factors.append("个人图谱信息不足，无法据此判断当前心理风险")
 
     # 6. 兴趣感知的应对推荐
     interest_cats = {i["category"] for i in interests if i.get("category")}
@@ -380,7 +369,9 @@ def run_inference(user_id: str) -> RiskReport:
 _SUMMARY_PROMPT = """你是心理状况推理报告撰写助手。基于以下结构化推理结果，写一段 150 字以内的中文报告正文：
 1. 客观陈述匹配到的风险因素，不夸大、不诊断；
 2. 给出 2-3 条缓解建议（优先使用 recommendations 中结合兴趣的条目）；
-3. 语气温暖、支持性，第二人称。直接输出正文，不要标题。"""
+3. 本模块只输出图谱参考，overall_score是匹配支持分；不能据此评定健康、疾病或风险等级。
+4. 有安全线索时明确其待核实，建议专业复核；不把历史关键词当作当前已确认危机。
+5. 语气温暖、支持性，第二人称。直接输出正文，不要标题。"""
 
 
 def _assemble_summary(report: RiskReport, interests: list[dict]) -> str:
@@ -389,8 +380,8 @@ def _assemble_summary(report: RiskReport, interests: list[dict]) -> str:
     if text:
         return text
     lines = [
-        f"综合个人知识图谱与领域知识推理，当前风险等级为【{report.risk_label}】"
-        f"（综合分 {report.overall_score}）。",
+        "本次提供个人知识图谱与领域知识的匹配参考，不生成心理风险等级。"
+        "当前筛查分层请查看本次业务筛查结果。",
         f"主要因素：{'；'.join(report.factors)}。",
     ]
     if report.recommendations:

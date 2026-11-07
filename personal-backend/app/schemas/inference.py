@@ -2,11 +2,11 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-RiskLevel = Literal["green", "yellow", "orange", "red"]
+RiskLevel = Literal["unknown", "green", "yellow", "orange", "red"]
 
-RISK_LABELS = {"green": "绿（正常）", "yellow": "黄（关注）", "orange": "橙（预警）", "red": "红（危机）"}
+RISK_LABELS = {"unknown": "图谱参考，待标准筛查", "green": "绿（正常）", "yellow": "黄（关注）", "orange": "橙（预警）", "red": "红（危机）"}
 
-# 命中即直接判定红级的危机信号
+# 图谱中的待确认安全线索：不直接映射当前风险或危机结论。
 CRISIS_KEYWORDS = ("自杀", "自伤", "轻生", "想死", "不想活", "活不下去")
 
 
@@ -33,8 +33,8 @@ class RiskReport(BaseModel):
     user_id: str
     risk_level: RiskLevel
     risk_label: str
-    overall_score: float
-    crisis: bool = Field(description="是否命中危机信号")
+    overall_score: float = Field(description="兼容旧客户端的图谱匹配支持分，不是经验证的心理风险评分")
+    crisis: bool = Field(description="图谱中是否存在待确认的安全线索，不等于已确认危机")
     factors: list[str] = Field(description="可解释的风险因素列表")
     matched_disorders: list[MatchedDisorder]
     recommendations: list[CopingRecommendation]
@@ -46,6 +46,8 @@ class RiskReport(BaseModel):
         default=False,
         description="是否由 Mock 通路（模板/本地记录）生成，而非图谱推理；界面据此标注演示模式",
     )
+    reference_only: bool = Field(default=True, description="图谱只提供参考，筛查分层由主业务后端统一计算")
+    source: str = "knowledge_graph"
 
 
 class InferenceRunResponse(BaseModel):

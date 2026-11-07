@@ -74,11 +74,20 @@ def _screening_to_dict(r: dict) -> dict:
 
 
 async def get_screening_by_id(screening_id: int) -> Optional[dict]:
-    return await db.query_one_a(
+    row = await db.query_one_a(
         "SELECT s.*, q.name AS questionnaire_name FROM screenings s "
         "LEFT JOIN questionnaires q ON s.questionnaire_id = q.id WHERE s.id = ?",
         (screening_id,),
     )
+    if row:
+        from app.services.screening_assessment import _json
+        stored = _json(row.get("answers"))
+        if "values" in stored:
+            row["answers"] = stored["values"]
+            metadata = _json(stored.get("_meta"))
+            row["questionnaireVersion"] = metadata.get("questionnaireVersion")
+            row["answerEncoding"] = metadata.get("answerEncoding")
+    return row
 
 
 async def create_screening(data: dict) -> dict:
@@ -145,6 +154,11 @@ async def complete_screening(screening_id: int, score: int) -> Optional[dict]:
     if not row:
         return None
     alert_level = await _calculate_alert_level(row["questionnaire_id"], score)
+    # A low total never hides an endorsed PHQ-9 safety item.
+    from app.services.screening_assessment import _scale_result
+    scale_result = _scale_result({**row, "status": "completed"})
+    if scale_result and scale_result["safetyStatus"] == "needs_review":
+        alert_level = "orange"
     await db.execute_a(
         "UPDATE screenings SET score = ?, status = 'completed', alert_level = ?, "
         "screening_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -165,6 +179,10 @@ async def complete_screening(screening_id: int, score: int) -> Optional[dict]:
 
 
 async def _calculate_alert_level(questionnaire_id: int, score: int) -> str:
+    from app.services.screening_assessment import SPECS, classify_scale_score
+    questionnaire = await db.query_one_a("SELECT code FROM questionnaires WHERE id=?", (questionnaire_id,))
+    if questionnaire and questionnaire["code"] in SPECS:
+        return classify_scale_score(questionnaire["code"], score)[0]
     rules = await db.query_a(
         "SELECT * FROM alert_rules WHERE questionnaire_id = ? AND is_active = 1 "
         "ORDER BY priority DESC",

@@ -7,6 +7,7 @@ from app.handlers import (auth, screening, alerts, cases, retrieval, upload,
                           agent_workspace, review)
 
 ROUTES = [
+    ("POST", "/api/personal/retrieval-screening", personal.personal_retrieval_screening, "user"),
     ("POST", "/api/agent-workspace/cases/{case_id}/runs", agent_workspace.run_case, "admin"),
     ("GET", "/api/agent-workspace", agent_workspace.overview, "admin"),
     ("POST", "/api/agent-workspace/runs", agent_workspace.run, "admin"),
@@ -34,6 +35,7 @@ ROUTES = [
     ("PUT", "/api/personal/warnings/{alert_id}", personal.update_personal_warning, "user"),
     ("GET", "/api/personal/profile", personal.get_personal_profile, "user"),
     ("POST", "/api/personal/search", personal.personal_search, "user"),
+    ("POST", "/api/personal/retrieval-assessment", personal.personal_retrieval_assessment, "user"),
     # RAG 深度报告（大模型，20~30s）：与检索接口分离，前端先渲染检索结果、
     # 报告区显示"大模型思考中"，再异步请求本接口
     ("POST", "/api/personal/rag-report", personal.personal_rag_report, "user"),

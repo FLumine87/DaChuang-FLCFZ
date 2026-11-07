@@ -224,7 +224,7 @@ export default function DashboardV2() {
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link
-                to="/personal/data-collection"
+                to="/personal/screening?tab=text"
                 className="inline-flex items-center gap-2 rounded-xl bg-[#ffffff] px-4 py-2.5 text-sm font-medium text-[#17213c] transition hover:-translate-y-0.5 hover:bg-[#f2f4f7]"
               >
                 <Plus className="h-4 w-4" />
@@ -466,7 +466,7 @@ export default function DashboardV2() {
               <p className="mt-1 text-xs text-slate-400">{lastRecord.date} · 问卷只作为多维评估中的一项参考</p>
             </div>
           </div>
-          <Link to="/personal/screening" className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-primary-600">
+          <Link to="/personal/screening?tab=scale" className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-primary-600">
             查看问卷记录
             <ChevronRight className="h-3.5 w-3.5" />
           </Link>

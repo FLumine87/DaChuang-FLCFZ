@@ -55,13 +55,11 @@ DATASET_DIRS = {
     "fer": ("FER2013", "archive"),   # Kaggle FER2013 解压包根目录（内含 train/ 与 test/）
 }
 
-# 合并语料时的粗风险映射：让 T3 跨数据集类别一致率可对齐。
-# 键为 数据集键 ; 值为 该数据集 label 值 -> 粗风险("high"/"low")
-MERGE_RISK = {
-    "eatd": {"Depressed": "high", "Normal": "low"},
-    "csemotions": {"high": "high", "low": "low"},
-    "fer": {"high": "high", "low": "low"},
-}
+# Emotion and SDS labels deliberately retain separate namespaces.
+PROVENANCE_FIELDS = (
+    "emotion_label", "screening_label", "label_source", "label_validity",
+    "pairing_type", "screening_usable",
+)
 
 # FER2013 参与合并时的默认每类样本数（7 类 → 约 7*221 ≈ 1547 张图像）
 FER_PER_CLASS = 220
@@ -100,7 +98,9 @@ SCHEMA = """
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE records(
     record_id TEXT PRIMARY KEY, themes TEXT, severity INTEGER,
-    alert_level TEXT, created_at TEXT, window INTEGER, context TEXT, label TEXT);
+    alert_level TEXT, created_at TEXT, window INTEGER, context TEXT, label TEXT,
+    emotion_label TEXT, screening_label TEXT, label_source TEXT,
+    label_validity TEXT, pairing_type TEXT, screening_usable INTEGER);
 CREATE TABLE units(
     unit_id TEXT PRIMARY KEY, record_id TEXT, modality TEXT, content TEXT,
     themes TEXT, alert_level TEXT, created_at TEXT, window INTEGER,
@@ -137,9 +137,10 @@ def write_db(out_path, root, records, units, queries, build_meta):
             meta_rows.append((k, str(v)))
         conn.executemany("INSERT INTO meta VALUES (?,?)", meta_rows)
         conn.executemany(
-            "INSERT INTO records VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO records VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [(r["record_id"], json.dumps(r["themes"], ensure_ascii=False), r["severity"],
-              r["alert_level"], r["created_at"], r["window"], r["context"], r["label"])
+              r["alert_level"], r["created_at"], r["window"], r["context"], r["label"],
+              *[r.get(key) for key in PROVENANCE_FIELDS])
              for r in records],
         )
         conn.executemany(
@@ -188,9 +189,16 @@ def _attach_images(records, units, pool):
         if i >= len(paths):
             continue
         cursor[key] = i + 1
-        iu = B.make_image_unit(rid, paths[i], rec["themes"], rec["alert_level"],
+        # The external face supplies only its own expression label. Never inherit
+        # the other person's SDS outcome, risk colour, or SDS tags onto this image.
+        image_theme = fer2013.EMOTION_SPEC.get(key, ("情绪-中性",))[0]
+        iu = B.make_image_unit(rid, paths[i], [image_theme], "unknown",
                                rec["created_at"], rec["window"], "FER2013")
         if iu is not None:
+            iu["meta"] = {**(iu.get("meta") or {}),
+                "emotion_label": key, "screening_label": "unknown",
+                "label_source": "FER2013/expression", "label_validity": "emotion_only",
+                "pairing_type": "weak_cross_dataset", "screening_usable": False}
             units.append(iu)
             added += 1
             covered += 1
@@ -223,10 +231,10 @@ def _image_queries(records, units, rng, n):
 
 
 def _normalize_merged(records, sources_key):
-    """合并时把各数据集 label 映射为粗风险（跨数据集 T3 可对齐）。"""
+    """Preserve independent emotion/SDS label meaning in a mixed corpus."""
     for rec in records:
-        ds = rec.get("_ds")
-        rec["label"] = MERGE_RISK.get(ds, {}).get(rec["label"], rec["label"])
+        rec.setdefault("screening_label", "unknown")
+        rec.setdefault("label_source", rec.get("_ds") or "unknown")
 
 
 def main():
@@ -299,7 +307,9 @@ def main():
         _normalize_merged(all_records, keys)
         build_meta["dataset_name"] = "EATD-Corpus + CSEMOTIONS + FER2013"
         build_meta["pairing"] = ("text/audio (utterance-level) + FER2013 images; "
-                                 "labels: EATD SDS(53) + CSEMOTIONS/FER emotion -> 高/低风险")
+                                 "FER images are weak cross-dataset references; "
+                                 "EATD SDS screening and emotion labels remain separate")
+        build_meta["label_rule"] = "separate emotion_label / screening_label / label_source; no emotion-to-risk mapping"
     else:
         build_meta["dataset_name"] = {
             "eatd": "EATD-Corpus", "csemotions": "CSEMOTIONS", "fer": "FER2013",

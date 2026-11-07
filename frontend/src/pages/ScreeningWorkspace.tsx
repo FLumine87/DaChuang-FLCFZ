@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ScreeningDetail from './ScreeningDetail';
 import {
   Search,
@@ -15,9 +15,8 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { questionnaireCatalog, type PersonalScreeningRecord } from '../data/mockData';
-import { questionnaires } from '../data/questionnaireData';
+import { QUESTIONNAIRE_ANSWER_ENCODING, QUESTIONNAIRE_VERSION, questionnaires } from '../data/questionnaireData';
 import { getScreeningRecords, saveScreeningRetrieval, submitScreening } from '../services/mockApi';
-import { api } from '../services/api';
 import { loadFirstRunEvidence, toRetrievalSnapshot } from '../services/firstRunRetrieval';
 import { getCurrentSession } from '../auth/session';
 import AlertBadge from '../components/AlertBadge';
@@ -26,10 +25,20 @@ import QuestionnaireForm from '../components/QuestionnaireForm';
 
 type AlertLevel = 'green' | 'yellow' | 'orange' | 'red';
 
-export default function Screening() {
+/**
+ * 量表工作区：选量表作答、看历史记录、看单条详情。
+ *
+ * 原先这是一个独立页面（/personal/screening），与「多模态采集」页的量表入口重复。
+ * 现在两页合并成一页「心理筛查」，这里只作为其中「量表填写」标签页的内容，
+ * URL 参数仍是 ?paper=<量表> 与 ?record=<记录>：
+ *   - 完成作答后写入 ?record=，详情因此可以直接分享/刷新
+ *   - 内层改参数时保留其它参数（尤其是 ?tab=），刷新后仍停在同一标签页
+ */
+export default function ScreeningWorkspace() {
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('record');
-  // ?paper=PHQ-9 时直接打开该量表的作答表单（多模态采集页的量表卡片跳到这里）
+  // ?paper=PHQ-9 时直接打开该量表的作答表单（首页「评估心理状态」等入口跳到这里）
   const paperParam = params.get('paper');
   const [savedRecord, setSavedRecord] = useState<PersonalScreeningRecord | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,6 +49,28 @@ export default function Screening() {
   const [loading, setLoading] = useState(false);
   const [kgSyncMsg, setKgSyncMsg] = useState<string | null>(null);
   const userId = getCurrentSession()?.username ?? 'demo_user';
+
+  /* 只改 record / paper，其余参数（?tab=）原样留着。
+     两处兜底都是为了刷新或点「返回」之后仍停在这一页：
+       - 打开详情/作答时补 ?tab=scale：从别处带着 record 进来时地址栏本来没有 tab
+       - 清空它们之后也补回 ?tab=scale：外层按"没有 tab"会回落到文本采集，
+         一条返回键就把人从量表页踢走了 */
+  const patchParams = useCallback(
+    (patch: Record<string, string | null>, replace = false) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [key, value] of Object.entries(patch)) {
+          if (value === null) next.delete(key);
+          else next.set(key, value);
+        }
+        if (!next.get('record') && !next.get('paper') && !next.get('tab')) {
+          next.set('tab', 'scale');
+        }
+        return next;
+      }, { replace });
+    },
+    [setParams],
+  );
 
   const fetchRecords = useCallback(async () => {
     try {
@@ -103,19 +134,26 @@ export default function Screening() {
     level: AlertLevel,
     answers: Record<string, number>,
   ) => {
+    const scaleId = activeQuestionnaire;
+    if (!scaleId) throw new Error('请先选择量表');
     let recordId: string | null = null;
+    let authoritativeScore = score;
     try {
       const response = await submitScreening({
-        questionnaire: activeQuestionnaire!,
+        questionnaire: scaleId,
         score,
         maxScore,
         level,
         answers,
+        questionnaireVersion: QUESTIONNAIRE_VERSION,
+        answerEncoding: QUESTIONNAIRE_ANSWER_ENCODING,
       });
       if (response.status !== 'success') throw new Error('筛查尚未保存，请重试');
       recordId = response.id;
-      setSavedRecord({ id: response.id, questionnaire: activeQuestionnaire!, score, maxScore, level, status: 'completed', moodTag: '已完成', date: new Date().toLocaleDateString('sv-SE') });
-      setParams({ record: response.id });
+      authoritativeScore = response.score ?? score;
+      const serverLevel = ['green', 'yellow', 'orange', 'red'].includes(response.riskLevel) ? response.riskLevel as AlertLevel : level;
+      setSavedRecord({ id: response.id, questionnaire: scaleId, score: authoritativeScore, maxScore: response.maxScore ?? maxScore, level: serverLevel, status: 'completed', moodTag: '已完成', date: new Date().toLocaleDateString('sv-SE') });
+      patchParams({ record: response.id });
     } catch (e) {
       console.error('提交筛查失败', e);
       throw e;
@@ -124,13 +162,19 @@ export default function Screening() {
     // 重新从后端拉取（真实模式下后端会生成筛查记录与分级预警）
     await fetchRecords();
 
-    /* 本次「检索与解释」的快照写进这条记录（L1：只存在浏览器本地）。
-       与首次引导 02 提交走的是同一套：拿不到就存 unavailable，不编造。
-       写完再刷一次列表，这样马上打开详情也能看到这一块。 */
+    // The shared loader waits for this scale to be written before KG inference.
+    // Its optional graph reference cannot override the server screening result.
     if (recordId) {
       const id = recordId;
-      void loadFirstRunEvidence(userId)
-        .then((evidence) => saveScreeningRetrieval(id, toRetrievalSnapshot(evidence)))
+      setKgSyncMsg('量表已保存，正在同步图谱参考…');
+      void loadFirstRunEvidence(userId, undefined, { recordId: id, scaleId, score: authoritativeScore })
+        .then(async (evidence) => {
+          await saveScreeningRetrieval(id, toRetrievalSnapshot(evidence));
+          setKgSyncMsg(evidence.scaleSyncError
+            ? '量表已保存；图谱同步未完成，本次未使用旧图谱生成分析。'
+            : evidence.neo4jConnected ? '本次量表已同步；图谱结果仅作参考，不覆盖筛查结论。'
+              : '量表已保存；个人图谱未连接，图谱参考未参与本次筛查。');
+        })
         .catch(() =>
           saveScreeningRetrieval(id, {
             at: new Date().toISOString(),
@@ -139,29 +183,14 @@ export default function Screening() {
           }),
         )
         .then(() => fetchRecords())
-        .catch(() => undefined);
+        .catch(() => setKgSyncMsg('量表已保存，图谱参考暂不可用。'));
     }
-
-    // 量表得分自动回写个人 KG（失败静默，不阻塞 UI）
-    if (activeQuestionnaire) {
-      api.submitScaleScore(userId, activeQuestionnaire, score, true)
-        .then((r) => {
-          /* 「写入图谱」与「给出风险评估」是两件事：Neo4j 未连接时 written=0（确实没写进去），
-             但后端 mock 通路仍能返回一份模板报告。分开放两句话说，别混成一句"已写入"。 */
-          if (r.written > 0) {
-            setKgSyncMsg(
-              r.inference_triggered && r.report
-                ? `已写入知识图谱，最新风险评估：${r.report.risk_label}（综合分 ${r.report.overall_score}）`
-                : '量表得分已写入个人知识图谱',
-            );
-          } else if (r.inference_triggered && r.report) {
-            setKgSyncMsg(
-              `量表得分未写入知识图谱（Neo4j 未连接）；已按演示模板给出风险评估：${r.report.risk_label}`,
-            );
-          }
-        })
-        .catch(() => setKgSyncMsg('量表得分写入知识图谱失败（Neo4j 未连接？），不影响本地记录'));
-      setTimeout(() => setKgSyncMsg(null), 8000);
+    const supplementId = params.get('assessmentSupplementId');
+    if (supplementId && recordId) {
+      const next = new URLSearchParams({ assessmentSupplementId: supplementId, screeningId: recordId });
+      const query = params.get('assessmentQuery');
+      if (query) next.set('q', query);
+      navigate(`/personal/retrieval?${next.toString()}`);
     }
   };
 
@@ -174,7 +203,7 @@ export default function Screening() {
             setActiveQuestionnaire(null);
             // 清掉 ?paper=，避免刷新后又被自动打开
             if (paperParam) {
-              setParams({}, { replace: true });
+              patchParams({ paper: null }, true);
             }
           }}
           onComplete={handleComplete}
@@ -183,8 +212,8 @@ export default function Screening() {
     );
   }
 
-  if (selectedRecord) return <ScreeningDetail record={selectedRecord} onBack={() => setParams({}, { replace: true })} />;
-  if (selectedId) return <div className="ui-card p-6"><p className="text-sm text-slate-500">{loading ? '正在加载筛查详情…' : '未找到该筛查记录，请返回列表重试。'}</p><button className="ui-button mt-4" onClick={() => setParams({})}>返回筛查记录</button></div>;
+  if (selectedRecord) return <ScreeningDetail record={selectedRecord} onBack={() => patchParams({ record: null }, true)} />;
+  if (selectedId) return <div className="ui-card p-6"><p className="text-sm text-slate-500">{loading ? '正在加载筛查详情…' : '未找到该筛查记录，请返回列表重试。'}</p><button className="ui-button mt-4" onClick={() => patchParams({ record: null })}>返回筛查记录</button></div>;
 
   return (
     <div className="space-y-6">
@@ -195,11 +224,12 @@ export default function Screening() {
           <ClipboardCheck className="w-3.5 h-3.5 shrink-0 text-primary-500" /> {kgSyncMsg}
         </div>
       )}
-      <div className="ui-card p-5">
-        <h3 className="text-base font-semibold text-slate-800">筛查说明</h3>
-        <p className="text-sm text-slate-500 mt-2 leading-6">
-          这里提供个人自助心理筛查。系统会结合你的量表结果、文本/语音/图像采集结果，进行动态跨模态哈希检索和
-          RAG 风险解释，用于"早发现、早干预"。结果仅作参考，不构成诊断。
+      {/* 量表卡片：整页的说明在标签页上方那张卡里，这里只留一句引导，
+          不再单独占一张"筛查说明"卡（同一段话说两遍）。 */}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="text-base font-semibold text-slate-800">选一个量表开始</h3>
+        <p className="text-sm text-slate-500">
+          都是自评量表，按最近两周的实际情况作答，结果仅作参考。
         </p>
       </div>
 
@@ -224,11 +254,7 @@ export default function Screening() {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <button
-                onClick={() => {
-                  const next = new URLSearchParams(params);
-                  next.set('paper', item.id);
-                  setParams(next);
-                }}
+                onClick={() => patchParams({ paper: item.id })}
                 className="ui-button ui-button-primary"
               >
                 <PlayCircle className="w-4 h-4" /> 开始 {item.id}
@@ -442,7 +468,7 @@ export default function Screening() {
                 <td className="px-5 py-3.5"><StatusBadge status={record.status} /></td>
                 <td className="px-5 py-3.5 text-sm text-slate-600">{record.moodTag}</td>
                 <td className="px-5 py-3.5 text-sm text-slate-500">{record.date}</td>
-                <td className="px-5 py-3.5"><button className="whitespace-nowrap text-sm font-medium text-primary-600 hover:underline" onClick={() => setParams({ record: record.id })}>查看详情</button></td>
+                <td className="px-5 py-3.5"><button className="whitespace-nowrap text-sm font-medium text-primary-600 hover:underline" onClick={() => patchParams({ record: record.id })}>查看详情</button></td>
               </tr>
             ))}
           </tbody>

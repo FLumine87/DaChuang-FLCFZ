@@ -8,12 +8,14 @@ import {
 
 /** 语料记录等级外观：与全站 稳定/关注/警告/高危 同一套口径 */
 const LEVEL_NAME: Record<string, string> = {
+  unknown: '未评估',
   green: '稳定',
   yellow: '关注',
   orange: '警告',
   red: '高危',
 };
 const LEVEL_PILL: Record<string, string> = {
+  unknown: 'bg-slate-100 text-slate-500',
   green: 'bg-success-50 text-success-600',
   yellow: 'bg-warning-50 text-warning-600',
   orange: 'bg-orange-50 text-orange-600',
@@ -25,7 +27,6 @@ import {
   Mic,
   Image,
   Sparkles,
-  ArrowRight,
   Hash,
   Loader2,
   X,
@@ -33,16 +34,26 @@ import {
   Square,
   ArrowLeft,
   Camera,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
-import { getScreeningRecords, getPersonalSupplements, search, fetchRetrievalMedia, fetchRagReport } from '../services/mockApi';
+import {
+  getPersonalSupplements,
+  search,
+  fetchRetrievalMedia,
+  fetchRagReport,
+  uploadFile,
+  saveUserSupplement,
+} from '../services/mockApi';
 import { USE_MOCK } from '../services/http';
 import { supplementModalityText } from '../services/localKg';
-import { getCurrentSession } from '../auth/session';
 import type { RetrievalResult, RetrievalIndexInfo } from '../data/mockData';
-import AlertBadge from '../components/AlertBadge';
 import CameraCapture from '../components/CameraCapture';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { toCorpusWavFile } from '../utils/audioRecorder';
+import { assessRetrieval, type RetrievalAnalysisReport as RagReport, type RetrievalAssessment } from '../services/screeningAssessment';
+import RetrievalAssessmentCard from '../components/RetrievalAssessmentCard';
+import type { CollectionAnalysis } from '../services/mockApi';
 
 const modalityIcons = {
   text: FileText,
@@ -83,22 +94,15 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-interface RagReport {
-  summary: string;
-  riskLevel: string;
-  sections: { title: string; content: string }[];
-  recommendations: string[];
-  /** true = 结论由规则模板 + 检索命中生成（不经过大模型） */
-  mock?: boolean;
-}
-
 export default function Retrieval() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<'all' | 'text' | 'audio' | 'image'>('all');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<RetrievalResult[] | null>(null);
   /* 语料库历史记录一次先列 20 条，避免 300 条一口气铺满页面 */
   const [shown, setShown] = useState(20);
+  const [showAllResults, setShowAllResults] = useState(false);
   /* 语料库历史记录的模态分类：全部 / 文本 / 语音 / 图像 */
   const [histMode, setHistMode] = useState<'all' | Modality>('all');
   /* 自己的记录：两路合并后置顶显示——
@@ -107,61 +111,40 @@ export default function Retrieval() {
         backend save_personal_supplement）。不合并的话，新账号在采集页
         传的内容在这张列表里看不到（"只上传不挂靠"的另一面）。 */
   const [mine, setMine] = useState<typeof corpusRecords>([]);
+  const savedReportsRef = useRef<Map<number, CollectionAnalysis>>(new Map());
   useEffect(() => {
     let alive = true;
-    Promise.all([getScreeningRecords(), getPersonalSupplements()])
-      .then(([rs, sups]) => {
-        if (!alive) return;
-        const fromRecords = rs
-          .filter((r) => r.supplement)
-          .map((r) => {
-            const sup = r.supplement!;
-            return {
-              id: r.id,
-              date: r.date,
-              themes: r.moodTag ? [r.moodTag] : [],
-              /* 有哈希检索分析的用分析等级，没有就回退记录自身的等级 */
-              level: sup.analysis?.level ?? r.level,
-              severity: 0,
-              context: '我的记录',
-              text: sup.kind === 'text' ? (sup.text ?? '') : '',
-              /* 模态文本统一走 supplementModalityText（与首页「最近一次输入」同一处逻辑）：
-                 有分析描述就显示「语音片段特征：…」/「记录到的非言语线索：…」，
-                 没有就如实回退成文件名 */
-              audio: sup.kind === 'audio' ? supplementModalityText(sup, 'audio') : '',
-              image: sup.kind === 'image' ? supplementModalityText(sup, 'image') : '',
-            };
-          });
-        const fromUser = sups
-          .filter((s) => !s.screeningId)
-          .map((s) => ({
-            id: `SUP-${s.id}`,
-            date: s.createdAt ?? '',
-            themes: [] as string[],
-            level: s.analysis?.level ?? 'green',
-            severity: 0,
-            context: '我的采集',
-            text: s.kind === 'text' ? (s.text ?? '') : '',
-            audio: s.kind === 'audio' ? supplementModalityText(s, 'audio') : '',
-            image: s.kind === 'image' ? supplementModalityText(s, 'image') : '',
-          }));
-        setMine([...fromUser, ...fromRecords]);
-      })
-      .catch(() => {});
+    getPersonalSupplements().then((sups) => {
+      if (!alive) return;
+      sups.forEach((item) => { if (item.analysis) savedReportsRef.current.set(item.id, item.analysis); });
+      setMine(sups.map((item) => ({ id: `SUP-${item.id}`, date: item.createdAt ?? '', themes: [],
+        level: item.analysis?.level ?? 'unknown', severity: 0, context: '我的检索记录', supplementId: item.id,
+        text: item.kind === 'text' ? item.text ?? '' : '',
+        audio: item.kind === 'audio' ? supplementModalityText(item, 'audio') : '',
+        image: item.kind === 'image' ? supplementModalityText(item, 'image') : '',
+      })));
+    }).catch(() => {});
     return () => {
       alive = false;
     };
   }, []);
   const [report, setReport] = useState<RagReport | null>(null);
-  /** 报告两阶段（2026-10-14 产品口径）：检索结果秒出（哈希检索的优势），
-   *  报告区先显示"大模型思考中"，RAG 深度报告异步回来后替换展示。 */
+  const [includeOriginalInput, setIncludeOriginalInput] = useState(() => localStorage.getItem('psych_retrieval_include_original') !== 'false');
+  const includeOriginalInputRef = useRef(includeOriginalInput);
+  /** 结论先展示，RAG 分析异步补充到同一张结论卡中。 */
   const [reportPhase, setReportPhase] = useState<'idle' | 'thinking' | 'done'>('idle');
-  /** 规则报告兜底：大模型失败 / Mock / 超时的时候显示，并标注来源 */
-  const fallbackReportRef = useRef<RagReport | null>(null);
   /** 当前报告请求的序号：思考期间再次检索时，旧请求回来直接丢弃 */
   const reportSeqRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [indexInfo, setIndexInfo] = useState<RetrievalIndexInfo | null>(null);
+  const [assessment, setAssessment] = useState<RetrievalAssessment | null>(null);
+  const [assessmentLoading, setAssessmentLoading] = useState(false);
+  const [assessmentError, setAssessmentError] = useState<string | null>(null);
+  const retrievalTokenRef = useRef<string | undefined>(undefined);
+  const assessmentQueryRef = useRef('');
+  const assessmentInputRef = useRef<{ query: string; modality: QueryModality; file: File | null }>({ query: '', modality: 'text', file: null });
+  const savedContextRef = useRef<{ id: number; query: string } | null>(null);
+  const searchSeqRef = useRef(0);
   // 查询模态：文本直接检索；图像/语音需先选文件（本地预览，提交时转 base64）
   const [queryModality, setQueryModality] = useState<QueryModality>('text');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
@@ -249,21 +232,228 @@ export default function Retrieval() {
 
   const canSearch = queryModality === 'text' ? !!query.trim() : !!mediaFile;
 
+  /* ── 送入检索数据 ─────────────────────────────────────────────────────────
+     默认开启：检索页的每一次查询，都和「心理筛查」页的采集一样算一条数据记录，
+     存下来之后首页「最近一次输入」、我的档案和管理端都能看到。
+     有些查询只是想看一眼、不想留痕，可以在这里取消。 */
+  const [saveToSystem, setSaveToSystem] = useState(true);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveMessage, setSaveMessage] = useState('');
+  /** 同一次输入点「检索范围」会反复触发检索（点范围即检索），但入库只该有一次：
+   *  按 模态 + 内容 + 文件 做指纹，存过就跳过；改字或换文件才算新的一条。 */
+  const persistedKeysRef = useRef<Map<string, CollectionAnalysis | null>>(new Map());
+
+  /** 把一次检索作为一条采集记录送入系统。
+   *
+   *  走的是「心理筛查」页采集落库的同一套接口：有已完成的筛查记录就挂在那条下，
+   *  一条都没有就挂到用户名下（首页同样读得到）。后端保存时会再跑一次哈希分析、
+   *  把内容写进待审核索引，所以首页「最近一次输入」、检索页「我的记录」、
+   *  管理端的数据审核与案例都能看到这条。
+   *
+   *  失败只报"没送进去"，不影响已经拿到的检索结果。 */
+  const pushToSystem = async (input: {
+    query: string;
+    modality: QueryModality;
+    file: File | null;
+    sequence: number;
+  }) => {
+    const text = input.query.trim();
+    if (input.modality === 'text' && !text) return;
+    if (input.modality !== 'text' && !input.file) return;
+
+    const key = `user|${input.modality}|${text}|${input.file ? `${input.file.name}:${input.file.size}:${input.file.lastModified}` : ''}`;
+    if (persistedKeysRef.current.has(key)) return persistedKeysRef.current.get(key);
+
+    setSaveState('saving');
+    setSaveMessage('正在送入系统…');
+    try {
+      /* 图像/语音要先落盘换成 url：后端按 uploads 路径再抽一次模态特征，
+         只给 base64 进不了索引，管理端也就看不到这条。 */
+      let payload: {
+        kind: 'text' | 'audio' | 'image';
+        text?: string;
+        filename?: string;
+        url?: string;
+        description?: string;
+      };
+      if (input.modality === 'text') {
+        payload = { kind: 'text', text };
+      } else {
+        const up = await uploadFile(input.file!);
+        payload = {
+          kind: input.modality,
+          filename: up.filename,
+          url: up.url,
+          description: up.analysis,
+        };
+      }
+
+      const report = await saveUserSupplement({ ...payload, retrievalToken: retrievalTokenRef.current });
+
+      persistedKeysRef.current.set(key, report);
+      if (input.sequence !== searchSeqRef.current) return report;
+      setSaveState('saved');
+      setSaveMessage('已作为一条记录存入系统，检索初筛依据已保存到你的档案');
+      return report;
+    } catch (e) {
+      if (input.sequence !== searchSeqRef.current) return null;
+      /* 图像/语音要先把文件传上去才能入库。本部署的文件上传后端未启用（固定 503），
+         这种情况直接说清楚"只做了检索、没入库"，别把 axios 的英文错误抛给用户。 */
+      const raw = e instanceof Error ? e.message : '';
+      setSaveState('error');
+      setSaveMessage(
+        /503/.test(raw)
+          ? '未能送入系统：文件上传服务未启用（503），本条只做了检索、没有入库'
+          : raw
+            ? `未能送入系统：${raw}（检索结果不受影响）`
+            : '未能送入系统，检索结果不受影响',
+      );
+      return null;
+    }
+  };
+
+  const updateReport = (text: string, currentResults: RetrievalResult[], current: RetrievalAssessment) => {
+    const includeOriginal = includeOriginalInputRef.current;
+    const modality = current.queryModality ?? assessmentInputRef.current.modality;
+    const fallback: RagReport = {
+      summary: current.conclusion, riskLevel: current.levelLabel,
+      sections: [{ title: '参考依据', content: current.evidence.filter((item) => item.id !== 'coverage').slice(0, 3).map((item) => `${item.label}：${item.value}`).join('；').slice(0, 180) }],
+      recommendations: [], mock: true,
+      generationMessage: '大模型本次未生成有效报告，以下仅保留检索筛查结果，心理建议尚未生成。请重新生成报告。',
+      originalInput: { enabled: includeOriginal, used: false, modality,
+        notice: !includeOriginal ? '已关闭原始输入分析，仅依据检索筛查结果生成。'
+          : modality !== 'text' ? '当前大模型不直接解读原始图片或语音，本次媒体线索依据检索结果分析。'
+          : '本次未使用原始文字生成大模型分析，保留检索证据结论。' },
+    };
+    setReport(fallback);
+    if (USE_MOCK) { setReportPhase('done'); return; }
+    setReportPhase('thinking');
+    const sequence = ++reportSeqRef.current;
+    void fetchRagReport<RagReport>({
+      query: includeOriginal ? text : '', analysisMode: 'retrieval', includeOriginalInput: includeOriginal,
+      retrievalToken: current.retrievalToken, supplementId: current.supplementId,
+      hits: currentResults.slice(0, 10).map((r) => ({ recordId: r.recordId, alertLevel: r.alertLevel, similarity: r.similarity, summary: r.summary })),
+    }).then((response) => {
+      if (sequence === reportSeqRef.current) setReport(response.report ? {
+        ...response.report, mock: response.mock || response.report.mock,
+        generationMessage: response.report.generationMessage || (response.mock ? fallback.generationMessage : undefined),
+      } : fallback);
+    }).catch(() => {
+      if (sequence === reportSeqRef.current) setReport(fallback);
+    }).finally(() => {
+      if (sequence === reportSeqRef.current) setReportPhase('done');
+    });
+  };
+
+  const changeOriginalInput = (enabled: boolean) => {
+    setIncludeOriginalInput(enabled);
+    includeOriginalInputRef.current = enabled;
+    localStorage.setItem('psych_retrieval_include_original', String(enabled));
+    // Regenerate only the report; search results and saved records stay the same.
+    ++reportSeqRef.current;
+    if (assessment && results) updateReport(assessmentQueryRef.current, results, assessment);
+  };
+
+  const refreshAssessment = async () => {
+    const sequence = searchSeqRef.current;
+    setAssessmentLoading(true); setAssessmentError(null);
+    ++reportSeqRef.current;
+    setReport(null); setReportPhase('idle');
+    try {
+      const updated = await assessRetrieval({
+        query: assessmentQueryRef.current, modality: assessmentInputRef.current.modality,
+        supplementId: assessment?.supplementId,
+        retrievalToken: retrievalTokenRef.current,
+      });
+      if (sequence !== searchSeqRef.current) return;
+      setAssessment(updated);
+      updateReport(assessmentQueryRef.current, results ?? [], updated);
+    } catch (e) {
+      if (sequence === searchSeqRef.current) setAssessmentError(e instanceof Error ? e.message : '评估更新失败，请重试');
+    } finally {
+      if (sequence === searchSeqRef.current) setAssessmentLoading(false);
+    }
+  };
+
+  const openSavedAssessment = async (row: (typeof corpusRecords)[number]) => {
+    if (!row.supplementId) { setQuery(row.text); return; }
+    const sequence = ++searchSeqRef.current;
+    ++reportSeqRef.current;
+    const saved = savedReportsRef.current.get(row.supplementId);
+    const previousHits: RetrievalResult[] = (saved?.hits ?? []).map((hit) => ({
+      id: hit.id, similarity: hit.similarity, modality: ['text', 'audio', 'image'].includes(hit.modality ?? '') ? hit.modality as 'text' | 'audio' | 'image' : 'text',
+      summary: hit.summary || '', tags: hit.tags ?? [], date: hit.date || '',
+      alertLevel: ['green', 'yellow', 'orange', 'red'].includes(hit.alertLevel) ? hit.alertLevel as 'green' | 'yellow' | 'orange' | 'red' : 'unknown',
+    }));
+    setQuery(row.text); setResults(previousHits); setReport(null); setReportPhase('idle'); setAssessment(null);
+    setAssessmentLoading(true); setAssessmentError(null); setError(null);
+    assessmentQueryRef.current = row.text;
+    savedContextRef.current = { id: row.supplementId, query: row.text };
+    assessmentInputRef.current = { query: row.text, modality: row.text ? 'text' : row.audio ? 'audio' : 'image', file: null };
+    try {
+      const current = await assessRetrieval({ query: row.text, supplementId: row.supplementId });
+      if (sequence !== searchSeqRef.current) return;
+      setAssessment(current);
+      retrievalTokenRef.current = current.retrievalToken;
+      updateReport(row.text, previousHits, current);
+    } catch (e) {
+      if (sequence === searchSeqRef.current) setAssessmentError(e instanceof Error ? e.message : '历史评估读取失败');
+    } finally { if (sequence === searchSeqRef.current) setAssessmentLoading(false); }
+  };
+
+  const saveAssessmentInput = async () => {
+    const sequence = searchSeqRef.current;
+    setAssessmentLoading(true); setAssessmentError(null);
+    try {
+      const saved = await pushToSystem({ ...assessmentInputRef.current, sequence });
+      if (sequence !== searchSeqRef.current) return;
+      const supplementId = saved?.supplementId ?? saved?.assessment?.supplementId;
+      if (!supplementId) throw new Error('本次输入尚未完成保存与评估，请检查保存提示后重试。');
+      const current = await assessRetrieval({ query: assessmentQueryRef.current, supplementId, retrievalToken: retrievalTokenRef.current });
+      if (sequence !== searchSeqRef.current) return;
+      setAssessment(current);
+      savedContextRef.current = { id: supplementId, query: assessmentQueryRef.current };
+      setSaveToSystem(true);
+      updateReport(assessmentQueryRef.current, results ?? [], current);
+    } catch (e) {
+      if (sequence === searchSeqRef.current) setAssessmentError(e instanceof Error ? e.message : '保存本次输入失败');
+    } finally { if (sequence === searchSeqRef.current) setAssessmentLoading(false); }
+  };
+
   /** 执行检索。scopeOverride 用于「点范围即检索」：setScope 是异步的，
-   *  同一轮事件里读到的 scope 还是旧值，所以显式传入本次要用的范围。 */
-  const handleSearch = async (scopeOverride?: typeof scope, queryOverride?: string) => {
+   *  同一轮事件里读到的 scope 还是旧值，所以显式传入本次要用的范围。
+   *  persistOverride 只在"带参自动检索"时显式传 false —— 那种情况下内容
+   *  本来就是首页已有的记录，再存一遍就是重复。 */
+  const handleSearch = async (
+    scopeOverride?: typeof scope,
+    queryOverride?: string,
+    persistOverride?: boolean,
+  ) => {
     /* queryOverride 用于「带参进来自动检索」：setQuery 是异步的，同一轮事件里
        读到的 query 还是旧值，所以显式传入本次要用的查询词。 */
     const effQuery = queryOverride ?? query;
     const effCanSearch = queryModality === 'text' ? !!effQuery.trim() : !!mediaFile;
     if (!effCanSearch) return;
     const effScope = scopeOverride ?? scope;
+    const sequence = ++searchSeqRef.current;
+    ++reportSeqRef.current;
+    const returnSupplementId = queryModality === 'text'
+      ? (savedContextRef.current?.query === effQuery ? savedContextRef.current.id : effQuery === searchParams.get('q') ? searchParams.get('assessmentSupplementId') : null)
+      : null;
+    assessmentQueryRef.current = effQuery;
+    assessmentInputRef.current = { query: effQuery, modality: queryModality, file: mediaFile };
     setLoading(true);
     setResults(null);
+    setShowAllResults(false);
     setReport(null);
     setReportPhase('idle');
     setError(null);
     setIndexInfo(null);
+    setAssessment(null);
+    setAssessmentError(null);
+    setAssessmentLoading(true);
+    setSaveState('idle');
+    setSaveMessage('');
     try {
       let mediaBase64: string | null = null;
       if (queryModality !== 'text' && mediaFile) {
@@ -277,44 +467,46 @@ export default function Retrieval() {
       });
       /* 检索结果秒出，立即渲染（哈希检索的优势）。报告分两步：
          ① 检索接口附带的规则结论先存为兜底（大模型不可用时展示）；
-         ② 报告区进入"大模型思考中"，异步请求 RAG 深度报告，回来后替换。 */
-      const hits = ((res.results ?? []) as RetrievalResult[]).slice(0, 10).map((r) => ({
-        recordId: r.recordId,
-        alertLevel: r.alertLevel,
-        similarity: r.similarity,
-        summary: r.summary,
-      }));
+         ② 同一结论卡显示"大模型思考中"，异步补充 RAG 分析说明与建议。 */
+      if (sequence !== searchSeqRef.current) return;
       setResults((res.results ?? []) as RetrievalResult[]);
       setIndexInfo((res.index ?? null) as RetrievalIndexInfo | null);
-      const ruleReport = (res.report ?? null) as RagReport | null;
-      fallbackReportRef.current = ruleReport;
-      if (!ruleReport) {
-        setReportPhase('done');
-        return;
-      }
-      setReportPhase('thinking');
-      const seq = ++reportSeqRef.current; // 思考期间再次检索时，旧报告作废
-      void (async () => {
-        try {
-          const rr = await fetchRagReport<RagReport>({ query: effQuery, hits });
-          if (seq !== reportSeqRef.current) return;
-          if (rr.mock || !rr.report) {
-            setReport(ruleReport); // 引擎降级：如实显示规则报告
-          } else {
-            setReport(rr.report); // 大模型报告
-          }
-        } catch {
-          if (seq !== reportSeqRef.current) return;
-          setReport(ruleReport); // 超时 / 失败：兜底规则报告
-        } finally {
-          if (seq === reportSeqRef.current) setReportPhase('done');
-        }
-      })();
-    } catch (err) {
-      setError((err as Error).message || '检索失败，请稍后重试');
-      setReportPhase('done');
-    } finally {
+      retrievalTokenRef.current = res.assessment?.retrievalToken;
+      if (res.assessment) { setAssessment(res.assessment); setAssessmentLoading(false); }
       setLoading(false);
+      /* 送入系统放在结果渲染之后：即使这一步失败，也不影响这一屏的检索结果。 */
+      try {
+        const saved = !returnSupplementId && (persistOverride ?? saveToSystem)
+          ? await pushToSystem({ query: effQuery, modality: queryModality, file: mediaFile, sequence })
+          : null;
+        if (sequence !== searchSeqRef.current) return;
+        const current = await assessRetrieval({
+          query: effQuery, modality: queryModality, retrievalToken: retrievalTokenRef.current,
+          supplementId: returnSupplementId ? Number(returnSupplementId) : saved?.supplementId ?? saved?.assessment?.supplementId,
+        });
+        if (sequence !== searchSeqRef.current) return;
+        setAssessment(current);
+        if (current.supplementId && queryModality === 'text') savedContextRef.current = { id: current.supplementId, query: effQuery };
+        retrievalTokenRef.current = current.retrievalToken;
+        if (searchParams.get('assessmentSupplementId')) {
+          const next = new URLSearchParams(searchParams);
+          next.delete('assessmentSupplementId'); next.delete('screeningId'); next.delete('q');
+          setSearchParams(next, { replace: true });
+        }
+        updateReport(effQuery, res.results ?? [], current);
+      } catch (reason) {
+        if (sequence === searchSeqRef.current) {
+          setAssessmentError(reason instanceof Error ? reason.message : '筛查评估未完成，请重试');
+          setReportPhase('done');
+        }
+      }
+    } catch (err) {
+      if (sequence === searchSeqRef.current) {
+        setError((err as Error).message || '检索失败，请稍后重试');
+        setReportPhase('done');
+      }
+    } finally {
+      if (sequence === searchSeqRef.current) { setLoading(false); setAssessmentLoading(false); }
     }
   };
 
@@ -355,16 +547,23 @@ export default function Retrieval() {
     image: '当前显示每条记录的图像单元描述（非言语线索）',
   };
 
-  const [searchParams] = useSearchParams();
   const autoQuery = searchParams.get('q') ?? '';
+  const autoContext = `${autoQuery}|${searchParams.get('assessmentSupplementId') || ''}|${searchParams.get('screeningId') || ''}`;
   const autoRanRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!autoQuery.trim() || autoRanRef.current === autoQuery) return;
-    autoRanRef.current = autoQuery;
+    const savedId = Number(searchParams.get('assessmentSupplementId'));
+    if ((!autoQuery.trim() && !savedId) || autoRanRef.current === autoContext) return;
+    autoRanRef.current = autoContext;
+    if (!autoQuery.trim() && Number.isInteger(savedId) && savedId > 0) {
+      void openSavedAssessment({ id: `SUP-${savedId}`, date: '', themes: [], level: 'unknown', severity: 0,
+        context: '我的记录', text: '', audio: '', image: '', supplementId: savedId,
+        screeningId: searchParams.get('screeningId') || undefined });
+      return;
+    }
     setQuery(autoQuery);
-    void handleSearch(undefined, autoQuery);
+    void handleSearch(undefined, autoQuery, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoQuery]);
+  }, [autoContext]);
 
   return (
     <div className="space-y-6">
@@ -374,7 +573,7 @@ export default function Retrieval() {
           动态跨模态哈希检索
         </h3>
         <p className="text-sm text-slate-400 mb-4">
-          输入你的症状描述，或上传一段面部图像 / 语音片段，系统将检索与你当前状态相似的历史模式并触发 RAG 风险解释
+          输入文字或上传图像、语音，系统将汇总本次跨模态检索结果，直接给出情绪与心理相关线索的初筛结论。
         </p>
         {/* 隐藏的文件选择器：由下方麦克风 / 图像按钮触发 */}
         <input
@@ -597,6 +796,47 @@ export default function Retrieval() {
               : '检索范围决定命中单元的类型：选「全部模态」时，一段文字也能命中真实面部图像 / 语音单元（跨模态检索）'}
           </span>
         </div>
+
+
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <label className="inline-flex cursor-pointer items-center gap-2.5">
+            <input type="checkbox" aria-label="结合本次原始输入分析" checked={includeOriginalInput} onChange={(event) => changeOriginalInput(event.target.checked)} className="h-4 w-4 cursor-pointer" />
+            <span className="text-sm font-medium text-slate-700">结合本次原始输入分析</span>
+          </label>
+          <p className="mt-1 pl-6 text-xs leading-5 text-slate-400">默认开启，报告结合原始文字与检索筛查结果；关闭后只依据检索结果。当前大模型不直接解读原始图片或语音。调整后会自动重新生成报告。</p>
+        </div>
+
+        {/* 送入检索数据：默认勾上。检索和采集一样会留下一条记录，
+            用户不想留痕时可以取消；取消后检索照常，只是不写库。 */}
+        <label className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-slate-100 pt-3 cursor-pointer">
+          <input
+            type="checkbox"
+            aria-label="送入检索数据"
+            checked={saveToSystem}
+            onChange={(e) => setSaveToSystem(e.target.checked)}
+            className="h-4 w-4 cursor-pointer"
+          />
+          <span className="text-sm font-medium text-slate-700">送入检索数据</span>
+          <span className="text-xs leading-5 text-slate-400">
+            默认开启。本次检索会作为一条记录存入系统，首页「最近一次输入」、我的档案与管理端都能看到；不想留痕就取消勾选。
+          </span>
+        </label>
+        {saveState !== 'idle' && (
+          <p
+            className={`mt-1.5 flex items-start gap-1.5 pl-6 text-xs ${
+              saveState === 'error'
+                ? 'text-danger-600'
+                : saveState === 'saved'
+                  ? 'text-success-600'
+                  : 'text-slate-400'
+            }`}
+          >
+            {saveState === 'saving' && <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />}
+            {saveState === 'saved' && <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+            {saveState === 'error' && <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+            {saveMessage}
+          </p>
+        )}
       </div>
 
       {loading && (
@@ -611,17 +851,25 @@ export default function Retrieval() {
 
       {!loading && results && (
         <>
+          <RetrievalAssessmentCard
+            key={assessment?.supplementId ?? assessmentQueryRef.current}
+            assessment={assessment} loading={assessmentLoading} error={assessmentError}
+            report={report} reportPhase={reportPhase}
+            onSave={() => void saveAssessmentInput()}
+            onRefresh={() => void refreshAssessment()}
+            onRetryReport={() => { if (assessment) updateReport(assessmentQueryRef.current, results, assessment); }}
+          />
           <div className="ui-card ">
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
               <div>
                 {/* 检索后语料库历史列表会被结果区顶掉，这里留一个明确入口回去，
                     否则用户搜完就找不到那份列表了 */}
                 <h3 className="font-semibold text-slate-800">
-                  检索结果{' '}
+                  检索参考{' '}
                   <span className="text-sm font-normal text-slate-400">
                     {results.length === 0
-                      ? '（没有找到相似模式：试试换一种描述，或把检索范围改成「全部模态」）'
-                      : `（找到 ${results.length} 个高相似模式）`}
+                      ? assessment?.references.length ? '（已保存参考的采用依据见上方判断过程）' : '（暂无可展示参考，仍可补充本人情况）'
+                      : `（找到 ${results.length} 条候选参考）`}
                   </span>
                   {/* 演示模式（VITE_USE_MOCK=true）下命中的是仓库自带的示例语料，
                       不是按本次查询从真实索引里算出来的 —— 如实标注，别让人当真结果 */}
@@ -661,19 +909,21 @@ export default function Retrieval() {
                 )}
                 {indexInfo?.dataset && (
                   <p className="text-xs text-slate-400 mt-0.5">
-                    检索语料：{indexInfo.dataset}（真实数据，按风险类别配对三模态）
+                    检索语料：{indexInfo.dataset}。跨数据集配对素材仅作参考，不视为本人的多模态证据。
                   </p>
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-2.5">
-                {/* 「RAG智能分析」按钮已按用户要求去掉：报告随检索结果自动生成、就地展示，
-                    用户不需要点开也不需要关闭（见下方 RAG 区块）。这里只留返回入口。 */}
+                {/* 分析已自动并入上方结论卡，这里保留返回入口。 */}
                 <button
                   type="button"
                   onClick={() => {
                     setResults(null);
                     setReport(null);
                     setError(null);
+                    setAssessment(null);
+                    ++searchSeqRef.current;
+                    ++reportSeqRef.current;
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
                 >
@@ -682,9 +932,10 @@ export default function Retrieval() {
               </div>
             </div>
             <div className="divide-y divide-slate-100">
-              {results.map((result) => {
+              {(showAllResults ? results : results.slice(0, 3)).map((result) => {
                 const Icon = modalityIcons[result.modality] ?? FileText;
                 const modalityLabel = modalityLabels[result.modality] ?? (result.modality || '文本');
+                const reference = assessment?.references.find((item) => item.id === result.id);
                 return (
                   <div key={result.id} className="p-5 hover:bg-slate-50 transition-colors">
                     <div className="flex items-start justify-between mb-2">
@@ -708,7 +959,9 @@ export default function Retrieval() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <AlertBadge level={result.alertLevel} size="sm" />
+                        <span className="max-w-40 text-right text-xs text-slate-500">
+                          {result.labelDescription || (result.screeningLabel === 'positive' ? '样本标签：SDS筛查阳性' : result.screeningLabel === 'negative' ? '样本标签：SDS筛查阴性' : result.alertLevel === 'unknown' ? '仅情绪标签 · 未作心理筛查' : `参考样本标签：${LEVEL_NAME[result.alertLevel] ?? '未评估'}`)}
+                        </span>
                         <div className="text-right">
                           <p className="text-lg font-bold text-primary-600 tabular-nums">
                             {(result.similarity * 100).toFixed(0)}%
@@ -716,7 +969,7 @@ export default function Retrieval() {
                           {/* 把裸数字换成「人能读的档位 + 分数条」：
                               >80% 高度相似 / >60% 较相似 / 其余关联较弱 */}
                           <p className="text-xs text-slate-500">
-                            {result.similarity >= 0.8 ? '高度相似' : result.similarity >= 0.6 ? '较相似' : '关联较弱'}
+                            {result.similarity >= 0.8 ? '检索相关性较高' : result.similarity >= 0.6 ? '检索相关性' : '关联较弱'}
                           </p>
                           <div className="mt-1 ml-auto h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
                             <div
@@ -729,6 +982,11 @@ export default function Retrieval() {
                       </div>
                     </div>
                     <p className="text-sm text-slate-600 mt-2">{result.summary}</p>
+                    <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs leading-5">
+                      <p className="font-medium text-slate-700">本次用途：{reference?.usage === 'screening' ? '用于形成上方初筛结论' : reference?.usage === 'followup' ? '用于选择补充问题' : reference?.usage === 'explanation' ? '用于解释参考' : '候选参考，未用于风险定级'}</p>
+                      {reference && <p className="mt-1 text-slate-500">{reference.reason}{reference.questionIds.length ? ` · 关联问题 ${reference.questionIds.join('、')}` : ''}</p>}
+                      {!reference && <p className="mt-1 text-slate-500">相似度表示检索相关性，不是本人患病概率。</p>}
+                    </div>
                     {result.media && (
                       <div className="mt-3 flex items-start gap-3">
                         {result.mediaKind === 'speech_pcm16' ? (
@@ -862,94 +1120,9 @@ export default function Retrieval() {
                 );
               })}
             </div>
+            {results.length > 3 && <div className="border-t border-slate-100 p-4 text-center"><button type="button" onClick={() => setShowAllResults(!showAllResults)} className="text-sm text-primary-600">{showAllResults ? '收起更多参考' : `查看其余 ${results.length - 3} 条参考`}</button></div>}
           </div>
 
-          {/* RAG 智能分析：随检索结果**自动生成、就地展示**（用户 2026-10-14 要求去掉
-              "点一下才看报告"的按钮，也不再需要关闭）。拿不到报告时只在这里就地说明，
-              上面的检索命中不受影响。 */}
-          <div className="ui-card">
-              <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-primary-50 to-white rounded-t-xl">
-                <div className="flex flex-wrap items-center gap-3">
-                  <Sparkles className="w-6 h-6 text-primary-600" />
-                  <div>
-                    <h3 className="font-semibold text-slate-800">RAG 智能分析报告</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      用户：{getCurrentSession()?.username || '用户'}，综合 {results.length} 个相似模式与知识库生成
-                    </p>
-                  </div>
-                  <div className="ml-auto flex items-center gap-2">
-                    {/* 演示模式下命中的是仓库自带的示例语料与示例报告：如实标注来源 */}
-                    {USE_MOCK && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">
-                        演示数据
-                      </span>
-                    )}
-                    {report?.riskLevel && <div className="px-3 py-1 bg-slate-100 text-slate-700 rounded-md text-sm font-medium">
-                      风险提示：{report.riskLevel}
-                    </div>}
-                    {/* 结论来源如实标注：mock=规则兜底（大模型不可用），否则为大模型生成 */}
-                    {reportPhase === 'done' && report?.mock && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">
-                        规则分析 · 依据检索命中
-                      </span>
-                    )}
-                    {reportPhase === 'done' && report && !report.mock && (
-                      <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-normal text-primary-600">
-                        大模型分析
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {reportPhase === 'thinking' && (
-                <div className="p-5 flex items-center gap-3 text-sm text-slate-500">
-                  <Loader2 className="w-4 h-4 animate-spin text-primary-500 shrink-0" />
-                  <span>
-                    大模型思考中：正在结合知识库与本次 {results.length} 条检索命中生成深度分析报告，
-                    通常需要 30 ~ 60 秒，期间可以先查看上面的检索结果。
-                  </span>
-                </div>
-              )}
-
-              {reportPhase === 'done' && !report && (
-                <p className="p-5 text-sm leading-6 text-slate-500">
-                  本次没有返回分析结论（上面的检索命中不受影响）。可以稍后重试，或换一种描述再检索一次。
-                </p>
-              )}
-
-              {report && (
-              <div className="p-5 space-y-5">
-                <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                  <p className="text-sm text-slate-700 leading-relaxed">{report.summary}</p>
-                </div>
-
-                {(report.sections ?? []).map((section, i) => (
-                  <div key={i}>
-                    <h4 className="font-medium text-slate-800 mb-2 flex items-center gap-2">
-                      <ArrowRight className="w-4 h-4 text-primary-500" />
-                      {section.title}
-                    </h4>
-                    <p className="text-sm text-slate-600 leading-relaxed pl-6">{section.content}</p>
-                  </div>
-                ))}
-
-                <div className="mt-4">
-                  <h4 className="font-medium text-slate-800 mb-3">个性化建议措施</h4>
-                  <div className="space-y-2">
-                    {(report.recommendations ?? []).map((rec, i) => (
-                      <div key={i} className="flex items-start gap-3 p-3 bg-warning-50 rounded-lg">
-                        <span className="w-5 h-5 rounded-full bg-warning-500 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">
-                          {i + 1}
-                        </span>
-                        <span className="text-sm text-slate-700">{rec}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              )}
-          </div>
         </>
       )}
 
@@ -1007,7 +1180,7 @@ export default function Retrieval() {
               <li key={r.id}>
                 <button
                   type="button"
-                  onClick={() => setQuery(r.text)}
+                  onClick={() => void openSavedAssessment(r)}
                   className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-primary-300 hover:bg-primary-50/40"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1064,7 +1237,7 @@ export default function Retrieval() {
           {/* 该模态下一条都没有时给一句说明，不留空白（例如还没有任何图像采集） */}
           {historyRows.length === 0 && (
             <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
-              当前筛选下还没有记录。切回「全部模态」，或先去「多模态采集」补一条这个模态的记录。
+              当前筛选下还没有记录。切回「全部模态」，或先去「心理筛查」补一条这个模态的记录。
             </p>
           )}
 

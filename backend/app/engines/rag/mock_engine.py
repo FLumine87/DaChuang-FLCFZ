@@ -112,6 +112,9 @@ class MockRAGEngine(RAGEngineInterface):
         return self.MOCK_KNOWLEDGE[:top_k]
     
     async def generate_report(self, screening_data: Dict) -> Dict:
+        if screening_data.get("screening_assessment"):
+            from app.services.screening_assessment import assessment_report
+            return assessment_report(screening_data["screening_assessment"])
         score = screening_data.get("score", 0)
         max_score = screening_data.get("max_score", 100)
         alert_level = screening_data.get("alert_level", "green")

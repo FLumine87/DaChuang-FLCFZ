@@ -99,6 +99,8 @@ def kg_scale_score(body: ScaleScoreRequest) -> ScaleScoreResponse:
                 "overall_score": r.overall_score,
                 "crisis": r.crisis,
                 "mock": r.mock,
+                "reference_only": r.reference_only,
+                "source": r.source,
             }
             inference_triggered = True
         except RuntimeError:

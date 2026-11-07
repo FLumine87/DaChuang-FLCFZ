@@ -3,6 +3,7 @@ from app.core.responses import success_response
 from app.core.auth import RequestContext, get_current_user
 from app.core.exceptions import HttpError
 from app.services import screening_service, agent_graph
+from app.services.screening_assessment import build_symptom_query
 from app.db import database as db
 from app.engines import get_hashing_engine, get_rag_engine
 from app.engines.agent import build_evidence_pack
@@ -70,7 +71,11 @@ def _image_corpus_search(data: dict, top_k: int):
             "similarity": it["similarity"],
             "summary": f"FER2013 · {label}",
             "tags": [label] if label else [],
-            "alert_level": "green", "date": "",
+            "alert_level": "unknown", "date": "",
+            "emotion_label": label, "screening_label": "unknown",
+            "label_source": "FER2013 expression annotation", "label_validity": "emotion_only",
+            "pairing_type": "image_only", "screening_usable": False, "reference_only": True,
+            "label_description": "仅表情类别，无心理筛查标签",
             "cross_modal": False,
             "media": RF.media_data_url(it.get("path"), "image"),
             "media_kind": "image",
@@ -144,6 +149,14 @@ def to_frontend_hit(hit: dict) -> dict:
         # （显示"查看原图"而不是播放按钮）
         "mediaKind": hit.get("media_kind"),
         "mediaMeta": hit.get("media_meta"),
+        "emotionLabel": hit.get("emotion_label"),
+        "screeningLabel": hit.get("screening_label"),
+        "labelSource": hit.get("label_source"),
+        "labelValidity": hit.get("label_validity"),
+        "pairingType": hit.get("pairing_type"),
+        "screeningUsable": hit.get("screening_usable"),
+        "referenceOnly": hit.get("reference_only"),
+        "labelDescription": hit.get("label_description"),
     }
 
 
@@ -201,13 +214,14 @@ async def analyze(ctx: RequestContext):
         return success_response(data=None, message="筛查记录不存在")
 
     history = await _safe_history(screening)
+    screening["symptom_query"] = await _symptom_query(screening)
     initial_pack = build_evidence_pack(screening, history=history)
     retrieval_results = None
     if data.get("include_retrieval"):
         modality, modality_filter, top_k = _params(data)
         engine = get_hashing_engine()
         results, info = await engine.search_with_info(
-            query=f"{screening.get('name')} {screening.get('questionnaire_name') or ''}",
+            query=initial_pack["local_retrieval_query"],
             modality=modality, top_k=top_k, modality_filter=modality_filter,
             viewer=viewer_of(ctx),
         )
@@ -217,8 +231,9 @@ async def analyze(ctx: RequestContext):
         }
 
     await agent_graph.ensure_seeded()
-    paths = await agent_graph.evidence_paths(initial_pack)
-    decisions = await agent_graph.evaluate(initial_pack)
+    combined_pack = build_evidence_pack(screening, history=history, retrieval_results=retrieval_results)
+    paths = await agent_graph.evidence_paths(combined_pack)
+    decisions = await agent_graph.evaluate(combined_pack)
     evidence_pack = build_evidence_pack(screening, history=history, retrieval_results=retrieval_results, knowledge_paths=paths)
     rag_engine = get_rag_engine()
     await rag_engine.initialize()
@@ -238,6 +253,7 @@ async def get_report(ctx: RequestContext, screening_id: int):
     if not screening:
         return success_response(data=None, message="筛查记录不存在")
     history = await _safe_history(screening)
+    screening["symptom_query"] = await _symptom_query(screening)
     initial_pack = build_evidence_pack(screening, history=history)
     await agent_graph.ensure_seeded()
     paths = await agent_graph.evidence_paths(initial_pack)
@@ -263,4 +279,9 @@ async def _safe_history(screening: dict):
     case_id = screening.get("case_id")
     if not case_id:
         return []
-    return await db.query_a("SELECT id, score, max_score, alert_level, screening_date, created_at FROM screenings WHERE case_id = ? AND id != ? ORDER BY COALESCE(screening_date, created_at) DESC LIMIT 5", (case_id, screening.get("id")))
+    return await db.query_a("SELECT id, questionnaire_id, score, max_score, alert_level, screening_date, created_at FROM screenings WHERE case_id = ? AND id != ? AND questionnaire_id=? AND max_score=? ORDER BY COALESCE(screening_date, created_at) DESC LIMIT 5", (case_id, screening.get("id"), screening.get("questionnaire_id"), screening.get("max_score")))
+
+
+async def _symptom_query(screening: dict) -> str:
+    supplements = await db.query_a("SELECT kind, text FROM screening_supplements WHERE screening_id=? AND user_id=? ORDER BY id DESC LIMIT 10", (screening.get("screening_id"), screening.get("user_id")))
+    return build_symptom_query(screening, supplements)

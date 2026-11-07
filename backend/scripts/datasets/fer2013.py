@@ -10,7 +10,7 @@
 * 情感主题与 CSEMOTIONS 的 EMOTION_SPEC 命名对齐（如 happy→"情绪-高兴"、
   sad→"情绪-悲伤"），使 CMFH 的跨模态监督能借同主题把 image 编码与
   text/audio 编码对齐（弱监督跨模态对齐）；
-* label="high"/"low"（与合并语料的粗风险口径一致），sad/angry/fear/disgust→high。
+* 只保存表情类别，不从单张表情推导心理风险或健康结论。
 """
 import os
 
@@ -19,15 +19,15 @@ from . import base
 
 DATASET_NAME = "FER2013"
 
-# 表情 -> (中文主题, 粗风险, 严重度, 预警色)，与 CSEMOTIONS.EMOTION_SPEC 命名对齐
+# 表情 -> (中文主题, 情绪极性, 占位严重度, 未知筛查状态)
 EMOTION_SPEC = {
-    "angry":    ("情绪-愤怒", "high", 3, "orange"),
-    "disgust":  ("情绪-厌恶", "high", 3, "orange"),
-    "fear":     ("情绪-恐惧", "high", 3, "orange"),
-    "sad":      ("情绪-悲伤", "high", 3, "orange"),
-    "happy":    ("情绪-高兴", "low",  2, "green"),
-    "surprise": ("情绪-惊讶", "low",  2, "green"),
-    "neutral":  ("情绪-中性", "low",  1, "green"),
+    "angry":    ("情绪-愤怒", "negative", 0, "unknown"),
+    "disgust":  ("情绪-厌恶", "negative", 0, "unknown"),
+    "fear":     ("情绪-恐惧", "negative", 0, "unknown"),
+    "sad":      ("情绪-悲伤", "negative", 0, "unknown"),
+    "happy":    ("情绪-高兴", "positive", 0, "unknown"),
+    "surprise": ("情绪-惊讶", "unspecified", 0, "unknown"),
+    "neutral":  ("情绪-中性", "neutral", 0, "unknown"),
 }
 
 
@@ -96,7 +96,7 @@ def build(root, rng, records_per_class=None, sample_max=None, num_queries=0, **k
         spec = EMOTION_SPEC.get(emo)
         if spec is None:
             continue
-        theme, risk, sev, level = spec
+        theme, _valence, sev, level = spec
         d = os.path.join(split, cls)
         files = [f for f in os.listdir(d) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
         rng.shuffle(files)
@@ -106,7 +106,10 @@ def build(root, rng, records_per_class=None, sample_max=None, num_queries=0, **k
             rid = f"FER-{ridx:06d}"
             created, win = base.simulated_created(ridx)
             rec = {
-                "record_id": rid, "label": risk, "themes": [theme],
+                "record_id": rid, "label": f"emotion:{emo}", "themes": [theme],
+                "emotion_label": emo, "screening_label": "unknown",
+                "label_source": "FER2013/expression", "label_validity": "emotion_only",
+                "pairing_type": "image_only", "screening_usable": False,
                 "severity": sev, "alert_level": level,
                 "created_at": created, "window": win,
                 "context": f"FER2013 {emo}（48×48 灰度面部图像）",
@@ -116,6 +119,8 @@ def build(root, rng, records_per_class=None, sample_max=None, num_queries=0, **k
             iu = base.make_image_unit(
                 rid, img, [theme], level, created, win, DATASET_NAME)
             if iu is not None:
+                iu.setdefault("meta", {}).update({key: rec[key] for key in (
+                    "emotion_label", "screening_label", "label_source", "label_validity", "pairing_type", "screening_usable")})
                 units.append(iu)
 
     base.attach_units(records, units)
@@ -130,8 +135,8 @@ def build(root, rng, records_per_class=None, sample_max=None, num_queries=0, **k
             "classes": {c: EMOTION_SPEC.get(c.lower(), ("?", "?", 0, "?"))[0]
                         for c in sorted(clss) if c.lower() in EMOTION_SPEC},
             "per_class": per_class,
-            "pairing": "image only; emotion -> 高/低风险 (same naming as CSEMOTIONS)",
-            "label_rule": "sad/angry/fear/disgust -> high; happy/surprise/neutral -> low",
+            "pairing": "image only; expression class, no subject screening label",
+            "label_rule": "expression class only; screening label unknown",
             "license": "ODbL (FER2013) / research use",
         },
     }

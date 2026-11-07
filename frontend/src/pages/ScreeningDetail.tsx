@@ -1,6 +1,6 @@
 import { ArrowLeft, ClipboardCheck } from 'lucide-react';
 import type { ScreeningRecord, ScreeningRetrievalSnapshot } from '../data/mockData';
-import { questionnaires } from '../data/questionnaireData';
+import { calculateQuestionnaireScore, QUESTIONNAIRE_VERSION, questionnaires } from '../data/questionnaireData';
 import { exampleAnswers } from '../data/screeningExample';
 
 interface Props {
@@ -21,7 +21,7 @@ interface Props {
 function RetrievalSnapshotSection({ snapshot }: { snapshot: ScreeningRetrievalSnapshot }) {
   const modeLabel =
     snapshot.mode === 'live'
-      ? { text: '服务端检索', className: 'bg-primary-50 text-primary-600' }
+      ? { text: '服务端参考快照', className: 'bg-primary-50 text-primary-600' }
       : snapshot.mode === 'mock'
         ? { text: '演示模式 · 模板生成', className: 'bg-slate-100 text-slate-500' }
         : { text: '未取得检索结果', className: 'bg-slate-100 text-slate-500' };
@@ -57,7 +57,7 @@ function RetrievalSnapshotSection({ snapshot }: { snapshot: ScreeningRetrievalSn
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-medium text-slate-800">{row.name}</span>
                       <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-500">
-                        相似度 {row.score}
+                        参考匹配分 {row.score}
                       </span>
                       {typeof row.coverage === 'number' && (
                         <span className="text-[11px] text-slate-400">
@@ -114,9 +114,9 @@ function RetrievalSnapshotSection({ snapshot }: { snapshot: ScreeningRetrievalSn
 
 export default function ScreeningDetail({ record, onBack, isExample = false }: Props) {
   const definition = questionnaires.find(q => q.id === record.questionnaire || q.name === record.questionnaire);
-  const result = record.status === 'completed' ? definition?.scoring(record.score) : undefined;
-  const resultLabel = result && (definition?.id === 'PHQ-9' || definition?.id === 'GAD-7')
-    ? `${result.label}症状` : result?.label;
+  const legacyPss = definition?.id === 'PSS-10' && record.questionnaireVersion !== QUESTIONNAIRE_VERSION;
+  const result = record.status === 'completed' && !legacyPss ? definition?.scoring(record.score) : undefined;
+  const resultLabel = result?.label;
   return (
     <div className="space-y-5">
       <button onClick={onBack} className="ui-button"><ArrowLeft className="h-4 w-4" />返回筛查记录</button>
@@ -127,15 +127,17 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
             <p className="text-sm text-slate-500">{isExample ? '筛查详情示例' : '筛查详情'}</p>
             <h2 className="mt-2 text-xl font-semibold text-slate-800">{definition?.name ?? record.questionnaire}</h2>
             <p className="mt-2 text-xs text-slate-500">{record.date} · {record.status === 'completed' ? '已完成' : '待完成'} · {record.id}</p>
+            <p className="mt-1 text-xs text-slate-500">量表版本：{record.questionnaireVersion ?? '历史版本未标注'}{record.answerEncoding === 'option-index' ? ' · 保存原始选项' : ''}</p>
           </div>
           <p className="text-3xl font-semibold text-primary-600">{record.status === 'completed' ? record.score : '—'}<span className="ml-1 text-base font-normal text-slate-400">/ {record.maxScore} 分</span></p>
         </div>
         <div className="mt-5 rounded-xl bg-slate-50 p-4">
           <h3 className="font-semibold text-slate-800">结果如何理解</h3>
-          <p className="mt-2 text-sm text-slate-700">{resultLabel ? `本次量表提示：${resultLabel}。` : '暂时没有可用的结果解释。'}</p>
+          <p className="mt-2 text-sm text-slate-700">{legacyPss ? '历史 PSS 题序和计分版本未核对，保留当时总分，不按新版重新分层或直接比较。' : resultLabel ? `本次量表提示：${resultLabel}。` : '暂时没有可用的结果解释。'}</p>
           <p className="mt-2 text-sm leading-6 text-slate-500">{definition?.introduction.recallPeriod} 总分反映量表所评估问题的整体程度，不能单凭分数判断你有哪些具体症状，也不等同于医学诊断。</p>
         </div>
       </section>
+      {definition?.id === 'PHQ-9' && (record.answers?.[9] ?? 0) > 0 && <section className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm leading-6 text-slate-700">第 9 题提示需要独立安全复核，无论总分多少，都建议尽快联系专业人员进一步了解当前情况。</section>}
       {record.supplement && (
         <section className="ui-card p-6">
           <h3 className="font-semibold text-slate-800">本次补充记录</h3>
@@ -183,7 +185,7 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
           <div className="mt-4 divide-y divide-slate-100">
             {definition.questions.map((q, index) => <div key={q.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span className="text-slate-700">{q.id}. {q.text}</span><span className="shrink-0 text-slate-500">{q.options.find(o => o.value === exampleAnswers[index])?.label} · {exampleAnswers[index]} 分</span></div>)}
           </div>
-        ) : record.answers && definition ? (
+        ) : legacyPss ? <p className="mt-3 text-sm leading-6 text-slate-500">该历史记录的题目版本未核对，不使用新版题序重建当时的逐题作答。可重新填写新版量表建立基线。</p> : record.answers && definition ? (
           /* 有逐题答案就照实回看（首次引导流程会把它一起存下来） */
           <div className="mt-4 divide-y divide-slate-100">
             {definition.questions.map((q) => {
@@ -192,7 +194,7 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
                 <div key={q.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
                   <span className="text-slate-700">{q.id}. {q.text}</span>
                   <span className="shrink-0 text-slate-500">
-                    {value === undefined ? '未作答' : `${q.options.find(o => o.value === value)?.label} · ${value} 分`}
+                    {value === undefined ? '未作答' : `${q.options.find(o => o.value === value)?.label ?? '原始选项未识别'} · ${calculateQuestionnaireScore(definition.id, { [q.id]: value })} 分`}
                   </span>
                 </div>
               );

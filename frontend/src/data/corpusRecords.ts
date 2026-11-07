@@ -17,13 +17,15 @@ export interface CorpusRecord {
   id: string;
   date: string;
   themes: string[];
-  level: 'green' | 'yellow' | 'orange' | 'red';
+  level: 'green' | 'yellow' | 'orange' | 'red' | 'unknown';
   severity: number;
   context: string;
   /** 三种模态各自的单元正文，字段名与 units.modality 一致 */
   text: string;
   audio: string;
   image: string;
+  supplementId?: number;
+  screeningId?: string;
 }
 
 /** 三种模态的展示口径：术语、图标色、说明 */

@@ -51,6 +51,7 @@ from app.engines.hashing.interface import HashingEngineInterface
 from app.engines.hashing.multi_table_index import MultiTableHashIndex
 from app.engines.hashing.store import HashingStore
 from app.engines.hashing.window_models import WindowModelBank
+from app.engines.hashing.label_provenance import reference_labels
 from app.engines.hashing import features as F
 
 try:
@@ -1345,6 +1346,7 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 query_themes: List[str], query_modality: str,
                 query_vec: Optional[List[float]] = None) -> Dict:
         meta = self.units.get(unit_id) or {}
+        provenance = reference_labels(meta)
         code = meta.get("code") or []
         ham = sum(1 for a, b in zip(query_code, code) if a != b)
         shared = sorted(set(query_themes or []) & set(meta.get("tags") or []))
@@ -1373,6 +1375,7 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             "media_meta": meta.get("media_meta"),
             "data_source": self._source,
             "dataset": meta.get("dataset") or self._corpus_meta.get("dataset_name") or "",
+            **provenance,
             "explain": {
                 "hamming_distance": ham,
                 "hamming_similarity": round(1.0 - ham / max(1, self.code_length), 4),

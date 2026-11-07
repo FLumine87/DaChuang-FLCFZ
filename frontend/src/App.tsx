@@ -3,7 +3,6 @@ import { lazy, Suspense, type ReactElement } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import DashboardV2 from './pages/DashboardV2';
-import Screening from './pages/Screening';
 import DataCollection from './pages/DataCollection';
 import Retrieval from './pages/Retrieval';
 import Alerts from './pages/Alerts';
@@ -114,8 +113,11 @@ export default function App() {
         <Route index element={<Navigate to="/personal/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="dashboard-v2" element={<DashboardV2 />} />
-        <Route path="screening" element={<Screening />} />
-        <Route path="data-collection" element={<DataCollection />} />
+        {/* 个人端「心理筛查」= 原筛查页 + 多模态采集页合并，四个标签页
+            由 ?tab= 切换；旧地址 /personal/data-collection 重定向过去。
+            ?record= / ?paper= 之类的老链接自动落在「量表填写」页。 */}
+        <Route path="screening" element={<DataCollection />} />
+        <Route path="data-collection" element={<Navigate to="/personal/screening" replace />} />
         <Route path="retrieval" element={<Retrieval />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="cases" element={<Cases />} />

@@ -18,20 +18,16 @@
  *   任何一条线索都必须来自接口真实返回；接口没有的字段就不展示，
  *   不做"相似度"之类的本地估算，也不为凑数填占位内容。
  *
- * 关于接口字段与界面文案的对应关系（接口确实没有专门的"参考资料来源"字段）：
- *   · 动态跨模态哈希检索 → 用推理返回的 matched_disorders
- *     （name / matched_symptoms / matched_triggers / score / coverage），
- *     这是后端侧唯一"命中的相似线索"结构化结果，按相似度（score）降序展示。
- *   · RAG 参考资料 → 用 report.factors（可解释风险因素）与
- *     recommendations[].reason（该建议的由来），这两项正是后端从
- *     个人 KG + 领域 KG 里取出来的依据，字段名就写在 schema 里。
- *     没有 sources/references 这种字段，所以不硬凑，也不假装是文献引用。
- *   · 知识关联 → POST /kg/extract 的真实返回三元组（仅在有补充文字时）
+ * 哈希参考只来自主后端 /api/personal/search 或已保存补充的真实检索结果。
+ * matched_disorders 来自个人图谱匹配，单独标注为图谱参考，不是哈希结果。
+ * 量表同步、补充抽取完成后才运行图谱推理，避免读到上一次记录。
  */
 
 import { api } from './api';
 import type { CopingRecommendation, MatchedDisorder, RiskReport } from './api';
 import type { ScreeningRetrievalSnapshot } from '../data/mockData';
+import { search, type CollectionAnalysis } from './mockApi';
+import { USE_MOCK } from './http';
 
 /** 展示用的条数上限：条目多时只给前几条，其余在界面上注明"其余略" */
 export const MAX_ROWS = 5;
@@ -73,6 +69,27 @@ export interface FirstRunEvidence {
   /** 知识关联抽取结果；没有补充文字或未调用时为 undefined */
   triples?: TriplesResult;
   triplesError?: string;
+  hashRequested?: boolean;
+  hashMode?: BackendMode;
+  hashResults?: HashReference[];
+  hashError?: string;
+  hashOmitted?: number;
+  scaleSyncError?: string;
+}
+
+export interface HashReference {
+  id: string;
+  summary: string;
+  similarity: number;
+  modality?: string;
+  tags: string[];
+}
+
+interface EvidenceOptions {
+  recordId?: string;
+  scaleId?: string;
+  score?: number;
+  savedAnalysis?: CollectionAnalysis;
 }
 
 /**
@@ -111,9 +128,10 @@ function briefError(reason: unknown): string {
  * @param userId      个人 KG 的 user_id（当前用账号名，与其它页面一致）
  * @param supplement  用户在 02 步补充的文字（可选）；有值时顺带抽取知识关联
  */
-export async function loadFirstRunEvidence(
+async function fetchFirstRunEvidence(
   userId: string,
   supplement?: string,
+  options: EvidenceOptions = {},
 ): Promise<FirstRunEvidence> {
   const health = await probeBackend();
 
@@ -124,44 +142,91 @@ export async function loadFirstRunEvidence(
     matchedOmitted: 0,
   };
 
-  /* 后端不可达才不调：mock 模式也要调 —— 后端的 Mock 通路会返回一份 report.mock=true
-     的报告（模板正文 + 本地 SQLite 记录 + 仓库内置建议），03 的「RAG 参考资料」
-     据此展示真实返回的 summary 与建议，同时由界面标注「演示模式 · 模板生成」。
-     拿不到数据时（inferenceError）页面按原口径写明原因，不猜也不编。 */
-  if (health.mode === 'unreachable') return empty;
-
-  /* 推理与知识抽取互不依赖，并行发起；任一失败都不影响另一条。
-     用 allSettled 而不是 all：分析依据里两条应当各自独立可用。 */
   const text = supplement?.trim();
-  const [inference, extraction] = await Promise.allSettled([
-    api.runInference(userId),
-    text ? api.extract(userId, text.slice(0, MAX_EXTRACT_CHARS)) : Promise.resolve(null),
-  ]);
-
   const result: FirstRunEvidence = { ...empty };
-
-  if (inference.status === 'fulfilled') {
-    const report = inference.value?.report;
-    result.inferenceOk = Boolean(report);
-    result.report = report;
-    result.contentFeed = inference.value?.content_feed ?? [];
-    result.matchedOmitted = Math.max(0, (report?.matched_disorders?.length ?? 0) - MAX_ROWS);
-  } else {
-    result.inferenceError = briefError(inference.reason);
-  }
-
-  if (extraction.status === 'fulfilled' && extraction.value) {
-    result.triples = {
-      triples: extraction.value.triples ?? [],
-      written: extraction.value.written ?? 0,
-      neo4jConnected: Boolean(extraction.value.neo4j_connected),
-      mock: Boolean(extraction.value.mock),
-    };
-  } else if (extraction.status === 'rejected') {
-    result.triplesError = briefError(extraction.reason);
-  }
-
+  // Main hash backend and personal KG are independent services; a KG outage
+  // must not hide a successful hash retrieval (or be mislabeled as one).
+  const hashTask = async () => {
+    const saved = options.savedAnalysis;
+    result.hashRequested = Boolean(saved || text);
+    if (!result.hashRequested) return;
+    try {
+      const response = saved ? null : await search(text!, { modality: 'text' });
+      const rows = saved?.hits ?? response?.results ?? [];
+      const rawIndex = saved?.index ?? response?.index;
+      const index = rawIndex && typeof rawIndex === 'object' ? rawIndex as Record<string, unknown> : {};
+      if (index.source === 'unavailable') throw new Error('参考检索暂不可用');
+      result.hashResults = rows.slice(0, MAX_ROWS).map(row => ({
+        id: row.id, summary: row.summary ?? '', similarity: row.similarity,
+        modality: row.modality, tags: row.tags ?? [],
+      }));
+      result.hashOmitted = Math.max(0, rows.length - MAX_ROWS);
+      result.hashMode = USE_MOCK || index.mode === 'mock' || index.source === 'mock' || index.data_source === 'demo' ? 'mock' : 'live';
+    } catch (error) {
+      result.hashMode = 'unreachable';
+      result.hashError = briefError(error);
+    }
+  };
+  const graphTask = async () => {
+    if (health.mode === 'unreachable') return;
+    let prerequisitesReady = true;
+    if (options.scaleId && typeof options.score === 'number') {
+      try {
+        const sync = await api.submitScaleScore(userId, options.scaleId, options.score, false);
+        if (!sync.written && health.neo4jConnected) {
+          result.scaleSyncError = '本次量表尚未写入图谱，未运行可能使用旧数据的图谱分析';
+          prerequisitesReady = false;
+        }
+      } catch (error) {
+        result.scaleSyncError = briefError(error);
+        prerequisitesReady = false;
+      }
+    }
+    if (text) {
+      try {
+        const extraction = await api.extract(userId, text.slice(0, MAX_EXTRACT_CHARS));
+        result.triples = {
+          triples: extraction.triples ?? [], written: extraction.written ?? 0,
+          neo4jConnected: Boolean(extraction.neo4j_connected), mock: Boolean(extraction.mock),
+        };
+        if (health.neo4jConnected && extraction.triples.length > 0 && !extraction.written) {
+          result.triplesError = '本次补充尚未写入图谱，未运行可能使用旧数据的图谱分析';
+          prerequisitesReady = false;
+        }
+      } catch (error) {
+        result.triplesError = briefError(error);
+        prerequisitesReady = false;
+      }
+    }
+    if (!prerequisitesReady) {
+      result.inferenceError = result.scaleSyncError ?? result.triplesError;
+      return;
+    }
+    try {
+      const inference = await api.runInference(userId);
+      result.inferenceOk = Boolean(inference.report);
+      result.report = inference.report;
+      result.contentFeed = inference.content_feed ?? [];
+      result.matchedOmitted = Math.max(0, (inference.report?.matched_disorders?.length ?? 0) - MAX_ROWS);
+    } catch (error) {
+      result.inferenceError = briefError(error);
+    }
+  };
+  await Promise.allSettled([hashTask(), graphTask()]);
   return result;
+}
+
+/** Share a running request across React StrictMode mounts; do not cache stale results. */
+const pendingEvidence = new Map<string, Promise<FirstRunEvidence>>();
+export function loadFirstRunEvidence(userId: string, supplement?: string, options: EvidenceOptions = {}): Promise<FirstRunEvidence> {
+  const key = JSON.stringify([userId, supplement, options.recordId, options.scaleId, options.score]);
+  const pending = pendingEvidence.get(key);
+  if (pending) return pending;
+  const request = fetchFirstRunEvidence(userId, supplement, options);
+  pendingEvidence.set(key, request);
+  const clear = () => { if (pendingEvidence.get(key) === request) pendingEvidence.delete(key); };
+  void request.then(clear, clear);
+  return request;
 }
 
 /** matched_disorders 是"命中的相似线索"，按后端给的 score 降序（后端已排好，这里再兜一层） */
@@ -184,27 +249,25 @@ export const MAX_SNAPSHOT_MATCHES = 5;
 export function toRetrievalSnapshot(evidence: FirstRunEvidence): ScreeningRetrievalSnapshot {
   const report = evidence.report;
   const at = new Date().toISOString();
-  if (!evidence.inferenceOk || !report) {
+  const hashRows = evidence.hashResults ?? [];
+  if ((!evidence.inferenceOk || !report) && hashRows.length === 0) {
     return {
       at,
       mode: 'unavailable',
       reason:
-        evidence.inferenceError ??
-        (evidence.mode === 'unreachable' ? '后端未接入，本次未发起检索' : '本次未取得检索结果'),
+        evidence.hashError ?? evidence.inferenceError ??
+        (evidence.hashRequested ? '本次未取得参考结果' : '未补充检索材料，本次仅有量表结果'),
     };
   }
   return {
     at,
-    mode: evidence.mode === 'mock' || report.mock ? 'mock' : 'live',
-    matches: (report.matched_disorders ?? []).slice(0, MAX_SNAPSHOT_MATCHES).map((row) => ({
-      name: row.name,
-      score: row.score,
-      coverage: row.coverage,
-      matched_symptoms: row.matched_symptoms ?? [],
-      matched_triggers: row.matched_triggers ?? [],
+    mode: hashRows.length ? (evidence.hashMode === 'mock' ? 'mock' : 'live') : evidence.mode === 'mock' || report?.mock ? 'mock' : 'live',
+    matches: hashRows.slice(0, MAX_SNAPSHOT_MATCHES).map((row) => ({
+      name: `哈希参考 ${row.id}`,
+      score: row.similarity,
     })),
-    summary: report.summary,
-    advice: (report.recommendations ?? []).map((rec) =>
+    summary: [hashRows.length ? `哈希召回 ${hashRows.length} 条候选参考，相似度不作为本人风险分数。` : '本次未取得哈希候选。', report?.summary ? `图谱参考：${report.summary}` : ''].filter(Boolean).join('\n'),
+    advice: (report?.recommendations ?? []).map((rec) =>
       rec.reason ? `${rec.name}：${rec.reason}` : rec.name,
     ),
   };

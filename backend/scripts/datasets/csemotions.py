@@ -19,15 +19,15 @@ from . import base
 
 DATASET_NAME = "CSEMOTIONS"
 
-# 情绪 -> (中文主题, 粗风险标签, 严重度, 预警色)
+# 情绪 -> (中文主题, 情绪极性, 占位严重度, 未知筛查状态)。极性不是风险。
 EMOTION_SPEC = {
-    "angry":      ("情绪-愤怒", "high", 3, "orange"),
-    "fearful":    ("情绪-恐惧", "high", 3, "orange"),
-    "sad":        ("情绪-悲伤", "high", 3, "orange"),
-    "happy":      ("情绪-高兴", "low",  2, "green"),
-    "surprise":   ("情绪-惊讶", "low",  2, "green"),
-    "neutral":    ("情绪-中性", "low",  1, "green"),
-    "playfulness":("情绪-调皮", "low",  1, "green"),
+    "angry":      ("情绪-愤怒", "negative", 0, "unknown"),
+    "fearful":    ("情绪-恐惧", "negative", 0, "unknown"),
+    "sad":        ("情绪-悲伤", "negative", 0, "unknown"),
+    "happy":      ("情绪-高兴", "positive", 0, "unknown"),
+    "surprise":   ("情绪-惊讶", "unspecified", 0, "unknown"),
+    "neutral":    ("情绪-中性", "neutral", 0, "unknown"),
+    "playfulness":("情绪-调皮", "positive", 0, "unknown"),
 }
 _COARSE_EMOTION_SET = {e: spec[1] for e, spec in EMOTION_SPEC.items()}
 
@@ -95,7 +95,7 @@ def build(root, rng, records_per_class=None, sample_max=None, num_queries=120, *
         spec = EMOTION_SPEC.get(emotion)
         if spec is None:
             continue
-        theme, risk, sev, level = spec
+        theme, valence, sev, level = spec
 
         wav = _write_wav(cache_dir, i, audio_bytes)
         themes = F.extract_themes(text)
@@ -106,8 +106,11 @@ def build(root, rng, records_per_class=None, sample_max=None, num_queries=120, *
         rid = f"CSEM-{ridx:05d}"
         created, win = base.simulated_created(ridx)
         rec = {
-            "record_id": rid, "label": risk,
-            "coarse_emotion": _COARSE_EMOTION_SET.get(emotion, risk),
+            "record_id": rid, "label": f"emotion:{emotion}",
+            "emotion_label": emotion, "screening_label": "unknown",
+            "label_source": "CSEMOTIONS/emotion", "label_validity": "emotion_only",
+            "pairing_type": "same_source_text_audio", "screening_usable": False,
+            "coarse_emotion": _COARSE_EMOTION_SET.get(emotion, valence),
             "themes": themes, "severity": sev, "alert_level": level,
             "created_at": created, "window": win,
             "context": f"CSEMOTIONS {emotion} · {row['speaker']}",
@@ -132,6 +135,10 @@ def build(root, rng, records_per_class=None, sample_max=None, num_queries=120, *
         units = [u for u in units if u["record_id"] in keep_ids]
 
     base.attach_units(records, units)
+    record_by_id = {r["record_id"]: r for r in records}
+    for unit in units:
+        unit.setdefault("meta", {}).update({key: record_by_id[unit["record_id"]][key]
+            for key in ("emotion_label", "screening_label", "label_source", "label_validity", "pairing_type", "screening_usable")})
     queries = base.build_queries(records, rng, num_queries)
 
     return {
@@ -143,7 +150,7 @@ def build(root, rng, records_per_class=None, sample_max=None, num_queries=120, *
             "wav_cache_dir": cache_dir,
             "n_skipped_audio_feat": skipped,
             "pairing": "utterance level (transcript text <-> same audio, emotion label)",
-            "label_rule": "emotion -> 高风险(angry/fearful/sad) / 低风险(happy/surprise/neutral/playfulness)",
+            "label_rule": "emotion class only; screening label unknown; repetition must come from the querying user's own observations",
             "license": "Apache-2.0",
         },
     }

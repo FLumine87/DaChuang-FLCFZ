@@ -12,10 +12,8 @@ import {
   SquarePen,
   X,
 } from "lucide-react";
-import { saveScreeningRetrieval, saveScreeningSupplement, uploadFile } from "../../services/mockApi";
+import { saveScreeningSupplement, uploadFile } from "../../services/mockApi";
 import { getDraft, saveDraft, type SupplementKind } from "../../services/firstRun";
-import { loadFirstRunEvidence, toRetrievalSnapshot } from "../../services/firstRunRetrieval";
-import { getCurrentSession } from "../../auth/session";
 import FirstRunShell from "./FirstRunShell";
 import { firstRunSteps } from "./firstRunSteps";
 
@@ -28,7 +26,7 @@ import { firstRunSteps } from "./firstRunSteps";
  *   · 提交前先预览：文字给摘要、图片给缩略图、语音给文件名，都可以撤掉重来。
  *
  * 语音这一版先做**选择音频文件**（复用 uploadFile），没有做麦克风实时录制：
- * 引导流程里少一次权限弹窗，实现也轻；实时录制仍在「多模态采集」页里。
+ * 引导流程里少一次权限弹窗，实现也轻；实时录制仍在「心理筛查」页里。
  */
 export default function FirstRunSupplement() {
   const navigate = useNavigate();
@@ -45,8 +43,10 @@ export default function FirstRunSupplement() {
       : null,
   );
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const savingRef = useRef(false);
 
   /* 没有 01 的作答结果就别停在这一页（直接刷新/手输地址进来的情况） */
   if (!draft?.recordId) {
@@ -88,7 +88,8 @@ export default function FirstRunSupplement() {
     }
   };
 
-  const goResult = (withSupplement: boolean) => {
+  const goResult = async (withSupplement: boolean) => {
+    if (savingRef.current || uploading) return;
     const supplement = withSupplement
       ? kind === "text"
         ? text.trim()
@@ -98,29 +99,23 @@ export default function FirstRunSupplement() {
           ? { kind, filename: file.name, url: file.url, description: file.description }
           : undefined
       : undefined;
-    /* 先写进草稿（03 结果页要读），再**当场落库**到本次筛查记录上——
-       否则离开引导流程后这段内容就没了，档案里也查不到。 */
-    saveDraft({ supplement });
     const recordId = draft?.recordId;
-    if (supplement && recordId) {
-      void saveScreeningSupplement(recordId, supplement);
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      // Wait for storage and its hash analysis before the result page reads them.
+      // Inference runs once on that page, after KG extraction and scale sync.
+      const analysis = supplement && recordId
+        ? await saveScreeningSupplement(recordId, supplement) : null;
+      saveDraft({ supplement: supplement ? { ...supplement, analysis: analysis ?? undefined } : undefined });
+      navigate("/personal/first/result", { replace: true });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '补充尚未保存，请重试；内容仍保留在页面上。');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
-    /* 本次「检索与解释」的快照也存进这条记录（L1：只存在浏览器本地）。
-       03 结果页会自己再取一遍用于展示，这里只负责"记录里留得住"：
-       拿不到就存 mode:'unavailable' 与原样原因，绝不编造。 */
-    if (recordId) {
-      const userId = getCurrentSession()?.username ?? "demo_user";
-      void loadFirstRunEvidence(userId, supplement?.text)
-        .then((evidence) => saveScreeningRetrieval(recordId, toRetrievalSnapshot(evidence)))
-        .catch(() =>
-          saveScreeningRetrieval(recordId, {
-            at: new Date().toISOString(),
-            mode: "unavailable",
-            reason: "检索服务暂不可用",
-          }),
-        );
-    }
-    navigate("/personal/first/result", { replace: true });
   };
 
   return (
@@ -277,15 +272,16 @@ export default function FirstRunSupplement() {
         <button
           type="button"
           onClick={() => goResult(true)}
-          disabled={uploading}
+          disabled={uploading || saving}
           className="ui-button ui-button-primary mt-5 h-12 w-full rounded-xl disabled:cursor-not-allowed disabled:opacity-60"
         >
-          提交补充并查看结果
+          {saving ? '正在保存补充…' : '提交补充并查看结果'}
           <ArrowRight className="h-4 w-4" />
         </button>
         <button
           type="button"
           onClick={() => goResult(false)}
+          disabled={uploading || saving}
           className="mt-3 h-12 w-full rounded-xl border border-slate-300 bg-white text-sm font-medium text-slate-700 transition-colors hover:border-primary-200 hover:text-primary-600"
         >
           跳过补充，查看量表结果
@@ -306,7 +302,7 @@ function TechNote() {
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/70 px-3.5 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-[12px] font-medium text-slate-500">报告生成方式</span>
+        <span className="text-[12px] font-medium text-slate-500">补充信息的用途</span>
         <span className="inline-flex items-center gap-1.5 text-[12px] text-slate-500">
           <Network className="h-3.5 w-3.5 text-primary-500" strokeWidth={1.7} />
           动态跨模态哈希检索
@@ -314,7 +310,7 @@ function TechNote() {
         <ArrowRight className="h-3 w-3 text-slate-300" aria-hidden="true" />
         <span className="inline-flex items-center gap-1.5 text-[12px] text-slate-500">
           <BookOpen className="h-3.5 w-3.5 text-primary-500" strokeWidth={1.7} />
-          RAG 检索增强生成
+          图谱参考与解释
         </span>
         <button
           type="button"
@@ -328,7 +324,7 @@ function TechNote() {
       </div>
       {open && (
         <p className="mt-2 border-t border-slate-200 pt-2 text-[12px] leading-5 text-slate-500">
-          通过动态跨模态哈希检索关联输入线索，并结合心理知识库，通过 RAG 组织报告中的解释与建议。
+          哈希检索提供相关候选参考；保存补充后再抽取知识关联。图谱匹配与量表分层分别标注来源，不用候选样本的风险替代本人结果。
         </p>
       )}
     </div>
