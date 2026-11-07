@@ -1670,6 +1670,28 @@ html:not(.app-booted) .page-enter {
   );
 }
 
+/* 深色下左栏文字落在整片暗底上，空白会显得比浅色更"空"。
+   这里在左侧补一层非常淡的蓝紫柔光：不改变"右下大曲面"的构图，
+   也不跨到正文上形成第二块形状，只把文字背后的明度垫起来。
+   浅色模式不需要（白色与蓝白渐变本身已经有层次）。 */
+.dark .aurora--calm::before {
+  content: "";
+  position: absolute;
+  left: 3%;
+  top: 26%;
+  width: 46vw;
+  height: 42vw;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(70, 95, 255, 0.26) 0%,
+    rgba(70, 95, 255, 0.11) 44%,
+    transparent 72%
+  );
+  filter: blur(12px);
+  pointer-events: none;
+}
+
 /* 正式答题：形状保留、动画全停（只停漂移，不改变深浅色下的样子） */
 .aurora--still,
 .aurora--still span,
