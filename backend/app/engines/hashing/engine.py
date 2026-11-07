@@ -237,7 +237,7 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         if fixed:
             try:
                 self._store.upsert_units({u: self.units[u] for u in fixed})
-                self._store.upsert_records({self.units[u].get("record_id"): 
+                self._store.upsert_records({self.units[u].get("record_id"):
                                             self.records[self.units[u].get("record_id")]
                                             for u in fixed
                                             if self.units[u].get("record_id") in self.records})
