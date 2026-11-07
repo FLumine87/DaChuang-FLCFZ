@@ -261,8 +261,11 @@ export default function KgPage() {
       )}
 
       <div className="ui-card overflow-hidden">
+        {/* 空态不再占 520px 高：整页会因此把图例挤到首屏之外，
+            用户要滚动才能看到下面一行。这里收成 260px，图例与说明直接落在首屏内；
+            有节点时仍由 SVG 的 viewBox 决定高度。 */}
         {!data || nodes.length === 0 || links.length === 0 ? (
-          <div className="h-[520px] flex flex-col items-center justify-center gap-3 text-sm text-slate-400">
+          <div className="h-[260px] flex flex-col items-center justify-center gap-3 text-sm text-slate-400">
             {loading ? (
               '加载中…'
             ) : (
