@@ -162,8 +162,8 @@ export default function FirstRunShell({
             </p>
             <h1
               className={
-                tight
-                  ? "mt-6 max-w-[560px] text-[36px] font-medium leading-[1.3] tracking-tight text-slate-900"
+                step
+                  ? "first-run-title mt-6 max-w-[620px] font-medium tracking-tight text-slate-900"
                   : "auth-section-title mt-6 max-w-[720px] text-slate-900"
               }
             >

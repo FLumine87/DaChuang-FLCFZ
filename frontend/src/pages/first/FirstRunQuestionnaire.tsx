@@ -221,7 +221,7 @@ export default function FirstRunQuestionnaire() {
           第 9 题的支持信息因此放在左栏（与 01c 效果图一致），不挤占选项。 */}
       <div className="mx-auto w-full max-w-[560px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-slate-900">
+          <h2 className="text-base font-semibold text-slate-900">
             {definition.id} {shortName(definition.id)}
           </h2>
           <div className="flex items-center gap-3">
@@ -234,7 +234,7 @@ export default function FirstRunQuestionnaire() {
               <Info className="h-3.5 w-3.5" />
               了解 {definition.id}
             </button>
-            <span className="whitespace-nowrap text-[15px] text-slate-500">
+            <span className="whitespace-nowrap text-[13px] text-slate-500">
               第{" "}
               <span className="font-semibold tabular-nums text-slate-800">
                 {current + 1}
@@ -252,7 +252,7 @@ export default function FirstRunQuestionnaire() {
         </div>
 
         {/* 作答说明栏：每题都在，但不抢题目注意力（图六第 2 条） */}
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl bg-slate-50 px-3.5 py-2.5 text-[14px] text-slate-500">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl bg-slate-50 px-3.5 py-2.5 text-[12px] text-slate-500">
           <span className="inline-flex items-center gap-2">
             <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
             {guide.recall}
@@ -268,7 +268,7 @@ export default function FirstRunQuestionnaire() {
             {/* 题目：按自然折行，不用 text-balance —— 平衡折行会在词中间提前断行 */}
             <h3
               key={question.id}
-              className="first-run-question question-enter min-h-[3rem] font-medium text-slate-900"
+              className="first-run-question question-enter min-h-[4.5rem] text-[22px] font-medium leading-9 text-slate-900"
             >
               {question.text}
             </h3>
@@ -283,7 +283,7 @@ export default function FirstRunQuestionnaire() {
                     role="radio"
                     aria-checked={active}
                     onClick={() => choose(option.value)}
-                    className={`flex w-full items-center gap-4 rounded-2xl border px-5 py-[1.125rem] text-left text-[18px] transition-all duration-200 ${
+                    className={`flex w-full items-center gap-3.5 rounded-2xl border px-4 py-3.5 text-left text-[15px] transition-all duration-200 ${
                       active
                         ? "border-primary-500 bg-primary-50/70 font-medium text-slate-900 shadow-[0_10px_30px_-22px_rgba(70,95,255,0.45)]"
                         : "border-slate-200 bg-white text-slate-700 hover:border-primary-200 hover:bg-primary-50/40"
@@ -306,7 +306,7 @@ export default function FirstRunQuestionnaire() {
             </div>
 
             {/* 结果用途：一行小字，普通提示样式（图六第 4 条） */}
-            <p className="mt-4 flex items-start gap-2 text-[14px] leading-6 text-slate-400">
+            <p className="mt-4 flex items-start gap-2 text-[12px] leading-5 text-slate-400">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               结果用于初步筛查和自我了解，不等同于医学诊断；完成后可查看解释与建议。
             </p>
@@ -359,7 +359,7 @@ export default function FirstRunQuestionnaire() {
               setCurrent((value) => Math.max(0, value - 1));
             }}
             disabled={current === 0 || saving}
-            className="first-run-action ui-button h-12 flex-1 rounded-xl border-slate-300 disabled:cursor-not-allowed disabled:opacity-40"
+            className="ui-button h-12 flex-1 rounded-xl border-slate-300 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ArrowLeft className="h-4 w-4" />
             上一题
@@ -374,7 +374,7 @@ export default function FirstRunQuestionnaire() {
                 void submit();
               }}
               disabled={!allAnswered || saving}
-              className="first-run-action ui-button ui-button-primary h-12 flex-[1.6] rounded-xl disabled:cursor-not-allowed disabled:opacity-50"
+              className="ui-button ui-button-primary h-12 flex-[1.6] rounded-xl disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -388,7 +388,7 @@ export default function FirstRunQuestionnaire() {
             <button
               type="button"
               onClick={goNextNow}
-              className="first-run-action ui-button ui-button-primary h-12 flex-[1.6] rounded-xl"
+              className="ui-button ui-button-primary h-12 flex-[1.6] rounded-xl"
             >
               下一题
               <ArrowRight className="h-4 w-4" />
