@@ -1,0 +1,59 @@
+{
+ "generated_at": "2026-10-28T18:03:43",
+ "steps": 3,
+ "results": [
+  {
+   "mode": "full",
+   "steps": 3,
+   "map_mean": 0.5817,
+   "map_std": 0.0038,
+   "map_first": 0.587,
+   "map_last": 0.5792,
+   "decay": 0.0078,
+   "index_units": 13938,
+   "windows": {
+    "0": 4644,
+    "1": 4644,
+    "2": 4650
+   },
+   "series": [
+    {
+     "map@10": 0.587,
+     "text2text": 0.8015,
+     "text2audio": 0.3726,
+     "audio2text": 0.5116,
+     "audio2audio": 0.5581,
+     "queries": 60,
+     "audio_queries": 60,
+     "step": 0,
+     "date": "2025-01-01",
+     "elapsed": 142.7
+    },
+    {
+     "map@10": 0.5788,
+     "text2text": 0.7007,
+     "text2audio": 0.4569,
+     "audio2text": 0.4568,
+     "audio2audio": 0.5343,
+     "queries": 60,
+     "audio_queries": 60,
+     "step": 1,
+     "date": "2025-01-31",
+     "elapsed": 267.7
+    },
+    {
+     "map@10": 0.5792,
+     "text2text": 0.7553,
+     "text2audio": 0.4031,
+     "audio2text": 0.2404,
+     "audio2audio": 0.5528,
+     "queries": 60,
+     "audio_queries": 60,
+     "step": 2,
+     "date": "2025-03-02",
+     "elapsed": 402.8
+    }
+   ]
+  }
+ ]
+}

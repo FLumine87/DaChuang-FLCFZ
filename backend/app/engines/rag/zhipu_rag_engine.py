@@ -114,6 +114,9 @@ class ZhipuRAGEngine(RAGEngineInterface):
 }}
 
 请直接返回JSON，不要包含其他文字。"""
+        if screening_data.get("screening_assessment"):
+            from app.services.screening_assessment import assessment_prompt
+            prompt = assessment_prompt(screening_data["screening_assessment"], knowledge_text, screening_data.get("original_input"))
         
         try:
             call_kwargs = dict(
@@ -130,8 +133,13 @@ class ZhipuRAGEngine(RAGEngineInterface):
             report = self._parse_json_response(content)
             
             if report:
+                if screening_data.get("screening_assessment"):
+                    from app.services.screening_assessment import lock_report
+                    report = lock_report(report, screening_data["screening_assessment"])
                 report["subject"] = name
                 report["date"] = datetime.now().strftime("%Y-%m-%d")
+                report["mock"] = False
+                report["source"] = "llm"
                 return report
             
         except Exception as e:

@@ -1,24 +1,27 @@
-"""缓解推荐 Agent（阶段 3，阶段 3.5 扩展兴趣类别）。
+"""缓解推荐 Agent（阶段 3，阶段 3.5 扩展兴趣类别；2026-10-15 升级为 LLM 生成）。
 
-从推理报告的兴趣画像出发，将"应对方式"映射为具体的个性化缓解内容：
-- 音乐类兴趣 → 真实歌单 / 歌曲推荐（NetEaseCloudMusicApi + 内置种子兜底）
-- 体育赛事类兴趣 → 关注的球队/赛事动态（聚合种子）
-- 影视类兴趣 → 热门剧集/电影推荐（种子库）
-- 书籍/小说类兴趣 → 书单推荐（种子库）
-- 漫画/动漫类兴趣 → 热门漫画推荐（种子库）
-- 美食类兴趣 → 美食推荐（种子库）
-- 其他类 → 通用心理科普/活动推荐
+生成策略（LLM 优先，种子兜底）：
+- LLM 可用时：把「风险等级 + 可解释因素 + 图谱参考方向 + 兴趣画像」交给
+  LLM 生成 4~6 条个性化推荐（条目名、内容、推荐理由全部生成）。
+  歌曲/作品/文章只给"名称 + 关键词"，链接由程序拼接搜索链接——
+  零外部服务依赖，且链接恒可达、内容不虚构。
+- LLM 不可用/失败/超时：回退到内置种子库 + 模板拼装（原逻辑完整保留）。
+- 不做跨次记忆（2026-10-15 决策）：多样性靠提示词约束 + 温度 + 随机种子，
+  每次刷新都重新生成全新内容。
 
 数据源策略（可配置）：
-- MUSIC_API_URL：自建 NetEaseCloudMusicApi 实例（可选，不配则用内置种子）
-- ENABLE_LLM_CONTENT=True 时由 LLM 生成摘要文案，失败回退模板
+- MUSIC_API_URL：自建 NetEaseCloudMusicApi 实例（可选，仅种子回退路径使用）
+- ENABLE_LLM_CONTENT=False 时跳过 LLM 生成，直接走种子回退
+- 种子库（SEED_*）保留为离线/失败兜底，不再作为主路径内容来源
 
 轻中度（绿/黄/橙）风险时由推理链路自动附带推荐；红级跳过（走预警）。
 """
 
 import json
 import random
+import re
 import time
+from urllib.parse import quote
 
 import httpx
 
@@ -197,21 +200,150 @@ def _fetch_general_content(limit: int = 3) -> list[dict]:
     return random.sample(SEED_GENERAL, min(limit, len(SEED_GENERAL)))
 
 
-def _llm_content_brief(items: list[dict], interest_hint: str, risk_label: str) -> str:
-    if not getattr(settings, "enable_llm_content", True):
-        return ""
-    prompt = (
-        "你是心理健康内容推荐助手。用户当前风险等级为【{risk}】，兴趣方向：{interest}。"
-        "基于以下条目写一段 80 字以内的推荐语，语气温暖支持性，提醒适度使用、注意休息，不要医疗建议。"
-        "条目：{items}"
-    ).format(risk=risk_label, interest=interest_hint, items=json.dumps(items, ensure_ascii=False))
-    return llm_client.chat(prompt, "")
+# ---------- LLM 生成通路（主路径，2026-10-15 起） ----------
+
+
+def _load_interests_by_cat(user_id: str) -> dict[str, list[str]]:
+    """查用户兴趣画像并按 category 分组。调用方需保证 Neo4j 可用。"""
+    driver = get_driver()
+    with driver.session() as session:
+        rows = session.run(
+            "MATCH (u:User {user_id:$uid})-[:LIKES|FOLLOWS]->(i:Interest) "
+            "RETURN i.name AS name, i.category AS category",
+            uid=user_id,
+        ).data()
+    interests_by_cat: dict[str, list[str]] = {}
+    for r in rows:
+        if r.get("category"):
+            interests_by_cat.setdefault(r["category"], []).append(r["name"])
+    return interests_by_cat
+
+
+# category 白名单：与前端图标映射保持一致（映射外的归入"通用"）
+_ALLOWED_CATEGORIES = {
+    "音乐", "运动", "影视", "书籍", "漫画", "美食",
+    "冥想", "认知", "社交", "专业帮助", "通用",
+}
+
+_GENERATE_SYSTEM = """你是心理健康内容推荐助手，为「个人心理状态管理」系统生成「为你推荐」内容。
+输入 JSON 里给出：用户风险等级、可解释因素（近期被记录到的状态）、参考方向（知识图谱给出的建议维度）、兴趣画像。
+
+生成规则：
+1. 生成 {count} 条推荐，每条围绕一个具体方向——可以是缓解建议（睡眠/运动/呼吸练习等），也可以是贴合兴趣的内容（歌单/影视/读物）。
+2. name 自拟，15 字以内；参考方向只作方向池，不要照抄原名。
+3. category 必须是以下之一：音乐、运动、影视、书籍、漫画、美食、冥想、认知、社交、专业帮助、通用。
+4. 内容必须真实存在，禁止虚构：
+   - 音乐：真实存在的歌曲，给出"歌名+歌手"，贴合兴趣画像，避开被推荐到烂大街的少数几首
+   - 影视/书籍/漫画：真实作品名
+   - 文章/科普：真实存在的知名来源（丁香医生/壹心理/简单心理/豆瓣等）
+   - 做法类：给具体、可执行、低门槛的做法
+5. reason 一句话（第二人称），说明为什么推荐给这位用户，引用他的兴趣或状态。
+6. 风险等级为黄/橙时：优先调节方法类内容，且必须包含一条「专业帮助」方向（措辞温和，如持续无改善建议寻求学校心理咨询中心）；参考方向里若有专业支持类，绿级也保留一条。
+7. 不要医疗建议、不要诊断；语气温暖支持；提醒适度、注意休息。
+8. {count} 条内容要多样，不要全部同类；避免总是给出最热门/最常见的推荐。
+9. links 给可跳转内容：label 为显示文本（如「《南山南》- 马頔」），q 为搜索关键词（如「南山南 马頔」）；纯做法类给空数组 []；音乐类必须给 links。
+
+只输出 JSON 数组，不要输出任何其他文字：
+[{{"name": "...", "category": "...", "content": "...", "links": [{{"label": "...", "q": "..."}}], "reason": "..."}}]"""
+
+
+def _music_search_url(q: str) -> str:
+    """网易云音乐搜索页链接（不依赖任何 API，链接恒可达）。"""
+    return "https://music.163.com/#/search/m/?s=" + quote(q)
+
+
+def _web_search_url(q: str) -> str:
+    """通用内容用必应搜索链接（标题+来源做关键词）。"""
+    return "https://cn.bing.com/search?q=" + quote(q)
+
+
+def _llm_generate_feed(
+    *,
+    risk_level: str,
+    risk_label: str,
+    factors: list[str],
+    directions: list[str],
+    interests_by_cat: dict[str, list[str]],
+    limit: int,
+) -> list[CopingRecommendation] | None:
+    """用 LLM 生成推荐条目。返回 None 表示生成失败（调用方回退种子库）。"""
+    if llm_client.mock_mode() or not getattr(settings, "enable_llm_content", True):
+        return None
+    interests_flat = [f"{name}（{cat}）" for cat, names in interests_by_cat.items() for name in names]
+    payload = {
+        "风险等级": f"{risk_label}（{risk_level}）",
+        "可解释因素": factors[:6],
+        "参考方向": directions[:8],
+        "兴趣画像": interests_flat or ["（暂无）"],
+        "条数": limit,
+        "随机种子": random.randint(1, 10 ** 6),  # 让每次生成结果有差异
+    }
+    prompt = _GENERATE_SYSTEM.format(count=limit)
+    text = llm_client.chat(prompt, json.dumps(payload, ensure_ascii=False), temperature=0.9)
+    if not text.strip():
+        return None
+    return _parse_generated_items(text, limit)
+
+
+def _parse_generated_items(text: str, limit: int) -> list[CopingRecommendation] | None:
+    """解析 LLM 输出的 JSON 数组；任一步失败返回 None（回退种子库）。
+
+    链接只信任 LLM 给的"关键词"，URL 一律由程序拼接——防止编造出死链。
+    """
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, list):
+        return None
+
+    items: list[CopingRecommendation] = []
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()
+        content = str(row.get("content") or "").strip()
+        if not name or not content:
+            continue
+        category = str(row.get("category") or "").strip()
+        if category not in _ALLOWED_CATEGORIES:
+            category = "通用"
+
+        parts = [content]
+        link_texts: list[str] = []
+        links = row.get("links")
+        if isinstance(links, list):
+            for link in links[:5]:
+                if not isinstance(link, dict):
+                    continue
+                label = str(link.get("label") or "").strip()
+                q = str(link.get("q") or "").strip()
+                if not label or not q:
+                    continue
+                url = _music_search_url(q) if category == "音乐" else _web_search_url(q)
+                link_texts.append(f"{label}（{url}）")
+        if link_texts:
+            parts.append("；".join(link_texts))
+
+        items.append(CopingRecommendation(
+            name=name,
+            category=category,
+            suggestion="\n".join(parts),
+            reason=str(row.get("reason") or "").strip() or "为你个性化生成",
+        ))
+        if len(items) >= limit:
+            break
+    return items or None
 
 
 def build_recommendation_feed(report: RiskReport, limit: int = 6) -> list[CopingRecommendation]:
-    """将推理报告的 recommendations 展开为带具体内容的缓解推送列表。
+    """状态推荐：LLM 生成优先，种子库兜底（2026-10-15 升级）。
 
-    返回的 CopingRecommendation.suggestion 中填充具体内容（歌曲/资讯标题 + 链接）。
+    LLM 可用时基于「风险等级 + 可解释因素 + 图谱参考方向 + 兴趣画像」生成
+    全新条目；生成失败/超时/解析失败时回退种子库拼装，页面永不空白。
     """
     if report.crisis or report.risk_level == "red":
         # 红级不推荐娱乐内容，走预警链路
@@ -222,19 +354,27 @@ def build_recommendation_feed(report: RiskReport, limit: int = 6) -> list[Coping
         # 而不是返回空列表让页面空着；真实模式仍然如实返回空。
         return mock_fallback_feed(limit) if llm_client.mock_mode() else []
 
-    # 拉用户兴趣画像（按 category 分组）
-    driver = get_driver()
-    with driver.session() as session:
-        rows = session.run(
-            "MATCH (u:User {user_id:$uid})-[:LIKES|FOLLOWS]->(i:Interest) "
-            "RETURN i.name AS name, i.category AS category",
-            uid=report.user_id,
-        ).data()
-    interests_by_cat: dict[str, list[str]] = {}
-    for r in rows:
-        if r.get("category"):
-            interests_by_cat.setdefault(r["category"], []).append(r["name"])
+    interests_by_cat = _load_interests_by_cat(report.user_id)
 
+    generated = _llm_generate_feed(
+        risk_level=report.risk_level,
+        risk_label=report.risk_label,
+        factors=report.factors,
+        directions=[r.name for r in report.recommendations],
+        interests_by_cat=interests_by_cat,
+        limit=limit,
+    )
+    if generated:
+        return generated
+
+    # 回退：种子库拼装（不再二次调用 LLM——刚失败过，避免再次等待超时）
+    return _seed_feed_from_report(report, interests_by_cat, limit)
+
+
+def _seed_feed_from_report(
+    report: RiskReport, interests_by_cat: dict[str, list[str]], limit: int
+) -> list[CopingRecommendation]:
+    """种子库回退路径（原逻辑保留，2026-10-15 起仅作 LLM 失败/离线兜底）。"""
     feed: list[CopingRecommendation] = []
     for rec in report.recommendations[:limit]:
         content_type = CATEGORY_CONTENT_MAP.get(rec.category or "", "general")
@@ -244,9 +384,6 @@ def build_recommendation_feed(report: RiskReport, limit: int = 6) -> list[Coping
             tracks = _fetch_music_recommendations(interest_names)
             detail = "；".join(f"《{t['title']}》- {t['artist']}（{t['url']}）" for t in tracks)
             suggestion = f"为你挑选了 {len(tracks)} 首与「{interest_names[0]}」相关的歌：{detail}"
-            brief = _llm_content_brief(tracks, rec.category or "音乐", report.risk_label)
-            if brief:
-                suggestion = f"{brief}\n{suggestion}"
             feed.append(CopingRecommendation(
                 name=rec.name, category=rec.category,
                 suggestion=suggestion, reason=rec.reason,
@@ -263,9 +400,6 @@ def build_recommendation_feed(report: RiskReport, limit: int = 6) -> list[Coping
             films = _fetch_films(interest_names)
             detail = "；".join(f"{n['title']}（{n['source']}：{n['url']}）" for n in films)
             suggestion = f"为你挑选了这些影视作品：{detail}"
-            brief = _llm_content_brief(films, rec.category or "影视", report.risk_label)
-            if brief:
-                suggestion = f"{brief}\n{suggestion}"
             feed.append(CopingRecommendation(
                 name=rec.name, category=rec.category,
                 suggestion=suggestion, reason=rec.reason,
@@ -310,7 +444,7 @@ def build_recommendation_feed(report: RiskReport, limit: int = 6) -> list[Coping
 
 
 def build_feed_from_interests(user_id: str, limit: int = 4) -> list[CopingRecommendation]:
-    """纯兴趣驱动的内容推荐（绿级或日常问询后使用）。
+    """纯兴趣驱动的内容推荐（绿级或日常问询后使用；LLM 生成优先，种子兜底）。
 
     不依赖推理报告，直接从用户兴趣画像生成内容推送。
     """
@@ -318,19 +452,27 @@ def build_feed_from_interests(user_id: str, limit: int = 4) -> list[CopingRecomm
         # 同上：Mock 模式给内置通用内容，真实模式如实返回空
         return mock_fallback_feed(limit) if llm_client.mock_mode() else []
 
-    driver = get_driver()
-    with driver.session() as session:
-        rows = session.run(
-            "MATCH (u:User {user_id:$uid})-[:LIKES|FOLLOWS]->(i:Interest) "
-            "RETURN i.name AS name, i.category AS category",
-            uid=user_id,
-        ).data()
+    interests_by_cat = _load_interests_by_cat(user_id)
 
-    interests_by_cat: dict[str, list[str]] = {}
-    for r in rows:
-        if r.get("category"):
-            interests_by_cat.setdefault(r["category"], []).append(r["name"])
+    if interests_by_cat:
+        generated = _llm_generate_feed(
+            risk_level="green",
+            risk_label="绿（正常）",
+            factors=[],
+            directions=[],
+            interests_by_cat=interests_by_cat,
+            limit=limit,
+        )
+        if generated:
+            return generated
 
+    return _seed_feed_from_interests(interests_by_cat, limit)
+
+
+def _seed_feed_from_interests(
+    interests_by_cat: dict[str, list[str]], limit: int
+) -> list[CopingRecommendation]:
+    """种子库回退路径（原逻辑保留，2026-10-15 起仅作 LLM 失败/离线兜底）。"""
     feed: list[CopingRecommendation] = []
     for cat, names in interests_by_cat.items():
         content_type = CATEGORY_CONTENT_MAP.get(cat, "general")

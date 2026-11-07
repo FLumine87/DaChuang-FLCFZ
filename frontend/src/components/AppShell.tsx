@@ -151,22 +151,30 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       icon: LayoutDashboard,
       group: "工作空间",
     },
+    /* 个人端把「心理筛查」与「多模态采集」合成一页：文本 / 语音 / 图像 /
+       量表四个标签页都在 /personal/screening，侧栏因此只留一项，
+       图标沿用原本「心理筛查」那张清单。
+       管理端的「多模态采集」是另一件事（全量采集数据看板），仍然独立成项。 */
     {
       path: `${root}/screening`,
       label: isAdmin ? "筛查管理" : "心理筛查",
       description: isAdmin
         ? "管理筛查记录，及时了解心理健康状态。"
-        : "从一次简单的自我了解开始。",
+        : "文本、语音、图像与量表，多模态记录更完整的状态。",
       icon: ClipboardList,
       group: "工作空间",
     },
-    {
-      path: `${root}/data-collection`,
-      label: "多模态采集",
-      description: "通过文字、语音与图像，记录更完整的状态。",
-      icon: Database,
-      group: "工作空间",
-    },
+    ...(isAdmin
+      ? [
+          {
+            path: `${root}/data-collection`,
+            label: "多模态采集",
+            description: "通过文字、语音与图像，记录更完整的状态。",
+            icon: Database,
+            group: "工作空间",
+          },
+        ]
+      : []),
     /* 「智能心理助手」三件套**只属于个人端**：
        它们是"我的"视角（陪伴我 / 我的图谱 / 推给我），路径也只在
        /personal 下注册过路由。之前这三条没做侧栏过滤，管理端也会渲染出来，
@@ -198,6 +206,18 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             group: "智能心理助手",
           },
         ]),
+    /* 数据审核只属于管理端：新数据进公共池与训练池前的人工闸门 */
+    ...(isAdmin
+      ? [
+          {
+            path: `${root}/review`,
+            label: "数据审核",
+            description: "新数据进公共池与训练池前的人工把关。",
+            icon: ShieldCheck,
+            group: "工作空间",
+          },
+        ]
+      : []),
     {
       path: `${root}/retrieval`,
       label: "检索与分析",

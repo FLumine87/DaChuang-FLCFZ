@@ -9,9 +9,10 @@
   跨模态检索到。真实部署时只需在此文件接入 CLIP / Whisper 等特征即可，
   上层哈希算法无需改动。
 """
-import math
-import re
 import hashlib
+import math
+import os
+import re
 import random
 
 TEXT_DIM = 256   # 文本特征维度（哈希桶数）
@@ -290,15 +291,32 @@ def theme_vector(text):
     return _normalize(vec)
 
 
-def semantic_feature(text, dim=TEXT_DIM):
-    """文本 -> TF(哈希桶) ⊕ w·主题语义向量 的复合特征，整体 L2 归一化。
+# 文本后端：tf = 256 维哈希桶（原实现）；bge = 512 维语义句向量。
+# 用环境变量切换，便于同一份代码跑改前改后对照，不必改代码重部署。
+# 默认 bge：索引一旦用某种后端训练，查询必须用同一后端编码，
+# 否则查询码与库码不在同一空间，检索会全错。切换后端必须重建索引。
+TEXT_BACKEND = os.environ.get("HASHING_TEXT_BACKEND", "bge").strip().lower()
 
-    输出维度 = dim + THEME_DIM（默认 256 + 14 = 270）。
+
+def semantic_feature(text, dim=TEXT_DIM):
+    """文本 -> 语义向量 ⊕ w·主题向量 的复合特征，整体 L2 归一化。
+
+    tf  后端：256 哈希桶 + 19 主题 = 275 维（原实现，只认字面重合）
+    bge 后端：512 句向量 + 19 主题 = 531 维（语义泛化，同义改写可召回）
     训练 / 入库编码 / 查询三条路径必须统一走本函数，维度与语义口径才一致。
     """
     tv = theme_vector(text)
     if THEME_WEIGHT != 1.0:
         tv = [x * THEME_WEIGHT for x in tv]
+
+    if TEXT_BACKEND == "bge":
+        from app.engines.hashing.text_encoder import get_text_encoder
+        enc = get_text_encoder()
+        if enc is not None:
+            vec = enc.encode(text)
+            if vec is not None:
+                return _normalize(list(vec) + tv)
+
     return _normalize(text_feature(text, dim) + tv)
 
 

@@ -109,6 +109,8 @@ async def create_case(data: dict) -> dict:
             "alert_level": row["alert_level"],
             "modality": "text",
             "date": row["created_at"].date().isoformat() if row["created_at"] else "",
+            # 案例由咨询师在管理端建立，属于机构内部数据，直接进公共池
+            "scope": "public",
         })
     except Exception:
         pass

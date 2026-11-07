@@ -3,7 +3,7 @@
 auth_level: None=公开 / 'user'=需登录 / 'admin'=需管理员
 """
 from app.handlers import (auth, screening, alerts, cases, retrieval, upload,
-                          dashboard, personal, admin)
+                          dashboard, personal, admin, review)
 
 ROUTES = [
     # ---- 认证（公开）----
@@ -27,6 +27,13 @@ ROUTES = [
     ("GET", "/api/admin/cases", admin.get_admin_cases, "admin"),
     ("POST", "/api/admin/search", admin.admin_search, "admin"),
     ("GET", "/api/admin/data-collection", admin.get_admin_data_collection, "admin"),
+    ("GET", "/api/admin/review/pending", review.pending, "admin"),
+    ("GET", "/api/admin/review/stats", review.stats, "admin"),
+    ("POST", "/api/admin/review/batch", review.batch, "admin"),
+    ("POST", "/api/admin/hashing/retrain", review.retrain, "admin"),
+    ("GET", "/api/admin/hashing/status", review.retrain_status, "admin"),
+    ("GET", "/api/admin/hashing/drift", review.drift, "admin"),
+    ("POST", "/api/personal/scope", review.set_scope, "user"),
 
     # ---- 筛查管理 ----
     ("GET", "/api/screening/questionnaires", screening.list_questionnaires, "user"),

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # 缓解推荐 Agent（阶段 3）
     music_api_url: str = ""          # 自建 NetEaseCloudMusicApi 地址，如 http://localhost:3000
-    enable_llm_content: bool = True  # 是否用 LLM 生成推荐语（失败回退模板）
+    enable_llm_content: bool = True  # 是否用 LLM 生成推荐内容（False/失败时回退种子库）
 
     # 定时日常问询 Agent（阶段 3.5）
     enable_daily_checkin: bool = True   # 是否启用定时问询

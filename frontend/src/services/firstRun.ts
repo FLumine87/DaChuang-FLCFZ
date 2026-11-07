@@ -25,6 +25,7 @@
  */
 
 import { getCurrentSession } from '../auth/session';
+import type { CollectionAnalysis } from './mockApi';
 
 export type FirstRunStatus = 'new' | 'in_progress' | 'done';
 
@@ -165,13 +166,7 @@ export interface SupplementDraft {
   /** 语音 / 图片的分析描述（上传接口返回的 analysis），存下来供首页与检索页一致展示 */
   description?: string;
   /** 哈希检索引擎的分析报告（保存补充时后端同步生成） */
-  analysis?: {
-    level: 'green' | 'yellow' | 'orange' | 'red';
-    levelLabel?: string;
-    conclusion?: string;
-    reason?: string;
-    alertId?: string | null;
-  };
+  analysis?: CollectionAnalysis;
 }
 
 export interface FirstRunDraft {
@@ -180,6 +175,9 @@ export interface FirstRunDraft {
   score?: number;
   maxScore?: number;
   level?: 'green' | 'yellow' | 'orange' | 'red';
+  /** Original option indices, interpreted using questionnaireVersion. */
+  answers?: Record<string, number>;
+  questionnaireVersion?: string;
   /** 量表提交的时刻（03 报告卡顶部显示"完成于 …"） */
   completedAt?: string;
   supplement?: SupplementDraft;

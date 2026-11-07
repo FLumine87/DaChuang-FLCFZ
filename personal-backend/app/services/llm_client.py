@@ -36,10 +36,10 @@ def mock_mode() -> bool:
     return settings.enable_mock_engines or not settings.llm_api_key
 
 
-def chat(system: str, user: str) -> str:
+def chat(system: str, user: str, temperature: float = 0.7) -> str:
     """通用对话。Mock 模式返回空串，由调用方回退到模板逻辑。"""
     return chat_messages([{"role": "system", "content": system},
-                          {"role": "user", "content": user}])
+                          {"role": "user", "content": user}], temperature=temperature)
 
 
 def chat_messages(messages: list[dict], temperature: float = 0.7) -> str:

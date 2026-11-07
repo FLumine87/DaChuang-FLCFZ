@@ -1,8 +1,9 @@
 """检索与分析接口 handler（动态跨模态哈希检索 + RAG 报告）。"""
 from app.core.responses import success_response
-from app.core.auth import RequestContext
+from app.core.auth import RequestContext, get_current_user
 from app.core.exceptions import HttpError
 from app.services import screening_service, agent_graph
+from app.services.screening_assessment import build_symptom_query
 from app.db import database as db
 from app.engines import get_hashing_engine, get_rag_engine
 from app.engines.agent import build_evidence_pack
@@ -12,6 +13,16 @@ from app.engines.hashing.query_media import (
 
 # 前端可选的检索范围：全部 / 文本 / 图像 / 语音
 _MODALITY_FILTERS = ("text", "image", "audio")
+
+
+def viewer_of(ctx: RequestContext) -> dict:
+    """把登录态转成检索可见性身份。管理员看全部，普通用户看公共池加本人数据。"""
+    user = get_current_user(ctx)
+    try:
+        uid = int(user.get("sub"))
+    except (TypeError, ValueError):
+        uid = None
+    return {"user_id": uid, "role": user.get("role") or "user"}
 
 
 def _params(data: dict, default_top_k: int = 5):
@@ -31,14 +42,78 @@ def _params(data: dict, default_top_k: int = 5):
     return modality, mf, max(1, min(50, top_k))
 
 
-async def perform_search(data: dict, default_top_k: int = 5):
+def _image_corpus_search(data: dict, top_k: int):
+    """图像搜图像：走全量 FER2013 独立索引，不经过跨模态引擎。"""
+    from app.engines import get_image_index
+    from app.engines.hashing import real_features as RF
+
+    index = get_image_index()
+    if index is None:
+        raise HttpError(503, "图像库未就绪，请先运行 scripts/build_image_corpus.py")
+    raw = data.get("media_base64") or data.get("media")
+    tmp_path = None
+    if raw:
+        try:
+            tmp_path = decode_media_query(raw, data.get("media_name") or "", "image")
+        except MediaQueryError as exc:
+            raise HttpError(400, str(exc)) from exc
+    try:
+        items = index.search(path=tmp_path or "", top_k=top_k)
+    finally:
+        remove_media_query(tmp_path)
+
+    hits = []
+    for it in items:
+        label = it.get("label") or ""
+        hits.append({
+            "id": it["image_id"], "record_id": it["image_id"],
+            "modality": "image", "modality_label": "图像",
+            "similarity": it["similarity"],
+            "summary": f"FER2013 · {label}",
+            "tags": [label] if label else [],
+            "alert_level": "unknown", "date": "",
+            "emotion_label": label, "screening_label": "unknown",
+            "label_source": "FER2013 expression annotation", "label_validity": "emotion_only",
+            "pairing_type": "image_only", "screening_usable": False, "reference_only": True,
+            "label_description": "仅表情类别，无心理筛查标签",
+            "cross_modal": False,
+            "media": RF.media_data_url(it.get("path"), "image"),
+            "media_kind": "image",
+            "media_meta": {"label": label, "dataset": "FER2013"},
+            "data_source": "fer-image-corpus", "dataset": "FER2013",
+            "explain": {
+                "hamming_distance": None,
+                "hamming_similarity": it["similarity"],
+                "asymmetric_score": it["similarity"],
+                "code_hex": "", "query_code_hex": "",
+                "window": None, "shared_themes": [], "source": "fer-image-corpus",
+            },
+        })
+    info = {"corpus": "image", "index_size": len(index.meta),
+            "candidates": len(items), "probed_windows": [], "scoring": "image-only"}
+    return hits, info, "image", "image"
+
+
+async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None):
     """执行一次跨模态检索，返回 (命中列表, 过程信息, 查询模态, 模态过滤)。
 
     图像 / 语音查询：把请求体里的 base64（`media_base64`，兼容 `media`）
     落盘成临时文件供特征抽取，检索结束（含异常）即删除。
     查询文本 `query` 始终参与主题抽取与"为什么相似"解释，图像/语音查询也可以带。
+    viewer 为调用者身份；为 None 时不做可见性过滤（仅内部调用）。
     """
     modality, modality_filter, top_k = _params(data, default_top_k)
+    # 路由规则：
+    #   上传图像 + 范围「仅图像线索」→ 全量图像库（同模态近邻，35887 张）
+    #   上传图像 + 范围「全部模态」  → 主引擎（跨模态，图搜文/图搜语音）
+    #   文字 / 语音查询              → 主引擎（跨模态）
+    # 前端上传图像时默认把范围设为「仅图像线索」，因此图搜图自动走新库，
+    # 无需前端改动；corpus=image 仍保留为显式覆盖入口。
+    has_media = bool(data.get("media_base64") or data.get("media"))
+    if modality == "image" and has_media and (
+            modality_filter == "image"
+            or (data.get("corpus") or "").strip() == "image"):
+        return _image_corpus_search(data, top_k)
     engine = get_hashing_engine()
     tmp_path = None
     try:
@@ -51,6 +126,7 @@ async def perform_search(data: dict, default_top_k: int = 5):
         results, info = await engine.search_with_info(
             query=data.get("query", ""), modality=modality,
             top_k=top_k, modality_filter=modality_filter, media_path=tmp_path,
+            viewer=viewer,
         )
     finally:
         remove_media_query(tmp_path)
@@ -73,6 +149,14 @@ def to_frontend_hit(hit: dict) -> dict:
         # （显示"查看原图"而不是播放按钮）
         "mediaKind": hit.get("media_kind"),
         "mediaMeta": hit.get("media_meta"),
+        "emotionLabel": hit.get("emotion_label"),
+        "screeningLabel": hit.get("screening_label"),
+        "labelSource": hit.get("label_source"),
+        "labelValidity": hit.get("label_validity"),
+        "pairingType": hit.get("pairing_type"),
+        "screeningUsable": hit.get("screening_usable"),
+        "referenceOnly": hit.get("reference_only"),
+        "labelDescription": hit.get("label_description"),
     }
 
 
@@ -84,7 +168,8 @@ async def search(ctx: RequestContext):
     查询码、命中主题、数据来源），供前端展示"哈希命中率"与可解释信息。
     """
     data = ctx.body or {}
-    results, info, modality, modality_filter = await perform_search(data)
+    results, info, modality, modality_filter = await perform_search(
+        data, viewer=viewer_of(ctx))
     return success_response(data={
         "query": data.get("query"),
         "modality": modality,
@@ -129,14 +214,16 @@ async def analyze(ctx: RequestContext):
         return success_response(data=None, message="筛查记录不存在")
 
     history = await _safe_history(screening)
+    screening["symptom_query"] = await _symptom_query(screening)
     initial_pack = build_evidence_pack(screening, history=history)
     retrieval_results = None
     if data.get("include_retrieval"):
         modality, modality_filter, top_k = _params(data)
         engine = get_hashing_engine()
         results, info = await engine.search_with_info(
-            query=f"{screening.get('name')} {screening.get('questionnaire_name') or ''}",
+            query=initial_pack["local_retrieval_query"],
             modality=modality, top_k=top_k, modality_filter=modality_filter,
+            viewer=viewer_of(ctx),
         )
         retrieval_results = {
             "query": initial_pack["local_retrieval_query"], "results": results,
@@ -144,8 +231,9 @@ async def analyze(ctx: RequestContext):
         }
 
     await agent_graph.ensure_seeded()
-    paths = await agent_graph.evidence_paths(initial_pack)
-    decisions = await agent_graph.evaluate(initial_pack)
+    combined_pack = build_evidence_pack(screening, history=history, retrieval_results=retrieval_results)
+    paths = await agent_graph.evidence_paths(combined_pack)
+    decisions = await agent_graph.evaluate(combined_pack)
     evidence_pack = build_evidence_pack(screening, history=history, retrieval_results=retrieval_results, knowledge_paths=paths)
     rag_engine = get_rag_engine()
     await rag_engine.initialize()
@@ -165,6 +253,7 @@ async def get_report(ctx: RequestContext, screening_id: int):
     if not screening:
         return success_response(data=None, message="筛查记录不存在")
     history = await _safe_history(screening)
+    screening["symptom_query"] = await _symptom_query(screening)
     initial_pack = build_evidence_pack(screening, history=history)
     await agent_graph.ensure_seeded()
     paths = await agent_graph.evidence_paths(initial_pack)
@@ -190,4 +279,9 @@ async def _safe_history(screening: dict):
     case_id = screening.get("case_id")
     if not case_id:
         return []
-    return await db.query_a("SELECT id, score, max_score, alert_level, screening_date, created_at FROM screenings WHERE case_id = ? AND id != ? ORDER BY COALESCE(screening_date, created_at) DESC LIMIT 5", (case_id, screening.get("id")))
+    return await db.query_a("SELECT id, questionnaire_id, score, max_score, alert_level, screening_date, created_at FROM screenings WHERE case_id = ? AND id != ? AND questionnaire_id=? AND max_score=? ORDER BY COALESCE(screening_date, created_at) DESC LIMIT 5", (case_id, screening.get("id"), screening.get("questionnaire_id"), screening.get("max_score")))
+
+
+async def _symptom_query(screening: dict) -> str:
+    supplements = await db.query_a("SELECT kind, text FROM screening_supplements WHERE screening_id=? AND user_id=? ORDER BY id DESC LIMIT 10", (screening.get("screening_id"), screening.get("user_id")))
+    return build_symptom_query(screening, supplements)

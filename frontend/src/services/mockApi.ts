@@ -17,6 +17,7 @@ import {
   getTokenUsername,
   isDemoToken,
 } from './http';
+import type { RetrievalAssessment } from './screeningAssessment';
 
 import {
   screeningRecords,
@@ -206,6 +207,7 @@ export interface SearchResponse<T> {
   query: string;
   /** 检索过程信息：候选数、探测桶数、查询哈希码等（真实后端返回） */
   index?: RetrievalIndexInfo;
+  assessment?: RetrievalAssessment;
 }
 
 export interface DashboardResponse {
@@ -462,15 +464,11 @@ export async function submitScreening(data: {
   maxScore: number;
   level: AlertLevel;
   answers?: Record<string, number>;
-}): Promise<{ id: string; status: 'success'; riskLevel: string }> {
+  questionnaireVersion?: string;
+  answerEncoding?: 'option-index';
+}): Promise<{ id: string; status: 'success'; riskLevel: string; score?: number; maxScore?: number; assessment?: RetrievalAssessment }> {
   if (USE_MOCK) {
     await delay();
-    const labels: Record<AlertLevel, string> = {
-      green: '低',
-      yellow: '中低',
-      orange: '中高',
-      red: '高',
-    };
     const id = `ME-SCR-${Date.now().toString().slice(-6)}`;
     /* 以前只返回一个 id，数据里什么都不落 —— 演示模式下刚做完的筛查
        不会出现在记录列表里。现在按账号记一条，列表和档案都能看到。 */
@@ -485,11 +483,15 @@ export async function submitScreening(data: {
       date: new Date().toLocaleDateString('sv-SE'),
       /* 逐题作答也要落下来：以前只存分数，档案里看不到"哪一题答了什么" */
       answers: data.answers,
+      questionnaireVersion: data.questionnaireVersion,
+      answerEncoding: data.answerEncoding,
     });
     return {
       id,
       status: 'success',
-      riskLevel: labels[data.level],
+      riskLevel: data.level,
+      score: data.score,
+      maxScore: data.maxScore,
     };
   }
   return request.post('/api/personal/screenings', data);
@@ -518,7 +520,7 @@ export interface CollectionHit {
 export interface CollectionAnalysis {
   modality: 'text' | 'audio' | 'image';
   query?: string;
-  level: 'green' | 'yellow' | 'orange' | 'red';
+  level: 'green' | 'yellow' | 'orange' | 'red' | 'unknown';
   levelLabel: string;
   isAlert: boolean;
   reason: string;
@@ -527,6 +529,8 @@ export interface CollectionAnalysis {
   alertId?: string | null;
   index?: unknown;
   createdAt?: string;
+  supplementId?: number;
+  assessment?: RetrievalAssessment;
 }
 
 /**
@@ -585,6 +589,7 @@ export interface PersonalSupplement {
  * 与挂记录路径一样，返回哈希检索引擎的检索报告。
  */
 export async function saveUserSupplement(supplement: {
+  retrievalToken?: string;
   kind: 'text' | 'audio' | 'image';
   text?: string;
   filename?: string;
@@ -799,7 +804,12 @@ export async function fetchRetrievalMedia(unitId: string): Promise<RetrievalMedi
 
 /** RAG 深度报告请求体：带上检索命中的精简信息，供大模型做检索增强分析 */
 export interface RagReportRequest {
+  analysisMode?: 'retrieval';
+  includeOriginalInput?: boolean;
+  retrievalToken?: string;
   query: string;
+  screeningId?: string | null;
+  supplementId?: number | null;
   hits: {
     recordId?: string;
     alertLevel?: string;
@@ -823,7 +833,7 @@ export async function fetchRagReport<T>(payload: RagReportRequest): Promise<{ re
   }
   return request.post<{ report: T | null; mock: boolean }>(
     '/api/personal/rag-report',
-    { query: payload.query, hits: payload.hits },
+    { query: payload.query, hits: payload.hits, screeningId: payload.screeningId, supplementId: payload.supplementId, analysisMode: payload.analysisMode, retrievalToken: payload.retrievalToken, includeOriginalInput: payload.includeOriginalInput },
     { timeout: 90_000 },
   );
 }

@@ -407,14 +407,14 @@ export default function Dashboard() {
         >
           <ActionStack
             padY={tune.btnPad}
-            to="/personal/data-collection"
+            to="/personal/screening?tab=text"
             primary
             title="记录一下现在"
             meta={view.last ? `${view.last.date} 记过一次` : "今天还没有记录"}
           />
           <ActionStack
             padY={tune.btnPad}
-            to="/personal/screening"
+            to="/personal/screening?tab=scale"
             title="评估心理状态"
             meta={
               view.last
@@ -722,7 +722,7 @@ export default function Dashboard() {
                   to={
                     view.last
                       ? `/personal/screening?record=${encodeURIComponent(view.last.id)}`
-                      : "/personal/screening"
+                      : "/personal/screening?tab=scale"
                   }
                   className="ui-button"
                 >
@@ -737,13 +737,13 @@ export default function Dashboard() {
               还没有检测记录 —— 从下面「评估心理状态」开始，大约 3 分钟。
             </p>
             {/* 新账号还没做筛查时，采集内容挂在用户名下——这里也要让它露脸，
-                否则「多模态采集」传完东西、首页什么都看不到（只上传不挂靠的剩余死角）。 */}
+                否则「心理筛查」页里的采集传完东西、首页什么都看不到（只上传不挂靠的剩余死角）。 */}
             {view.input && (
               <div className="mt-4 rounded-xl border border-slate-100 p-4">
                 <p className="flex items-center gap-1.5 text-[15px] font-semibold text-slate-700">
                   最近一次输入
                   <span className="rounded bg-primary-50 px-1 text-[11px] font-medium text-primary-600">
-                    来自多模态采集
+                    来自心理筛查
                   </span>
                 </p>
                 <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-700">

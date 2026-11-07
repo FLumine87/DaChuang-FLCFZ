@@ -123,7 +123,9 @@ export interface CopingRecommendation {
 
 export interface RiskReport {
   user_id: string;
-  risk_level: 'green' | 'yellow' | 'orange' | 'red';
+  risk_level: 'green' | 'yellow' | 'orange' | 'red' | 'unknown';
+  reference_only?: boolean;
+  source?: 'knowledge_graph' | string;
   risk_label: string;
   overall_score: number;
   crisis: boolean;
@@ -172,7 +174,9 @@ export interface ScaleScoreResult {
   neo4j_connected: boolean;
   inference_triggered: boolean;
   report?: {
-    risk_level: 'green' | 'yellow' | 'orange' | 'red';
+    risk_level: 'green' | 'yellow' | 'orange' | 'red' | 'unknown';
+    reference_only?: boolean;
+    source?: string;
     risk_label: string;
     overall_score: number;
     crisis: boolean;

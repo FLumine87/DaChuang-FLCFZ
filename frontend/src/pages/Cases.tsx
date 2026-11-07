@@ -164,7 +164,7 @@ export default function Cases() {
           使用建议
         </h3>
         <ul className="text-sm text-slate-600 space-y-2 list-disc pl-5">
-          <li>保持每周至少 2 次多模态采集，提升检索与 RAG 建议准确度。</li>
+          <li>保持每周至少 2 次记录，提升检索与 RAG 建议准确度。</li>
           <li>出现红色预警时，不要独自承受，优先联系可信赖同伴或学校心理支持资源。</li>
           <li>连续 7 天执行行动计划后，再查看趋势变化并做下一轮调整。</li>
         </ul>

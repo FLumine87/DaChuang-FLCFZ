@@ -13,14 +13,34 @@ env/
 dist/
 
 # 数据库文件 - 默认全部忽略（工作库含真实生成数据，不上传）
-# 但放行随项目发布的检索语料（仅含合成数据，无账号/敏感数据）
+# 但下面三个放行，都只含**演示/合成数据**，不含真实用户隐私：
+#   data/retrieval_seed.db      检索语料种子（合成）
+#   data/hashing/corpus.db      合成语料（回退用）
+#   data/dev.db                 ⚠ 本地主库 —— 放行是为了让别人 clone 后
+#                                **直接看到演示账号 xiaoyu 的历史数据**
+#                                （18 条筛查 2025-06~2026-10、16 条预警、1 个个案）。
+#                                该库由 scripts/seed_xiaoyu_demo.py 生成，内容
+#                                完全自包含（无绝对路径、无媒体文件引用），
+#                                密码哈希为 pbkdf2_sha256（salt 内嵌），换机器可登录。
+#   ⚠ 注意：若你在本地用真实数据跑过系统，请先删掉 data/dev.db 再提交，
+#     或执行 python scripts/seed_xiaoyu_demo.py --reset 覆盖成纯演示数据。
 *.db
 *.db-journal
 !data/retrieval_seed.db
 !data/hashing/corpus.db
+!data/dev.db
 
 # 哈希引擎运行状态：可由 corpus.db 重建，且体积较大，不入库
 data/hashing/hashing_state.json
+data/hashing/image_state.json
+# 对照实验的状态备份（每个 5-7MB，可由重建复现）
+data/hashing/hashing_state_*.json
+# 训练权重体积大，重新训练可复现；导出后的 onnx 保留
+models/*.pth
+# bge 导出原料：PyTorch 权重 92MB 不随仓库分发，ONNX 与分词器才是部署所需
+models/bge-small-zh/pytorch_model.bin
+# 注：bge-small-zh.onnx（91MB）随仓库分发，便于开箱可用；
+# 若需轻量分发可改用 scripts/fetch_bge_model.py 现场获取
 # 评测脚本的临时工作目录（eval_retrieval.py 每次运行重建）
 data/hashing/_eval_tmp/
 

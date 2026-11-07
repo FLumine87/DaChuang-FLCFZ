@@ -59,6 +59,8 @@ export interface PersonalScreeningRecord {
   date: string;
   /** 逐题作答（题号 → 选项分值）。后端接口以前只回总分，所以是可选的 */
   answers?: Record<number, number>;
+  questionnaireVersion?: string;
+  answerEncoding?: 'option-index';
   /** 用户自愿补充的一条记录（文字 / 语音 / 图片） */
   supplement?: {
     kind: 'text' | 'audio' | 'image';
@@ -118,7 +120,7 @@ export interface RetrievalResult {
   modality: 'text' | 'audio' | 'image' | 'multimodal';
   summary: string;
   tags: string[];
-  alertLevel: AlertLevel;
+  alertLevel: AlertLevel | 'unknown';
   date: string;
   recordId?: string;
   modalityLabel?: string;
@@ -141,6 +143,14 @@ export interface RetrievalResult {
   dataSource?: string;
   /** 语料所属数据集名称（真实数据来源标注） */
   dataset?: string;
+  emotionLabel?: string | null;
+  screeningLabel?: string | null;
+  labelSource?: string;
+  labelValidity?: string;
+  pairingType?: string;
+  screeningUsable?: boolean;
+  referenceOnly?: boolean;
+  labelDescription?: string;
   explain?: RetrievalExplain;
 }
 

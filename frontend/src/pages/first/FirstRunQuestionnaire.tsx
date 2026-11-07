@@ -9,7 +9,7 @@ import {
   Loader2,
   ShieldCheck,
 } from "lucide-react";
-import { questionnaires } from "../../data/questionnaireData";
+import { calculateQuestionnaireScore, QUESTIONNAIRE_ANSWER_ENCODING, QUESTIONNAIRE_VERSION, questionnaires } from "../../data/questionnaireData";
 import { getScaleGuide } from "../../data/scaleGuide";
 import { submitScreening } from "../../services/mockApi";
 import { getCurrentSession } from "../../auth/session";
@@ -116,7 +116,7 @@ export default function FirstRunQuestionnaire() {
     setError("");
     setSaving(true);
     try {
-      const totalScore = questions.reduce((sum, item) => sum + (answers[item.id] ?? 0), 0);
+      const totalScore = calculateQuestionnaireScore(definition.id, answers);
       const maxScore = questions[0].options.reduce((max, option) => Math.max(max, option.value), 0) * total;
       const result = definition.scoring(totalScore);
       const response = await submitScreening({
@@ -125,13 +125,18 @@ export default function FirstRunQuestionnaire() {
         maxScore,
         level: result.level,
         answers,
+        questionnaireVersion: QUESTIONNAIRE_VERSION,
+        answerEncoding: QUESTIONNAIRE_ANSWER_ENCODING,
       });
       if (response.status !== "success") throw new Error("筛查尚未保存，请重试");
       saveDraft({
         recordId: response.id,
-        score: totalScore,
-        maxScore,
-        level: result.level,
+        score: response.score ?? totalScore,
+        maxScore: response.maxScore ?? maxScore,
+        level: ['green', 'yellow', 'orange', 'red'].includes(response.riskLevel)
+          ? response.riskLevel as 'green' | 'yellow' | 'orange' | 'red' : result.level,
+        answers,
+        questionnaireVersion: QUESTIONNAIRE_VERSION,
         /* 03 的卡顶要显示"完成时间"：这里就是量表提交的时刻 */
         completedAt: new Date().toISOString(),
       });

@@ -29,7 +29,7 @@ export default function LatestScreeningCard({ record }: { record?: PersonalScree
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {isExample && <span className="rounded-full bg-primary-50 px-2 py-1 text-xs font-medium text-primary-600">示例数据</span>}
-          <Link to="/personal/screening" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 hover:border-primary-300 hover:text-primary-600">
+          <Link to="/personal/screening?tab=scale" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 hover:border-primary-300 hover:text-primary-600">
             查看全部 <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>

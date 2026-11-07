@@ -422,7 +422,7 @@ function RunInferenceButton({ userId }: { userId: string }) {
             {!result && !loading && (
               <div className="text-center py-8">
                 <p className="text-sm text-slate-500 mb-4">
-                  将基于你的个人知识图谱 + 领域知识图谱运行推理 Agent，评估当前心理状态并生成建议。
+                  将基于个人知识图谱和领域知识图谱整理参考线索与建议；正式筛查结论以量表及后端评估为准。
                 </p>
                 {err && <p className="text-sm text-slate-500 mb-3">服务端推理不可用（{err}），会用本机记录组装一份报告。</p>}
                 <button
@@ -441,7 +441,9 @@ function RunInferenceButton({ userId }: { userId: string }) {
                 <div className="flex items-center gap-3">
                   <span
                     className={`px-3 py-1.5 rounded-lg text-sm font-bold ${
-                      result.report.risk_level === 'red'
+                      result.report.reference_only || result.report.risk_level === 'unknown' || source === 'local'
+                        ? 'bg-slate-100 text-slate-700'
+                        : result.report.risk_level === 'red'
                         ? 'bg-danger-50 text-danger-600'
                         : result.report.risk_level === 'orange'
                         ? 'bg-orange-50 text-orange-600'
@@ -450,9 +452,9 @@ function RunInferenceButton({ userId }: { userId: string }) {
                         : 'bg-success-50 text-success-600'
                     }`}
                   >
-                    {result.report.risk_label}
+                    {source === 'local' ? '本机记录参考，待标准筛查' : result.report.risk_level === 'unknown' || result.report.reference_only ? '图谱参考，待标准筛查' : result.report.risk_label}
                   </span>
-                  <span className="text-sm text-slate-500">综合分 {result.report.overall_score}</span>
+                  <span className="text-sm text-slate-500">参考线索不直接决定本人风险</span>
                   {result.report.alert_created && (
                     <span className="text-xs text-orange-600 flex items-center gap-1">
                       <AlertTriangle className="w-3.5 h-3.5" /> 已生成预警
@@ -471,7 +473,7 @@ function RunInferenceButton({ userId }: { userId: string }) {
 
                 {result.report.factors.length > 0 && (
                   <div>
-                    <p className="text-sm font-semibold text-slate-700 mb-2">风险因素</p>
+                    <p className="text-sm font-semibold text-slate-700 mb-2">待核实的参考因素</p>
                     <ul className="space-y-1">
                       {result.report.factors.map((f, i) => (
                         <li key={i} className="text-sm text-slate-600 flex gap-2">

@@ -5,7 +5,6 @@ import ScrollToTop from './components/ScrollToTop';
 import ScrollHint from './components/ScrollHint';
 import Dashboard from './pages/Dashboard';
 import DashboardV2 from './pages/DashboardV2';
-import Screening from './pages/Screening';
 import DataCollection from './pages/DataCollection';
 import Retrieval from './pages/Retrieval';
 import Alerts from './pages/Alerts';
@@ -15,6 +14,7 @@ import AdminLayout from './admin/components/AdminLayout';
 import AdminDashboard from './admin/pages/AdminDashboard';
 import AdminScreening from './admin/pages/AdminScreening';
 import AdminDataCollection from './admin/pages/AdminDataCollection';
+import AdminReview from './admin/pages/AdminReview';
 import AdminRetrieval from './admin/pages/AdminRetrieval';
 import AdminAlerts from './admin/pages/AdminAlerts';
 import AdminCases from './admin/pages/AdminCases';
@@ -121,8 +121,11 @@ export default function App() {
         <Route index element={<Navigate to="/personal/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="dashboard-v2" element={<DashboardV2 />} />
-        <Route path="screening" element={<Screening />} />
-        <Route path="data-collection" element={<DataCollection />} />
+        {/* 个人端「心理筛查」= 原筛查页 + 多模态采集页合并，四个标签页
+            由 ?tab= 切换；旧地址 /personal/data-collection 重定向过去。
+            ?record= / ?paper= 之类的老链接自动落在「量表填写」页。 */}
+        <Route path="screening" element={<DataCollection />} />
+        <Route path="data-collection" element={<Navigate to="/personal/screening" replace />} />
         <Route path="retrieval" element={<Retrieval />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="cases" element={<Cases />} />
@@ -141,6 +144,7 @@ export default function App() {
         <Route path="me/feed" element={<FeedPage />} />
         <Route path="screening" element={<AdminScreening />} />
         <Route path="data-collection" element={<AdminDataCollection />} />
+        <Route path="review" element={<AdminReview />} />
         <Route path="retrieval" element={<AdminRetrieval />} />
         <Route path="alerts" element={<AdminAlerts />} />
         <Route path="cases" element={<AdminCases />} />
