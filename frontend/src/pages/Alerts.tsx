@@ -294,24 +294,7 @@ export default function Alerts() {
                   ))}
                   <div className="flex items-center justify-between gap-4">
                     <dt className="text-slate-400">状态</dt>
-                    <dd className="flex items-center gap-2">
-                      <StatusBadge status={selected.status} />
-                      {/* 误点保护：标记「已缓解」之后给一个低调的胶囊回退按钮。
-                          只有已缓解时出现；点它 = 回退为跟踪中（后端 resolved→processing，
-                          会写一条署名记录与审计，管理端的处理历史里能看到）。 */}
-                      {selected.status === 'resolved' && (
-                        <button
-                          type="button"
-                          onClick={() => handleStatusChange('tracking')}
-                          disabled={statusNotice?.kind === 'busy'}
-                          title="误点保护：把这条预警回退为「跟踪中」"
-                          className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-400 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <RotateCcw className="h-3 w-3" />
-                          回退
-                        </button>
-                      )}
-                    </dd>
+                    <dd><StatusBadge status={selected.status} /></dd>
                   </div>
                 </dl>
 
@@ -340,9 +323,23 @@ export default function Alerts() {
                     </button>
                   )}
                   {selected.status === 'resolved' && (
-                    <p className="w-full rounded-lg bg-success-50 px-3 py-2 text-xs leading-5 text-success-600">
-                      这条预警已缓解。如仍有不适，可以回到「心理筛查」重新做一次记录。
-                    </p>
+                    /* 误点保护：回退按钮放在这条"已缓解"提示的右侧（详情底部），
+                       而不是状态徽标旁边 —— 用户标记完看到的就是这里。 */
+                    <div className="flex w-full items-center gap-3 rounded-lg bg-success-50 px-3 py-2">
+                      <p className="flex-1 text-xs leading-5 text-success-600">
+                        这条预警已缓解。如仍有不适，可以回到「心理筛查」重新做一次记录。
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleStatusChange('tracking')}
+                        disabled={statusNotice?.kind === 'busy'}
+                        title="误点保护：把这条预警回退为「跟踪中」"
+                        className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        回退
+                      </button>
+                    </div>
                   )}
                 </div>
 
