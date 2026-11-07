@@ -265,6 +265,33 @@ function isConnectivityError(reason: unknown): boolean {
   );
 }
 
+/**
+ * 后端能连上、但它自己 500（典型：线上 D1 结构旧 → D1_ERROR: no such column）。
+ *
+ * 这和"网络没通"不是一回事：网络问题在登录层已经降级；这里针对已经登录、
+ * 但某个读接口挂了的情况——页面不该整页停在错误态，也不该提示用户去查 WiFi。
+ * 退回演示数据至少能让人继续看界面，顶栏会明确标注「离线演示」。
+ */
+function isServerFailure(reason: unknown): boolean {
+  const status = (reason as { status?: number } | null)?.status;
+  if (typeof status === 'number' && status >= 500) return true;
+  const raw = reason instanceof Error ? reason.message : String(reason ?? '');
+  return /服务器内部错误|D1_ERROR|Internal Server Error|status code 5\d\d/i.test(raw);
+}
+
+/**
+ * 读接口失败时是否退回演示数据。
+ *
+ * 返回 true 时已经把全局切到离线演示（顶栏出现「离线演示」标记），
+ * 后续请求统一走本机数据，避免"一半真一半假"的会话。
+ */
+function fallbackToDemo(reason: unknown): boolean {
+  if (isDemoToken()) return true;
+  if (!isServerFailure(reason)) return false;
+  activateOfflineDemo();
+  return true;
+}
+
 /** 构造标准 JWT 三段式演示 token：<header>.<payload>.<sig>，session.ts 解码第二段。 */
 function buildDemoToken(username: string, role: 'admin' | 'user'): string {
   const header = btoa(JSON.stringify({ alg: 'none', typ: 'JWT' }));
@@ -380,7 +407,7 @@ export async function getScreeningRecords(): Promise<PersonalScreeningRecord[]> 
     return withLocalRetrieval(rows);
   } catch (err) {
     /* 同 getDashboardData：演示会话拿不到真实记录时退回演示数据，不整页报错 */
-    if (!isDemoToken()) throw err;
+    if (!fallbackToDemo(err)) throw err;
     await delay();
     return personalRecords();
   }
@@ -592,7 +619,7 @@ export async function getDashboardData(): Promise<DashboardResponse> {
     /* 演示会话（自签 alg=none token）在真实后端下必然 401。首页不该因此变成
        一行错误文字或一片空白，所以退回演示数据；真实账号失败照实抛出，
        由页面给出局部提示（见 Dashboard.tsx 的兜底分支）。 */
-    if (!isDemoToken()) throw err;
+    if (!fallbackToDemo(err)) throw err;
     await delay();
     return demoDashboard();
   }
@@ -607,17 +634,29 @@ export interface DashboardStats {
   completion_rate: number;
 }
 
+function demoDashboardStats(): DashboardStats {
+  return {
+    total_screenings: 300,
+    monthly_screenings: 261,
+    pending_alerts: 9,
+    completion_rate: 87,
+  };
+}
+
 export async function getDashboardStats(): Promise<DashboardStats> {
   if (USE_MOCK) {
     await delay();
-    return {
-      total_screenings: 300,
-      monthly_screenings: 261,
-      pending_alerts: 9,
-      completion_rate: 87,
-    };
+    return demoDashboardStats();
   }
-  return request.get<DashboardStats>('/api/dashboard/stats');
+  try {
+    return await request.get<DashboardStats>('/api/dashboard/stats');
+  } catch (err) {
+    /* 管理端首页指标：后端 5xx（如 D1 旧结构）时退回演示数字，
+       不让整个管理端停在"加载失败"。 */
+    if (!fallbackToDemo(err)) throw err;
+    await delay();
+    return demoDashboardStats();
+  }
 }
 
 export async function getWarnings(): Promise<WarningEvent[]> {
@@ -629,7 +668,7 @@ export async function getWarnings(): Promise<WarningEvent[]> {
     return await request.get<WarningEvent[]>('/api/personal/warnings');
   } catch (err) {
     /* 同 getDashboardData：演示会话拿不到真实预警时退回演示数据 */
-    if (!isDemoToken()) throw err;
+    if (!fallbackToDemo(err)) throw err;
     await delay();
     return [...warningEvents];
   }
@@ -678,7 +717,7 @@ export async function getCases() {
     return { ...data, screeningRecords: withLocalRetrieval(data.screeningRecords ?? []) };
   } catch (err) {
     /* 同 getDashboardData：演示会话下「我的档案」也退回演示数据 */
-    if (!isDemoToken()) throw err;
+    if (!fallbackToDemo(err)) throw err;
     await delay();
     return { screeningRecords: personalRecords(), warningEvents, userProfile, personalTimeline };
   }
@@ -793,29 +832,40 @@ export async function uploadFile(file: File): Promise<{ url: string; filename: s
 
 // ─── 管理端 ──────────────────────────────────────────────────────────────────
 
+function adminDashboardDemo(): AdminDashboardResponse {
+  /* 月份口径：**按数据里最新的那个月**统计，不用当前自然月。
+     演示数据是 2026-03、今天是 2026-10 —— 按自然月过滤会恒显示 0 条，
+     看起来像"本月没有预警"，其实是口径错了。
+     个人端「最近预警」卡片早就用了这个口径（见 Dashboard.tsx 同名判断），
+     管理端这里之前没跟上，所以「本月预警」一直是 0。 */
+  const monthPrefix =
+    alertRecords.map((a) => (a.createdAt ?? '').slice(0, 7)).sort().pop() ?? '';
+  return {
+    trendData,
+    alertDistribution,
+    monthlyAlertCounts: {
+      yellow: alertRecords.filter((item) => item.level === 'yellow' && item.createdAt.startsWith(monthPrefix)).length,
+      red: alertRecords.filter((item) => item.level === 'red' && item.createdAt.startsWith(monthPrefix)).length,
+    },
+    alertRecords,
+    screeningRecords: adminScreeningRecords,
+    caseRecords,
+  };
+}
+
 export async function getAdminDashboardData(): Promise<AdminDashboardResponse> {
   if (USE_MOCK) {
     await delay();
-    /* 月份口径：**按数据里最新的那个月**统计，不用当前自然月。
-       演示数据是 2026-03、今天是 2026-10 —— 按自然月过滤会恒显示 0 条，
-       看起来像"本月没有预警"，其实是口径错了。
-       个人端「最近预警」卡片早就用了这个口径（见 Dashboard.tsx 同名判断），
-       管理端这里之前没跟上，所以「本月预警」一直是 0。 */
-    const monthPrefix =
-      alertRecords.map((a) => (a.createdAt ?? '').slice(0, 7)).sort().pop() ?? '';
-    return {
-      trendData,
-      alertDistribution,
-      monthlyAlertCounts: {
-        yellow: alertRecords.filter((item) => item.level === 'yellow' && item.createdAt.startsWith(monthPrefix)).length,
-        red: alertRecords.filter((item) => item.level === 'red' && item.createdAt.startsWith(monthPrefix)).length,
-      },
-      alertRecords,
-      screeningRecords: adminScreeningRecords,
-      caseRecords,
-    };
+    return adminDashboardDemo();
   }
-  return request.get<AdminDashboardResponse>('/api/admin/dashboard');
+  try {
+    return await request.get<AdminDashboardResponse>('/api/admin/dashboard');
+  } catch (err) {
+    /* 同个人端：后端在线但 5xx 时退回演示数据，管理端不至于整页报错。 */
+    if (!fallbackToDemo(err)) throw err;
+    await delay();
+    return adminDashboardDemo();
+  }
 }
 
 export async function getAdminScreeningRecords(): Promise<AdminScreeningRecord[]> {

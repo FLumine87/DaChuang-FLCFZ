@@ -29,7 +29,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { getCurrentSession, logout } from "../auth/session";
-import { isOfflineDemo } from "../services/http";
+import { isOfflineDemo, subscribeOfflineDemo } from "../services/http";
 import Aurora from "./Aurora";
 import BrandLogo from "./BrandLogo";
 import BackToTop from './BackToTop';
@@ -115,6 +115,12 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   const isMobile = useSyncExternalStore(
     subscribeToViewport,
     getMobileSnapshot,
+    () => false,
+  );
+  /* 订阅离线状态：首页数据 5xx 后才切到演示模式时，顶栏标记要立刻出现 */
+  const offlineDemo = useSyncExternalStore(
+    subscribeOfflineDemo,
+    isOfflineDemo,
     () => false,
   );
   const [searchOpen, setSearchOpen] = useState(false);
@@ -691,7 +697,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             {/* 离线演示标记：登录时后端连不上、自动切到本机演示数据后出现。
                 不做静默降级——用户必须知道「下面的数据不是服务器上的」。
                 点击 = 退出这次演示会话，回到登录页重新尝试连接真实后端。 */}
-            {isOfflineDemo() && (
+            {offlineDemo && (
               <button
                 type="button"
                 onClick={handleLogout}

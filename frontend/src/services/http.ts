@@ -37,6 +37,7 @@ export let USE_MOCK = ENV_MOCK;
  */
 export function activateOfflineDemo(): void {
   USE_MOCK = true;
+  notifyOfflineDemo();
 }
 
 /** 当前是否处于"后端连不上而降级到演示数据"的状态（区别于构建期就定的演示包）。 */
@@ -44,9 +45,29 @@ export function isOfflineDemo(): boolean {
   return USE_MOCK && !ENV_MOCK;
 }
 
+/* USE_MOCK 是模块级变量，React 不会因为普通变量变化而重渲染。
+   页面在挂载之后才收到 5xx、切到离线演示时（例如首页数据加载失败），
+   顶栏的「离线演示」标记如果没有订阅机制就不会出现——用户会以为数据还是
+   服务器返回的。这里给 useSyncExternalStore 提供一个最小订阅接口。 */
+const offlineListeners = new Set<() => void>();
+
+export function subscribeOfflineDemo(listener: () => void): () => void {
+  offlineListeners.add(listener);
+  return () => {
+    offlineListeners.delete(listener);
+  };
+}
+
+function notifyOfflineDemo(): void {
+  offlineListeners.forEach((listener) => listener());
+}
+
 /** 退出演示会话后回到"照常尝试真实后端"的状态；构建期演示包不受影响。 */
 export function resetOfflineDemo(): void {
-  if (!ENV_MOCK) USE_MOCK = false;
+  if (!ENV_MOCK) {
+    USE_MOCK = false;
+    notifyOfflineDemo();
+  }
 }
 
 const TOKEN_KEY_PERSISTENT = 'psych_token_persistent';
@@ -273,7 +294,12 @@ http.interceptors.response.use(
       error.response?.data?.message ||
       error.message ||
       '网络请求失败';
-    return Promise.reject(new Error(message));
+    /* 把 HTTP 状态带出去：调用层要区分"网络没通"(无 response) 和
+       "后端在线但自己 500"(有 status)。后者同样不该让整页停在错误态，
+       但也不能当成网络问题提示用户去查 WiFi。 */
+    const failure = new Error(message) as Error & { status?: number };
+    failure.status = error.response?.status;
+    return Promise.reject(failure);
   }
 );
 
