@@ -46,6 +46,8 @@ uploads/
 *.png
 *.gif
 *.webp
+# 首屏插画是源码资产，需要入库（其余截图/生成图仍忽略）
+!frontend/src/assets/hero-calm-*.webp
 
 # ---- 离线资产（真实数据集 / 模型权重）：一律不入库，各自本地准备 ----
 # 真实数据集体积大且带使用条款，绝不随仓库分发；其派生产物（如 real_corpus.db）

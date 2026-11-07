@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { navigateWithTransition } from "../utils/viewTransition";
-import { ArrowRight, Bell, Check, FileText, Layers, Moon, Search, Sun } from "lucide-react";
+import { ArrowRight, Check, Moon, Sun } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
+import heroCalmLight from "../assets/hero-calm-light.webp";
+import heroCalmDark from "../assets/hero-calm-dark.webp";
 import {
   AlertVisual,
   AssessVisual,
@@ -691,6 +693,26 @@ export default function LandingPage() {
         className="auth-screen relative flex items-center overflow-hidden px-6 py-16 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)] lg:py-12"
       >
         <Aurora />
+        {/* 首屏右侧插画：人物和蓝紫弧面来自同一张参考图，只把背景的左侧、顶部做了
+            渐隐（人物本身保持不透明），所以不用 CSS 遮罩也能直接贴在页面背景上。
+            绝对定位到 section 右下角，向右、向下贴边出血，不占左栏的排版宽度；
+            窄屏（<lg）隐藏，改在左栏内容下面出一张通栏图。 */}
+        <div
+          aria-hidden="true"
+          data-reveal
+          className="pointer-events-none absolute inset-y-0 right-0 z-[1] hidden items-end justify-end lg:flex"
+        >
+          <img
+            src={heroCalmLight}
+            alt=""
+            className="block h-auto max-h-[calc(100%-64px)] w-[48vw] max-w-[760px] object-contain object-right-bottom dark:hidden"
+          />
+          <img
+            src={heroCalmDark}
+            alt=""
+            className="hidden h-auto max-h-[calc(100%-64px)] w-[48vw] max-w-[760px] object-contain object-right-bottom dark:block"
+          />
+        </div>
         <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
           <div data-reveal className="@container">
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
@@ -753,95 +775,23 @@ export default function LandingPage() {
                 金种子重点课题
               </span>
             </div>
-          </div>
 
-          {/* 外层 data-reveal 负责"框"本身的渐入，内层才是内容：
-              否则框会瞬间出现、内容再逐条浮现，看着像"空盒子先落地"。 */}
-          <div data-reveal data-visual>
-            <div className="@container rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-8">
-              <p className="text-[13px] font-medium tracking-[0.18em] text-slate-500">
-                平台概览
-              </p>
-
-              {/* 服务流程：采集 → 分析 → 报告 → 复核。
-                  这里只留四个动作词，具体能力由下方四张卡片承担 ——
-                  比原来"四列标签 + 折线图"更像一张入口图，也不会和左栏文案抢注意力。 */}
-              <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[14px] font-medium text-slate-600 sm:text-[15px]">
-                {["采集", "分析", "报告", "复核"].map((step, index) => (
-                  <span key={step} className="flex items-center gap-2.5">
-                    {step}
-                    {index < 3 && (
-                      <span aria-hidden="true" className="text-[13px] text-slate-400">
-                        →
-                      </span>
-                    )}
-                  </span>
-                ))}
-              </div>
-
-              {/* 四张能力卡。
-                  颜色全部走语义令牌（--color-white / --color-slate-* / --color-primary-*），
-                  深色模式由 .dark 整体翻转：外框白 → 深蓝面板、内卡浅灰 → 比面板更深一档、
-                  强调色 primary-600 → 提亮的 primary-300，图标底色同步压暗。
-                  列数按**卡片自身宽度**（容器查询）切换，而不是按视口断点：
-                  页面在 1024–1199px 时右栏只有约 440px，写死两列会把标题挤到换行、
-                  三条要点互相压字；@container 直接量内容宽度，换列时机才准。 */}
-              <div className="mt-5 grid gap-2.5 @[400px]:grid-cols-2">
-                {[
-                  { icon: Layers, title: "多模态采集", note: "文本、语音与图像统一录入" },
-                  { icon: Search, title: "相似案例检索", note: "关联参考样例与专业知识" },
-                  { icon: FileText, title: "筛查报告生成", note: "汇总分析线索，呈现参考依据" },
-                  { icon: Bell, title: "分级预警处置", note: "辅助人工研判与后续跟踪" },
-                ].map(({ icon: Icon, title, note }) => (
-                  <div
-                    key={title}
-                    className="flex items-start gap-3.5 rounded-2xl border border-slate-200/70 bg-slate-50 p-4"
-                  >
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-50 text-primary-600 ring-1 ring-inset ring-primary-100/70 dark:text-primary-300 dark:ring-primary-400/20">
-                      <Icon className="h-5 w-5" strokeWidth={1.7} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-[15px] font-semibold leading-6 text-slate-800">
-                        {title}
-                      </p>
-                      <p className="mt-0.5 text-[13px] leading-5 text-slate-500">{note}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 border-t border-dashed border-slate-200" />
-
-              {/* 三条要点横排，用竖线分隔（对齐参考图）。
-                  文字统一 14px；开头的能力词用强调色，后半句保持中性，
-                  这样一眼能扫到 "3 模态 / RAG / 人工" 三个抓手。 */}
-              <div className="mt-5 grid gap-3 @[440px]:grid-cols-3 @[440px]:gap-0">
-                {[
-                  { value: "3 模态", label: "联合分析" },
-                  { value: "RAG", label: "报告辅助生成" },
-                  { value: "人工", label: "复核与处置" },
-                ].map((item, index) => (
-                  <div
-                    key={item.value}
-                    className={`min-w-0 whitespace-nowrap text-[14px] leading-6 ${
-                      index === 0
-                        ? "@[440px]:pr-4"
-                        : "@[440px]:border-l @[440px]:border-slate-200 @[440px]:px-4"
-                    }`}
-                  >
-                    <b className="font-semibold text-primary-600 dark:text-primary-300">
-                      {item.value}
-                    </b>
-                    <span className="ml-1.5 text-slate-500">{item.label}</span>
-                  </div>
-                ))}
-              </div>
-
-              <p className="mt-5 text-[13px] leading-6 text-slate-500">
-                多源线索形成报告，预警结果衔接人工复核。
-              </p>
+            {/* 手机 / 平板：右侧插画改为通栏放在内容下面，底部做一点渐隐，
+                避免图片下缘在页面中间切出一条硬边。桌面端由上面那张绝对定位图承担。 */}
+            <div className="mt-10 -mx-6 sm:-mx-10 lg:hidden">
+              <img
+                src={heroCalmLight}
+                alt=""
+                className="block w-full [mask-image:linear-gradient(to_bottom,#000_86%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,#000_86%,transparent)] dark:hidden"
+              />
+              <img
+                src={heroCalmDark}
+                alt=""
+                className="hidden w-full [mask-image:linear-gradient(to_bottom,#000_86%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,#000_86%,transparent)] dark:block"
+              />
             </div>
           </div>
+
         </div>
       </section>
 
