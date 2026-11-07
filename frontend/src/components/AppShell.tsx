@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
+  NotebookPen,
   BrainCircuit,
   ChevronDown,
   ChevronLeft,
@@ -20,6 +21,7 @@ import {
   PanelLeftOpen,
   Rss,
   Search,
+  Settings,
   ShieldCheck,
   Sun,
   TriangleAlert,
@@ -148,12 +150,16 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
        管理端的「多模态采集」是另一件事（全量采集数据看板），仍然独立成项。 */
     {
       path: `${root}/screening`,
-      label: isAdmin ? "筛查管理" : "心理筛查",
+      /* 个人端改叫「心理筛查分析」并归到「智能分析」：
+         这一页现在一半是记录、一半是检索分析，重心在"分析"这一侧，
+         和「筛查记录」（只管回看）分开放更好找。
+         管理端语义没变，仍在「工作空间」里叫「筛查管理」。 */
+      label: isAdmin ? "筛查管理" : "心理筛查分析",
       description: isAdmin
         ? "管理筛查记录，及时了解心理健康状态。"
-        : "文本、语音、图像与量表，多模态记录更完整的状态。",
+        : "做量表、记录近况，并比对相似样本、查看分析结论。",
       icon: ClipboardList,
-      group: "工作空间",
+      group: isAdmin ? "工作空间" : "智能分析",
     },
     ...(isAdmin
       ? [
@@ -209,13 +215,30 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           },
         ]
       : []),
-    {
-      path: `${root}/retrieval`,
-      label: "检索与分析",
-      description: "查找相似案例，获取有据可循的分析与建议。",
-      icon: Search,
-      group: "智能分析",
-    },
+      /* 个人端的「检索与分析」已合并进「心理筛查分析」的检索标签页，
+         这里换成「筛查记录」——把提交过的记录与当时结论按时间沉淀下来。
+         管理端语义不同（跨个案查找证据），仍保留独立检索入口。 */
+    ...(isAdmin
+      ? [
+          {
+            path: `${root}/retrieval`,
+            label: "检索与分析",
+            description: "查找相似案例，获取有据可循的分析与建议。",
+            icon: Search,
+            group: "智能分析",
+          },
+        ]
+      : [
+          {
+            path: `${root}/records`,
+            label: "筛查记录",
+            /* 放进「工作空间」：这一页是"我提交过什么、当时判成什么样"，
+               和「心理筛查分析」（新做一次记录/检索）分开放更好找。 */
+            description: "提交过的文字、语音与照片，按日子回看。",
+            icon: NotebookPen,
+            group: "工作空间",
+          },
+        ]),
     ...(isAdmin
       ? [
           {
@@ -667,6 +690,16 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                         我的档案
                       </Link>
                     )}
+                    {/* 账号设置：跳转到整页 /personal/settings 或 /admin/settings。
+                        不在这里做浮窗 —— 改密码要三个输入框，浮窗局促，点外面就没了。 */}
+                    <Link
+                      to={`${root}/settings`}
+                      onClick={closeNavigation}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+                    >
+                      <Settings className="h-4 w-4" />
+                      账号设置
+                    </Link>
                     <button
                       disabled={signingOut}
                       onClick={handleLogout}

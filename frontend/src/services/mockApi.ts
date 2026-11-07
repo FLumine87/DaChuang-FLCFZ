@@ -450,6 +450,10 @@ export interface PersonalSupplement {
   /** 哈希检索分析报告（保存时同步生成；早期数据可能没有） */
   analysis?: CollectionAnalysis;
   createdAt?: string;
+  /** 我给这条记录写的便签（空串表示没有） */
+  note?: string;
+  /** 便签最后修改时间 */
+  noteUpdatedAt?: string;
 }
 
 /**
@@ -484,6 +488,132 @@ export async function getPersonalSupplements(): Promise<PersonalSupplement[]> {
   if (USE_MOCK) return [];
   const data = await request.get<PersonalSupplement[]>('/api/personal/supplements');
   return Array.isArray(data) ? data : [];
+}
+
+/* ---------------- 筛查记录：便签与删除 ---------------- */
+
+/** 给一条记录写 / 改便签。content 传空串等于删掉这张便签。 */
+export async function saveSupplementNote(
+  supplementId: number,
+  content: string,
+): Promise<{ note: string; noteUpdatedAt: string }> {
+  if (USE_MOCK) return { note: content, noteUpdatedAt: '' };
+  const data = await request.put<{ supplementId: number; note: string; noteUpdatedAt?: string }>(
+    `/api/personal/supplements/${supplementId}/note`,
+    { content },
+  );
+  return { note: data?.note ?? '', noteUpdatedAt: data?.noteUpdatedAt ?? '' };
+}
+
+/** 删除一条记录（连带它的便签与上传的媒体文件）。 */
+export async function deletePersonalSupplement(supplementId: number): Promise<boolean> {
+  if (USE_MOCK) return false;
+  await request.del<{ deleted: number }>(`/api/personal/supplements/${supplementId}`);
+  return true;
+}
+
+/* ---------------- 今日行动计划 ----------------
+ * 后端落库（action_plans 表），所以"完成"能持久化：
+ * 待进行 → 标注完成 → 进归档。前端只负责展示与触发。
+ */
+export interface ActionPlanItem {
+  id: number;
+  title: string;
+  detail: string;
+  /** auto = 系统按条件生成；user = 自己写的 */
+  source: 'auto' | 'user';
+  status: 'pending' | 'done';
+  /** 计划制定的那一刻（右上角显示，精确到分） */
+  createdAt: string;
+  /** 计划截止时间；空串表示没设 */
+  dueAt: string;
+  completedAt: string;
+}
+
+export interface PersonalPlansResponse {
+  pending: ActionPlanItem[];
+  archived: ActionPlanItem[];
+  generatedAt: string;
+}
+
+export async function getPersonalPlans(): Promise<PersonalPlansResponse> {
+  if (USE_MOCK) return { pending: [], archived: [], generatedAt: '' };
+  const data = await request.get<PersonalPlansResponse>('/api/personal/plans');
+  return {
+    pending: Array.isArray(data?.pending) ? data.pending : [],
+    archived: Array.isArray(data?.archived) ? data.archived : [],
+    generatedAt: data?.generatedAt ?? '',
+  };
+}
+
+export async function createPersonalPlan(input: {
+  title: string;
+  detail?: string;
+  dueAt?: string;
+}): Promise<ActionPlanItem | null> {
+  if (USE_MOCK) return null;
+  const data = await request.post<{ plan: ActionPlanItem | null }>('/api/personal/plans', input);
+  return data?.plan ?? null;
+}
+
+export async function completePersonalPlan(id: number): Promise<ActionPlanItem | null> {
+  if (USE_MOCK) return null;
+  const data = await request.post<{ plan: ActionPlanItem | null }>(
+    `/api/personal/plans/${id}/complete`, {});
+  return data?.plan ?? null;
+}
+
+/** 归档 → 退回待进行（误标完成时的后悔药） */
+export async function restorePersonalPlan(id: number): Promise<ActionPlanItem | null> {
+  if (USE_MOCK) return null;
+  const data = await request.post<{ plan: ActionPlanItem | null }>(
+    `/api/personal/plans/${id}/restore`, {});
+  return data?.plan ?? null;
+}
+
+export async function deletePersonalPlan(id: number): Promise<boolean> {
+  if (USE_MOCK) return false;
+  await request.del<{ deleted: number }>(`/api/personal/plans/${id}`);
+  return true;
+}
+
+/* ---------------- 账号设置 ----------------
+ * 改个人信息 + 改密码。后端只放行姓名 / 院系 / 手机 / 邮箱四项
+ * （用户名与角色涉及登录与权限，不开放自改）。
+ */
+export interface MyAccount {
+  username: string;
+  name: string;
+  role: string;
+  department: string;
+  phone: string;
+  email: string;
+}
+
+export async function getMyAccount(): Promise<MyAccount | null> {
+  if (USE_MOCK) return null;
+  const data = await request.get<{ account: MyAccount | null }>('/api/account');
+  return data?.account ?? null;
+}
+
+export async function updateMyAccount(input: {
+  name: string;
+  department?: string;
+  phone?: string;
+  email?: string;
+}): Promise<MyAccount | null> {
+  if (USE_MOCK) return null;
+  const data = await request.put<{ account: MyAccount | null }>('/api/account', input);
+  return data?.account ?? null;
+}
+
+export async function changeMyPassword(input: {
+  oldPassword: string;
+  newPassword: string;
+}): Promise<boolean> {
+  if (USE_MOCK) return false;
+  await request.post<{ changed: boolean }>('/api/account/password', input);
+  return true;
 }
 
 /** 演示数据整包：demo 模式与"演示会话被真实后端拒绝"两种情况共用同一份 */
@@ -617,6 +747,8 @@ export interface RetrievalQuery {
   mediaBase64?: string | null;
   /** 媒体原始文件名（仅用于推断扩展名，决定落盘格式） */
   mediaName?: string;
+  /** 返回条数（1~20，后端另有 1~50 的兜底夹取）。不传则由后端用默认值 */
+  topK?: number;
 }
 
 export async function search(
@@ -638,6 +770,7 @@ export async function search(
       modality_filter: opts.modalityFilter ?? 'all',
       media_base64: opts.mediaBase64 ?? null,
       media_name: opts.mediaName ?? '',
+      top_k: opts.topK,
     }
   );
 }

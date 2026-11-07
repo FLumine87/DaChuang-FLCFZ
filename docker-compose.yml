@@ -1,3 +1,10 @@
+# 项目名固定写死：Compose 默认从目录名推导，而本仓库常被放在中文目录
+# （如 E:\心理疾病预测项目）下，推导结果为空会直接报
+# "project name must not be empty"，导致 docker compose up 无法启动。
+# 写死之后，无论放在哪个目录、叫什么名字，容器名与网络名都稳定为
+# psych-screening-backend-1 / psych-screening-frontend-1。
+name: psych-screening
+
 services:
   backend:
     build:

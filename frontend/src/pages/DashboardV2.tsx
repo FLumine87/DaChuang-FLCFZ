@@ -231,7 +231,7 @@ export default function DashboardV2() {
                 开始多模态记录
               </Link>
               <Link
-                to="/personal/retrieval"
+                to="/personal/screening?tab=retrieval"
                 className="inline-flex items-center gap-2 rounded-xl border border-[#ffffff26] bg-[#ffffff0d] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#ffffff1a]"
               >
                 查看分析依据
@@ -299,7 +299,7 @@ export default function DashboardV2() {
             <h3 className="mt-1.5 text-xl font-semibold text-slate-800">动态跨模态哈希检索 + RAG 心理筛查预警</h3>
             <p className="mt-2 text-sm text-slate-500">一次综合评估如何从原始记录走向可解释、可复核的预警结果</p>
           </div>
-          <Link to="/personal/retrieval" className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700">
+          <Link to="/personal/screening?tab=retrieval" className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700">
             体验完整检索过程
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
@@ -426,7 +426,7 @@ export default function DashboardV2() {
             <p className="mt-3 text-sm leading-6 text-slate-600">
               最近的压力上升与睡眠减少同时出现，情绪记录中也多次提到学习任务。系统会把检索到的相似模式与可信知识结合，给出可追溯的解释与建议。
             </p>
-            <Link to="/personal/retrieval" className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700">
+            <Link to="/personal/screening?tab=retrieval" className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700">
               查看相似案例与引用依据
               <ArrowRight className="h-4 w-4" />
             </Link>

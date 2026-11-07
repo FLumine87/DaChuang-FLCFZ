@@ -221,7 +221,7 @@ export default function FirstRunResult() {
           <div className="mt-4 rounded-xl border border-slate-200 p-3" role="status">
             <p className="text-sm font-medium text-slate-800">本次复核建议{followupLabel ? `：${followupLabel}` : ''}</p>
             <p className="mt-1 text-sm leading-6 text-slate-600">{followupConclusion}</p>
-            <Link to={`/personal/retrieval?${followupParams.toString()}`} className="mt-2 inline-flex text-sm text-primary-600">查看本次参考用途与下一步</Link>
+            <Link to={`/personal/screening?tab=retrieval&${followupParams.toString()}`} className="mt-2 inline-flex text-sm text-primary-600">查看本次参考用途与下一步</Link>
           </div>
         )}
 

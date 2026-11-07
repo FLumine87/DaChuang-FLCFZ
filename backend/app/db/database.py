@@ -258,6 +258,49 @@ CREATE TABLE IF NOT EXISTS kg_evidence (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_kg_evidence_screening ON kg_evidence(screening_id);
+
+-- 今日行动计划：系统按规则自动生成 + 用户自己写的那两类都放这张表。
+-- 设计要点：
+--   · rule_key   —— 自动计划去重用。同一用户同一规则只保留一条待办，
+--                   完成后即使规则再次命中也不再生成（否则"完成了又冒出来"）。
+--   · source     —— auto（系统按条件生成）/ user（自己写的）。
+--   · status     —— pending（待进行）/ done（已完成，进归档）。
+--   · created_at —— 计划制定的那一刻，前端右上角显示到分钟。
+--   · due_at     —— 计划截止时间，待进行列表按它升序排。
+--   · completed_at —— 标注完成的时刻，归档里显示。
+CREATE TABLE IF NOT EXISTS action_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    detail TEXT,
+    source TEXT NOT NULL DEFAULT 'user',
+    rule_key TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    due_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS ix_action_plans_user ON action_plans(user_id, status);
+-- 注意：这里**不加** (user_id, rule_key) 唯一索引。
+-- 一条自动计划被标注完成后，同一规则在冷却期过后仍应能再次生成
+-- （例如"做一次心理筛查"完成后，隔两周没做还要再提醒）。
+-- 去重逻辑放在代码里：同 rule_key 若还有待办、或完成未满冷却期，就跳过。
+CREATE INDEX IF NOT EXISTS ix_action_plans_rule ON action_plans(user_id, rule_key);
+
+-- 心理日记的「便签」：给某一条记录补一段自己的注解。
+-- 与记录分开存而不是加列到 screening_supplements，原因有两条：
+--   1) 不必给既有表做 ALTER，老库直接可用；
+--   2) 便签可以独立于记录存在/清空，语义上是"我对这条的批注"，不是记录内容本身。
+-- supplement_id 唯一：一条记录最多一张便签，重复保存走 UPDATE。
+CREATE TABLE IF NOT EXISTS supplement_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplement_id INTEGER NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_supplement_notes_user ON supplement_notes(user_id);
 """
 
 

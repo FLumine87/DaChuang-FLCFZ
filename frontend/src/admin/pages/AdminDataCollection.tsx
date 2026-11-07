@@ -104,7 +104,7 @@ function TextTab({ rows }: { rows: TextSubmission[] }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="ui-card lg:col-span-2 overflow-hidden">
           <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-            <p className="text-sm font-semibold text-slate-700">文本日记列表</p>
+            <p className="text-sm font-semibold text-slate-700">文本记录列表</p>
             <p className="text-xs text-slate-400">共 {filtered.length} 条</p>
           </div>
           <div className="ui-table-scroll"><table className="ui-table">
@@ -149,7 +149,7 @@ function TextTab({ rows }: { rows: TextSubmission[] }) {
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="font-semibold text-slate-800">{selected.username} 的文本日记</p>
+                <p className="font-semibold text-slate-800">{selected.username} 的文本记录</p>
                 <button onClick={() => setSelected(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
@@ -483,7 +483,7 @@ export default function AdminDataCollection() {
       {/* Header summary */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: '文本日记', count: data?.text.length ?? 0, sub: '条用户提交', color: 'bg-indigo-50 text-indigo-600' },
+          { label: '文本记录', count: data?.text.length ?? 0, sub: '条用户提交', color: 'bg-indigo-50 text-indigo-600' },
           { label: '语音条目', count: data?.audio.length ?? 0, sub: '条音频记录', color: 'bg-violet-50 text-violet-600' },
           { label: '图像上传', count: data?.image.length ?? 0, sub: '张图像', color: 'bg-amber-50 text-amber-600' },
         ].map((item) => (

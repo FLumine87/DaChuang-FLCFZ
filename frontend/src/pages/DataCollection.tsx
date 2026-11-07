@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   FileText, Mic, ImageIcon, Upload, Sparkles,
   Square, Play, Pause, Trash2, CheckCircle2, AlertCircle, AlertTriangle, X,
-  ClipboardList,
+  ClipboardList, Search, ArrowRight,
 } from 'lucide-react';
 import {
   uploadFile,
@@ -14,6 +14,7 @@ import {
   type CollectionAnalysis,
 } from '../services/mockApi';
 import ScreeningWorkspace from './ScreeningWorkspace';
+import Retrieval from './Retrieval';
 
 interface PersistResult {
   ok: boolean;
@@ -45,80 +46,148 @@ async function persistCollection(
   }
 }
 
-type Tab = 'text' | 'audio' | 'image' | 'scale';
+/* 「心理筛查」一页四件事：
+   text / audio / image / scale 是**采集**（把近况记下来），
+   retrieval 是**检索**（拿这些记录去比对相似样本、看分析结论）。
+   合并成一页后，采集完顺手就能检索，不用在两个菜单之间来回跳。 */
+type Tab = 'text' | 'audio' | 'image' | 'scale' | 'retrieval';
 type RecordState = 'idle' | 'requesting' | 'recording' | 'stopped';
 
-/* 报告与命中的等级外观：与全站 稳定/关注/警告/高危 同一套口径 */
-const LEVEL_TONE: Record<string, { badge: string; dot: string; text: string }> = {
-  unknown: { badge: 'border-slate-200 bg-slate-50 text-slate-600', dot: 'bg-slate-400', text: 'text-slate-500' },
-  green: { badge: 'border-success-500/30 bg-success-50 text-success-700', dot: 'bg-success-500', text: 'text-success-600' },
-  yellow: { badge: 'border-warning-500/30 bg-warning-50 text-warning-700', dot: 'bg-warning-500', text: 'text-warning-600' },
-  orange: { badge: 'border-orange-500/30 bg-orange-50 text-orange-700', dot: 'bg-orange-500', text: 'text-orange-600' },
-  red: { badge: 'border-danger-500/30 bg-danger-50 text-danger-700', dot: 'bg-danger-500', text: 'text-danger-600' },
+/* 报告与命中的等级外观：与全站 稳定/关注/警告/高危 同一套口径。
+   edge 是卡片左侧的竖色条（一眼看出风险档位），bar 是相似度进度条的填充色。 */
+const LEVEL_TONE: Record<string, { badge: string; dot: string; text: string; edge: string; bar: string }> = {
+  unknown: { badge: 'border-slate-200 bg-slate-50 text-slate-600', dot: 'bg-slate-400', text: 'text-slate-500', edge: 'border-l-slate-300', bar: 'bg-slate-400' },
+  green: { badge: 'border-success-500/30 bg-success-50 text-success-700', dot: 'bg-success-500', text: 'text-success-600', edge: 'border-l-success-500', bar: 'bg-success-500' },
+  yellow: { badge: 'border-warning-500/30 bg-warning-50 text-warning-700', dot: 'bg-warning-500', text: 'text-warning-600', edge: 'border-l-warning-500', bar: 'bg-warning-500' },
+  orange: { badge: 'border-orange-500/30 bg-orange-50 text-orange-700', dot: 'bg-orange-500', text: 'text-orange-600', edge: 'border-l-orange-500', bar: 'bg-orange-500' },
+  red: { badge: 'border-danger-500/30 bg-danger-50 text-danger-700', dot: 'bg-danger-500', text: 'text-danger-600', edge: 'border-l-danger-500', bar: 'bg-danger-500' },
 };
 const LEVEL_NAME: Record<string, string> = { unknown: '未评估', green: '稳定', yellow: '关注', orange: '警告', red: '高危' };
 const MODALITY_NAME: Record<string, string> = { text: '文本', audio: '语音', image: '图像' };
+const MODALITY_ICON = { text: FileText, audio: Mic, image: ImageIcon } as const;
 
-/* 一次采集的哈希检索报告卡：等级 + 结论 + 命中记录 + 预警回执 */
+/* 一次采集的哈希检索报告卡
+   设计要点：
+     · 左侧竖色条 = 风险档位，扫一眼就知道这条重不重要；
+     · 结论是主角（大一号字），依据退成小字；
+     · 命中记录不再是一排数字，改成"模态 → 摘要 → 相似度条 → 标签"的整齐行，
+       相似度用进度条而不是裸小数，方便横向比较；
+     · 达到预警级别时底部给一条醒目的回执，带跳转。 */
 function ReportCard({ report }: { report: CollectionAnalysis }) {
   const tone = LEVEL_TONE[report.level] ?? LEVEL_TONE.unknown;
+  const Icon = MODALITY_ICON[report.modality] ?? FileText;
+  const topHits = report.hits.slice(0, 5);
+
   return (
-    <div className="ui-card p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary-500" />
-          <span className="font-semibold text-slate-800">筛查评估与检索参考</span>
-          <span className="text-xs text-slate-400">
-            {MODALITY_NAME[report.modality] ?? ''}线索{report.createdAt ? ` · ${report.createdAt}` : ''}
+    <article
+      className={`overflow-hidden rounded-2xl border border-slate-200 border-l-4 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${tone.edge}`}
+    >
+      <div className="p-5">
+        {/* 标题行 */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-50">
+              <Icon className="h-4 w-4 text-slate-500" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[14px] font-semibold text-slate-800">筛查评估与检索参考</p>
+              <p className="mt-0.5 text-[11.5px] text-slate-400">
+                {MODALITY_NAME[report.modality] ?? ''}线索
+                {report.createdAt ? ` · ${report.createdAt}` : ''}
+                {topHits.length > 0 ? ` · 命中 ${report.hits.length} 条` : ''}
+              </p>
+            </div>
+          </div>
+
+          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium ${tone.badge}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
+            {report.levelLabel}
           </span>
         </div>
-        <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium ${tone.badge}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
-          {report.levelLabel}
-        </span>
-      </div>
 
-      <p className="mt-3 text-sm leading-6 text-slate-700">{report.conclusion}</p>
-      <p className="mt-1.5 text-xs text-slate-400">评估依据：{report.reason}</p>
-      {report.supplementId && <Link to={`/personal/retrieval?assessmentSupplementId=${report.supplementId}${report.query ? `&q=${encodeURIComponent(report.query)}` : ''}`} className="mt-3 inline-flex text-sm font-medium text-primary-600">查看采用依据并继续本次筛查</Link>}
+        {/* 结论：这份报告的正题 */}
+        <p className="mt-4 text-[14px] leading-7 text-slate-700">{report.conclusion}</p>
+        <p className="mt-1.5 text-[12px] leading-5 text-slate-400">评估依据：{report.reason}</p>
 
-      {report.hits.length > 0 && (
-        <div className="mt-3 rounded-xl border border-slate-100 p-3">
-          <p className="text-[12.5px] font-medium text-slate-500">
-            最相似的语料记录（真实数据集 · 跨模态检索）
-          </p>
-          <ul className="mt-1.5 divide-y divide-slate-100">
-            {report.hits.slice(0, 5).map((hit) => {
-              const hTone = LEVEL_TONE[hit.alertLevel] ?? LEVEL_TONE.unknown;
-              return (
-                <li key={hit.id} className="flex items-center gap-3 py-2 text-[13px]">
-                  <span className="w-9 shrink-0 text-xs text-slate-400">
-                    {hit.modalityLabel ?? MODALITY_NAME[hit.modality ?? ''] ?? ''}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-slate-600">{hit.summary}</span>
-                  <span className="shrink-0 tabular-nums text-slate-500">{hit.similarity.toFixed(3)}</span>
-                  <span className={`shrink-0 text-[11.5px] font-medium ${hTone.text}`}>
-                    样本标签：{LEVEL_NAME[hit.alertLevel] ?? '未评估'}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+        {/* 命中记录 */}
+        {topHits.length > 0 && (
+          <div className="mt-4 rounded-xl bg-slate-50/80 p-3.5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="text-[12px] font-medium text-slate-600">最相似的语料记录</p>
+              <span className="text-[11px] text-slate-400">
+                真实数据集 · 跨模态检索
+                {report.hits.length > topHits.length ? ` · 仅显示前 ${topHits.length} 条` : ''}
+              </span>
+            </div>
 
-      {report.alertId && (
-        <div className="mt-3 flex items-start gap-2 rounded-lg border border-danger-500/30 bg-danger-50 px-3.5 py-2.5">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" />
-          <p className="text-[13px] leading-5 text-danger-700">
-            本次分析达到预警级别，已生成预警（{report.alertId}）并同步到预警中心。
-            <Link to="/personal/alerts" className="ml-1 font-medium underline underline-offset-2">
-              去查看
+            <ul className="mt-2 space-y-1.5">
+              {topHits.map((hit) => {
+                const hTone = LEVEL_TONE[hit.alertLevel] ?? LEVEL_TONE.unknown;
+                const pct = Math.round(hit.similarity * 100);
+                return (
+                  <li
+                    key={hit.id}
+                    className="rounded-lg bg-white px-3 py-2 ring-1 ring-slate-100"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10.5px] text-slate-500">
+                        {hit.modalityLabel ?? MODALITY_NAME[hit.modality ?? ''] ?? '—'}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-slate-600">
+                        {hit.summary}
+                      </span>
+                      <span className={`shrink-0 text-[11px] font-medium ${hTone.text}`}>
+                        {LEVEL_NAME[hit.alertLevel] ?? '未评估'}
+                      </span>
+                    </div>
+                    {/* 相似度：数字 + 细条，方便横向比较 */}
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full ${hTone.bar}`}
+                          style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
+                        />
+                      </div>
+                      <span className="shrink-0 text-[10.5px] tabular-nums text-slate-400">
+                        {pct}%
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        {/* 预警回执 */}
+        {report.alertId && (
+          <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-danger-500/30 bg-danger-50 px-3.5 py-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" />
+            <div className="min-w-0">
+              <p className="text-[12.5px] font-medium text-danger-700">本次分析达到预警级别</p>
+              <p className="mt-0.5 text-[11.5px] leading-5 text-danger-700/80">
+                已生成预警 {report.alertId}，并同步到预警中心。
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 底部操作 */}
+        {report.supplementId && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3.5">
+            <p className="text-[11px] text-slate-400">
+              报告已随这条记录挂到你的档案
+            </p>
+            <Link
+              to={`/personal/screening?tab=retrieval&assessmentSupplementId=${report.supplementId}${report.query ? `&q=${encodeURIComponent(report.query)}` : ''}`}
+              className="inline-flex items-center gap-1 text-[12.5px] font-medium text-primary-600 hover:text-primary-700"
+            >
+              查看采用依据并继续本次筛查
             </Link>
-          </p>
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -431,7 +500,7 @@ function ImageTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
       <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-2">绘画 / 图像上传</h3>
         <p className="text-sm text-slate-500 mb-4">
-          可上传房树人绘画或情绪日记配图。图片仅用于辅助了解情绪表达，不能单独作为诊断依据。
+          可上传房树人绘画或情绪记录配图。图片仅用于辅助了解情绪表达，不能单独作为诊断依据。
         </p>
         <div
           onClick={() => fileRef.current?.click()}
@@ -455,7 +524,7 @@ function ImageTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
         />
         <div className="mt-3 space-y-1 text-xs leading-5 text-slate-500">
           <p className="text-[12px]">房树人（HTP）：画一幅包含房子、树和人的图，拍照或扫描后上传；不需要画得好看。</p>
-          <p>情绪日记配图：上传能表达当天心情的照片或画，例如风景或涂鸦。</p>
+          <p>情绪记录配图：上传能表达当天心情的照片或画，例如风景或涂鸦。</p>
         </div>
       </div>
 
@@ -541,10 +610,13 @@ function TextTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  /* 保存成功后拿到的补充记录 id：跳转检索页时带上它，可以直接打开这条记录
+     已经算好的结论，而不是让用户再去手动搜一遍。 */
+  const [savedSupplementId, setSavedSupplementId] = useState<number | null>(null);
 
-  /* 保存日记：不经过文件上传，直接作为 text 类型的补充落库
+  /* 保存这段文字：不经过文件上传，直接作为 text 类型的补充落库
      （有筛查记录挂记录、没有就挂用户名下，与语音/图片共用同一条读取链路：
-     首页「最近一次输入」+ 检索页「我的记录」）。
+     首页「最近一次输入」+ 筛查记录）。
      保存后后端同步跑哈希检索引擎，返回的检索报告交给页面底部展示。 */
   const submitDiary = async () => {
     const content = freeText.trim();
@@ -558,6 +630,7 @@ function TextTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
       const res = await persistCollection('text', { text: content });
       if (res.ok) {
         setSaved(true);
+        setSavedSupplementId(res.report?.supplementId ?? null);
         if (res.report) onReport(res.report);
       } else {
         setError('保存失败，请检查网络后重试');
@@ -568,11 +641,11 @@ function TextTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
   };
 
   return (
-    /* 纯文本采集：量表入口已经独立成「量表填写」标签页，这里只留日记本身 */
+    /* 纯文本采集：量表入口已经独立成「量表填写」标签页，这里只留文字记录本身 */
     <div className="ui-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="font-semibold text-slate-800">开放式情绪日记</h3>
+          <h3 className="font-semibold text-slate-800">文本采集</h3>
           <p className="mt-1 text-sm text-slate-500">
             描述你近期的情绪状态、睡眠情况、人际关系和学习压力变化。
           </p>
@@ -580,7 +653,7 @@ function TextTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
         <span className="text-xs text-slate-400">{freeText.length} 字</span>
       </div>
       <textarea
-        aria-label="情绪日记内容"
+        aria-label="文本采集内容"
         value={freeText}
         onChange={(e) => {
           setFreeText(e.target.value);
@@ -592,7 +665,7 @@ function TextTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
       />
       <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
         <p className="text-xs leading-5 text-slate-500">
-          日记会保存到你的档案，仅用于自我回顾与检索分析。
+          这段文字会保存到你的档案，仅用于自我回顾与检索分析。
         </p>
         <button
           onClick={submitDiary}
@@ -603,11 +676,22 @@ function TextTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
         </button>
       </div>
       {saved && (
-        <div className="mt-3 flex items-center gap-2 py-2.5 px-4 bg-success-50 rounded-lg border border-success-500/30">
-          <CheckCircle2 className="w-4 h-4 text-success-600" />
-          <p className="text-sm text-success-700">
-            日记已保存，可在首页「最近一次输入」与「检索与分析」中查看
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-success-500/30 bg-success-50 py-2.5 px-4">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-success-600" />
+          <p className="min-w-0 flex-1 text-sm leading-6 text-success-700">
+            记录已保存到你的档案，可在「筛查记录」里回看。
           </p>
+          {/* 直接把这次写的内容带进检索页并自动分析 —— 用户不用再手动搜一遍。
+              带上 supplementId 还能直接打开这条记录已算好的结论。 */}
+          <Link
+            to={`/personal/screening?tab=retrieval&q=${encodeURIComponent(freeText.trim())}${
+              savedSupplementId ? `&assessmentSupplementId=${savedSupplementId}` : ''
+            }`}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-success-600 px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-success-700"
+          >
+            用这段文字做检索分析
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
       )}
       {error && (
@@ -632,7 +716,7 @@ export default function DataCollection() {
   const activeTab: Tab =
     params.get('record') || params.get('paper')
       ? 'scale'
-      : tabParam === 'audio' || tabParam === 'image' || tabParam === 'scale'
+      : tabParam === 'audio' || tabParam === 'image' || tabParam === 'scale' || tabParam === 'retrieval'
         ? tabParam
         : 'text';
 
@@ -675,16 +759,18 @@ export default function DataCollection() {
     { id: 'audio', label: '语音采集', icon: Mic },
     { id: 'image', label: '图像采集', icon: ImageIcon },
     { id: 'scale', label: '量表填写', icon: ClipboardList },
+    { id: 'retrieval', label: '检索分析', icon: Search },
   ];
 
   return (
     <div className="space-y-6">
       <div className="ui-card p-5">
-        <h3 className="text-base font-semibold text-slate-800">从四个角度记录一次</h3>
+        <h3 className="text-base font-semibold text-slate-800">记录一次，也能查一次</h3>
         <p className="text-sm text-slate-500 mt-2 leading-6">
-          量表用于标准计分，文本、语音和图像用于补充本人近况与检索相关参考。
-          提交后可查看<span className="font-medium text-slate-600">本人依据、参考用途和后续筛查建议</span>，
-          并继续补充问题或填写适用量表。需要专业复核时会同步生成预警；参考样本标签不直接作为本人结论。
+          量表用于标准计分，文本、语音和图像用于补充本人近况。
+          这些记录既能作为<b className="font-medium text-slate-600">本次筛查的依据</b>，
+          也能在「检索分析」里<b className="font-medium text-slate-600">比对相似样本、拿到有据可循的结论</b>。
+          需要专业复核时会同步生成预警；参考样本标签不直接作为本人结论。
         </p>
       </div>
 
@@ -719,17 +805,36 @@ export default function DataCollection() {
       {activeTab === 'audio' && <AudioTab onReport={pushReport} />}
       {activeTab === 'image' && <ImageTab onReport={pushReport} />}
       {activeTab === 'scale' && <ScreeningWorkspace />}
+      {/* 检索分析：与采集同页。Retrieval 的根元素是 space-y-6 的普通容器，
+          直接嵌进来即可，不需要为它另做一套页面外壳。 */}
+      {activeTab === 'retrieval' && <Retrieval />}
 
       {/* ============ 检索报告（本页底部）============
           提交后由后端哈希检索引擎同步分析；报告连同结论一起挂载在补充记录上，
           这里展示最新的几份（含进入页面前的历史结论）。
           量表页不显示：那一页自己就有作答记录与检索快照，底部再挂一段
-          采集报告会把"填量表"这件事冲散。 */}
-      {activeTab !== 'scale' && (
+          采集报告会把"填量表"这件事冲散。
+          检索分析页也不显示：那一页本身就是检索，再挂一遍历史报告是重复信息。 */}
+      {(activeTab === 'text' || activeTab === 'audio' || activeTab === 'image') && (
         <div className="pt-2">
-          <p className="ml-2 text-[13px] font-semibold uppercase tracking-[0.14em] text-primary-500">
-            检索报告
-          </p>
+          <div className="ml-2 flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-primary-500">
+                检索报告
+              </p>
+              <p className="mt-1 text-[12px] text-slate-400">
+                {reports.length > 0
+                  ? `最近 ${reports.length} 次提交的分析 · 新的在前`
+                  : '提交后会在这里生成'}
+              </p>
+            </div>
+            {reports.length > 0 && (
+              <span className="text-[11px] text-slate-400">
+                按系统等级从高到低比对
+              </span>
+            )}
+          </div>
+
           {reports.length > 0 ? (
             <div className="mt-3 space-y-4">
               {reports.map((report, idx) => (
@@ -737,10 +842,14 @@ export default function DataCollection() {
               ))}
             </div>
           ) : (
-            <div className="ui-card mt-3 p-5">
-              <p className="text-sm text-slate-400">
-                提交文本日记、语音或图像后，这里会显示哈希检索引擎的检索报告：
-                相似语料记录、风险等级与处置建议。报告会随采集内容一起挂载到你的档案。
+            <div className="ui-card mt-3 p-8 text-center">
+              <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-primary-50">
+                <Sparkles className="h-5 w-5 text-primary-500" />
+              </span>
+              <p className="mt-3 text-sm text-slate-500">还没有检索报告</p>
+              <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-6 text-slate-400">
+                提交一段文字、语音或图像之后，后端会同步跑一次跨模态检索，
+                把相似语料、风险等级与处置建议生成报告挂到你的档案里 —— 结果会出现在这里。
               </p>
             </div>
           )}

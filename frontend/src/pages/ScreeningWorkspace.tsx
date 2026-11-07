@@ -187,10 +187,10 @@ export default function ScreeningWorkspace() {
     }
     const supplementId = params.get('assessmentSupplementId');
     if (supplementId && recordId) {
-      const next = new URLSearchParams({ assessmentSupplementId: supplementId, screeningId: recordId });
+      const next = new URLSearchParams({ tab: 'retrieval', assessmentSupplementId: supplementId, screeningId: recordId });
       const query = params.get('assessmentQuery');
       if (query) next.set('q', query);
-      navigate(`/personal/retrieval?${next.toString()}`);
+      navigate(`/personal/screening?${next.toString()}`);
     }
   };
 

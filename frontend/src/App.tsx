@@ -1,10 +1,11 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { lazy, Suspense, type ReactElement } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import DashboardV2 from './pages/DashboardV2';
 import DataCollection from './pages/DataCollection';
-import Retrieval from './pages/Retrieval';
+import ScreeningRecords from './pages/ScreeningRecords';
+import AccountSettings from './pages/AccountSettings';
 import Alerts from './pages/Alerts';
 import Cases from './pages/Cases';
 import SystemSelector from './pages/SystemSelector';
@@ -60,6 +61,21 @@ function RouteFallback() {
   );
 }
 
+/**
+ * 旧地址 /personal/retrieval → 新的 /personal/screening?tab=retrieval
+ *
+ * 为什么不用普通的 <Navigate to="...">：
+ * 旧链接常带查询参数（?q=<那条输入>、?assessmentSupplementId=<id>、?screeningId=），
+ * 直接被重定向到不带参数的地址会把它们全丢掉，点进来就只剩一张空检索页。
+ * 这里先原样搬过去再补一个 tab=retrieval。
+ */
+function LegacyRetrievalRedirect() {
+  const [params] = useSearchParams();
+  const next = new URLSearchParams(params);
+  next.set('tab', 'retrieval');
+  return <Navigate to={`/personal/screening?${next.toString()}`} replace />;
+}
+
 export default function App() {
   return (
     <Suspense fallback={<RouteFallback />}>
@@ -113,12 +129,18 @@ export default function App() {
         <Route index element={<Navigate to="/personal/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="dashboard-v2" element={<DashboardV2 />} />
-        {/* 个人端「心理筛查」= 原筛查页 + 多模态采集页合并，四个标签页
-            由 ?tab= 切换；旧地址 /personal/data-collection 重定向过去。
-            ?record= / ?paper= 之类的老链接自动落在「量表填写」页。 */}
+        {/* 个人端「心理筛查」= 原筛查 + 多模态采集 + 检索分析，五个标签页都由 ?tab= 切换。
+            「检索与分析」已并入本页的 retrieval 标签，不再单独占一个菜单项。 */}
         <Route path="screening" element={<DataCollection />} />
         <Route path="data-collection" element={<Navigate to="/personal/screening" replace />} />
-        <Route path="retrieval" element={<Retrieval />} />
+        {/* 旧的检索地址重定向到检索标签页（保留 q / assessmentSupplementId 等参数） */}
+        <Route path="retrieval" element={<LegacyRetrievalRedirect />} />
+        {/* 筛查记录：提交过的文字/语音/照片与当时结论，按日子回看。
+            旧地址 /personal/diary 重定向过来，避免收藏的链接失效。 */}
+        <Route path="records" element={<ScreeningRecords />} />
+        <Route path="diary" element={<Navigate to="/personal/records" replace />} />
+        {/* 账号设置：整页而不是弹窗，从顶栏头像菜单进来 */}
+        <Route path="settings" element={<AccountSettings />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="cases" element={<Cases />} />
         {/* 智能心理助手（个人端 Agent + 知识图谱） */}
@@ -142,6 +164,8 @@ export default function App() {
         <Route path="cases" element={<AdminCases />} />
         <Route path="judgement" element={<AdminJudgement />} />
         <Route path="agent-workbench" element={<AdminAgentWorkspace />} />
+        {/* 管理端同样有整页的账号设置 */}
+        <Route path="settings" element={<AccountSettings />} />
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 

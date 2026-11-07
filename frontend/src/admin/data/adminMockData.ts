@@ -46,6 +46,30 @@ export interface RetrievalResult {
   tags: string[];
   alertLevel: 'green' | 'yellow' | 'orange' | 'red';
   date: string;
+  /**
+   * 以下字段与后端 app/handlers/retrieval.py 的 to_frontend_hit() 一一对应。
+   * 管理端此前没有声明它们，于是后端明明返回了媒体、界面却不显示图/音。
+   * 补齐后即可复用与个人端同一套「数据集样本图片 / 语音」展示。
+   */
+  /** 命中单元的真实媒体缩略图（内联 data URL：图像→灰度图，语音→梅尔频谱） */
+  media?: string | null;
+  /** 媒体形态标识：facial_image（面部图像）/ speech_pcm16（语音）/ self_report（文本） */
+  mediaKind?: string | null;
+  /** 媒体真实元数据：文件名 / 来源目录 / 语音的情绪·说话人·发音·时长 */
+  mediaMeta?: {
+    file?: string;
+    dir?: string;
+    speaker?: string;
+    word?: string;
+    emotion?: string;
+    duration_sec?: number | null;
+    sample_rate?: number | null;
+  } | null;
+  recordId?: string;
+  modalityLabel?: string;
+  crossModal?: boolean;
+  dataSource?: string;
+  dataset?: string;
 }
 
 export const screeningRecords: ScreeningRecord[] = [

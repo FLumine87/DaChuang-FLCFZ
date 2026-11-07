@@ -40,6 +40,25 @@ ROUTES = [
     # 报告区显示"大模型思考中"，再异步请求本接口
     ("POST", "/api/personal/rag-report", personal.personal_rag_report, "user"),
 
+    # 今日行动计划：待进行 / 归档两个分区由后端一并返回。
+    # GET 时会顺带按规则补生成"该提醒的事"（如两周没做量表），因此是幂等的 GET。
+    ("GET", "/api/personal/plans", personal.get_personal_plans, "user"),
+    ("POST", "/api/personal/plans", personal.create_personal_plan, "user"),
+    ("POST", "/api/personal/plans/{plan_id}/complete", personal.complete_personal_plan, "user"),
+    # 归档里的「回归」：误标完成时把计划退回待进行
+    ("POST", "/api/personal/plans/{plan_id}/restore", personal.restore_personal_plan, "user"),
+    ("DELETE", "/api/personal/plans/{plan_id}", personal.delete_personal_plan, "user"),
+
+    # 账号设置（顶栏头像菜单）：改个人信息 + 改密码。
+    # auth 用 "user" 级别 = 任何已登录角色，管理端也能用同一套接口。
+    ("GET", "/api/account", personal.get_my_account, "user"),
+    ("PUT", "/api/account", personal.update_my_account, "user"),
+    ("POST", "/api/account/password", personal.change_my_password, "user"),
+
+    # 心理日记：每条记录的便签（写 / 改 / 清空）与删除记录本身
+    ("PUT", "/api/personal/supplements/{supplement_id}/note", personal.save_supplement_note, "user"),
+    ("DELETE", "/api/personal/supplements/{supplement_id}", personal.delete_personal_supplement, "user"),
+
     # ---- 管理端 ----
     ("GET", "/api/admin/test", admin.test_admin, "admin"),
     ("GET", "/api/admin/dashboard", admin.get_admin_dashboard, "admin"),

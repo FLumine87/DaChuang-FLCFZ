@@ -49,6 +49,7 @@ import { USE_MOCK } from '../services/http';
 import { supplementModalityText } from '../services/localKg';
 import type { RetrievalResult, RetrievalIndexInfo } from '../data/mockData';
 import CameraCapture from '../components/CameraCapture';
+import ThemeHistogram from '../components/ThemeHistogram';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { toCorpusWavFile } from '../utils/audioRecorder';
 import { assessRetrieval, type RetrievalAnalysisReport as RagReport, type RetrievalAssessment } from '../services/screeningAssessment';
@@ -98,6 +99,9 @@ export default function Retrieval() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<'all' | 'text' | 'audio' | 'image'>('all');
+  /* 返回条数：滑条控制 1~20 条（后端另有 1~50 的兜底夹取）。
+     默认 10 —— 少于 3 条页面就没有"查看其余"这一步，多于 20 条一屏读不完。 */
+  const [topK, setTopK] = useState(10);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<RetrievalResult[] | null>(null);
   /* 语料库历史记录一次先列 20 条，避免 300 条一口气铺满页面 */
@@ -428,13 +432,16 @@ export default function Retrieval() {
     scopeOverride?: typeof scope,
     queryOverride?: string,
     persistOverride?: boolean,
+    topKOverride?: number,
   ) => {
     /* queryOverride 用于「带参进来自动检索」：setQuery 是异步的，同一轮事件里
-       读到的 query 还是旧值，所以显式传入本次要用的查询词。 */
+       读到的 query 还是旧值，所以显式传入本次要用的查询词。
+       topKOverride 同理用于滑条：setTopK 也是异步的。 */
     const effQuery = queryOverride ?? query;
     const effCanSearch = queryModality === 'text' ? !!effQuery.trim() : !!mediaFile;
     if (!effCanSearch) return;
     const effScope = scopeOverride ?? scope;
+    const effTopK = topKOverride ?? topK;
     const sequence = ++searchSeqRef.current;
     ++reportSeqRef.current;
     const returnSupplementId = queryModality === 'text'
@@ -464,6 +471,7 @@ export default function Retrieval() {
         modalityFilter: effScope === 'all' ? undefined : effScope,
         mediaBase64,
         mediaName: mediaFile?.name,
+        topK: effTopK,
       });
       /* 检索结果秒出，立即渲染（哈希检索的优势）。报告分两步：
          ① 检索接口附带的规则结论先存为兜底（大模型不可用时展示）；
@@ -510,7 +518,8 @@ export default function Retrieval() {
     }
   };
 
-  /* 从首页「查看检索依据」跳进来时地址是 #/personal/retrieval?q=<那条输入>。
+  /* 从首页「查看检索依据」跳进来时地址是
+     #/personal/screening?tab=retrieval&q=<那条输入>（本组件已并入「心理筛查」页）。
      本项目用 HashRouter，查询串在 hash 里 —— useSearchParams 读的正是 hash 里的
      location，而 window.location.search 在 hash 路由下永远是空的（别用它）。
      带 q 就自动填入搜索框并立即检索，用户不必再输一遍；没有 q 时保持空表单。
@@ -797,6 +806,38 @@ export default function Retrieval() {
           </span>
         </div>
 
+        {/* 返回条数滑条：拖到几条就返回几条（1~20）。
+            拖动时如果已经有结果，直接按新条数重跑一次，不用再点「开始检索」。 */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-slate-100 pt-3">
+          <label htmlFor="topk-range" className="text-xs text-slate-400">
+            返回条数
+          </label>
+          <input
+            id="topk-range"
+            type="range"
+            min={1}
+            max={20}
+            step={1}
+            value={topK}
+            aria-label="返回条数"
+            onChange={async (e) => {
+              const v = Number(e.target.value);
+              setTopK(v);
+              if (!results || !canSearch) return;
+              await handleSearch(undefined, undefined, undefined, v);
+              // 滑条明确要求 N 条，就别再折叠成 3 条，否则看着像没生效
+              setShowAllResults(true);
+            }}
+            className="h-1.5 w-40 cursor-pointer accent-primary-500"
+          />
+          <span className="inline-flex min-w-[3.2rem] items-center justify-center rounded-md bg-primary-50 px-2 py-0.5 text-xs font-medium tabular-nums text-primary-600">
+            {topK} 条
+          </span>
+          <span className="text-xs text-slate-400">
+            1–20 条，默认 10；拖动即按新条数重新检索
+          </span>
+        </div>
+
 
         <div className="mt-3 border-t border-slate-100 pt-3">
           <label className="inline-flex cursor-pointer items-center gap-2.5">
@@ -930,6 +971,12 @@ export default function Retrieval() {
                   <ArrowLeft className="w-4 h-4" /> 返回历史记录
                 </button>
               </div>
+            </div>
+            {/* 命中主题分布柱状图：让使用者一眼看出"这批相似参考集中在哪些困扰主题上"，
+                而不是逐条去读。数据直接来自检索结果的 tags 字段（不需要额外接口）。
+                放在结果列表之上作为可视化摘要。 */}
+            <div className="px-5 pt-5">
+              <ThemeHistogram hits={results} />
             </div>
             <div className="divide-y divide-slate-100">
               {(showAllResults ? results : results.slice(0, 3)).map((result) => {

@@ -188,6 +188,10 @@ export interface PersonalTimelineEvent {
   type: 'screening' | 'warning' | 'collection' | 'plan';
   title: string;
   detail: string;
+  /** 采集类事件（type=collection）的模态：text / audio / image */
+  modality?: string;
+  /** 该模态的中文名，后端一并给出（文字 / 语音 / 图像） */
+  modalityLabel?: string;
 }
 
 export const userProfile: UserProfile = {

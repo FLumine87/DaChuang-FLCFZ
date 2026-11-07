@@ -56,6 +56,12 @@ offline/*
 offline/datasets/*
 !offline/datasets/README.md
 
+# ---- 根目录 data/：本地数据集参考资料 ----
+# 这是开发时放在仓库根下的数据集素材（AVDD-TCMI / EATD / IEMOCAP / Reddit 等），
+# 约 28 GB，代码不读取它（引擎读的是 offline/datasets），纯粹是本地参考。
+# 不进库：体积远超 GitHub 单文件/仓库限制，且数据集本身带使用条款。
+data/
+
 # ---- 环境变量（保留 .env.example / .env.production 示例）----
 .env
 .env.local

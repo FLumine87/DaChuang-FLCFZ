@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Search, Sparkles, Loader2, Camera } from 'lucide-react';
-import { adminSearch } from '../../services/mockApi';
+import { Search, Sparkles, Loader2, Camera, Mic, Image as ImageIcon, X } from 'lucide-react';
+import { adminSearch, fetchRetrievalMedia } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import CameraCapture from '../../components/CameraCapture';
+import ThemeHistogram from '../../components/ThemeHistogram';
 import type { RetrievalResult } from '../data/adminMockData';
 import { corpusRecords } from '../../data/corpusRecords';
 
@@ -29,6 +30,48 @@ export default function AdminRetrieval() {
   const [mediaError, setMediaError] = useState('');
   /** 现场拍照（摄像头）：拍完与文件选择走同一条 pickMedia 链路 */
   const [cameraOpen, setCameraOpen] = useState(false);
+
+  /*
+   * 结果条目里的「数据集样本媒体」加载状态（与个人端检索页同一套口径）。
+   *
+   * 后端在每条命中里只返回**缩略图**的 data URL（图像→48×48 灰度、语音→梅尔频谱），
+   * 原始文件要另调 /api/retrieval/media/{unit_id} 才拿得到：
+   *   · 语音 → 原始 wav，给 <audio> 播放
+   *   · 图像 → 原图 jpg，给放大弹窗看
+   * 这里按 unit_id 缓存，避免重复请求。
+   */
+  const [unitMediaUrls, setUnitMediaUrls] = useState<Record<string, string>>({});
+  const [unitMediaLoading, setUnitMediaLoading] = useState<Record<string, boolean>>({});
+  const [unitMediaError, setUnitMediaError] = useState<Record<string, string>>({});
+  const [zoomUnit, setZoomUnit] = useState<{ id: string; url: string; file?: string } | null>(null);
+
+  /** 取某条命中的原始媒体（语音可播放 / 图像可放大） */
+  const loadUnitMedia = async (unitId: string): Promise<string | null> => {
+    const cached = unitMediaUrls[unitId];
+    if (cached) return cached;
+    if (unitMediaLoading[unitId]) return null;
+    setUnitMediaLoading((s) => ({ ...s, [unitId]: true }));
+    try {
+      const payload = await fetchRetrievalMedia(unitId);
+      setUnitMediaUrls((s) => ({ ...s, [unitId]: payload.media }));
+      return payload.media;
+    } catch (e) {
+      setUnitMediaError((s) => ({
+        ...s,
+        [unitId]: e instanceof Error ? e.message : '媒体加载失败',
+      }));
+      return null;
+    } finally {
+      setUnitMediaLoading((s) => ({ ...s, [unitId]: false }));
+    }
+  };
+
+  /** 查看原图：优先取原始 jpg，取不到则退回后端给的缩略图 */
+  const openUnitImage = async (result: RetrievalResult) => {
+    const url = (await loadUnitMedia(result.id)) ?? result.media ?? null;
+    if (!url) return;
+    setZoomUnit({ id: result.id, url, file: result.mediaMeta?.file });
+  };
 
   /** 选择图像 / 语音文件：读成 base64（去掉 dataURL 前缀）后随查询提交 */
   const pickMedia = (kind: 'image' | 'audio', file: File | null) => {
@@ -180,6 +223,12 @@ export default function AdminRetrieval() {
 
       {!loading && results && (
         <>
+          {/* 命中主题分布柱状图：一眼看出这批相似案例集中在哪些困扰主题上。
+              数据来自检索结果的 tags 字段，不需要额外接口。 */}
+          {results.length > 0 && (
+            <ThemeHistogram hits={results} />
+          )}
+
           <div className="ui-card divide-y divide-slate-100">
             {results.length === 0 && (
               <div className="px-5 py-12 text-center text-sm text-slate-400">
@@ -190,12 +239,96 @@ export default function AdminRetrieval() {
               <div key={result.id} className="p-5 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{result.id}</p>
-                    <p className="text-xs text-slate-400 mt-1">{result.date} · 相似度 {(result.similarity * 100).toFixed(0)}%</p>
+                    <p className="text-sm font-medium text-slate-800">{result.recordId ?? result.id}</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {result.date} · 相似度 {(result.similarity * 100).toFixed(0)}%
+                      {result.modalityLabel && <> · {result.modalityLabel}</>}
+                    </p>
                   </div>
                   <AdminAlertBadge level={result.alertLevel} size="sm" />
                 </div>
                 <p className="text-sm text-slate-600 mt-3">{result.summary}</p>
+
+                {/* 数据集样本媒体：图像给缩略图+查看原图，语音给频谱缩略图+播放。
+                    与个人端检索页同一套交互（后端 /api/retrieval/media/{unit_id}）。 */}
+                {result.media && (
+                  <div className="mt-3 flex items-start gap-3">
+                    {result.mediaKind === 'speech_pcm16' ? (
+                      <img
+                        src={result.media}
+                        alt="语音梅尔频谱"
+                        className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 w-44 h-16 object-cover"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void openUnitImage(result)}
+                        title="点击查看原图"
+                        className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 overflow-hidden hover:border-primary-400 transition-colors"
+                      >
+                        <img
+                          src={result.media}
+                          alt="面部图像"
+                          className="w-16 h-16 object-cover"
+                          style={{ imageRendering: 'pixelated' }}
+                        />
+                      </button>
+                    )}
+                    <div className="min-w-0 text-xs space-y-1">
+                      <p className="font-mono text-slate-600 break-all">
+                        {result.mediaMeta?.file ?? '（媒体文件）'}
+                      </p>
+                      {result.mediaKind === 'speech_pcm16' ? (
+                        <>
+                          <p className="text-slate-400">
+                            情绪 {result.mediaMeta?.emotion || '—'} · 说话人{' '}
+                            {result.mediaMeta?.speaker || '—'}
+                            {result.mediaMeta?.duration_sec
+                              ? ` · ${result.mediaMeta.duration_sec}s`
+                              : ''}
+                          </p>
+                          {unitMediaUrls[result.id] ? (
+                            <audio
+                              controls
+                              autoPlay
+                              src={unitMediaUrls[result.id]}
+                              className="h-9 max-w-full"
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void loadUnitMedia(result.id)}
+                              disabled={!!unitMediaLoading[result.id]}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-primary-200 bg-primary-50 text-primary-600 hover:bg-primary-100 disabled:opacity-60 transition-colors"
+                            >
+                              <Mic className="w-3.5 h-3.5" />
+                              {unitMediaLoading[result.id] ? '加载中…' : '播放真实语音'}
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-slate-400">
+                            来源目录 {result.mediaMeta?.dir || '—'}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => void openUnitImage(result)}
+                            disabled={!!unitMediaLoading[result.id]}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-primary-200 bg-primary-50 text-primary-600 hover:bg-primary-100 disabled:opacity-60 transition-colors"
+                          >
+                            <ImageIcon className="w-3.5 h-3.5" />
+                            {unitMediaLoading[result.id] ? '加载中…' : '查看原图'}
+                          </button>
+                        </>
+                      )}
+                      {unitMediaError[result.id] && (
+                        <p className="text-danger-600">{unitMediaError[result.id]}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-3 flex items-center gap-2">
                   <span className="text-xs text-slate-400">哈希相似度:</span>
                   <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -295,6 +428,42 @@ export default function AdminRetrieval() {
         onClose={() => setCameraOpen(false)}
         onCapture={(file) => pickMedia('image', file)}
       />
+
+      {/* 原图放大：点缩略图或「查看原图」时打开，取的是数据集里的真实原图 */}
+      {zoomUnit && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/70 flex items-center justify-center p-6"
+          onClick={() => setZoomUnit(null)}
+        >
+          <div
+            className="bg-white rounded-xl p-4 w-full max-w-md shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-800">样本原图</p>
+                <p className="mt-0.5 truncate font-mono text-xs text-slate-400">
+                  {zoomUnit.file ?? zoomUnit.id}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setZoomUnit(null)}
+                className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                aria-label="关闭"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <img
+              src={zoomUnit.url}
+              alt="样本原图"
+              className="mt-3 w-full rounded-lg border border-slate-200 bg-slate-50"
+              style={{ imageRendering: 'pixelated' }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

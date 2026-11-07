@@ -32,6 +32,7 @@ import { getDraft } from "../services/firstRun";
 import { supplementModalityText } from "../services/localKg";
 import { getCurrentSession } from "../auth/session";
 import { USE_MOCK, clearToken } from "../services/http";
+import ActionPlanCard from "../components/ActionPlanCard";
 
 /* ------------------------------------------------------------------ 小工具 */
 
@@ -172,16 +173,10 @@ export default function Dashboard() {
 
     const warning = (data.warningEvents ?? []).find((w) => w.status !== "resolved");
 
-    /* 旧版口径：行动计划按预警等级在前面补一条，再拼上原定三条 */
-    const levelPlan =
-      warning?.level === "red"
-        ? [{ id: "PLAN-ALERT-RED", title: "预约心理辅导", duration: "本周内", status: "new" as const }]
-        : warning?.level === "orange"
-          ? [{ id: "PLAN-ALERT-ORANGE", title: "与可信赖的人聊一聊", duration: "本周内", status: "new" as const }]
-          : warning?.level === "yellow"
-            ? [{ id: "PLAN-ALERT-YELLOW", title: "继续每日情绪记录", duration: "每日", status: "new" as const }]
-            : [];
-    const planItems = [...levelPlan, ...(data.actionPlan ?? [])];
+    /* 行动计划已改为独立组件 ActionPlanCard（后端 action_plans 表落库，
+       支持自己写计划、手动完成、归档与截止时间）。这里不再拼 levelPlan /
+       planItems —— 那套"按预警等级补一条 + 静态三条"的口径已被取代，
+       留着只会让页面出现两套互相矛盾的待办。 */
 
     /* 「最近预警」按数据里最新的那个月统计，避免演示数据（3 月）恒显示 0 */
     const warnings = data.warningEvents ?? [];
@@ -251,7 +246,6 @@ export default function Dashboard() {
       counts,
       maxCount,
       warning,
-      planItems,
       monthWarnings,
       retrievalQuery,
       monthBreakdown: Object.entries(monthCounts)
@@ -418,59 +412,10 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ============ ③ 今日行动计划（右栏） ============ */}
-        <section className="ui-card p-4 sm:p-5">
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <div>
-              <h2 className="text-[17px] font-semibold text-slate-900">今日行动计划</h2>
-              <p className="mt-1 text-[13px] text-slate-500">
-                从一件小事开始，为自己留一点时间
-              </p>
-            </div>
-            <span className="text-[12.5px] tabular-nums text-slate-400">
-              {view.planItems.length} 项
-            </span>
-          </div>
-
-
-          <hr className="my-5 border-slate-100" />
-
-          <ul className="grid gap-4">
-            {view.planItems.map((plan, index) => (
-              <li
-                key={plan.id}
-                /* min-w-0 不能省：<ul> 是 grid，而 grid item 默认 min-width:auto
-                   = min-content；标题是 truncate（white-space:nowrap），
-                   min-content 就是整句话的宽度 —— 栅格列会被撑开，truncate 根本没
-                   机会生效。实测：卡片内容区 390px 时，18 字标题还装得下，
-                   24 字就把 li 撑到 512px、横向溢出 104px。
-                   父级那两层 min-w-0 管不住 grid item 自己这一层。 */
-                className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-xs font-medium tabular-nums text-primary-500">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-[14px] font-medium text-slate-700">
-                      {plan.title}
-                    </p>
-                    <p className="mt-1 text-[12.5px] text-slate-400">
-                      建议时长 · {plan.duration}
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[12.5px] font-medium ${
-                    STATUS_META[plan.status]?.cls ?? "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {STATUS_META[plan.status]?.label ?? plan.status}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {/* ============ ③ 今日行动计划（右栏） ============
+          已拆成独立组件：待进行 / 归档两个分区、手动标注完成、自己写计划、
+          右上角制定时间戳、按截止时间排序，逻辑都在 ActionPlanCard 里。 */}
+      <ActionPlanCard />
 
       {/* ==================== 常驻求助条 ==================== */}
       </div>
@@ -704,8 +649,8 @@ export default function Dashboard() {
                 <Link
                   to={
                     view.retrievalQuery
-                      ? `/personal/retrieval?q=${encodeURIComponent(view.retrievalQuery)}`
-                      : "/personal/retrieval"
+                      ? `/personal/screening?tab=retrieval&q=${encodeURIComponent(view.retrievalQuery)}`
+                      : "/personal/screening?tab=retrieval"
                   }
                   className="ui-button ui-button-primary"
                 >
@@ -809,7 +754,7 @@ export default function Dashboard() {
                 <b className="text-[20px] tabular-nums text-slate-900">8</b> 个相似历史模式
               </p>
             </div>
-            <Link to="/personal/retrieval" className="ui-button">
+            <Link to="/personal/screening?tab=retrieval" className="ui-button">
               看命中明细
             </Link>
           </div>
