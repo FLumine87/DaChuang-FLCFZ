@@ -506,7 +506,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
         </nav>
         {/* 底部说明卡：与卡片同一套圆角与"淡玻璃"底色，
             在毛玻璃侧栏上不再是一块突兀的实心浅灰块。 */}
-        <div className="sidebar-label mx-5 mb-5 mt-auto shrink-0 rounded-2xl border border-slate-200/70 bg-white/70 p-5 text-center">
+        <div className="sidebar-label sidebar-promo mx-5 mb-5 mt-auto shrink-0 rounded-2xl border border-slate-200/70 bg-white/70 p-5 text-center">
           <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
             <ShieldCheck className="h-5 w-5" />
           </div>

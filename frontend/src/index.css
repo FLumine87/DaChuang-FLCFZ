@@ -429,6 +429,14 @@ html.theme-switching *::after {
   .app-shell[data-collapsed="true"] .sidebar-label {
     display: none;
   }
+  /* 矮屏（笔记本 700–820px）侧栏放不下 9 个导航项 + 这张纯装饰的卡片：
+     卡片会把「健康管理」整组挤到滚动区外，看起来像菜单缺了一项。
+     这一档直接收起装饰卡，把高度让给导航本身（收起态它本来就不显示）。 */
+  @media (max-height: 820px) {
+    .sidebar-promo {
+      display: none;
+    }
+  }
   .sidebar-link {
     display: flex;
     align-items: center;
@@ -859,7 +867,13 @@ h1.text-3xl {
 @media (min-width: 640px) {
   .dash-hero-title { font-size: 2.75rem; } /* 44px */
 }
+/* 1024–1439：内容区被 290px 侧栏吃掉后只剩 ~670–1090px，
+   54px 的 11 字标题要 ~600px，会和右侧「今日行动计划」叠在一起。
+   这一档先给 44px；1440 以上空间够了再放到 54px。 */
 @media (min-width: 1024px) {
+  .dash-hero-title { font-size: 2.75rem; } /* 44px */
+}
+@media (min-width: 1440px) {
   .dash-hero-title { font-size: 3.375rem; } /* 54px */
 }
 h2,
@@ -1670,6 +1684,28 @@ html:not(.app-booted) .page-enter {
   );
 }
 
+/* 深色下左栏文字落在整片暗底上，空白会显得比浅色更"空"。
+   这里在左侧补一层非常淡的蓝紫柔光：不改变"右下大曲面"的构图，
+   也不跨到正文上形成第二块形状，只把文字背后的明度垫起来。
+   浅色模式不需要（白色与蓝白渐变本身已经有层次）。 */
+.dark .aurora--calm::before {
+  content: "";
+  position: absolute;
+  left: 3%;
+  top: 26%;
+  width: 46vw;
+  height: 42vw;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(70, 95, 255, 0.26) 0%,
+    rgba(70, 95, 255, 0.11) 44%,
+    transparent 72%
+  );
+  filter: blur(12px);
+  pointer-events: none;
+}
+
 /* 正式答题：形状保留、动画全停（只停漂移，不改变深浅色下的样子） */
 .aurora--still,
 .aurora--still span,
@@ -2108,6 +2144,18 @@ html:not(.app-booted) .page-enter {
   overflow-wrap: break-word;
   word-break: normal;
   hyphens: none;
+  /* 字号必须写在这里：全局 h3 { font-size: 1.0625rem } 在无层级区域，
+     会压过 Tailwind 的 text-* 工具类（之前 text-[22px] 实际显示成 17px）。
+     26px 让题干成为卡片里最醒目的阅读对象；手机收一档到 22px。 */
+  font-size: 1.375rem; /* 22px */
+  line-height: 2.125rem; /* 34px */
+}
+
+@media (min-width: 1024px) {
+  .first-run-question {
+    font-size: 1.625rem; /* 26px */
+    line-height: 2.5rem; /* 40px */
+  }
 }
 
 /* 换题时的题目淡入：只动 opacity/transform，避免整卡重排 */
@@ -2304,5 +2352,48 @@ html:not(.app-booted) .page-enter {
   .scroll-hint-pill,
   .scroll-hint-arrow {
     animation: none !important;
+  }
+}
+
+/* ============================================================================
+   主页首屏在「矮屏」上的收紧（2026-11-07）
+   背景：13–16 寸笔记本加上浏览器工具栏后，可视高度常常只有 700–820px；
+   首屏原本按 900+ 设计，矮屏时「立即体验」下面的两个立项标签会被推到
+   首屏之外，看起来像"页面没做完/被切掉"。这里只收紧首屏 (#top)，
+   其它章节的节奏不动：标题小一档、正文行高与字号收一档、纵向留白压一压，
+   目标是 700px 高度内也能完整看到 CTA 与标签。
+   ========================================================================== */
+@media (max-height: 820px) {
+  #top {
+    padding-top: 1.25rem;
+    padding-bottom: 1.5rem;
+  }
+  #top .auth-section-title {
+    font-size: 2.5rem; /* 40px，原 52px */
+    line-height: 1.15;
+    margin-top: 1rem;
+  }
+  #top .hero-body {
+    margin-top: 1.25rem;
+    font-size: 1rem;
+    line-height: 1.75;
+  }
+  #top .hero-badges {
+    margin-top: 0.85rem;
+  }
+}
+
+/* 更矮（约 700px，13 寸全屏 + 工具栏）：再收一档字号 */
+@media (max-height: 740px) {
+  #top .auth-section-title {
+    font-size: 2.15rem;
+    line-height: 1.15;
+  }
+  #top .hero-body {
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+  #top .hero-badges {
+    margin-top: 0.65rem;
   }
 }
