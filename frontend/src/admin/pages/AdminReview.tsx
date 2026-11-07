@@ -20,6 +20,17 @@ const LEVEL_LABEL: Record<string, string> = {
   green: '正常', yellow: '关注', orange: '预警', red: '高风险',
 };
 
+/** 把 axios 的英文状态码错误翻成能照做的中文；其它错误原样显示 */
+function describeError(err: unknown, fallback: string): string {
+  const raw = (err instanceof Error ? err.message : String(err ?? '')).trim();
+  if (!raw) return fallback;
+  if (/status code 5\d\d|Network Error|Failed to fetch|ECONNREFUSED|timeout|服务暂时不可用/i.test(raw)) {
+    return '服务暂时不可用，请确认后端已启动后重试';
+  }
+  if (/status code 401|status code 403/i.test(raw)) return '没有权限或登录已过期，请重新登录';
+  return raw.length > 120 ? `${raw.slice(0, 120)}…` : raw;
+}
+
 const MODALITY_LABEL: Record<string, string> = {
   text: '文本', image: '图像', audio: '语音',
 };
@@ -76,7 +87,7 @@ export default function AdminReview() {
       setTotal(page.total || 0);
       setSelected((prev) => prev.filter((id) => (page.items || []).some((it) => it.record_id === id)));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : '加载失败');
+      setMessage(describeError(err, '加载失败'));
     } finally {
       setLoading(false);
     }
@@ -111,7 +122,7 @@ export default function AdminReview() {
       if (r.labels?.length) setDraftTags(r.labels.slice(0, maxLabels));
       setMessage(r.source === 'llm' ? '已根据内容生成建议标签' : (r.reason || '已给出规则建议'));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'AI 建议失败');
+      setMessage(describeError(err, 'AI 建议失败'));
     } finally {
       setSuggesting(false);
     }
@@ -130,7 +141,7 @@ export default function AdminReview() {
         await load();
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : '保存失败');
+      setMessage(describeError(err, '保存失败'));
     } finally {
       setSavingTags(false);
     }
@@ -151,7 +162,7 @@ export default function AdminReview() {
       setRetrain({ running: r.running, pending: r.pending, last_version: r.last_version, windows: r.windows });
       setTimeout(() => void load(), 1500);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : '重训失败');
+      setMessage(describeError(err, '重训失败'));
     } finally {
       setTraining(false);
     }
@@ -176,26 +187,25 @@ export default function AdminReview() {
       setNote('');
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : '操作失败');
+      setMessage(describeError(err, '操作失败'));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">数据审核</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            新数据写入后本人即可检索，通过审核后才进入公共检索池与训练池。
-          </p>
-        </div>
+    <div className="space-y-6">
+      {/* 页头（标题 / 说明 / 面包屑）由 AppShell 统一渲染，这里不再写一遍大标题，
+          只保留这一句本页特有的规则说明。 */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-500">
+          新数据写入后本人即可检索，通过审核后才进入公共检索池与训练池。
+        </p>
         <div className="flex items-center gap-2">
           <button
             onClick={() => void runRetrain()}
             disabled={training || !!retrain?.running}
-            className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-700 hover:bg-primary-100 disabled:opacity-50"
             title={retrain ? `队列 ${retrain.pending} 条，最近版本 ${retrain.last_version || '无'}` : ''}
           >
             {training || retrain?.running
@@ -218,7 +228,7 @@ export default function AdminReview() {
         <StatCard icon={Clock} label="待审核" value={stats?.pending ?? '—'}
           hint="本人可见，他人不可见" tone="bg-amber-50 text-amber-600" />
         <StatCard icon={Database} label="公共池" value={stats?.public ?? '—'}
-          hint="可被检索、可被训练" tone="bg-sky-50 text-sky-600" />
+          hint="可被检索、可被训练" tone="bg-primary-50 text-primary-600" />
         <StatCard icon={ShieldX} label="已拒绝" value={stats?.rejected ?? '—'}
           hint="保留记录，仅供审计" tone="bg-rose-50 text-rose-600" />
         <StatCard icon={ShieldCheck} label="待训练" value={stats?.queue ?? '—'}
@@ -230,7 +240,7 @@ export default function AdminReview() {
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3">
           <div className="text-sm text-slate-600">
             待审 {total} 条
-            {selected.length > 0 && <span className="ml-2 text-sky-600">已选 {selected.length}</span>}
+            {selected.length > 0 && <span className="ml-2 text-primary-600">已选 {selected.length}</span>}
             {retrain && (
               <span className="ml-3 text-xs text-slate-400">
                 队列 {retrain.pending} · 表 {retrain.windows} · 版本 {retrain.last_version || '未训练'}
@@ -241,13 +251,13 @@ export default function AdminReview() {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="按摘要或记录号筛选"
-            className="ml-auto w-56 rounded-xl border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-sky-400"
+            className="ml-auto w-56 rounded-xl border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-primary-400"
           />
           <input
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="审核意见（可选）"
-            className="w-48 rounded-xl border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-sky-400"
+            className="w-48 rounded-xl border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-primary-400"
           />
           <button
             onClick={() => void submit('approve')}
@@ -335,7 +345,7 @@ export default function AdminReview() {
                         )) : <span className="text-xs text-slate-400">无标签</span>}
                         <button
                           onClick={() => openLabel(it)}
-                          className="inline-flex items-center gap-0.5 text-xs text-sky-600 hover:underline"
+                          className="inline-flex items-center gap-0.5 text-xs text-primary-600 hover:underline"
                         >
                           <Tag className="h-3 w-3" />标注
                         </button>
@@ -393,7 +403,7 @@ export default function AdminReview() {
                     onClick={() => toggleTag(tag)}
                     className={`rounded-full px-2.5 py-1 text-xs transition ${
                       active
-                        ? 'bg-sky-600 text-white'
+                        ? 'bg-primary-600 text-white'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
@@ -407,7 +417,7 @@ export default function AdminReview() {
               <button
                 onClick={() => void runSuggest()}
                 disabled={suggesting}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-primary-200 bg-primary-50 px-3 py-1.5 text-sm text-primary-700 hover:bg-primary-100 disabled:opacity-50"
               >
                 {suggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                 AI 建议

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   FileText, Mic, ImageIcon, Search, ChevronDown,
   AlertTriangle, CheckCircle2, Clock, Loader2, Eye, X,
@@ -8,6 +9,7 @@ import {
 } from '../data/adminMockData';
 import { getAdminCollectionData } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
+import MultimodalFlowTabs from '../components/MultimodalFlowTabs';
 
 type Tab = 'text' | 'audio' | 'image';
 
@@ -145,7 +147,7 @@ function TextTab({ rows }: { rows: TextSubmission[] }) {
         </div>
 
         {/* Detail panel */}
-        <div className="ui-card p-5 h-fit sticky top-6">
+        <div className="ui-card p-5 h-fit lg:sticky lg:top-[80px]">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -158,6 +160,15 @@ function TextTab({ rows }: { rows: TextSubmission[] }) {
               <div className="p-3 bg-slate-50 rounded-lg text-sm text-slate-700 leading-6 border border-slate-200">
                 {selected.preview}
               </div>
+              {/* 采集 → 检索的页内互跳：这条日记本身就是一条可检索的多模态记录，
+                  直接带到检索页并自动跑一次，省掉“再复制粘贴一遍” */}
+              <Link
+                to={`/admin/retrieval?q=${encodeURIComponent(selected.preview)}`}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-700 hover:underline"
+              >
+                <Search className="h-3.5 w-3.5" />
+                用这段文字检索相似案例
+              </Link>
               <div>
                 <p className="text-xs text-slate-500 mb-1.5">关键词</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -259,7 +270,7 @@ function AudioTab({ rows }: { rows: AudioSubmission[] }) {
         </div>
 
         {/* Detail panel */}
-        <div className="ui-card p-5 h-fit sticky top-6">
+        <div className="ui-card p-5 h-fit lg:sticky lg:top-[80px]">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -367,7 +378,7 @@ function ImageTab({ rows }: { rows: ImageSubmission[] }) {
         </div>
 
         {/* Detail panel */}
-        <div className="ui-card p-5 h-fit sticky top-6">
+        <div className="ui-card p-5 h-fit lg:sticky lg:top-[80px]">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -480,6 +491,7 @@ export default function AdminDataCollection() {
 
   return (
     <div className="space-y-5">
+      <MultimodalFlowTabs active="collect" />
       {/* Header summary */}
       <div className="grid grid-cols-3 gap-4">
         {[

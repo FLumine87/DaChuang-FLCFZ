@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { Search, Sparkles, Loader2, Camera } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Camera, ChevronDown, FolderOpen, Image as ImageIcon, Loader2, Search, Sparkles, Upload } from 'lucide-react';
 import { adminSearch } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import CameraCapture from '../../components/CameraCapture';
+import MultimodalFlowTabs from '../components/MultimodalFlowTabs';
 import type { RetrievalResult } from '../data/adminMockData';
 import { corpusRecords } from '../../data/corpusRecords';
 
@@ -18,7 +20,8 @@ interface RagReport {
 }
 
 export default function AdminRetrieval() {
-  const [query, setQuery] = useState('');
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get('q') ?? '');
   const [loading, setLoading] = useState(false);
   const [shown, setShown] = useState(20);
   const [results, setResults] = useState<RetrievalResult[] | null>(null);
@@ -29,6 +32,13 @@ export default function AdminRetrieval() {
   const [mediaError, setMediaError] = useState('');
   /** 现场拍照（摄像头）：拍完与文件选择走同一条 pickMedia 链路 */
   const [cameraOpen, setCameraOpen] = useState(false);
+  /**
+   * 图像查询的下拉菜单（评审问题 7）：原来「图像查询」「拍照查询」是两个按钮，
+   * 选中态又都用 `modality === 'image'` 判断，选完图两个会同时高亮、像两个都开着。
+   * 现在并成一个按钮 + 两个动作（从文件选择 / 现场拍照），高亮只有这一个来源，
+   * 与个人端检索页的交互一致。
+   */
+  const [imgMenuOpen, setImgMenuOpen] = useState(false);
 
   /** 选择图像 / 语音文件：读成 base64（去掉 dataURL 前缀）后随查询提交 */
   const pickMedia = (kind: 'image' | 'audio', file: File | null) => {
@@ -52,13 +62,14 @@ export default function AdminRetrieval() {
     reader.readAsDataURL(file);
   };
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
+  const handleSearch = async (override?: string) => {
+    const q = (override ?? query).trim();
+    if (!q) return;
     setLoading(true);
     setResults(null);
     setReport(null);
     try {
-      const res = await adminSearch(query, {
+      const res = await adminSearch(q, {
         modality,
         mediaBase64: media?.base64,
         mediaName: media?.name,
@@ -70,8 +81,22 @@ export default function AdminRetrieval() {
     }
   };
 
+  /* 从「多模态采集」详情带过来的 ?q=（例如某条日记）→ 自动检索一次，
+     省掉“跳过来还要再点一次检索”。 */
+  const autoQuery = searchParams.get('q') ?? '';
+  const lastAutoQuery = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoQuery || lastAutoQuery.current === autoQuery) return;
+    lastAutoQuery.current = autoQuery;
+    setQuery(autoQuery);
+    void handleSearch(autoQuery);
+    // handleSearch 只在本次 query 上执行一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoQuery]);
+
   return (
     <div className="space-y-6">
+      <MultimodalFlowTabs active="search" />
       <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-3">跨模态哈希检索（管理端）</h3>
         <div className="flex flex-wrap gap-3">
@@ -81,7 +106,7 @@ export default function AdminRetrieval() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch(); }}
               placeholder="输入关键词或案例特征..."
               className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
@@ -101,43 +126,79 @@ export default function AdminRetrieval() {
             className="hidden"
             onChange={(e) => pickMedia('audio', e.target.files?.[0] ?? null)}
           />
-          <button
-            type="button"
-            onClick={() => document.getElementById('admin-media-image')?.click()}
-            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-sm transition-colors ${
-              modality === 'image'
-                ? 'border-primary-500 bg-primary-50 text-primary-600'
-                : 'border-slate-200 text-slate-600 hover:border-primary-300'
-            }`}
-          >
-            图像查询
-          </button>
-          <button
-            type="button"
-            onClick={() => setCameraOpen(true)}
-            title="现场拍照作为图像查询线索"
-            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-sm transition-colors inline-flex items-center gap-1.5 ${
-              modality === 'image'
-                ? 'border-primary-500 bg-primary-50 text-primary-600'
-                : 'border-slate-200 text-slate-600 hover:border-primary-300'
-            }`}
-          >
-            <Camera className="h-4 w-4" />
-            拍照查询
-          </button>
+          {/* 图像查询：一个按钮 + 两个动作（评审问题 7）。
+              以前「图像查询」「拍照查询」并排两个按钮，选中态又都看 modality === 'image'，
+              选完图后两个同时高亮，像是两套功能都开着；现在合并成一个带下拉的入口，
+              与个人端检索页「从文件选择 / 现场拍照」一致。 */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setImgMenuOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={imgMenuOpen}
+              title="上传图像或现场拍照，作为图像查询线索"
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                modality === 'image'
+                  ? 'border-primary-500 bg-primary-50 text-primary-600'
+                  : 'border-slate-200 text-slate-600 hover:border-primary-300'
+              }`}
+            >
+              <ImageIcon className="h-4 w-4" />
+              图像查询
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${imgMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {imgMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setImgMenuOpen(false)} />
+                <div
+                  role="menu"
+                  aria-label="图像查询方式"
+                  className="absolute left-0 top-full z-20 mt-1 w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setImgMenuOpen(false);
+                      document.getElementById('admin-media-image')?.click();
+                    }}
+                    className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    从文件选择
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setImgMenuOpen(false);
+                      setCameraOpen(true);
+                    }}
+                    className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    现场拍照
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          {/* 管理端没有录音器，语音只有一个来源，就不再套一层“菜单里只有一个选项” */}
           <button
             type="button"
             onClick={() => document.getElementById('admin-media-audio')?.click()}
-            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+            title="上传一段语音，作为语音查询线索"
+            className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
               modality === 'audio'
                 ? 'border-primary-500 bg-primary-50 text-primary-600'
                 : 'border-slate-200 text-slate-600 hover:border-primary-300'
             }`}
           >
+            <Upload className="h-4 w-4" />
             语音查询
           </button>
           <button
-            onClick={handleSearch}
+            onClick={() => void handleSearch()}
             disabled={loading || (!query.trim() && !media)}
             className="px-6 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >

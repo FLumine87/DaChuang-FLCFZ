@@ -1,22 +1,35 @@
-import { useState, useEffect } from 'react';
-import { Filter, ChevronDown, Clock, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  ChevronDown, ChevronRight, Clock, Filter, ShieldAlert,
+} from 'lucide-react';
 import { type WarningEvent } from '../data/mockData';
 import { getWarnings, updateWarningStatus } from '../services/mockApi';
 import AlertBadge from '../components/AlertBadge';
 import StatusBadge from '../components/StatusBadge';
+import { MasterDetail, DetailPanel } from '../components/MasterDetail';
 
+/**
+ * 个人端 · 预警中心
+ *
+ * 评审问题 5：「不点案例的话没人知道右边可以显示文字」。
+ * 根因不是“缺空态”，而是空态被网格拉高、垂直居中到了首屏之外，右侧看着就是一整块空白。
+ * 现在按邮箱/工单类界面的通行做法处理：
+ *   · 首屏默认选中当前筛选下的第一条（筛选变化时同步修正选中项）；
+ *   · 右侧详情栏粘顶、限高内滚，列表再长也不会“点完看不到”；
+ *   · 未选中（比如用户主动关掉详情、或筛选后没有数据）时，空态贴顶显示，
+ *     并明确写出「左侧每一条都能点开」。
+ */
 export default function Alerts() {
   const [filterLevel, setFilterLevel] = useState<'all' | 'red' | 'orange' | 'yellow' | 'green'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'new' | 'tracking' | 'resolved'>('all');
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
   const [warningEvents, setWarningEvents] = useState<WarningEvent[]>([]);
   const [statusNotice, setStatusNotice] = useState<{ kind: 'busy' | 'ok' | 'error'; text: string } | null>(null);
-  const [, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        setLoading(true);
         const data = await getWarnings();
         setWarningEvents(data);
       } catch (e) {
@@ -27,11 +40,28 @@ export default function Alerts() {
     })();
   }, []);
 
-  const filtered = warningEvents.filter((a) => {
-    const matchLevel = filterLevel === 'all' || a.level === filterLevel;
-    const matchStatus = filterStatus === 'all' || a.status === filterStatus;
-    return matchLevel && matchStatus;
-  });
+  const filtered = useMemo(
+    () =>
+      warningEvents.filter((a) => {
+        const matchLevel = filterLevel === 'all' || a.level === filterLevel;
+        const matchStatus = filterStatus === 'all' || a.status === filterStatus;
+        return matchLevel && matchStatus;
+      }),
+    [warningEvents, filterLevel, filterStatus],
+  );
+
+  /* 默认选中第一条：右侧首屏就有内容，“点卡片 → 右侧变化”这层关系才看得见。
+     筛选后如果当前选中的已经不在列表里，就顺延到新列表的第一条。 */
+  useEffect(() => {
+    if (loading) return;
+    if (filtered.length === 0) {
+      if (selectedAlert) setSelectedAlert(null);
+      return;
+    }
+    if (!filtered.some((a) => a.id === selectedAlert)) {
+      setSelectedAlert(filtered[0].id);
+    }
+  }, [loading, filtered, selectedAlert]);
 
   const selected = warningEvents.find((a) => a.id === selectedAlert);
 
@@ -59,38 +89,37 @@ export default function Alerts() {
     }
   };
 
+  const stats = [
+    { label: '新触发', count: warningEvents.filter((a) => a.status === 'new').length, tone: 'text-danger-600' },
+    { label: '跟踪中', count: warningEvents.filter((a) => a.status === 'tracking').length, tone: 'text-primary-600' },
+    { label: '已缓解', count: warningEvents.filter((a) => a.status === 'resolved').length, tone: 'text-success-600' },
+    { label: '高风险', count: warningEvents.filter((a) => a.level === 'red').length, tone: 'text-orange-600' },
+  ];
+
+  const filterSelect = 'cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white py-2 pr-8 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500';
+
   return (
     <div className="space-y-5">
-      <div className="ui-card p-5">
-        <h3 className="text-base font-semibold text-slate-800">个人预警中心</h3>
-        <p className="text-sm text-slate-500 mt-2">
-          当模型检测到“情绪持续下行、压力过载或睡眠显著下降”时，将在这里推送分级预警与可执行建议。
-        </p>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: '新触发', count: warningEvents.filter((a) => a.status === 'new').length, color: 'text-danger-600 bg-danger-50' },
-          { label: '跟踪中', count: warningEvents.filter((a) => a.status === 'tracking').length, color: 'text-blue-600 bg-blue-50' },
-          { label: '已缓解', count: warningEvents.filter((a) => a.status === 'resolved').length, color: 'text-success-600 bg-success-50' },
-          { label: '高风险', count: warningEvents.filter((a) => a.level === 'red').length, color: 'text-orange-600 bg-orange-50' },
-        ].map((item) => (
-          <div key={item.label} className="ui-card p-4">
+      {/* 统计：原来的四张卡各占一行高度，把下面的“列表 + 详情”挤到首屏之外；
+          改成同一张卡里四格，省下约 70px，也是这里最要紧的纵向空间。 */}
+      <div className="ui-card grid grid-cols-2 divide-slate-100 p-0 sm:grid-cols-4 sm:divide-x">
+        {stats.map((item) => (
+          <div key={item.label} className="px-5 py-4">
             <p className="text-sm text-slate-500">{item.label}</p>
-            <p className={`text-2xl font-semibold mt-1 ${item.color.split(' ')[0]}`}>{item.count}</p>
+            <p className={`mt-1 text-2xl font-semibold tabular-nums ${item.tone}`}>{item.count}</p>
           </div>
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      {/* 筛选 + 结果计数 */}
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative">
-          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <select
+            aria-label="按等级筛选"
             value={filterLevel}
             onChange={(e) => setFilterLevel(e.target.value as 'all' | 'red' | 'orange' | 'yellow' | 'green')}
-            className="pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
+            className={`${filterSelect} pl-9`}
           >
             <option value="all">全部等级</option>
             <option value="red">危险</option>
@@ -98,140 +127,190 @@ export default function Alerts() {
             <option value="yellow">关注</option>
             <option value="green">稳定</option>
           </select>
-          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         </div>
         <div className="relative">
           <select
+            aria-label="按状态筛选"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as 'all' | 'new' | 'tracking' | 'resolved')}
-            className="px-4 pr-8 py-2 border border-slate-200 rounded-lg text-sm bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
+            className={`${filterSelect} pl-3.5`}
           >
             <option value="all">全部状态</option>
             <option value="new">新触发</option>
             <option value="tracking">跟踪中</option>
             <option value="resolved">已缓解</option>
           </select>
-          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         </div>
+        <span className="ml-auto text-xs text-slate-400">
+          共 {filtered.length} 条
+          {filtered.length > 0 && filtered.length !== warningEvents.length
+            ? `（全部 ${warningEvents.length} 条）`
+            : ''}
+        </span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Alert List */}
-        <div className="lg:col-span-2 space-y-3">
-          {filtered.map((alert) => (
-            <div
-              key={alert.id}
-              onClick={() => setSelectedAlert(alert.id)}
-              className={`bg-white rounded-2xl border p-5 cursor-pointer transition-colors ${
-                selectedAlert === alert.id
-                  ? 'border-primary-500 ring-1 ring-primary-200'
-                  : 'border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <AlertBadge level={alert.level} />
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">{alert.title}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{alert.id}</p>
-                  </div>
-                </div>
-                <StatusBadge status={alert.status} />
-              </div>
-              <p className="text-sm text-slate-600 mb-2">{alert.reason}</p>
-              <div className="flex items-center gap-4 text-xs text-slate-400">
-                <span className="flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" /> 风险提示：{alert.title}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> {alert.createdAt}
-                </span>
-              </div>
-            </div>
-          ))}
-          {filtered.length === 0 && (
-            <div className="ui-card text-center py-12 text-slate-400 text-sm">
-              {warningEvents.length === 0
-                ? '还没有预警记录。系统检测到情绪、压力或睡眠的持续变化时，会在这里提醒你。'
-                : '当前筛选条件下没有预警记录，试试把「等级」或「状态」改成全部。'}
-            </div>
-          )}
-        </div>
-
-        {/* Alert Detail Panel */}
-        {/* 不用 sticky / h-fit：面板随列表一起滚动，并撑到与左侧列表等高，
-            这样两列的上下边缘始终对齐（此前 sticky 会在滚动时错位） */}
-        <div className="ui-card flex flex-col p-5">
-          {selected ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-slate-800">{selected.id}</h3>
-                <AlertBadge level={selected.level} />
-              </div>
-              <div className="space-y-3">
-                {[
-                  ['预警标题', selected.title],
-                  ['触发原因', selected.reason],
-                  ['创建时间', selected.createdAt],
-                  ['更新时间', selected.updatedAt],
-                ].map(([label, value]) => (
-                  <div key={label} className="flex justify-between text-sm">
-                    <span className="text-slate-400">{label}</span>
-                    <span className="text-slate-700 font-medium">{value}</span>
-                  </div>
+      <MasterDetail
+        width="md"
+        list={
+          <div className="space-y-3">
+            {loading && (
+              <div className="space-y-3" role="status" aria-label="正在加载预警">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-[116px] animate-pulse rounded-2xl border border-slate-200 bg-white" />
                 ))}
-                <div>
-                  <span className="text-sm text-slate-400">状态</span>
-                  <div className="mt-1"><StatusBadge status={selected.status} /></div>
-                </div>
               </div>
-              <div className="pt-3 border-t border-slate-100">
-                <p className="text-sm text-slate-400 mb-1">建议动作</p>
-                <p className="text-sm text-slate-700">{selected.suggestion}</p>
-              </div>
-              <div className="flex gap-2 pt-2">
-                {selected.status === 'new' && (
+            )}
+            {!loading &&
+              filtered.map((alert) => {
+                const isSelected = selectedAlert === alert.id;
+                return (
                   <button
-                    onClick={() => handleStatusChange('tracking')}
-                    disabled={statusNotice?.kind === 'busy'}
-                    className="flex-1 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    type="button"
+                    key={alert.id}
+                    onClick={() => {
+                      setSelectedAlert(alert.id);
+                      setStatusNotice(null);
+                    }}
+                    aria-pressed={isSelected}
+                    className={`group w-full cursor-pointer rounded-2xl border bg-white p-4 text-left shadow-sm transition ${
+                      isSelected
+                        ? 'border-primary-500 ring-1 ring-primary-200'
+                        : 'border-slate-200 hover:border-primary-300 hover:shadow'
+                    }`}
                   >
-                    标记为跟踪中
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <AlertBadge level={alert.level} />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800">{alert.title}</p>
+                          <p className="mt-0.5 text-xs text-slate-400">{alert.id}</p>
+                        </div>
+                      </div>
+                      <StatusBadge status={alert.status} />
+                    </div>
+                    <p className="mt-2.5 line-clamp-2 text-sm leading-6 text-slate-600">{alert.reason}</p>
+                    <div className="mt-2 flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1 text-slate-400">
+                        <Clock className="h-3 w-3" /> {alert.createdAt}
+                      </span>
+                      {/* 明确写出“可以点开” —— 评审说不知道右边会有内容，问题就出在这 */}
+                      <span className="inline-flex items-center gap-0.5 font-medium text-primary-600">
+                        {isSelected ? '正在查看' : '查看详情'}
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </span>
+                    </div>
                   </button>
-                )}
-                {selected.status === 'tracking' && (
-                  <button
-                    onClick={() => handleStatusChange('resolved')}
-                    disabled={statusNotice?.kind === 'busy'}
-                    className="flex-1 py-2 bg-success-600 text-white rounded-lg text-sm font-medium hover:bg-success-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    标记为已缓解
-                  </button>
-                )}
-              </div>
-              {statusNotice && (
-                <p
-                  className={`text-xs mt-2 ${
-                    statusNotice.kind === 'error'
-                      ? 'text-danger-600'
-                      : statusNotice.kind === 'ok'
-                        ? 'text-success-600'
-                        : 'text-slate-500'
-                  }`}
-                  role="status"
-                >
-                  {statusNotice.text}
+                );
+              })}
+            {!loading && filtered.length === 0 && (
+              <div className="ui-card px-6 py-12 text-center">
+                <ShieldAlert className="mx-auto h-8 w-8 text-slate-200" />
+                <p className="mt-3 text-sm font-medium text-slate-600">
+                  {warningEvents.length === 0 ? '还没有预警记录' : '当前筛选条件下没有预警'}
                 </p>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center text-sm text-slate-400">
-              <ShieldAlert className="mb-2 h-8 w-8 text-slate-200" />
-              选择一条预警查看详情
-            </div>
-          )}
-        </div>
-      </div>
+                <p className="mx-auto mt-1.5 max-w-[300px] text-xs leading-5 text-slate-400">
+                  {warningEvents.length === 0
+                    ? '系统检测到“情绪持续下行、压力过载或睡眠显著下降”时，会在这里推送分级预警与建议。'
+                    : '试试把「等级」或「状态」改成全部。'}
+                </p>
+              </div>
+            )}
+          </div>
+        }
+        detail={
+          <DetailPanel
+            selectionKey={selectedAlert}
+            title={selected?.title}
+            subtitle={selected ? `${selected.id} · ${selected.createdAt}` : undefined}
+            meta={selected ? <AlertBadge level={selected.level} /> : undefined}
+            onClose={() => {
+              setSelectedAlert(null);
+              setStatusNotice(null);
+            }}
+            emptyIcon={<ShieldAlert className="h-6 w-6" />}
+            emptyTitle={warningEvents.length === 0 ? '暂时没有预警' : '选择一条预警查看详情'}
+            emptyDescription={
+              warningEvents.length === 0
+                ? '出现需要关注的信号时，这里会显示触发原因、建议动作，并支持标记为跟踪中或已缓解。'
+                : '左侧每一条都能点开：查看触发原因与建议动作，并标记为跟踪中或已缓解。'
+            }
+          >
+            {selected && (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-slate-50 p-3.5">
+                  <p className="text-xs text-slate-400">触发原因</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-700">{selected.reason}</p>
+                </div>
+
+                <dl className="space-y-2.5 text-sm">
+                  {[
+                    ['预警编号', selected.id],
+                    ['创建时间', selected.createdAt],
+                    ['更新时间', selected.updatedAt],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between gap-4">
+                      <dt className="text-slate-400">{label}</dt>
+                      <dd className="font-medium text-slate-700">{value}</dd>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="text-slate-400">状态</dt>
+                    <dd><StatusBadge status={selected.status} /></dd>
+                  </div>
+                </dl>
+
+                <div className="border-t border-slate-100 pt-3.5">
+                  <p className="text-xs text-slate-400">建议动作</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-700">{selected.suggestion}</p>
+                </div>
+
+                <div className="flex gap-2">
+                  {selected.status === 'new' && (
+                    <button
+                      onClick={() => handleStatusChange('tracking')}
+                      disabled={statusNotice?.kind === 'busy'}
+                      className="flex-1 cursor-pointer rounded-lg bg-primary-500 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      标记为跟踪中
+                    </button>
+                  )}
+                  {selected.status === 'tracking' && (
+                    <button
+                      onClick={() => handleStatusChange('resolved')}
+                      disabled={statusNotice?.kind === 'busy'}
+                      className="flex-1 cursor-pointer rounded-lg bg-success-600 py-2 text-sm font-medium text-white transition-colors hover:bg-success-500 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      标记为已缓解
+                    </button>
+                  )}
+                  {selected.status === 'resolved' && (
+                    <p className="w-full rounded-lg bg-success-50 px-3 py-2 text-xs leading-5 text-success-600">
+                      这条预警已缓解。如仍有不适，可以回到「心理筛查」重新做一次记录。
+                    </p>
+                  )}
+                </div>
+
+                {statusNotice && (
+                  <p
+                    className={`text-xs ${
+                      statusNotice.kind === 'error'
+                        ? 'text-danger-600'
+                        : statusNotice.kind === 'ok'
+                          ? 'text-success-600'
+                          : 'text-slate-500'
+                    }`}
+                    role="status"
+                  >
+                    {statusNotice.text}
+                  </p>
+                )}
+              </div>
+            )}
+          </DetailPanel>
+        }
+      />
     </div>
   );
 }

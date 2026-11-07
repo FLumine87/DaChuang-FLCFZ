@@ -55,6 +55,16 @@ type Theme = "light" | "dark";
 /** 深色模式偏好存储键；index.html 的首屏脚本读取同一个键以避免闪白。 */
 const THEME_KEY = "psych_theme";
 
+/** 侧栏分组的固定顺序。「多模态数据」只在管理端有子项，
+ *  个人端因为「心理筛查」已合并了采集入口，这一组会自动隐藏。 */
+const SIDEBAR_GROUPS = [
+  "工作空间",
+  "多模态数据",
+  "智能分析",
+  "智能心理助手",
+  "健康管理",
+] as const;
+
 /** 默认浅色：只有用户显式切到深色（存入 "dark"）时才用深色，
  *  换浏览器 / 新窗口 / 清过站点数据后一律回到浅色。 */
 const readStoredTheme = (): Theme =>
@@ -164,14 +174,19 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       icon: ClipboardList,
       group: "工作空间",
     },
+    /* 管理端：采集与检索是**同一条多模态链路的两个环节**（入库/审阅 ↔ 出库/分析），
+       所以在侧栏里合并成独立的「多模态数据」分组、且紧挨着排。
+       之前它们被「案例管理」和一个分组标题隔开，评审据此认为要么功能重复、
+       要么关系说不清（评审问题 6）。两个页面顶部另有「采集 → 检索」分段控件互跳，
+       从任一页到另一页都只要 1 次点击。 */
     ...(isAdmin
       ? [
           {
             path: `${root}/data-collection`,
             label: "多模态采集",
-            description: "通过文字、语音与图像，记录更完整的状态。",
+            description: "文本 / 语音 / 图像入库前的审阅与把关。",
             icon: Database,
-            group: "工作空间",
+            group: "多模态数据",
           },
         ]
       : []),
@@ -221,9 +236,11 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
     {
       path: `${root}/retrieval`,
       label: "检索与分析",
-      description: "查找相似案例，获取有据可循的分析与建议。",
+      description: isAdmin
+        ? "用同一批多模态数据查找相似案例，并生成有据可循的报告。"
+        : "查找相似案例，获取有据可循的分析与建议。",
       icon: Search,
-      group: "智能分析",
+      group: isAdmin ? "多模态数据" : "智能分析",
     },
     ...(isAdmin
       ? [
@@ -448,7 +465,11 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           </button>
         </div>
         <nav className="sidebar-nav app-scrollbar px-5 pb-5">
-          {["工作空间", "智能分析", "智能心理助手", "健康管理"].map((group) => (
+          {/* 没有子项的分组整块不渲染：以前管理端的「智能心理助手」只剩一个
+              分组标题、下面空空的（评审问题 8 的一部分），看着像漏做了功能。 */}
+          {SIDEBAR_GROUPS.filter((group) =>
+            items.some((item) => item.group === group),
+          ).map((group) => (
             <div className="sidebar-group mb-7" key={group}>
               <div className="sidebar-group-title mb-3 flex h-5 items-center px-3 text-[12px] font-medium tracking-widest text-slate-400">
                 <span className="sidebar-label">{group}</span>
