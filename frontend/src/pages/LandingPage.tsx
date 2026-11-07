@@ -129,9 +129,8 @@ export default function LandingPage() {
     const DOWN_MS_MAX = 540;
     const GESTURE_GAP = 140;      // 两段滚轮间隔超过它 → 算新手势
     const UNLOCK_QUIET = 100;     // 动画结束后滚轮静默这么久才解锁下一屏
-    const UP_SETTLE_MS = 160;     // 向上停手后吸附
     const REVERSE_PX = 10;        // 下滑动画中反向超过它 → 交还控制
-    const UP_TRIGGER = 0.28;      // 向上沿用原来的 28% 屏高阈值
+    const UP_TRIGGER = 0.28;      // 触屏向上停手后的 28% 屏高阈值（滚轮向上已改为就近吸附）
     const END_QUIET = 110;        // 不足 32px 就停手时，用这个间隔做兜底判定
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     const desktop = window.matchMedia("(min-width: 1024px) and (min-height: 600px)");
@@ -155,14 +154,12 @@ export default function LandingPage() {
     /* 一次手势的状态机 */
     let lastWheelAt = 0;
     let gestureActive = false;
+    let lastDir: 1 | -1 | 0 = 0;
     let gestureStartY = 0;
     let gestureTarget: number | null = null;
     let accDown = 0;
     let accUp = 0;
     let locked = false;        // 这次手势已经用掉一次翻页
-    let aborted = false;       // 向下动画被反向手势打断：只允许往上落屏
-    let upStartY = -1;
-    let upTimer = 0;
     let endTimer = 0;
     let touchStartY = -1;
     let measureRaf = 0;
@@ -296,14 +293,6 @@ export default function LandingPage() {
       return best;
     };
 
-    /* 当前位置所在的那一屏（顶边 ≤ y + 4 的最后一屏）。
-       被反向打断的向下动画只能落到这一屏或更上面一屏，绝不补完原来的下落。 */
-    const indexAtOrAbove = (y: number) => {
-      let idx = 0;
-      for (let i = 0; i < tops.length; i++) if (tops[i] <= y + 4) idx = i;
-      return idx;
-    };
-
     const stepIndex = (from: number, dir: number) => {
       if (dir > 0) {
         for (let i = 0; i < tops.length; i++) if (tops[i] > from + 4) return i;
@@ -321,12 +310,11 @@ export default function LandingPage() {
     /* 新手势：记录起点与"本次最远只到下一屏"的目标 */
     const resetGesture = () => {
       gestureActive = true;
+      lastDir = 1;
       gestureStartY = window.scrollY;
       gestureTarget = nextTop(gestureStartY);
       accDown = 0;
       accUp = 0;
-      aborted = false;
-      upStartY = -1;
       clearTimeout(endTimer);
     };
 
@@ -335,11 +323,8 @@ export default function LandingPage() {
       if (locked || animating || !tops.length) return;
       const target = gestureTarget ?? nextTop(window.scrollY);
       locked = true;
-      aborted = false;
       accDown = 0;
       clearTimeout(endTimer);
-      clearTimeout(upTimer);
-      upStartY = -1;
       if (target == null) return;
       glideToY(target);
     };
@@ -360,27 +345,6 @@ export default function LandingPage() {
         if (Math.abs(nearest - y) > 2) glideToY(nearest, 320);
       }
       accDown = 0;
-    };
-
-    /* 向上：手势停稳后落屏，沿用原来的"过 28% 才翻、否则回原屏" */
-    const scheduleUpSettle = () => {
-      clearTimeout(upTimer);
-      upTimer = window.setTimeout(() => {
-        if (animating || !desktop.matches || !fits || !tops.length) return;
-        const target = aborted
-          ? tops[indexAtOrAbove(window.scrollY)]
-          : (() => {
-              const from = upStartY >= 0 ? upStartY : window.scrollY;
-              const delta = window.scrollY - from;
-              return Math.abs(delta) > viewH * UP_TRIGGER
-                ? tops[stepIndex(from, -1)]
-                : tops[nearestIndex(from)];
-            })();
-        aborted = false;
-        upStartY = -1;
-        gestureActive = false;
-        glideToY(target, 420);
-      }, UP_SETTLE_MS);
     };
 
     const onWheel = (event: WheelEvent) => {
@@ -405,9 +369,6 @@ export default function LandingPage() {
         /* 向下由脚本接管：既避免"原生滚一段 + 再吸附"的两段感，
            也顺手把这次手势的后续惯性全部吞掉。 */
         event.preventDefault();
-        aborted = false;
-        clearTimeout(upTimer);
-        upStartY = -1;
         if (animating) return;
         if (locked) {
           /* 动画结束还不够：必须等滚轮真正静下来、且动画已经收尾，
@@ -415,7 +376,7 @@ export default function LandingPage() {
           if (quiet <= UNLOCK_QUIET || now - animEndAt <= UNLOCK_QUIET) return;
           locked = false;
           resetGesture();
-        } else if (isNew) {
+        } else if (isNew || lastDir === -1) {
           resetGesture();
         } else if (!gestureActive) {
           resetGesture();
@@ -443,16 +404,25 @@ export default function LandingPage() {
           return;
         }
         cancelGlide();
-        aborted = true;
         accUp = 0;
+      } else if (locked && now - animEndAt <= UNLOCK_QUIET) {
+        /* 动画刚结束的 100ms 内，向上先走 10px 死区：
+           过滤触控板惯性尾巴的极小反向抖动，避免刚翻过去又被抖回来 */
+        accUp += Math.abs(px);
+        if (accUp < REVERSE_PX) {
+          event.preventDefault();
+          return;
+        }
       }
       locked = false;
+      accUp = 0;
       accDown = 0;
+      lastDir = -1;
       clearTimeout(endTimer);
-      if (upStartY < 0) upStartY = window.scrollY;
       gestureActive = true;
-      scheduleUpSettle();
-      /* 不 preventDefault：向上继续走原生滚动 */
+      /* 向上完全交还原生连续滚动，不再做任何自动吸附：
+         之前"停手后按 28% 落屏"会在顶端小幅上滑时把页面判到上一屏，
+         用户看到的就是"明明还在这一屏，却被强行拉走"。 */
     };
 
     /* 桌面触屏（一体机 / 触控笔记本）：沿用原来的"原生滚 + 停手吸附" */
@@ -462,12 +432,10 @@ export default function LandingPage() {
       touchStartY = window.scrollY;
       locked = false;
       gestureActive = false;
+      lastDir = 0;
       accDown = 0;
       accUp = 0;
-      aborted = false;
-      upStartY = -1;
       clearTimeout(endTimer);
-      clearTimeout(upTimer);
     };
 
     const onTouchEnd = () => {
@@ -489,6 +457,7 @@ export default function LandingPage() {
       if (to === base) return;
       locked = false;
       gestureActive = false;
+      lastDir = 0;
       glideToY(tops[to]);
     };
 
@@ -534,7 +503,6 @@ export default function LandingPage() {
       desktop.removeEventListener?.("change", onDesktopChange);
       ro?.disconnect();
       cancelAnimationFrame(measureRaf);
-      window.clearTimeout(upTimer);
       window.clearTimeout(endTimer);
       cancelGlide();
       glideRef.current = null;
