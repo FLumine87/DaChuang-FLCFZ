@@ -682,10 +682,15 @@ export default function LandingPage() {
               ))}
             </div>
 
+            {/* 这张示意图的 viewBox 是 900×240，也就是 **3.75:1**。
+                这里原来写的是 aspect-[4.4/1]，而且加了 preserveAspectRatio="none"
+                —— 两者一起把图横向拉宽了 17%，曲线和网格都变形。
+                （这段是 edd7307 引入的，不是本次改动带来的；团队 main 上同样如此。）
+                现在：比例改成与 viewBox 一致的 15/4，并去掉 preserveAspectRatio，
+                让它按设计比例等比缩放，无论容器多宽都不会变形。 */}
             <svg
               viewBox="0 0 900 240"
-              preserveAspectRatio="none"
-              className="mt-3 aspect-[4.4/1] w-full"
+              className="mt-3 aspect-[15/4] w-full"
               role="img"
               aria-label="三模态采集、哈希检索、RAG 报告、分级预警四个环节的状态演进示意"
             >
