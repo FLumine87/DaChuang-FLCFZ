@@ -27,7 +27,7 @@ interface ChatMessage {
   checkinNote?: string;
 }
 
-const WELCOME = '你好，我是你的 AI 心理陪伴助手。和我聊聊最近的状态、喜欢的事或烦恼吧——我会把关键信息整理进你的个人知识图谱，并在需要时为你生成状态报告。';
+const WELCOME = '你好，我是你的 AI 心理陪伴助手。和我聊聊最近的状态、喜欢的事或烦恼吧——我会把关键信息整理成近况线索，放进「我的知识图谱」，并在需要时为你生成状态报告。';
 
 // 本地兜底回复（后端未配置 LLM 对话时），语气温暖支持性
 const FALLBACK_REPLIES = [
@@ -236,7 +236,7 @@ export default function ChatPage() {
             <Sparkles className="w-4 h-4 text-primary-600" /> AI 心理陪伴对话
           </h2>
           <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span>你的话语会被抽取成知识图谱三元组 · 当前用户 <span className="font-mono">{userId}</span></span>
+            <span>你的话语会被整理成近况线索 · 当前用户 <span className="font-mono">{userId}</span></span>
             {/* L1：抽取结果存在本机，说清存在哪，避免被当成已写入图数据库 */}
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
               <HardDrive className="w-3 h-3" /> 本机已记录 {localCount} 条
@@ -432,7 +432,7 @@ function RunInferenceButton({ userId }: { userId: string }) {
             {!result && !loading && (
               <div className="text-center py-8">
                 <p className="text-sm text-slate-500 mb-4">
-                  将基于个人知识图谱和领域知识图谱整理参考线索与建议；正式筛查结论以量表及后端评估为准。
+                  将结合你的近况记录与心理知识整理参考线索与建议；正式筛查结论以量表及后端评估为准。
                 </p>
                 {err && <p className="text-sm text-slate-500 mb-3">服务端推理不可用（{err}），会用本机记录组装一份报告。</p>}
                 <button

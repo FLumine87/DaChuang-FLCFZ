@@ -4,6 +4,8 @@ import { Activity, ArrowRight, Check, ChevronRight, ClipboardCheck, FileText, Im
   Loader2, Mic, Play, Search, ShieldCheck, Users, X } from 'lucide-react';
 import { analyseCase, loadCase, loadWorkspace, saveTask, startRun, type CaseDetail, type Scope,
   type Subject, type Task, type Workspace } from '../../services/workspaceApi';
+import { USE_MOCK } from '../../services/http';
+import OfflineBackendNotice from '../components/OfflineBackendNotice';
 import './agent-workspace.css';
 
 const levels: Record<string, string> = { red: '优先复核', orange: '需要复核', yellow: '持续关注', green: '常规关注' };
@@ -60,6 +62,10 @@ export default function AgentWorkspaceV2() {
   }, [detailOpen, editing]);
 
   useEffect(() => {
+    if (USE_MOCK) {
+      setLoading(false);
+      return;
+    }
     let disposed = false;
     const id = ++generation.current;
     setLoading(true); setError(''); setWorkspace(null); setDetailOpen(false);
@@ -71,6 +77,7 @@ export default function AgentWorkspaceV2() {
   }, [scope]);
 
   useEffect(() => {
+    if (USE_MOCK) return;
     const subject = searchParams.get('caseId');
     if (!subject) return;
     let disposed = false;
@@ -116,6 +123,15 @@ export default function AgentWorkspaceV2() {
   const subjects = (run?.subjects || []).filter(s => s.alert_level !== 'green' && `${s.ref} ${s.department}`.includes(keyword));
   const pending = workspace?.tasks.filter(t => t.state === 'proposed').length || 0;
   const active = workspace?.tasks.filter(t => ['confirmed', 'modified'].includes(t.state)).length || 0;
+
+  if (USE_MOCK) {
+    return (
+      <OfflineBackendNotice
+        feature="预警处置工作台"
+        detail="工作台会读取业务数据、写入研判与随访任务；离线演示没有对应的后端队列，因此不在这里展示假的操作结果。"
+      />
+    );
+  }
 
   return <div className="aw">
     {/* 页头不再重复渲染标题与面包屑：AppShell 已经为这条路由输出

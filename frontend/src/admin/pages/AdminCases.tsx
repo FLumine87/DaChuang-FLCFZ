@@ -10,6 +10,7 @@ import {
 import type { CaseRecord } from '../data/adminMockData';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import AdminStatusBadge from '../components/AdminStatusBadge';
+import UnsavedChangesDialog from '../../components/UnsavedChangesDialog';
 
 /* 案例管理（2026-11-07 按设计稿改版）
    结构从「左列表 + 右详情」改成：
@@ -65,7 +66,19 @@ export default function AdminCases() {
   const [eventSaving, setEventSaving] = useState(false);
   const [actionError, setActionError] = useState('');
   const [notice, setNotice] = useState('');
+  const [pendingLeave, setPendingLeave] = useState<
+    { type: 'close' } | { type: 'switch'; id: string } | null
+  >(null);
   const actionRef = useRef(false);
+
+  /* 备注/状态改动，或跟进标题/内容写了一半，都算未保存。
+     「保存并离开」只有在跟进标题和内容同时填写（或都没填）时才可点。 */
+  const eventDirty = Boolean(eventTitle.trim() || eventDescription.trim());
+  const dirty = Boolean(
+    detail && (editStatus !== detail.status || notes.trim() !== detail.notes),
+  );
+  const unsaved = dirty || eventDirty;
+  const canSaveBeforeLeave = !eventDirty || Boolean(eventTitle.trim() && eventDescription.trim());
 
   useEffect(() => {
     let active = true;
@@ -98,24 +111,39 @@ export default function AdminCases() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       if (viewing) setViewing(null);
-      else setDrawerClosing(true);
+      else closeCase();
     };
     window.addEventListener('keydown', onKey);
     return () => {
       document.body.style.overflow = previous;
       window.removeEventListener('keydown', onKey);
     };
-  }, [openId, viewing]);
+    // closeCase 会读取最新的未保存状态，所以 dirty/eventDirty 变化时重注册
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId, viewing, dirty, eventDirty]);
 
-  function openCase(id: string) {
+  function openCaseNow(id: string) {
     setOpenId(id); setDetail(null); setDetailLoading(true); setDetailError('');
     setTab('screening'); setScreeningPage(1); setViewing(null); setDrawerClosing(false);
     setEditStatus('active'); setNotes(''); setActionError(''); setNotice('');
     setEventTitle(''); setEventDescription('');
   }
 
+  function openCase(id: string) {
+    if (openId === id) return;
+    if (openId && unsaved) {
+      setPendingLeave({ type: 'switch', id });
+      return;
+    }
+    openCaseNow(id);
+  }
+
   function closeCase() {
     if (!openId) return;
+    if (unsaved) {
+      setPendingLeave({ type: 'close' });
+      return;
+    }
     setDrawerClosing(true);
   }
 
@@ -134,22 +162,24 @@ export default function AdminCases() {
     setActionError(''); setNotice('已取消未保存的修改');
   }
 
-  async function saveCase() {
-    if (!detail || actionRef.current) return;
+  async function saveCase(): Promise<boolean> {
+    if (!detail || actionRef.current) return false;
     actionRef.current = true; setSaving(true); setActionError(''); setNotice('');
     try {
       const updated = await updateAdminCase(detail.id, { status: editStatus, notes: notes.trim() });
       setDetail(updated); setEditStatus(updated.status); setNotes(updated.notes);
       setNotice('案例信息已保存'); setListLoading(true); setReload((value) => value + 1);
+      return true;
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : '保存失败，请稍后重试');
+      return false;
     } finally { actionRef.current = false; setSaving(false); }
   }
 
-  async function addEvent() {
-    if (!detail || actionRef.current) return;
+  async function addEvent(): Promise<boolean> {
+    if (!detail || actionRef.current) return false;
     if (!eventTitle.trim() || !eventDescription.trim()) {
-      setActionError('请填写跟进标题和内容'); return;
+      setActionError('请填写跟进标题和内容'); return false;
     }
     actionRef.current = true; setEventSaving(true); setActionError(''); setNotice('');
     try {
@@ -158,12 +188,34 @@ export default function AdminCases() {
       });
       setDetail(updated); setEventTitle(''); setEventDescription('');
       setNotice('跟进记录已添加');
+      return true;
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : '添加失败，请稍后重试');
+      return false;
     } finally { actionRef.current = false; setEventSaving(false); }
   }
 
-  const dirty = detail && (editStatus !== detail.status || notes.trim() !== detail.notes);
+  /** 离开前把能保存的都保存：案例状态/备注，以及写了一半但已填完整的跟进。 */
+  async function saveAndLeave() {
+    if (!pendingLeave) return;
+    if (dirty && !(await saveCase())) return;
+    if (eventDirty) {
+      if (!canSaveBeforeLeave) return;
+      if (!(await addEvent())) return;
+    }
+    const target = pendingLeave;
+    setPendingLeave(null);
+    if (target.type === 'close') setDrawerClosing(true);
+    else openCaseNow(target.id);
+  }
+
+  function discardAndLeave() {
+    if (!pendingLeave) return;
+    const target = pendingLeave;
+    setPendingLeave(null);
+    if (target.type === 'close') setDrawerClosing(true);
+    else openCaseNow(target.id);
+  }
   const total = result?.total ?? 0;
   const pageSize = result?.pageSize ?? 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -616,5 +668,20 @@ export default function AdminCases() {
         </div>
       </div>
     )}
+
+    <UnsavedChangesDialog
+      open={Boolean(pendingLeave)}
+      saving={saving || eventSaving}
+      canSave={canSaveBeforeLeave}
+      saveDisabledHint="跟进标题和内容需要同时填写才能保存；也可以选择继续编辑或放弃修改。"
+      description={
+        pendingLeave?.type === 'switch'
+          ? '案例备注、状态或跟进内容还没有保存。直接切换记录会丢失这些修改。'
+          : '案例备注、状态或跟进内容还没有保存。直接关闭详情会丢失这些修改。'
+      }
+      onSave={() => void saveAndLeave()}
+      onDiscard={discardAndLeave}
+      onContinue={() => setPendingLeave(null)}
+    />
   </div>;
 }

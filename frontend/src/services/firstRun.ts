@@ -24,7 +24,7 @@
  *   调用方（LoginPage、WelcomePage、Screening、Dashboard）一行都不用改。
  */
 
-import { getCurrentSession } from '../auth/session';
+import { getTokenUsername } from './http';
 import type { CollectionAnalysis } from './mockApi';
 
 export type FirstRunStatus = 'new' | 'in_progress' | 'done';
@@ -46,7 +46,7 @@ const EMPTY: FirstRunState = { status: 'new', guideSeen: false };
 
 /* 未登录时（理论上进不来）用一个固定 key 兜底，避免读到别人的状态 */
 export function resolveUsername(explicit?: string | null): string {
-  const name = explicit?.trim() || getCurrentSession()?.username || '';
+  const name = explicit?.trim() || getTokenUsername() || '';
   return name || 'anonymous';
 }
 
@@ -177,6 +177,8 @@ export interface FirstRunDraft {
   level?: 'green' | 'yellow' | 'orange' | 'red';
   /** Original option indices, interpreted using questionnaireVersion. */
   answers?: Record<string, number>;
+  /** 当前停在题号（0 起）：刷新/暂停后回到这一题，而不是第 1 题 */
+  currentIndex?: number;
   questionnaireVersion?: string;
   /** 量表提交的时刻（03 报告卡顶部显示"完成于 …"） */
   completedAt?: string;
@@ -184,45 +186,62 @@ export interface FirstRunDraft {
   updatedAt?: string;
 }
 
-const DRAFT_KEY = 'psych_first_run:draft';
+const DRAFT_KEY_PREFIX = 'psych_first_run:draft:';
 
-export function getDraft(): FirstRunDraft | null {
+/** 草稿也按账号隔离：同一个标签页换账号登录时，不会读到上一个人的作答。 */
+function draftStorageKey(explicitUsername?: string | null): string {
+  return `${DRAFT_KEY_PREFIX}${resolveUsername(explicitUsername)}`;
+}
+
+export function getDraft(explicitUsername?: string | null): FirstRunDraft | null {
   try {
-    const raw = window.sessionStorage.getItem(DRAFT_KEY);
+    const raw = window.sessionStorage.getItem(draftStorageKey(explicitUsername));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as FirstRunDraft;
-    return parsed && typeof parsed.scaleId === 'string' ? parsed : null;
+    if (!parsed || typeof parsed.scaleId !== 'string') return null;
+    return {
+      ...parsed,
+      currentIndex:
+        typeof parsed.currentIndex === 'number' && parsed.currentIndex >= 0
+          ? parsed.currentIndex
+          : undefined,
+    };
   } catch {
     return null;
   }
 }
 
-export function saveDraft(patch: Partial<FirstRunDraft>): FirstRunDraft | null {
-  const current = getDraft();
+export function saveDraft(
+  patch: Partial<FirstRunDraft>,
+  explicitUsername?: string | null,
+): FirstRunDraft | null {
+  const username = resolveUsername(explicitUsername);
+  const current = getDraft(username);
   if (!current) return null;
   const next: FirstRunDraft = { ...current, ...patch, updatedAt: new Date().toISOString() };
   try {
-    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(next));
+    window.sessionStorage.setItem(draftStorageKey(username), JSON.stringify(next));
   } catch {
     /* 隐私模式下写不进去：本次会话内后面的步骤会退回第一步，不影响主流程 */
   }
   return next;
 }
 
-/** 开始一份新的首次筛查：清掉上一轮的草稿 */
-export function startDraft(scaleId: string): FirstRunDraft {
-  const next: FirstRunDraft = { scaleId, updatedAt: new Date().toISOString() };
+/** 开始一份新的首次筛查：清掉这个账号上一轮的草稿 */
+export function startDraft(scaleId: string, explicitUsername?: string | null): FirstRunDraft {
+  const next: FirstRunDraft = { scaleId, currentIndex: 0, updatedAt: new Date().toISOString() };
   try {
-    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(next));
+    window.sessionStorage.setItem(draftStorageKey(explicitUsername), JSON.stringify(next));
   } catch {
     /* 忽略 */
   }
   return next;
 }
 
-export function clearDraft(): void {
+/** 退出登录时清掉当前账号的草稿；不传账号时按当前 token 解析。 */
+export function clearDraft(explicitUsername?: string | null): void {
   try {
-    window.sessionStorage.removeItem(DRAFT_KEY);
+    window.sessionStorage.removeItem(draftStorageKey(explicitUsername));
   } catch {
     /* 忽略 */
   }

@@ -8,6 +8,7 @@ import type { AlertRecord } from '../data/adminMockData';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import AdminStatusBadge from '../components/AdminStatusBadge';
 import { MasterDetail, DetailPanel } from '../../components/MasterDetail';
+import UnsavedChangesDialog from '../../components/UnsavedChangesDialog';
 
 const nextStatus: Record<AlertRecord['status'], AlertRecord['status'] | null> = {
   pending: 'processing', processing: 'resolved', resolved: 'closed', closed: null,
@@ -50,6 +51,14 @@ export default function AdminAlerts() {
   const savingRef = useRef(false);
   /** 用户主动关掉详情后不再自动选第一条，直到他换了筛选条件 */
   const userClosed = useRef(false);
+  const [pendingLeave, setPendingLeave] = useState<
+    { type: 'close' } | { type: 'switch'; id: string } | null
+  >(null);
+
+  const dirty = Boolean(
+    detail &&
+      (editStatus !== detail.status || assigneeId !== detail.assigneeId || note.trim().length > 0),
+  );
 
   useEffect(() => {
     let active = true;
@@ -90,7 +99,23 @@ export default function AdminAlerts() {
   }, [result]);
 
   function choose(id: string) {
+    if (id === selectedId) return;
+    if (selectedId && dirty) {
+      setPendingLeave({ type: 'switch', id });
+      return;
+    }
     setSelectedId(id); setDetail(null); setDetailLoading(true); setNotice(''); setSaveError('');
+  }
+
+  /** 真正关闭详情：只在没有未保存修改，或用户已确认放弃后调用。 */
+  function closeDetail() {
+    if (dirty) {
+      setPendingLeave({ type: 'close' });
+      return;
+    }
+    userClosed.current = true;
+    setSelectedId(null);
+    setDetail(null);
   }
 
   /** 筛选/翻页视为“重新开始看列表”，关掉详情的意图不再顺延 */
@@ -105,8 +130,8 @@ export default function AdminAlerts() {
     setSaveError(''); setNotice('已取消未保存的修改');
   }
 
-  async function save() {
-    if (!detail || savingRef.current) return;
+  async function save(): Promise<boolean> {
+    if (!detail || savingRef.current) return false;
     savingRef.current = true; setSaving(true); setSaveError(''); setNotice('');
     try {
       const updated = await updateAdminAlert(detail.id, {
@@ -115,14 +140,41 @@ export default function AdminAlerts() {
       setDetail(updated); setEditStatus(updated.status); setAssigneeId(updated.assigneeId);
       setNote(''); setNotice('预警处置已保存');
       setListLoading(true); setReload((value) => value + 1);
+      return true;
     } catch (reason) {
       setSaveError(reason instanceof Error ? reason.message : '保存失败，请稍后重试');
+      return false;
     } finally {
       savingRef.current = false; setSaving(false);
     }
   }
 
-  const dirty = detail && (editStatus !== detail.status || assigneeId !== detail.assigneeId || note.trim().length > 0);
+  async function saveAndLeave() {
+    if (!pendingLeave) return;
+    if (!(await save())) return;
+    leaveTo(pendingLeave);
+  }
+
+  function leaveTo(target: NonNullable<typeof pendingLeave>) {
+    setPendingLeave(null);
+    if (target.type === 'close') {
+      userClosed.current = true;
+      setSelectedId(null);
+      setDetail(null);
+    } else {
+      userClosed.current = false;
+      setSelectedId(target.id);
+      setDetail(null);
+      setDetailLoading(true);
+      setNotice('');
+      setSaveError('');
+    }
+  }
+
+  function discardAndLeave() {
+    if (!pendingLeave) return;
+    leaveTo(pendingLeave);
+  }
   const hasMore = result ? page * result.pageSize < result.total : false;
   const totalPages = Math.max(1, Math.ceil((result?.total ?? 0) / (result?.pageSize ?? PAGE_SIZE)));
   const selectedRow = result?.items.find((item) => item.id === selectedId);
@@ -184,28 +236,34 @@ export default function AdminAlerts() {
                 </span>
               </div>
             </button>)}
-          {!listLoading && result && result.total > 0 && <div className="flex items-center justify-between text-sm text-slate-500">
-            <span>共 {result.total} 条 · 第 {page} 页</span>
-            <div className="flex items-center gap-1.5">
+          {!listLoading && result && result.total > 0 && <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
+            <span className="w-full sm:w-auto">共 {result.total} 条 · 第 {page} 页</span>
+            <div className="flex w-full items-center justify-between gap-1.5 sm:w-auto sm:justify-end">
               <button type="button" disabled={page <= 1} onClick={() => { setPage((value) => value - 1); resetAutoSelect(); }}
-                className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1 disabled:cursor-not-allowed disabled:opacity-40">上一页</button>
-              {pageList(page, totalPages).map((number) => (
-                <button
-                  key={number}
-                  type="button"
-                  onClick={() => { setPage(number); resetAutoSelect(); }}
-                  aria-current={number === page ? 'page' : undefined}
-                  className={`grid h-8 min-w-8 cursor-pointer place-items-center rounded-lg border px-2 ${
-                    number === page
-                      ? 'border-primary-500 bg-primary-50 font-medium text-primary-600'
-                      : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
-                  }`}
-                >
-                  {number}
-                </button>
-              ))}
+                className="shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1 disabled:cursor-not-allowed disabled:opacity-40">上一页</button>
+              {/* 手机只留上一页 / 当前页 / 下一页；页码在窄屏会挤成一行小按钮 */}
+              <span className="shrink-0 px-2 text-xs tabular-nums text-slate-500 sm:hidden">
+                {page} / {totalPages}
+              </span>
+              <div className="hidden items-center gap-1.5 sm:flex">
+                {pageList(page, totalPages).map((number) => (
+                  <button
+                    key={number}
+                    type="button"
+                    onClick={() => { setPage(number); resetAutoSelect(); }}
+                    aria-current={number === page ? 'page' : undefined}
+                    className={`grid h-8 min-w-8 cursor-pointer place-items-center rounded-lg border px-2 ${
+                      number === page
+                        ? 'border-primary-500 bg-primary-50 font-medium text-primary-600'
+                        : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    {number}
+                  </button>
+                ))}
+              </div>
               <button type="button" disabled={!hasMore} onClick={() => { setPage((value) => value + 1); resetAutoSelect(); }}
-                className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1 disabled:cursor-not-allowed disabled:opacity-40">下一页</button>
+                className="shrink-0 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1 disabled:cursor-not-allowed disabled:opacity-40">下一页</button>
             </div>
           </div>}
         </div>
@@ -217,7 +275,7 @@ export default function AdminAlerts() {
           title={selectedId ?? '预警详情'}
           subtitle={detail ? `${detail.name} · ${detail.screeningId || '无关联筛查'}` : selectedRow ? `${selectedRow.name} · ${selectedRow.screeningId || '无关联筛查'}` : undefined}
           meta={detail ? <AdminAlertBadge level={detail.level} /> : selectedRow ? <AdminAlertBadge level={selectedRow.level} /> : undefined}
-          onClose={() => { userClosed.current = true; setSelectedId(null); setDetail(null); }}
+          onClose={closeDetail}
           loading={detailLoading}
           error={detailError}
           emptyIcon={<ShieldAlert className="h-6 w-6" />}
@@ -274,6 +332,19 @@ export default function AdminAlerts() {
           </>}
         </DetailPanel>
       }
+    />
+
+    <UnsavedChangesDialog
+      open={Boolean(pendingLeave)}
+      saving={saving}
+      description={
+        pendingLeave?.type === 'switch'
+          ? '处理状态、处理人或跟进备注还没有保存。直接切换记录会丢失这些修改。'
+          : '处理状态、处理人或跟进备注还没有保存。直接关闭详情会丢失这些修改。'
+      }
+      onSave={() => void saveAndLeave()}
+      onDiscard={discardAndLeave}
+      onContinue={() => setPendingLeave(null)}
     />
   </div>;
 }

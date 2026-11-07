@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, Eye, ChevronDown } from 'lucide-react';
+import { Search, Filter, Eye, ChevronDown, RefreshCw } from 'lucide-react';
 import { type ScreeningRecord } from '../data/adminMockData';
 import { getAdminScreeningRecords } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
@@ -11,21 +11,28 @@ export default function AdminScreening() {
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [screeningRecords, setScreeningRecords] = useState<ScreeningRecord[]>([]);
-  const [, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
+    let alive = true;
     (async () => {
       try {
         setLoading(true);
+        setError('');
         const data = await getAdminScreeningRecords();
-        setScreeningRecords(data);
+        if (alive) setScreeningRecords(data);
       } catch (e) {
-        console.error('加载筛查记录失败', e);
+        if (alive) setError(e instanceof Error ? e.message : '筛查记录加载失败，请稍后重试');
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
-  }, []);
+    return () => {
+      alive = false;
+    };
+  }, [reload]);
 
   const filtered = screeningRecords.filter((r) => {
     const matchesSearch = r.name.includes(searchTerm) || r.id.includes(searchTerm);
@@ -85,14 +92,38 @@ export default function AdminScreening() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.length === 0 && (
+            {loading && (
               <tr>
-                <td colSpan={7} className="px-5 py-12 text-center text-sm text-slate-400">
+                <td colSpan={8} className="px-5 py-12 text-center text-sm text-slate-400">
+                  正在加载筛查记录…
+                </td>
+              </tr>
+            )}
+            {!loading && error && (
+              <tr>
+                <td colSpan={8} className="px-5 py-12 text-center text-sm">
+                  <p className="font-medium text-rose-700">筛查记录加载失败</p>
+                  <p className="mt-1 text-slate-500">{error}</p>
+                  <p className="mt-1 text-xs text-slate-400">这不等于没有记录，可能是网络或后端暂时不可用。</p>
+                  <button
+                    type="button"
+                    onClick={() => setReload((value) => value + 1)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    重试
+                  </button>
+                </td>
+              </tr>
+            )}
+            {!loading && !error && filtered.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-5 py-12 text-center text-sm text-slate-400">
                   当前筛选条件下没有筛查记录。试试清空搜索词，或把等级筛选改成全部。
                 </td>
               </tr>
             )}
-            {filtered.map((record) => (
+            {!loading && !error && filtered.map((record) => (
               <tr key={record.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-5 py-3.5 text-sm font-mono text-slate-500">{record.id}</td>
                 <td className="px-5 py-3.5 text-sm text-slate-700">{record.name}</td>

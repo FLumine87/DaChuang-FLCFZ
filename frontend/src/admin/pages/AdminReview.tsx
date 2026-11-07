@@ -8,6 +8,8 @@ import {
   getLabelSpace, setRecordTags, suggestRecordTags,
   type PendingItem, type ReviewStats, type RetrainStatus,
 } from '../../services/reviewApi';
+import { USE_MOCK } from '../../services/http';
+import OfflineBackendNotice from '../components/OfflineBackendNotice';
 
 const LEVEL_STYLE: Record<string, string> = {
   green: 'text-emerald-700 bg-emerald-50',
@@ -62,6 +64,7 @@ export default function AdminReview() {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [offset, setOffset] = useState(0);
   const [retrain, setRetrain] = useState<RetrainStatus | null>(null);
   const [training, setTraining] = useState(false);
@@ -74,6 +77,10 @@ export default function AdminReview() {
   const PAGE = 20;
 
   const load = useCallback(async () => {
+    if (USE_MOCK) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [s, page, tr] = await Promise.all([
@@ -85,9 +92,10 @@ export default function AdminReview() {
       setStats(s);
       setItems(page.items || []);
       setTotal(page.total || 0);
+      setLoadError('');
       setSelected((prev) => prev.filter((id) => (page.items || []).some((it) => it.record_id === id)));
     } catch (err) {
-      setMessage(describeError(err, '加载失败'));
+      setLoadError(describeError(err, '加载失败'));
     } finally {
       setLoading(false);
     }
@@ -96,6 +104,7 @@ export default function AdminReview() {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
+    if (USE_MOCK) return;
     getLabelSpace()
       .then((r) => { setLabelSpace(r.labels || []); setMaxLabels(r.max || 3); })
       .catch(() => setLabelSpace([]));
@@ -193,6 +202,15 @@ export default function AdminReview() {
     }
   };
 
+  if (USE_MOCK) {
+    return (
+      <OfflineBackendNotice
+        feature="数据审核"
+        detail="待审队列、标签管理和哈希重训都依赖后端；离线演示不会保存这些操作。"
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* 页头（标题 / 说明 / 面包屑）由 AppShell 统一渲染，这里不再写一遍大标题，
@@ -283,7 +301,19 @@ export default function AdminReview() {
           </div>
         )}
 
-        {loading && !items.length ? (
+        {loadError && !items.length ? (
+          <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-sm">
+            <p className="font-medium text-rose-700">待审队列加载失败</p>
+            <p className="text-slate-500">{loadError}</p>
+            <p className="text-xs text-slate-400">这不等于没有待审数据；可能是网络或后端暂时不可用。</p>
+            <button
+              onClick={() => void load()}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50"
+            >
+              <RefreshCw className="h-4 w-4" /> 重试
+            </button>
+          </div>
+        ) : loading && !items.length ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" /> 正在加载
           </div>

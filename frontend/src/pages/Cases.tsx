@@ -1,10 +1,77 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList, Clock, Sparkles, FileText, AlertTriangle } from 'lucide-react';
+import { ClipboardList, Clock, Sparkles, FileText, AlertTriangle, RefreshCw } from 'lucide-react';
 import { type PersonalScreeningRecord, type WarningEvent, type PersonalTimelineEvent, type UserProfile } from '../data/mockData';
 import { getCases } from '../services/mockApi';
 import { getCurrentSession, getDisplayName } from '../auth/session';
 import AlertBadge from '../components/AlertBadge';
+
+const LEVEL_LABEL: Record<string, string> = {
+  green: '稳定',
+  yellow: '关注',
+  orange: '警告',
+  red: '高危',
+};
+
+const SCALE_LABEL: Record<string, string> = {
+  'PHQ-9': '情绪筛查',
+  'GAD-7': '焦虑筛查',
+  ISI: '睡眠评估',
+  'PSS-10': '压力评估',
+};
+
+/** 档案摘要只根据当前账号的记录生成；没有记录时返回 null，由页面提示"完成筛查后生成"。 */
+function buildSummary(
+  records: PersonalScreeningRecord[],
+  warnings: WarningEvent[],
+): string[] | null {
+  const completed = records
+    .filter((item) => item.status === 'completed')
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const latest = completed[0];
+  if (!latest) return null;
+
+  const lines: string[] = [];
+  const scaleName = SCALE_LABEL[latest.questionnaire] ?? latest.questionnaire;
+  lines.push(
+    `最近一次${scaleName}（${latest.date}）得分 ${latest.score}/${latest.maxScore}，处于「${LEVEL_LABEL[latest.level] ?? latest.level}」区间。`,
+  );
+
+  const previous = completed.find(
+    (item) => item.id !== latest.id && item.questionnaire === latest.questionnaire,
+  );
+  if (previous) {
+    const delta = latest.score - previous.score;
+    lines.push(
+      delta === 0
+        ? `与上一次同名量表（${previous.date}）相比持平。`
+        : `与上一次同名量表（${previous.date}）相比${delta > 0 ? '上升' : '下降'} ${Math.abs(delta)} 分。`,
+    );
+  } else {
+    lines.push('这是该量表在当前档案里的第一条完整记录，后续可以做同量表复测来观察变化。');
+  }
+
+  const openWarnings = warnings.filter((item) => item.status !== 'resolved');
+  if (openWarnings.length > 0) {
+    const latestWarning = openWarnings[0];
+    const suggestion = (latestWarning.suggestion || '建议按预警页的提示跟进').replace(/[。！？!?；;]+$/, '');
+    lines.push(
+      `目前还有 ${openWarnings.length} 条未处理预警；最近一条是「${latestWarning.title}」（${latestWarning.createdAt}），${suggestion}。`,
+    );
+  } else {
+    lines.push('目前没有未处理的预警记录。');
+  }
+
+  if (latest.level === 'red' || latest.level === 'orange') {
+    lines.push('建议优先联系学校心理中心、咨询师或医疗专业人员，先安排一次面对面的支持。');
+  } else if (latest.level === 'yellow') {
+    lines.push('建议保持规律记录，并在 1–2 周内用同一份量表复测一次；若持续加重，及时联系专业人员。');
+  } else {
+    lines.push('当前结果较平稳，保持现有节奏即可；下次想了解变化时再做一次同量表复测。');
+  }
+
+  return lines;
+}
 
 export default function Cases() {
   const [screeningRecords, setScreeningRecords] = useState<PersonalScreeningRecord[]>([]);
@@ -13,13 +80,18 @@ export default function Cases() {
   const [userProfile, setUserProfile] = useState<UserProfile>({
     name: '—', age: 0, gender: '', campus: '', major: '', stage: '', emergencyContact: '',
   });
-  const [, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
+    let alive = true;
     (async () => {
       try {
         setLoading(true);
+        setError('');
         const data = await getCases();
+        if (!alive) return;
         setScreeningRecords(data.screeningRecords ?? []);
         setWarningEvents(data.warningEvents ?? []);
         setPersonalTimeline(data.personalTimeline ?? []);
@@ -34,12 +106,15 @@ export default function Cases() {
           });
         }
       } catch (e) {
-        console.error('加载档案失败', e);
+        if (alive) setError(e instanceof Error ? e.message : '档案加载失败，请稍后重试');
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
-  }, []);
+    return () => {
+      alive = false;
+    };
+  }, [reload]);
 
   // 副标题只拼有值的字段：此前会把空字段也连起来，渲染成「名字 ·  · 0 岁 ·  ·」，
   // 而 age 的 0 是「未知」不是真的 0 岁。宁可少显示，也不要显示假的。
@@ -54,6 +129,43 @@ export default function Cases() {
     .filter(Boolean)
     .join(' · ');
 
+  const summary = buildSummary(screeningRecords, warningEvents);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="ui-card p-5">
+          <div className="h-6 w-40 animate-pulse rounded bg-slate-100" />
+          <div className="mt-3 h-4 w-64 animate-pulse rounded bg-slate-100" />
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="ui-card h-52 animate-pulse bg-slate-50" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="ui-card p-6">
+        <p className="text-[15px] font-medium text-slate-800">心理档案加载失败</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{error}</p>
+        <p className="mt-1 text-[12.5px] leading-5 text-slate-500">
+          这不等于你没有记录；可能是网络或后端暂时不可用。
+        </p>
+        <button
+          type="button"
+          onClick={() => setReload((value) => value + 1)}
+          className="ui-button ui-button-primary mt-4 inline-flex items-center gap-2"
+        >
+          <RefreshCw className="h-4 w-4" />
+          重试
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -125,11 +237,22 @@ export default function Cases() {
             <Sparkles className="w-5 h-5 text-primary-600" />
             档案摘要
           </h3>
-          <div className="space-y-3 text-sm text-slate-600 leading-6">
-            <p>你的风险主要由“学习压力上升 + 睡眠下降 + 情绪耗竭”共同驱动。</p>
-            <p>模型建议优先执行短周期干预：稳定睡眠、降低压力峰值、增强支持连接。</p>
-            <p>建议每 3-4 天完成一次简版筛查并更新多模态样本。</p>
-          </div>
+          {summary ? (
+            <div className="space-y-2.5 text-sm leading-6 text-slate-600">
+              {summary.map((line, index) => (
+                <p key={index} className="flex gap-2">
+                  <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-slate-300" />
+                  <span>{line}</span>
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg bg-slate-50 px-3 py-6 text-center text-sm leading-6 text-slate-400">
+              还没有完成的筛查记录。
+              <br />
+              完成一次筛查后，这里会根据你的最近记录生成摘要。
+            </p>
+          )}
         </div>
       </div>
 

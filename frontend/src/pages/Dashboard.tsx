@@ -51,6 +51,23 @@ function todayLabel() {
   return `${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${WEEKDAYS[d.getDay()]}`;
 }
 
+/** 把后端可能返回的 "2026-03-18" / "2026-03-18 09:12" / ISO 统一解析成日期 */
+function parseDateValue(value?: string | null): Date | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw)
+    ? raw.replace(" ", "T")
+    : raw;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function monthOf(value?: string | null): string {
+  const date = parseDateValue(value);
+  if (!date) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 /** 用各量表自己的 scoring() 扫出分档，避免另写一张阈值表 */
 function scoringBands(
   definition: QuestionnaireDefinition | undefined,
@@ -154,21 +171,43 @@ export default function Dashboard() {
     const bands = scoringBands(def, last?.maxScore ?? 0);
     const result = def && last ? def.scoring(last.score) : null;
 
+    /* 「最近 30 天」必须按今天的日期筛，而不是把全部历史累计进来。
+       演示数据是 3 月样例，11 月登录时不应显示成"最近 30 天"；样例只在
+       下方明确标注为「样例月份」。 */
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const inLast30Days = (value?: string | null) => {
+      const date = parseDateValue(value);
+      return Boolean(date && date >= cutoff && date <= now);
+    };
+    const recentRecords = records.filter((r) => inLast30Days(r.date));
+    /* 挂用户名下（未挂记录）的采集也计入：新账号采集后，
+       「这 30 天你记录了 N 次」与模态条形图不该还是 0。
+       挂记录的在上面已按记录计过，这里只补未挂记录且时间在 30 天内的，避免重复计数。 */
+    const userSupplements = supplements.filter((s) => !s.screeningId);
+    const recentSupplements = userSupplements.filter((s) => inLast30Days(s.createdAt));
+
     const counts: Record<string, number> = { 文本: 0, 语音: 0, 图像: 0 };
-    records.forEach((r) => {
+    recentRecords.forEach((r) => {
       const k = modalityOf(r);
       counts[k] = (counts[k] ?? 0) + 1;
     });
-    /* 挂用户名下（未挂记录）的采集也计入：新账号采集后，
-       「这 30 天你记录了 N 次」与模态条形图不该还是 0。
-       挂记录的在上面已按记录计过，这里只补未挂记录的，避免重复计数。 */
-    const userSupplements = supplements.filter((s) => !s.screeningId);
-    userSupplements.forEach((s) => {
+    recentSupplements.forEach((s) => {
       const k = s.kind === "audio" ? "语音" : s.kind === "image" ? "图像" : "文本";
       counts[k] = (counts[k] ?? 0) + 1;
     });
-    const totalRecords = records.length + userSupplements.length;
+    const totalRecords = recentRecords.length + recentSupplements.length;
     const maxCount = Math.max(1, ...Object.values(counts));
+
+    /* 演示数据所在的月份：只在"最近 30 天/本月为空"时展示，避免把旧样例说成现在 */
+    const allMonths = [
+      ...records.map((r) => monthOf(r.date)),
+      ...supplements.map((s) => monthOf(s.createdAt)),
+      ...(data.warningEvents ?? []).map((w) => monthOf(w.createdAt)),
+    ].filter(Boolean);
+    const latestSampleMonth = allMonths.sort().at(-1) ?? "";
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const sampleMonth = latestSampleMonth && latestSampleMonth !== currentMonth ? latestSampleMonth : "";
 
     const warning = (data.warningEvents ?? []).find((w) => w.status !== "resolved");
 
@@ -183,13 +222,22 @@ export default function Dashboard() {
             : [];
     const planItems = [...levelPlan, ...(data.actionPlan ?? [])];
 
-    /* 「最近预警」按数据里最新的那个月统计，避免演示数据（3 月）恒显示 0 */
+    /* 「最近预警」按**当前自然月**统计；当前月没有、但库里只有旧样例时，
+       不把旧数据说成「本月」，而是明确标注「样例月份 3 月」。 */
     const warnings = data.warningEvents ?? [];
-    /* 后端字段名可能不是 createdAt（真后端用 snake_case 时这里是 undefined），
-       一旦 undefined.slice() 会直接抛错、整页白屏，所以先取字符串再切。 */
-    const latestMonth = String(warnings[0]?.createdAt ?? "").slice(0, 7);
-    const monthWarnings = warnings.filter((w) => w.createdAt.startsWith(latestMonth));
-    const monthCounts = monthWarnings.reduce<Record<string, number>>((acc, w) => {
+    const monthWarnings = warnings.filter(
+      (w) => String(w.createdAt ?? "").slice(0, 7) === currentMonth,
+    );
+    const sampleWarnings = sampleMonth
+      ? warnings.filter((w) => String(w.createdAt ?? "").slice(0, 7) === sampleMonth)
+      : [];
+    const displayWarnings = monthWarnings.length ? monthWarnings : sampleWarnings;
+    const warningPeriodLabel = monthWarnings.length
+      ? "本月"
+      : sampleMonth
+        ? `样例月份 ${Number(sampleMonth.slice(5))} 月`
+        : "本月";
+    const monthCounts = displayWarnings.reduce<Record<string, number>>((acc, w) => {
       const label = LEVEL_LABEL[w.level] ?? "—";
       acc[label] = (acc[label] ?? 0) + 1;
       return acc;
@@ -200,6 +248,17 @@ export default function Dashboard() {
        新账号没有筛查记录时，采集挂在用户名下（supplements），
        用它保证"上传后一定看得到"，而不是只上传不挂靠。 */
     const draft = getDraft();
+    const draftDefinition = draft ? questionnaires.find((q) => q.id === draft.scaleId) : undefined;
+    const pendingDraft =
+      draft && !draft.recordId && draftDefinition
+        ? {
+            scaleId: draft.scaleId,
+            name: draftDefinition.name,
+            answered: Object.keys(draft.answers ?? {}).length,
+            total: draftDefinition.questions.length,
+            updatedAt: draft.updatedAt,
+          }
+        : null;
     const supplement =
       records.find((r) => r.supplement)?.supplement ??
       supplements[0] ??
@@ -253,6 +312,10 @@ export default function Dashboard() {
       warning,
       planItems,
       monthWarnings,
+      displayWarnings,
+      warningPeriodLabel,
+      sampleMonth,
+      pendingDraft,
       retrievalQuery,
       monthBreakdown: Object.entries(monthCounts)
         .map(([k, v]) => `${k} ${v}`)
@@ -419,15 +482,36 @@ export default function Dashboard() {
           />
           <ActionStack
             padY={tune.btnPad}
-            to="/personal/screening?tab=scale"
-            title="评估心理状态"
+            to={
+              view.pendingDraft
+                ? `/personal/first/questionnaire?scale=${encodeURIComponent(view.pendingDraft.scaleId)}`
+                : "/personal/screening?tab=scale"
+            }
+            title={view.pendingDraft ? "继续上次作答" : "评估心理状态"}
             meta={
-              view.last
-                ? `上次评估 ${view.last.date} · 建议每 2 周一次`
-                : "还没做过评估 · 约 3 分钟"
+              view.pendingDraft
+                ? `${view.pendingDraft.name} · 已答 ${view.pendingDraft.answered}/${view.pendingDraft.total} 题`
+                : view.last
+                  ? `上次评估 ${view.last.date} · 建议每 2 周一次`
+                  : "还没做过评估 · 约 3 分钟"
             }
           />
         </div>
+
+        {/* 中途退出后回到首页：明确给一个「继续作答」入口，并显示已答进度。
+            草稿按账号保存在本次标签页里，刷新后仍在。 */}
+        {view.pendingDraft && (
+          <Link
+            to={`/personal/first/questionnaire?scale=${encodeURIComponent(view.pendingDraft.scaleId)}`}
+            className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-primary-200 bg-primary-50/60 px-4 py-3 text-[13px] text-primary-700 transition-colors hover:bg-primary-50"
+          >
+            <span>
+              上次的《{view.pendingDraft.name}》还没答完，已保存到第{" "}
+              {Math.min(view.pendingDraft.answered + 1, view.pendingDraft.total)} 题附近
+            </span>
+            <span className="shrink-0 font-medium">继续作答 →</span>
+          </Link>
+        )}
       </div>
 
       {/* ============ ③ 今日行动计划（右栏） ============ */}
@@ -788,6 +872,13 @@ export default function Dashboard() {
           <p className="mt-3 text-[24px] font-semibold leading-[1.3] text-slate-900">
             这 30 天你记录了 {view.totalRecords} 次
           </p>
+          {view.totalRecords === 0 && (
+            <p className="mt-2 text-[12.5px] leading-6 text-slate-400">
+              {view.sampleMonth
+                ? `最近 30 天还没有新记录。页面里的 ${Number(view.sampleMonth.slice(5))} 月数据是演示样例，不计入最近 30 天。`
+                : "最近 30 天还没有新记录，从上方「记录一下现在」开始即可。"}
+            </p>
+          )}
 
           <div className="mt-5">
             {(["文本", "语音", "图像"] as const).map((k) => (
@@ -832,8 +923,8 @@ export default function Dashboard() {
             <div className="min-w-0">
               <h2 className="text-[20px] font-semibold text-slate-900">最近预警</h2>
               <p className="mt-1 text-[13px] text-slate-500">
-                {view.monthWarnings.length
-                  ? `本月 ${view.monthWarnings.length} 条 · ${view.monthBreakdown}`
+                {view.displayWarnings.length
+                  ? `${view.warningPeriodLabel} ${view.displayWarnings.length} 条 · ${view.monthBreakdown}`
                   : "本月暂无新提醒"}
               </p>
             </div>
@@ -841,12 +932,12 @@ export default function Dashboard() {
               to="/personal/alerts"
               className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12.5px] text-slate-600 hover:border-primary-300 hover:text-primary-600"
             >
-              {view.monthWarnings.length > 2 ? `全部 ${view.monthWarnings.length} 条` : '全部'}
+              {view.displayWarnings.length > 2 ? `全部 ${view.displayWarnings.length} 条` : '全部'}
             </Link>
           </div>
 
           <ul className="mt-4 grid gap-3">
-            {view.monthWarnings.slice(0, 2).map((alert) => (
+            {view.displayWarnings.slice(0, 2).map((alert) => (
               <li key={alert.id} className="rounded-xl border border-slate-100 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[12.5px] tabular-nums text-slate-400">
@@ -876,8 +967,13 @@ export default function Dashboard() {
                 </p>
               </li>
             ))}
-            {!view.monthWarnings.length && (
+            {!view.displayWarnings.length && (
               <li className="py-6 text-center text-[13px] text-slate-400">本月暂无新提醒。</li>
+            )}
+            {view.sampleMonth && !view.monthWarnings.length && view.displayWarnings.length > 0 && (
+              <li className="text-center text-[11.5px] text-slate-400">
+                以上为 {Number(view.sampleMonth.slice(5))} 月演示样例；当前自然月暂无新提醒。
+              </li>
             )}
           </ul>
         </section>
@@ -889,8 +985,10 @@ export default function Dashboard() {
           心理援助热线 <b className="tabular-nums text-slate-800">12356</b>（24 小时）
         </span>
         <span className="text-slate-300">·</span>
+        {/* 这里没有真正的预约能力，按钮名称不能写成"预约"。
+            接入校心理中心的预约/联系方式后，再把入口和文案一起换掉。 */}
         <Link to="/personal/alerts" className="hover:text-primary-600">
-          预约校心理中心
+          查看预警与求助方式
         </Link>
         <span className="text-slate-300">·</span>
         <span>
