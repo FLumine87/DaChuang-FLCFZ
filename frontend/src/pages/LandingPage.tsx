@@ -583,7 +583,7 @@ export default function LandingPage() {
       >
         <Aurora />
         <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
-          <div data-reveal>
+          <div data-reveal className="@container">
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
               平台概览
             </p>
@@ -604,8 +604,12 @@ export default function LandingPage() {
             </p>
 
             {/* 特性列表 + 首屏「立即体验」：与右上角「登录」同一个入口（进登录页后再切换身份）。
-                按钮放在列表右侧的空白处并底对齐，不给首屏多添一行高度。 */}
-            <div className="mt-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-t border-dashed border-slate-200 pt-4">
+                按钮与四条清单同处一行，垂直居中对齐（落在第二、三条之间），并在这行
+                剩余的横向空间里居中 —— 不是整栏居中，仍保持左栏的左对齐关系。
+                用容器查询按「左栏实际宽度」切两栏：只有宽度 ≥510px（清单 329 + 按钮 133
+                + 两侧各留 24）时才并排，1024 那种窄左栏自动落回按钮在下的单栏。
+                不要改成 justify-between：那会把按钮顶到右边缘，贴着右侧大卡片。 */}
+            <div className="mt-5 grid grid-cols-1 items-center gap-y-4 border-t border-dashed border-slate-200 pt-4 @[510px]:grid-cols-[auto_minmax(0,1fr)]">
               <ul className="grid gap-1">
                 {[
                   "动态跨模态哈希检索：毫秒级匹配相似案例",
@@ -625,7 +629,7 @@ export default function LandingPage() {
               <button
                 type="button"
                 onClick={() => navigateWithTransition(navigate, "/login")}
-                className="group inline-flex shrink-0 items-center gap-2 rounded-full bg-primary-600 px-6 py-3 text-[15px] font-medium text-white shadow-[0_16px_34px_-18px_rgba(70,95,255,0.9)] transition-all duration-200 hover:bg-primary-700 active:scale-[0.97]"
+                className="group inline-flex shrink-0 items-center justify-self-start gap-2 rounded-full bg-primary-600 px-6 py-3 text-[15px] font-medium text-white shadow-[0_12px_28px_-18px_rgba(70,95,255,0.5)] transition-all duration-200 hover:bg-primary-700 active:scale-[0.97] @[510px]:justify-self-center"
               >
                 <span className="whitespace-nowrap">立即体验</span>
                 <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
