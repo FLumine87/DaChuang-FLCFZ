@@ -1465,7 +1465,7 @@ html:not(.app-booted) .page-enter {
       1) 只动 transform（合成层，不触发重排/重绘），三个光斑 42~60s 缓慢漂移；
       2) 低不透明度叠在浅底上，颜色全部取自项目品牌色（蓝 / 青 / 淡紫），
          避免出现"彩色塑料感"。
-   登录屏刻意不放这一层（登录页保持干净），只有内容屏使用。
+   登录页与主页共用这一层，配色与动态效果保持一致。
    ========================================================================== */
 .aurora {
   position: absolute;
@@ -1548,6 +1548,140 @@ html:not(.app-booted) .page-enter {
     animation: none;
   }
 }
+
+/* --------------------------------------------------------------------------
+   公共入口背景的三个变体
+   —— 主页首屏、登录、首次筛查共用同一套蓝白 / 蓝紫语言，只调整"装饰的量"：
+      rich    内容屏 / 工作台：三团光 + 三片玻璃（原样）
+      calm    登录、首次选择：一片大曲面 + 两团淡光，去掉青色光团
+      minimal 主页首屏：人物插画已经承担弧面，背景只留一层淡雾
+      still   正式答题：形状与颜色不变，只停漂移，阅读区保持稳定
+   —— 视觉方向统一为"左白右蓝紫"，与首屏人物插画的弧面方向一致。
+   -------------------------------------------------------------------------- */
+.aurora--calm .glass-1,
+.aurora--calm .glass-3,
+.aurora--minimal .glass {
+  display: none;
+}
+
+.aurora--calm span:nth-child(2),
+.aurora--minimal span:nth-child(2) {
+  display: none;
+}
+
+/* calm：左上一团淡蓝、右下一团淡紫；右上一片大曲面承接登录卡 */
+.aurora--calm span:nth-child(1) {
+  width: 56vw;
+  height: 56vw;
+  left: -20vw;
+  top: -24vw;
+  opacity: 0.55;
+}
+
+.aurora--calm span:nth-child(3) {
+  width: 48vw;
+  height: 48vw;
+  right: -16vw;
+  bottom: -22vw;
+  left: auto;
+  opacity: 0.5;
+}
+
+.aurora--calm .glass-2 {
+  width: 64vw;
+  height: 54vw;
+  right: -16vw;
+  top: -14vw;
+  border-radius: 46% 54% 58% 42% / 52% 48% 52% 48%;
+  background: linear-gradient(
+    140deg,
+    rgba(255, 255, 255, 0.48) 0%,
+    rgba(176, 205, 255, 0.26) 52%,
+    rgba(160, 170, 255, 0.14) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow:
+    inset 0 -30px 70px -30px rgba(110, 150, 255, 0.18),
+    0 30px 90px -60px rgba(70, 95, 255, 0.35);
+  opacity: 0.9;
+  transform: rotate(0deg);
+  animation-duration: 70s;
+}
+
+/* minimal：首屏只保留很淡的蓝雾，把装饰让给人物插画 */
+.aurora--minimal span:nth-child(1) {
+  width: 62vw;
+  height: 62vw;
+  left: -24vw;
+  top: -30vw;
+  opacity: 0.4;
+}
+
+.aurora--minimal span:nth-child(3) {
+  width: 42vw;
+  height: 42vw;
+  right: -14vw;
+  bottom: -24vw;
+  left: auto;
+  opacity: 0.32;
+}
+
+.aurora--calm::after,
+.aurora--minimal::after {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(247, 250, 255, 0.72) 30%,
+    rgba(228, 240, 255, 0.42) 62%,
+    rgba(208, 222, 255, 0.28) 100%
+  );
+}
+
+/* 深色：保持同一构图，明暗层次重新安排；不出现白雾 */
+.dark .aurora--calm span:nth-child(1),
+.dark .aurora--calm span:nth-child(3),
+.dark .aurora--minimal span:nth-child(1),
+.dark .aurora--minimal span:nth-child(3) {
+  opacity: 0.26;
+}
+
+.dark .aurora--calm .glass-2 {
+  background: linear-gradient(
+    140deg,
+    rgba(104, 134, 240, 0.16) 0%,
+    rgba(70, 92, 186, 0.1) 52%,
+    rgba(44, 56, 116, 0.06) 100%
+  );
+  border-color: rgba(146, 178, 255, 0.12);
+  box-shadow:
+    inset 0 -30px 70px -30px rgba(18, 32, 74, 0.5),
+    0 30px 90px -60px rgba(4, 10, 28, 0.8);
+  opacity: 0.55;
+}
+
+.dark .aurora--calm::after,
+.dark .aurora--minimal::after {
+  background: linear-gradient(
+    100deg,
+    rgba(8, 13, 26, 0.96) 0%,
+    rgba(12, 19, 36, 0.86) 34%,
+    rgba(20, 31, 58, 0.58) 68%,
+    rgba(30, 42, 82, 0.34) 100%
+  );
+}
+
+/* 正式答题：形状保留、动画全停（只停漂移，不改变深浅色下的样子） */
+.aurora--still,
+.aurora--still span,
+.aurora--still .glass {
+  animation: none !important;
+}
+
+.aurora--still span,
+.aurora--still .glass {
+  will-change: auto !important;
+}
+
 
 /* 顶栏：不再有自己的底色。
    之前给顶栏一块淡紫蓝（--color-header），与页面底色（--color-page）不是同一个色，

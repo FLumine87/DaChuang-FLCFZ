@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Check, Moon, Sun } from "lucide-react";
+import Aurora from "../../components/Aurora";
 import BrandLogo from "../../components/BrandLogo";
 import { useFirstRunTheme } from "./useFirstRunTheme";
 import { stepLabel, type FirstRunStep } from "./firstRunSteps";
@@ -11,8 +12,8 @@ import { stepLabel, type FirstRunStep } from "./firstRunSteps";
  * 四张效果图的顶栏、左侧叙事栏、背景图形是同一套，所以抽到这里：
  *   · 顶栏：品牌 ｜ 健康管理平台 ｜ 当前步骤（与登录页/主页同一结构）
  *   · 左栏：眉标 + 大标题 + 正文 + 步骤进度（或要点列表）
- *   · 背景：细网格 + 三圈同心轨道 + 两团柔光（与登录页同源）
- *   · 入场：整页共用 .welcome-in 的分级渐入，换步骤时自动重放
+ *   · 背景：与登录页/主页首屏同一套蓝白 / 蓝紫（Aurora · calm），不再叠轨道与网格
+ *   · 入场：只有欢迎页播整页渐入；02–04 保持外壳稳定，只让题目/卡片轻微变化
  *
  * 右栏内容（卡片）由各步骤自己传进来。
  */
@@ -29,6 +30,7 @@ export default function FirstRunShell({
   wide = false,
   alignTop = false,
   stretch = false,
+  compact = false,
 }: {
   /** 2/3/4 显示「首次筛查 · n/4」；欢迎页不传，显示「首次使用」 */
   step?: 2 | 3 | 4;
@@ -46,6 +48,8 @@ export default function FirstRunShell({
   wide?: boolean;
   /** 左栏与右侧顶部对齐（03：避免"左边偏低、右边偏高"） */
   alignTop?: boolean;
+  /** 01 正式答题：左侧大标题降一档，让右侧题目成为主要阅读对象 */
+  compact?: boolean;
   /** 右侧卡片撑满整行高度（03 结果页）。
       卡片高度原本跟着 tab 内容变：选「结果摘要」「后续建议」时内容短，
       卡片就显矮、看着往上飘；选「分析依据」撑满了才不飘。
@@ -54,18 +58,24 @@ export default function FirstRunShell({
 }) {
   const { theme, toggleTheme } = useFirstRunTheme();
   const [mounted, setMounted] = useState(false);
+  /* 02–04 的标题统一收一档：正式流程里右侧题目/卡片才是主角，
+     60px 大标题在「多一条线索，由你决定分享多少。」这种长句上还会折出孤字。
+     欢迎页保持大字，作为整条入口的起始画面。 */
+  const tight = compact || Boolean(step);
 
-  /* 挂载后再加 .welcome-in：首帧就是终态的话，动画不会播（元素一开始就可见）。
-     用 rAF 推到下一帧，保证每个步骤进来都重放一次分级渐入。 */
+  /* 只有欢迎页播整页渐入：首帧就是终态的话动画不会播，所以用 rAF 推到下一帧。
+     02–04 正式流程不再整页重播 —— 换一步就重开一次页面会打断"同一份问卷"的连续感，
+     换题只由题目自身的 question-enter 做轻微过渡。 */
   useEffect(() => {
+    if (step) return;
     const id = window.requestAnimationFrame(() => setMounted(true));
     return () => window.cancelAnimationFrame(id);
-  }, []);
+  }, [step]);
 
   return (
     <div
       className={`page-enter auth-snap first-run min-h-screen bg-page text-slate-800 ${
-        mounted ? "welcome-in" : ""
+        mounted && !step ? "welcome-in" : ""
       }`}
     >
       <header className="nav-blur sticky top-0 z-40 px-6 sm:px-10 lg:px-12 xl:px-16">
@@ -75,18 +85,31 @@ export default function FirstRunShell({
             <span className="hidden whitespace-nowrap text-[15px] font-medium text-primary-600 sm:inline">
               健康管理平台
             </span>
-            <span
-              aria-hidden="true"
-              className="hidden h-5 w-px bg-slate-300/80 sm:block"
-            />
-            <span className="whitespace-nowrap text-[15px] font-medium text-slate-700">
-              {step ? "首次筛查" : "首次使用"}
-            </span>
+            {/* 欢迎页只在品牌区写一次「首次使用」；02–04 的进度在桌面端放右侧，
+                这里只在手机（右侧进度被隐藏）补一个「首次筛查」，避免顶栏失去页名。 */}
+            {!step ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="hidden h-5 w-px bg-slate-300/80 sm:block"
+                />
+                <span className="whitespace-nowrap text-[15px] font-medium text-slate-700">
+                  首次使用
+                </span>
+              </>
+            ) : (
+              <span className="whitespace-nowrap text-[15px] font-medium text-slate-700 sm:hidden">
+                首次筛查
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="mr-1 hidden whitespace-nowrap text-sm font-medium text-slate-500 sm:inline">
-              {stepLabel(step)}
-            </span>
+            {/* 欢迎页的品牌区已经写了「首次使用」，右侧不再重复一次 */}
+            {step && (
+              <span className="mr-1 hidden whitespace-nowrap text-sm font-medium text-slate-500 sm:inline">
+                {stepLabel(step)}
+              </span>
+            )}
             <Link
               to="/"
               className="hidden px-2.5 py-2 text-sm font-medium text-slate-500 transition-colors duration-200 hover:text-primary-600 sm:inline"
@@ -112,14 +135,10 @@ export default function FirstRunShell({
         </div>
       </header>
 
-      <section className="auth-art relative flex items-center px-6 py-10 sm:px-10 lg:min-h-[calc(100svh-4rem)] lg:px-12 xl:px-16">
-        {/* 背景图形：与欢迎页同一套（三圈轨道 + 一枚落点 + 两团柔光） */}
-        <div className="auth-orbit welcome-orbit" />
-        <div className="auth-orbit welcome-orbit scale-[1.35]" />
-        <div className="auth-orbit welcome-orbit scale-[1.7]" />
-        <div className="welcome-dot" />
-        <div className="auth-glow auth-glow-left welcome-glow" />
-        <div className="auth-glow auth-glow-right welcome-glow" />
+      <section className="relative flex items-center overflow-hidden px-6 py-10 sm:px-10 lg:min-h-[calc(100svh-4rem)] lg:px-12 xl:px-16">
+        {/* 与登录页、主页首屏同一套蓝白 / 蓝紫背景：
+            欢迎页沿用缓慢漂移；02–04 正式流程改为静止，阅读区不跟着动。 */}
+        <Aurora variant="calm" still={Boolean(step)} />
 
         <div
           className={`relative z-10 mx-auto grid w-full gap-12 lg:justify-center lg:gap-[64px] ${
@@ -141,11 +160,23 @@ export default function FirstRunShell({
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
               {eyebrow}
             </p>
-            <h1 className="auth-section-title mt-6 max-w-[720px] text-slate-900">
+            <h1
+              className={
+                tight
+                  ? "mt-6 max-w-[560px] text-[36px] font-medium leading-[1.3] tracking-tight text-slate-900"
+                  : "auth-section-title mt-6 max-w-[720px] text-slate-900"
+              }
+            >
               {title}
             </h1>
             {body && (
-              <p className="mt-8 max-w-[600px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
+              <p
+                className={
+                  tight
+                    ? "mt-6 max-w-[520px] text-[17px] leading-8 text-slate-600"
+                    : "mt-8 max-w-[600px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]"
+                }
+              >
                 {body}
               </p>
             )}

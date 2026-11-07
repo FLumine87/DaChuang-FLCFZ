@@ -160,7 +160,7 @@ export default function FirstRunResult() {
     >
       {/* ============ 本次筛查报告卡 ============ */}
       {/* 长宽固定：切「结果摘要 / 分析依据 / 后续建议」时卡片尺寸不变，内容多就在卡内滚动（用户要求：方框长宽不要变） */}
-      <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)] sm:p-7 report-card">
+      <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7 report-card">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h2 className="text-base font-semibold text-slate-900">本次筛查结果</h2>
           <p className="text-[12px] text-slate-400">

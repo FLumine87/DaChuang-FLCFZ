@@ -110,20 +110,29 @@ export default function LandingPage() {
     return () => window.removeEventListener("resize", sync);
   }, [active]);
 
-  /* 桌面端整屏翻页：
-     · 向下——累计 40px 就直接接管，边收手势边播一屏缓动；一次手势只翻一屏，
-       惯性尾巴被吞掉，等滚轮真正停下 180ms 后才允许下一次。
-     · 向上——不接管，继续走原生滚动（可连续穿过多屏），停手后吸附；
-       向下动画中一旦明确向上滑，立即取消动画、把控制权交还原生滚动。
-     · 尺寸只在挂载 / resize / 内容尺寸变化时测量，滚动过程不读布局。 */
+  /* 桌面端整屏翻页（一次手势只翻一屏，向上保持连续）：
+     · 向下——滚轮一进来先给一小段跟手位移，累计到 32px（标准化后）就锁定
+       「下一屏」为目标并接管动画；同一手势的惯性只做收尾，不再翻第二屏。
+     · 动画——ease-out，从当前位置直接走，不做"从零加速"；时长 360–540ms。
+     · 解锁——动画结束且滚轮静默 100ms 后，才允许下一次独立下滑。
+     · 向上——不接管，继续原生滚动，停手后按 28% 门槛吸附；下滑动画中
+       明确反向超过 10px 就取消动画、交还原生滚动。
+     · 布局只在挂载 / resize / 内容尺寸变化时测量，滚动过程只读缓存。 */
   useEffect(() => {
     const NAV_H = 64;
-    const TRIGGER_PX = 40;     // 向下累计 40px 即出发（30–50 之间，按手感再调）
-    const DURATION = 500;      // 一屏动画时长：起步柔和、后半程减速
-    const GESTURE_GAP = 120;   // 两段滚轮间隔超过它 → 算新手势
-    const UNLOCK_QUIET = 180;  // 动画结束后滚轮静默 180ms 才解锁下一屏
-    const REVERSE_PX = 12;     // 动画中反向累计超过它 → 交还控制
-    const UP_TRIGGER = 0.28;   // 向上沿用原来的 28% 屏高阈值
+    const DOWN_TRIGGER = 32;      // 标准化后的累计触发量（30–50 可调）
+    const DOWN_MIN_FLIP = 8;      // 手势结束时至少走过这么多才翻，避免轻微抖动误触
+    const DOWN_STEP_GAIN = 0.32;  // 触发前的跟手位移比例
+    const DOWN_STEP_MAX = 16;     // 单次跟手位移上限
+    const MAX_EVENT_PX = 60;      // 单次事件最多计 60px：鼠标滚轮一格约 100，触控板一格约 1–10
+    const DOWN_MS_MIN = 360;
+    const DOWN_MS_MAX = 540;
+    const GESTURE_GAP = 140;      // 两段滚轮间隔超过它 → 算新手势
+    const UNLOCK_QUIET = 100;     // 动画结束后滚轮静默这么久才解锁下一屏
+    const UP_SETTLE_MS = 160;     // 向上停手后吸附
+    const REVERSE_PX = 10;        // 下滑动画中反向超过它 → 交还控制
+    const UP_TRIGGER = 0.28;      // 向上沿用原来的 28% 屏高阈值
+    const END_QUIET = 110;        // 不足 32px 就停手时，用这个间隔做兜底判定
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     const desktop = window.matchMedia("(min-width: 1024px) and (min-height: 600px)");
 
@@ -131,6 +140,7 @@ export default function LandingPage() {
     let screens: HTMLElement[] = [];
     let tops: number[] = [];
     let maxScroll = 0;
+    let viewH = 0;
     let fits = false;
 
     let raf = 0;
@@ -140,22 +150,27 @@ export default function LandingPage() {
     let animStart = 0;
     let animMs = 0;
     let animTarget = 0;
+    let animEndAt = 0;
 
     /* 一次手势的状态机 */
     let lastWheelAt = 0;
+    let gestureActive = false;
+    let gestureStartY = 0;
+    let gestureTarget: number | null = null;
     let accDown = 0;
     let accUp = 0;
     let locked = false;        // 这次手势已经用掉一次翻页
     let aborted = false;       // 向下动画被反向手势打断：只允许往上落屏
     let upStartY = -1;
     let upTimer = 0;
+    let endTimer = 0;
     let touchStartY = -1;
     let measureRaf = 0;
     let ro: ResizeObserver | null = null;
 
     const clampY = (y: number) => Math.max(0, Math.min(maxScroll, y));
-    const ease = (t: number) =>
-      t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    /* ease-out：接管时速度最大、后半程减速，避免"先停住再重新起步" */
+    const easeOut = (t: number) => 1 - Math.pow(1 - t, 2.6);
 
     /* 取"参与布局的那一层"：每屏的第一个子元素是绝对定位的极光背景，
        用它量高度会永远等于整屏，兜底判断形同失效。 */
@@ -166,7 +181,7 @@ export default function LandingPage() {
       }) as HTMLElement | undefined;
 
     const contentFits = (els: HTMLElement[]) => {
-      const avail = window.innerHeight - NAV_H;
+      const avail = viewH;
       return els.every((el) => {
         const row = contentRow(el);
         if (!row) return true;
@@ -189,6 +204,7 @@ export default function LandingPage() {
 
     const measure = () => {
       screens = Array.from(document.querySelectorAll<HTMLElement>(".auth-screen"));
+      viewH = window.innerHeight - NAV_H;
       maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
       tops = screens.map((el) => clampY(el.offsetTop - NAV_H));
       fits = desktop.matches && contentFits(screens);
@@ -216,6 +232,7 @@ export default function LandingPage() {
     const cancelGlide = () => {
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
+      if (animating) animEndAt = performance.now();
       animating = false;
     };
 
@@ -224,11 +241,20 @@ export default function LandingPage() {
       const from = window.scrollY;
       const to = clampY(target);
       const delta = to - from;
-      const ms = reduced.matches ? 0 : (msOverride ?? DURATION);
+      /* 距离越短，动画越短：从 360ms 起，一屏约 500ms，不拖到 600 */
+      const autoMs = Math.min(
+        DOWN_MS_MAX,
+        Math.max(DOWN_MS_MIN, 300 + Math.abs(delta) * 0.32),
+      );
+      const ms = reduced.matches ? 0 : (msOverride ?? autoMs);
       animTarget = to;
-      if (Math.abs(delta) < 2) return;
+      if (Math.abs(delta) < 2) {
+        animEndAt = performance.now();
+        return;
+      }
       if (!ms) {
         window.scrollTo(0, to);
+        animEndAt = performance.now();
         return;
       }
       animFrom = from;
@@ -238,18 +264,24 @@ export default function LandingPage() {
       animating = true;
       const step = (now: number) => {
         const p = Math.min(1, (now - animStart) / animMs);
-        window.scrollTo(0, animFrom + animDelta * ease(p));
+        window.scrollTo(0, animFrom + animDelta * easeOut(p));
         if (p < 1) {
           raf = requestAnimationFrame(step);
         } else {
           animating = false;
           raf = 0;
           window.scrollTo(0, animTarget);
+          animEndAt = performance.now();
         }
       };
       raf = requestAnimationFrame(step);
     };
-    glideRef.current = glideToY;
+    /* 导航/页码点走这里：先解锁，再动画，避免点完还被上一条手势锁住 */
+    glideRef.current = (target: number) => {
+      locked = false;
+      gestureActive = false;
+      glideToY(target);
+    };
 
     const nearestIndex = (from: number) => {
       let best = 0;
@@ -286,16 +318,48 @@ export default function LandingPage() {
       return null;
     };
 
-    /* 向下：达到触发值后立刻翻一屏，不再等滚轮停 */
+    /* 新手势：记录起点与"本次最远只到下一屏"的目标 */
+    const resetGesture = () => {
+      gestureActive = true;
+      gestureStartY = window.scrollY;
+      gestureTarget = nextTop(gestureStartY);
+      accDown = 0;
+      accUp = 0;
+      aborted = false;
+      upStartY = -1;
+      clearTimeout(endTimer);
+    };
+
+    /* 向下：达到触发值后立刻翻一屏，不再等滚轮停；目标在手势开始时已固定 */
     const triggerDown = () => {
+      if (locked || animating || !tops.length) return;
+      const target = gestureTarget ?? nextTop(window.scrollY);
       locked = true;
       aborted = false;
       accDown = 0;
+      clearTimeout(endTimer);
       clearTimeout(upTimer);
       upStartY = -1;
-      const target = nextTop(window.scrollY);
       if (target == null) return;
-      glideToY(target, DURATION);
+      glideToY(target);
+    };
+
+    /* 不足 32px 就停手：走过 8px 就当一次轻扫，翻到下一屏；否则回最近一屏。
+       这是"轻轻滑一下"和触控板噪声之间的兜底，不参与正常触发路径。 */
+    const endGesture = () => {
+      if (!gestureActive) return;
+      gestureActive = false;
+      if (animating || locked || !desktop.matches || !fits || !tops.length) return;
+      if (accDown >= DOWN_MIN_FLIP && gestureTarget != null) {
+        triggerDown();
+        return;
+      }
+      if (accDown > 0) {
+        const y = window.scrollY;
+        const nearest = tops[nearestIndex(y)];
+        if (Math.abs(nearest - y) > 2) glideToY(nearest, 320);
+      }
+      accDown = 0;
     };
 
     /* 向上：手势停稳后落屏，沿用原来的"过 28% 才翻、否则回原屏" */
@@ -308,15 +372,15 @@ export default function LandingPage() {
           : (() => {
               const from = upStartY >= 0 ? upStartY : window.scrollY;
               const delta = window.scrollY - from;
-              const avail = window.innerHeight - NAV_H;
-              return Math.abs(delta) > avail * UP_TRIGGER
+              return Math.abs(delta) > viewH * UP_TRIGGER
                 ? tops[stepIndex(from, -1)]
                 : tops[nearestIndex(from)];
             })();
         aborted = false;
         upStartY = -1;
-        glideToY(target, DURATION);
-      }, UNLOCK_QUIET);
+        gestureActive = false;
+        glideToY(target, 420);
+      }, UP_SETTLE_MS);
     };
 
     const onWheel = (event: WheelEvent) => {
@@ -324,70 +388,85 @@ export default function LandingPage() {
       if (event.ctrlKey) return; // 触控板捏合缩放
       const unit =
         event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
-      const dy = event.deltaY * unit;
-      const dx = event.deltaX * unit;
-      if (Math.abs(dy) < Math.abs(dx)) return; // 横向手势不接管
+      const rawY = event.deltaY * unit;
+      const rawX = event.deltaX * unit;
+      if (Math.abs(rawY) < Math.abs(rawX)) return; // 横向手势不接管
+      /* 鼠标滚轮一格 100、触控板一格 1–10：同时压到 60 以内，
+         再用累计 32px 统一判断，避免"鼠标一碰就翻、触控板滑不动" */
+      const px = Math.sign(rawY) * Math.min(Math.abs(rawY), MAX_EVENT_PX);
+      if (!px) return;
 
       const now = performance.now();
       const quiet = now - lastWheelAt;
-      if (!animating) {
-        if (locked) {
-          /* 动画结束还不够：必须等滚轮真正停下，惯性尾巴才不会接着翻页 */
-          if (quiet > UNLOCK_QUIET) {
-            locked = false;
-            accDown = 0;
-            accUp = 0;
-            upStartY = -1;
-          }
-        } else if (quiet > GESTURE_GAP) {
-          accDown = 0;
-          accUp = 0;
-          upStartY = -1;
-        }
-      }
+      const isNew = !gestureActive || quiet > GESTURE_GAP;
       lastWheelAt = now;
 
-      if (dy > 0) {
+      if (px > 0) {
         /* 向下由脚本接管：既避免"原生滚一段 + 再吸附"的两段感，
            也顺手把这次手势的后续惯性全部吞掉。 */
         event.preventDefault();
         aborted = false;
         clearTimeout(upTimer);
         upStartY = -1;
-        if (locked || animating) return;
-        accDown += dy;
-        if (accDown >= TRIGGER_PX) triggerDown();
+        if (animating) return;
+        if (locked) {
+          /* 动画结束还不够：必须等滚轮真正静下来，惯性尾巴才不会接着翻页 */
+          if (quiet <= UNLOCK_QUIET) return;
+          locked = false;
+          resetGesture();
+        } else if (isNew) {
+          resetGesture();
+        } else if (!gestureActive) {
+          resetGesture();
+        }
+
+        accDown += Math.abs(px);
+        /* 触发前先跟手走一小步，别停在原处等判定 */
+        if (gestureTarget != null) {
+          const y = window.scrollY;
+          const step = Math.min(Math.abs(px) * DOWN_STEP_GAIN, DOWN_STEP_MAX);
+          const nextY = Math.min(gestureTarget, y + step);
+          if (nextY > y) window.scrollTo(0, nextY);
+        }
+        clearTimeout(endTimer);
+        endTimer = window.setTimeout(endGesture, END_QUIET);
+        if (accDown >= DOWN_TRIGGER) triggerDown();
         return;
       }
 
-      if (dy < 0) {
-        /* 向下动画中明确反向：立刻交还原生滚动（向上逻辑保持原样） */
-        if (animating) {
-          accUp += -dy;
-          if (accUp < REVERSE_PX) {
-            event.preventDefault();
-            return;
-          }
-          cancelGlide();
-          aborted = true;
-          accUp = 0;
+      /* 向下动画中明确反向：立刻交还原生滚动（向上逻辑保持原样） */
+      if (animating) {
+        accUp += Math.abs(px);
+        if (accUp < REVERSE_PX) {
+          event.preventDefault();
+          return;
         }
-        locked = false;
-        accDown = 0;
-        if (upStartY < 0) upStartY = window.scrollY;
-        scheduleUpSettle();
-        /* 不 preventDefault：向上继续走原生滚动 */
+        cancelGlide();
+        aborted = true;
+        accUp = 0;
       }
+      locked = false;
+      accDown = 0;
+      clearTimeout(endTimer);
+      if (upStartY < 0) upStartY = window.scrollY;
+      gestureActive = true;
+      scheduleUpSettle();
+      /* 不 preventDefault：向上继续走原生滚动 */
     };
 
     /* 桌面触屏（一体机 / 触控笔记本）：沿用原来的"原生滚 + 停手吸附" */
     const onTouchStart = () => {
       if (!desktop.matches || !fits) return;
+      cancelGlide();
       touchStartY = window.scrollY;
       locked = false;
+      gestureActive = false;
       accDown = 0;
       accUp = 0;
-      cancelGlide();
+      aborted = false;
+      upStartY = -1;
+      clearTimeout(endTimer);
+      clearTimeout(upTimer);
     };
 
     const onTouchEnd = () => {
@@ -395,12 +474,11 @@ export default function LandingPage() {
       const from = touchStartY;
       touchStartY = -1;
       const delta = window.scrollY - from;
-      const avail = window.innerHeight - NAV_H;
       const target =
-        Math.abs(delta) > avail * UP_TRIGGER
+        Math.abs(delta) > viewH * UP_TRIGGER
           ? tops[stepIndex(from, delta > 0 ? 1 : -1)]
           : tops[nearestIndex(from)];
-      glideToY(target, DURATION);
+      glideToY(target);
     };
 
     const goBy = (dir: 1 | -1) => {
@@ -408,7 +486,9 @@ export default function LandingPage() {
       const base = nearestIndex(window.scrollY);
       const to = Math.min(tops.length - 1, Math.max(0, base + dir));
       if (to === base) return;
-      glideToY(tops[to], DURATION);
+      locked = false;
+      gestureActive = false;
+      glideToY(tops[to]);
     };
 
     /* 键盘翻页：↑ ↓ / PageUp PageDown / 空格；输入框内不抢键 */
@@ -454,6 +534,7 @@ export default function LandingPage() {
       ro?.disconnect();
       cancelAnimationFrame(measureRaf);
       window.clearTimeout(upTimer);
+      window.clearTimeout(endTimer);
       cancelGlide();
       glideRef.current = null;
     };
@@ -692,7 +773,7 @@ export default function LandingPage() {
         id="top"
         className="auth-screen relative flex items-center overflow-hidden px-6 py-16 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)] lg:py-12"
       >
-        <Aurora />
+        <Aurora variant="minimal" />
         {/* 首屏右侧插画：人物和蓝紫弧面来自同一张参考图，只把背景的左侧、顶部做了
             渐隐（人物本身保持不透明），所以不用 CSS 遮罩也能直接贴在页面背景上。
             绝对定位到 section 右下角，向右、向下贴边出血，不占左栏的排版宽度；

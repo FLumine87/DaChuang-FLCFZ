@@ -15,6 +15,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
+import Aurora from "../components/Aurora";
 import { apiLogin, apiRegister } from "../services/mockApi";
 import { isOfflineDemo } from "../services/http";
 import { saveDisplayName, saveSessionToken } from "../auth/session";
@@ -235,12 +236,10 @@ export default function LoginPage() {
       {/* ============ 第 1 屏：登录（左宣传卡，右登录框） ============ */}
       <section
         id="login"
-        className="auth-screen relative flex items-center px-6 py-8 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)]"
+        className="auth-screen relative flex items-center overflow-hidden px-6 py-8 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)]"
       >
-        <div className="auth-art mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,620px)_minmax(0,450px)] lg:justify-center lg:gap-[72px] 2xl:grid-cols-[minmax(0,720px)_minmax(0,500px)] 2xl:gap-[96px]">
-          <div className="auth-orbit" />
-          <div className="auth-orbit scale-[1.35]" />
-          <div className="auth-orbit scale-[1.7]" />
+        <Aurora variant="calm" />
+        <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,620px)_minmax(0,450px)] lg:justify-center lg:gap-[72px] 2xl:grid-cols-[minmax(0,720px)_minmax(0,500px)] 2xl:gap-[96px]">
 
           {/* 左：与平台简介屏同一套文字格式（眉标 + 大标题 + 正文 + 要点）
               垂直定位：居中后再上提一档（lg:-top-16 = 64px），做**视觉居中**而非几何居中。
@@ -283,7 +282,7 @@ export default function LoginPage() {
 
           {/* 右：登录卡 */}
           <div className="relative z-10 w-full">
-            <div className="mx-auto w-full max-w-[450px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)] sm:p-7 2xl:max-w-[500px]">
+            <div className="mx-auto w-full max-w-[450px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7 2xl:max-w-[500px]">
               <div className="mb-5">
                 <p
                   className={`text-[13px] font-medium tracking-[0.16em] ${

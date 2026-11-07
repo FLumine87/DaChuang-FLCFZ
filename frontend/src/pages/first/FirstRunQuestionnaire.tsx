@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -56,23 +56,6 @@ export default function FirstRunQuestionnaire() {
   const [introOpen, setIntroOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  /* 卸载时清掉待执行的翻页定时器，避免在别的页面上改状态。
-     放在 hooks 区（早退分支之前）——hooks 不能被条件调用。 */
-  useEffect(
-    () => () => {
-      if (pendingAdvance.current !== null) {
-        window.clearTimeout(pendingAdvance.current);
-        pendingAdvance.current = null;
-      }
-    },
-    [],
-  );
-
-  /* 待执行的"选完自动翻页"定时器。
-     必须在早退分支之前声明（hooks 不能被条件调用）。
-     用它而不是时间戳锁：时间锁会让手快的人卡住（连续答题时后一次被吞掉），
-     而"取消待执行定时器"既能防重、又不会误伤正常节奏。 */
-  const pendingAdvance = useRef<number | null>(null);
 
   /* 进来就落一份草稿：中途回主页/刷新，02、03 还能接着走 */
   useEffect(() => {
@@ -116,38 +99,16 @@ export default function FirstRunQuestionnaire() {
   /* PHQ-9 第 9 题（伤害自己的念头）：需要就地给出支持信息 */
   const isSafetyItem = definition.id === "PHQ-9" && question.id === 9;
 
-  /* 翻页防重锁：选完会自动翻页，若此刻又按了回车（或回车先触发、随后按钮的默认点击
-     又选了一次），两次触发会一次跳两题、漏答一半。450ms 内的重复触发只认一次。 */
-  const cancelPendingAdvance = () => {
-    if (pendingAdvance.current !== null) {
-      window.clearTimeout(pendingAdvance.current);
-      pendingAdvance.current = null;
-    }
-  };
-
-  /* 立即翻页：手动点「下一题」、按回车、跳题都用它。
-     关键是先取消待执行的自动翻页——否则"选完（排了 180ms 后翻页）+ 立刻点下一题"
-     会翻两次、静默跳掉一题，那一题没答案，末尾的提交按钮就一直是禁用的。 */
+  /* 翻页只由用户确认：选完选项后停在当前题，方便核对频率词再点「下一题」。
+     之前"选完 180ms 自动翻页"在心理筛查里容易来不及确认，问卷也未提供返回修改的
+     明确停顿；现在与 NHS 的问答模式一致：回答 → 继续。
+     具体操作在卡片底部：上一题 / 下一题（最后一题是提交）。 */
   const goNextNow = () => {
-    cancelPendingAdvance();
     setCurrent((index) => Math.min(total - 1, index + 1));
   };
 
-  /* 选完延迟 180ms 翻页：让选中态先被看见 */
-  const scheduleAdvance = () => {
-    cancelPendingAdvance();
-    pendingAdvance.current = window.setTimeout(() => {
-      pendingAdvance.current = null;
-      setCurrent((index) => Math.min(total - 1, index + 1));
-    }, 180);
-  };
-
-  /* 选完自动翻到下一题（保留「上一题 / 下一题」用于回改）：
-     一屏一题时每题都要求"点选项 + 点下一题"，9 题就是 18 次点击，
-     走完一遍很累。最后一题不自动翻——提交按钮就在下面。 */
   const choose = (value: number) => {
     setAnswers((prev) => ({ ...prev, [question.id]: value }));
-    if (!isLast) scheduleAdvance();
   };
 
   const submit = async () => {
@@ -221,12 +182,13 @@ export default function FirstRunQuestionnaire() {
       }
       steps={firstRunSteps(2)}
       afterBody={isSafetyItem ? <SafetySupportCard /> : undefined}
+      compact
     >
       {/* ============ 答题卡 ============ */}
       {/* 宽度全程不变（560px）：题目再长也让它自然折行，
           不做"遇到长题就加宽卡片"这种事——换题时卡片忽宽忽窄会很跳。
           第 9 题的支持信息因此放在左栏（与 01c 效果图一致），不挤占选项。 */}
-      <div className="mx-auto w-full max-w-[560px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)] sm:p-7">
+      <div className="mx-auto w-full max-w-[560px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-slate-900">
             {definition.id} {shortName(definition.id)}
@@ -275,7 +237,7 @@ export default function FirstRunQuestionnaire() {
             {/* 题目：按自然折行，不用 text-balance —— 平衡折行会在词中间提前断行 */}
             <h3
               key={question.id}
-              className="first-run-question question-enter text-[22px] font-medium leading-9 text-slate-900"
+              className="first-run-question question-enter min-h-[4.5rem] text-[22px] font-medium leading-9 text-slate-900"
             >
               {question.text}
             </h3>
@@ -292,7 +254,7 @@ export default function FirstRunQuestionnaire() {
                     onClick={() => choose(option.value)}
                     className={`flex w-full items-center gap-3.5 rounded-2xl border px-4 py-3.5 text-left text-[15px] transition-all duration-200 ${
                       active
-                        ? "border-primary-500 bg-primary-50/70 font-medium text-primary-700 shadow-[0_10px_30px_-20px_rgba(70,95,255,0.6)]"
+                        ? "border-primary-500 bg-primary-50/70 font-medium text-slate-900 shadow-[0_10px_30px_-22px_rgba(70,95,255,0.45)]"
                         : "border-slate-200 bg-white text-slate-700 hover:border-primary-200 hover:bg-primary-50/40"
                     }`}
                   >
@@ -336,10 +298,7 @@ export default function FirstRunQuestionnaire() {
                 <button
                   key={index}
                   type="button"
-                  onClick={() => {
-                    cancelPendingAdvance();
-                    setCurrent(index);
-                  }}
+                  onClick={() => setCurrent(index)}
                   className="rounded-lg border border-warning-500/40 bg-white px-2.5 py-1 text-[12px] text-slate-600 transition-colors hover:border-warning-500 hover:text-warning-600"
                 >
                   第 {index + 1} 题
