@@ -56,8 +56,8 @@ export default function AdminCases() {
   const [notice, setNotice] = useState('');
   /* 防重复提交：按钮 disabled 是异步生效的，连点两下仍会发两个请求 */
   const actionRef = useRef(false);
-  /** 点了 × 之后收起成一张小卡，点小卡展开（不清空选择） */
-  const [detailCollapsed, setDetailCollapsed] = useState(false);
+  /** 用户主动关掉详情后不再自动选第一条，直到他换了筛选条件 */
+  const userClosed = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -85,19 +85,20 @@ export default function AdminCases() {
   /* 默认选中第一条：右侧首屏就有内容，“点卡片 → 右侧变化”才看得出来。 */
   useEffect(() => {
     const first = result?.items[0];
-    if (!first) return;
+    if (!first || userClosed.current) return;
     if (!selectedId || !result?.items.some((item) => item.id === selectedId)) choose(first.id);
     // choose 是稳定的一次性动作，这里只跟随列表结果变化
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
   function choose(id: string) {
-    setSelectedId(id); setDetail(null); setDetailLoading(true); setDetailCollapsed(false);
+    setSelectedId(id); setDetail(null); setDetailLoading(true);
     setActionError(''); setNotice(''); setEventTitle(''); setEventDescription('');
   }
 
-  /** 筛选/翻页：重新拉列表，选中项若不在新结果里会自动顺延到第一条 */
+  /** 筛选/翻页视为“重新开始看列表”，关掉详情的意图不再顺延 */
   function resetAutoSelect() {
+    userClosed.current = false;
     setListLoading(true);
   }
 
@@ -193,7 +194,7 @@ export default function AdminCases() {
               </div>
               <p className="mt-2 text-xs text-slate-400">最近筛查：{item.lastScreening || '暂无'}</p>
               <p className="mt-3 inline-flex items-center gap-0.5 text-xs font-medium text-primary-600">
-                {selectedId === item.id && !detailCollapsed ? '正在查看' : '查看详情'}
+                {selectedId === item.id ? '正在查看' : '查看详情'}
                 <ChevronRight className="h-3.5 w-3.5" />
               </p>
             </button>)}
@@ -215,9 +216,7 @@ export default function AdminCases() {
           title={detail?.name || selectedRow?.name || selectedId || '案例详情'}
           subtitle={selectedId ? `${selectedId} · ${detail?.department || selectedRow?.department || '院系未记录'}` : undefined}
           meta={detail ? <AdminStatusBadge status={detail.status} /> : selectedRow ? <AdminStatusBadge status={selectedRow.status} /> : undefined}
-          collapsed={detailCollapsed}
-          onExpand={() => setDetailCollapsed(false)}
-          onClose={() => setDetailCollapsed(true)}
+          onClose={() => { userClosed.current = true; setSelectedId(null); setDetail(null); }}
           loading={detailLoading}
           error={detailError}
           emptyIcon={<FolderOpen className="h-6 w-6" />}

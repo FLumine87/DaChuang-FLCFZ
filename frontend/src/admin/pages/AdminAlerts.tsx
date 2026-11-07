@@ -39,8 +39,8 @@ export default function AdminAlerts() {
   const [saveError, setSaveError] = useState('');
   const [notice, setNotice] = useState('');
   const savingRef = useRef(false);
-  /** 点了 × 之后收起成一张小卡，点小卡展开（不清空选择） */
-  const [detailCollapsed, setDetailCollapsed] = useState(false);
+  /** 用户主动关掉详情后不再自动选第一条，直到他换了筛选条件 */
+  const userClosed = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -74,19 +74,19 @@ export default function AdminAlerts() {
   /* 默认选中列表第一条：右侧首屏就有内容，不必先点一下才知道这里会显示东西。 */
   useEffect(() => {
     const first = result?.items[0];
-    if (!first) return;
+    if (!first || userClosed.current) return;
     if (!selectedId || !result?.items.some((item) => item.id === selectedId)) choose(first.id);
     // choose 是稳定的一次性动作，这里只跟随列表结果变化
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
   function choose(id: string) {
-    setSelectedId(id); setDetail(null); setDetailLoading(true);
-    setDetailCollapsed(false); setNotice(''); setSaveError('');
+    setSelectedId(id); setDetail(null); setDetailLoading(true); setNotice(''); setSaveError('');
   }
 
-  /** 筛选/翻页：重新拉列表，选中项若不在新结果里会自动顺延到第一条 */
+  /** 筛选/翻页视为“重新开始看列表”，关掉详情的意图不再顺延 */
   function resetAutoSelect() {
+    userClosed.current = false;
     setListLoading(true);
   }
 
@@ -174,7 +174,7 @@ export default function AdminAlerts() {
               <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
                 <span>{alert.createdAt} · {alert.assignee}</span>
                 <span className="inline-flex items-center gap-0.5 font-medium text-primary-600">
-                  {selectedId === alert.id && !detailCollapsed ? '正在处理' : '查看详情'}<ChevronRight className="h-3.5 w-3.5" />
+                  {selectedId === alert.id ? '正在处理' : '查看详情'}<ChevronRight className="h-3.5 w-3.5" />
                 </span>
               </div>
             </button>)}
@@ -195,9 +195,7 @@ export default function AdminAlerts() {
           title={selectedId ?? '预警详情'}
           subtitle={detail ? `${detail.name} · ${detail.screeningId || '无关联筛查'}` : selectedRow ? `${selectedRow.name} · ${selectedRow.screeningId || '无关联筛查'}` : undefined}
           meta={detail ? <AdminAlertBadge level={detail.level} /> : selectedRow ? <AdminAlertBadge level={selectedRow.level} /> : undefined}
-          collapsed={detailCollapsed}
-          onExpand={() => setDetailCollapsed(false)}
-          onClose={() => setDetailCollapsed(true)}
+          onClose={() => { userClosed.current = true; setSelectedId(null); setDetail(null); }}
           loading={detailLoading}
           error={detailError}
           emptyIcon={<ShieldAlert className="h-6 w-6" />}

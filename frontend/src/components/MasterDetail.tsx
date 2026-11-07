@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { ChevronDown, MousePointerClick, PanelRightOpen, X } from 'lucide-react';
+import { MousePointerClick, X } from 'lucide-react';
 
 /**
  * 「左列表 + 右详情」的统一骨架（对应评审问题 5 / 9）。
@@ -51,8 +51,6 @@ export function DetailPanel({
   subtitle,
   meta,
   onClose,
-  collapsed = false,
-  onExpand,
   loading = false,
   error = '',
   emptyIcon,
@@ -67,13 +65,6 @@ export function DetailPanel({
   /** 标题栏右侧、关闭按钮左边的小徽标（风险等级等） */
   meta?: ReactNode;
   onClose?: () => void;
-  /**
-   * 收起态：点了标题栏的 × 之后不再把整块变成空态，而是留一张窄卡，
-   * 上面写着“详情已收起 + 当前条目”，点一下就能展开回来。
-   * 需要同时给 onExpand。
-   */
-  collapsed?: boolean;
-  onExpand?: () => void;
   loading?: boolean;
   error?: string;
   emptyIcon?: ReactNode;
@@ -97,48 +88,18 @@ export function DetailPanel({
   }, [selectionKey]);
 
   const hasSelection = selectionKey !== null;
-  const isCollapsed = hasSelection && collapsed && Boolean(onExpand);
 
   return (
     <aside
       ref={ref}
-      className={
-        isCollapsed
-          ? 'scroll-mt-24 lg:sticky lg:top-[88px]'
-          : [
-              'flex scroll-mt-24 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm',
-              /* 粘顶：顶栏是 sticky 的 h-16，留 24px 呼吸位；限高后详情自己滚 */
-              'lg:sticky lg:top-[88px] lg:max-h-[calc(100dvh-112px)]',
-            ].join(' ')
-      }
+      className={[
+        'flex scroll-mt-24 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm',
+        /* 粘顶：顶栏是 sticky 的 h-16，留 24px 呼吸位；限高后详情自己滚 */
+        'lg:sticky lg:top-[88px] lg:max-h-[calc(100dvh-112px)]',
+      ].join(' ')}
       aria-label="详情"
     >
-      {isCollapsed ? (
-        /* 收起态：一个小方框，写明当前是哪一条，点它展开回完整详情。
-           好处：关掉详情后右侧不会突然变成一大块空白，选择也没有丢。 */
-        <button
-          type="button"
-          onClick={onExpand}
-          aria-expanded={false}
-          aria-label="展开详情"
-          title="展开详情"
-          className="group flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-3.5 text-left shadow-sm transition-colors hover:border-primary-300 hover:bg-white"
-        >
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-50 text-slate-400 transition-colors group-hover:bg-primary-50 group-hover:text-primary-600">
-            <PanelRightOpen className="h-4 w-4" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium text-slate-700">详情已收起</span>
-            <span className="mt-0.5 block truncate text-xs text-slate-400">
-              {title || '点击展开查看详情'}
-            </span>
-          </span>
-          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary-600">
-            展开
-            <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover:translate-y-0.5" />
-          </span>
-        </button>
-      ) : hasSelection ? (
+      {hasSelection ? (
         <>
           <header className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
             <div className="min-w-0">
@@ -161,8 +122,8 @@ export function DetailPanel({
                 <button
                   type="button"
                   onClick={onClose}
-                  title="收起详情"
-                  aria-label="收起详情"
+                  title="关闭详情"
+                  aria-label="关闭详情"
                   className="grid h-8 w-8 cursor-pointer place-items-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
                 >
                   <X className="h-4 w-4" />

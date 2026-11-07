@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronDown, ChevronRight, Clock, Filter, RotateCcw, ShieldAlert,
 } from 'lucide-react';
@@ -26,8 +26,8 @@ export default function Alerts() {
   const [warningEvents, setWarningEvents] = useState<WarningEvent[]>([]);
   const [statusNotice, setStatusNotice] = useState<{ kind: 'busy' | 'ok' | 'error'; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
-  /** 点了详情栏的 × 之后收起成一张小卡；再点小卡展开回来（不是清空选择） */
-  const [detailCollapsed, setDetailCollapsed] = useState(false);
+  /** 用户点了详情栏的 × 之后标记一下，别让“默认选中第一条”立刻又把它选回来 */
+  const userClosed = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -60,9 +60,10 @@ export default function Alerts() {
       if (selectedAlert) setSelectedAlert(null);
       return;
     }
+    /* 用户刚点 × 关掉详情：保持关闭，不要马上又默认选中第一条 */
+    if (userClosed.current) return;
     if (!filtered.some((a) => a.id === selectedAlert)) {
       setSelectedAlert(filtered[0].id);
-      setDetailCollapsed(false);
     }
   }, [loading, filtered, selectedAlert]);
 
@@ -122,7 +123,10 @@ export default function Alerts() {
           <select
             aria-label="按等级筛选"
             value={filterLevel}
-            onChange={(e) => setFilterLevel(e.target.value as 'all' | 'red' | 'orange' | 'yellow' | 'green')}
+            onChange={(e) => {
+              userClosed.current = false;
+              setFilterLevel(e.target.value as 'all' | 'red' | 'orange' | 'yellow' | 'green');
+            }}
             className={`${filterSelect} pl-9`}
           >
             <option value="all">全部等级</option>
@@ -137,7 +141,10 @@ export default function Alerts() {
           <select
             aria-label="按状态筛选"
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as 'all' | 'new' | 'tracking' | 'resolved')}
+            onChange={(e) => {
+              userClosed.current = false;
+              setFilterStatus(e.target.value as 'all' | 'new' | 'tracking' | 'resolved');
+            }}
             className={`${filterSelect} pl-3.5`}
           >
             <option value="all">全部状态</option>
@@ -174,8 +181,8 @@ export default function Alerts() {
                     type="button"
                     key={alert.id}
                     onClick={() => {
+                      userClosed.current = false;
                       setSelectedAlert(alert.id);
-                      setDetailCollapsed(false);
                       setStatusNotice(null);
                     }}
                     aria-pressed={isSelected}
@@ -202,7 +209,7 @@ export default function Alerts() {
                       </span>
                       {/* 明确写出“可以点开” —— 评审说不知道右边会有内容，问题就出在这 */}
                       <span className="inline-flex items-center gap-0.5 font-medium text-primary-600">
-                        {isSelected && !detailCollapsed ? '正在查看' : '查看详情'}
+                        {isSelected ? '正在查看' : '查看详情'}
                         <ChevronRight className="h-3.5 w-3.5" />
                       </span>
                     </div>
@@ -230,10 +237,9 @@ export default function Alerts() {
             title={selected?.title}
             subtitle={selected ? `${selected.id} · ${selected.createdAt}` : undefined}
             meta={selected ? <AlertBadge level={selected.level} /> : undefined}
-            collapsed={detailCollapsed}
-            onExpand={() => setDetailCollapsed(false)}
             onClose={() => {
-              setDetailCollapsed(true);
+              userClosed.current = true;
+              setSelectedAlert(null);
               setStatusNotice(null);
             }}
             emptyIcon={<ShieldAlert className="h-6 w-6" />}
