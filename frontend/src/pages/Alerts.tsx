@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  ChevronDown, ChevronRight, Clock, Filter, RotateCcw, ShieldAlert, X,
+  ChevronDown, ChevronRight, Clock, Filter, RotateCcw, ShieldAlert,
 } from 'lucide-react';
 import { type WarningEvent } from '../data/mockData';
 import { getWarnings, updateWarningStatus } from '../services/mockApi';
@@ -85,12 +85,8 @@ export default function Alerts() {
     );
     try {
       await updateWarningStatus(prev.id, next);
-      /* 从「已缓解」点回退时文案要说清楚是回退，不然看起来像又一次标记 */
-      const reverted = prev.status === 'resolved' && next === 'tracking';
-      setStatusNotice({
-        kind: 'ok',
-        text: reverted ? '已回退为跟踪中' : next === 'tracking' ? '已标记为跟踪中' : '已标记为已缓解',
-      });
+      /* 成功不弹提示：状态徽标、列表和统计已经变了；失败必须说清楚并回滚 */
+      setStatusNotice(null);
     } catch (e) {
       setWarningEvents((list) => list.map((a) => (a.id === prev.id ? prev : a)));
       setStatusNotice({ kind: 'error', text: `同步失败，已回滚：${(e as Error).message}` });
@@ -158,32 +154,6 @@ export default function Alerts() {
             : ''}
         </span>
       </div>
-
-      {/* 状态变更提示放在页面级：标记「已缓解」或回退后，这条预警可能已经不在当前筛选里、
-          右侧会切到别的条目；提示如果留在详情里，就会跟着换人，甚至被滚出视野。
-          放在列表上方 + 可关闭，才是"我刚才那次操作成功了"的稳定反馈。 */}
-      {statusNotice && (
-        <div
-          role="status"
-          className={`flex flex-wrap items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs ${
-            statusNotice.kind === 'error'
-              ? 'border-danger-200 bg-danger-50 text-danger-700'
-              : statusNotice.kind === 'ok'
-                ? 'border-success-200 bg-success-50 text-success-700'
-                : 'border-slate-200 bg-white text-slate-500'
-          }`}
-        >
-          <span className="flex-1">{statusNotice.text}</span>
-          <button
-            type="button"
-            onClick={() => setStatusNotice(null)}
-            aria-label="关闭提示"
-            className="cursor-pointer rounded p-0.5 opacity-60 transition-opacity hover:opacity-100"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
 
       <MasterDetail
         width="md"
@@ -321,6 +291,11 @@ export default function Alerts() {
                     >
                       标记为已缓解
                     </button>
+                  )}
+                  {statusNotice?.kind === 'error' && (
+                    <p role="alert" className="w-full text-xs leading-5 text-danger-600">
+                      {statusNotice.text}
+                    </p>
                   )}
                   {selected.status === 'resolved' && (
                     /* 误点保护：回退按钮放在这条"已缓解"提示的右侧（详情底部），
