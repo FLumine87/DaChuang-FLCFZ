@@ -199,8 +199,11 @@ def _bridge_search(data: dict, modality: str, result_modality: str,
         return None
 
     # 桥接索引里的单元是语料单元；可见性过滤交回主引擎的规则
+    # 可见性白名单：与主引擎同一套规则（admin 全量 / user 公共池+本人）
+    allowed = engine._allowed_ids(viewer) if viewer else None
     hits = br.search(feat, modality, top_k=max(top_k * 3, 20),
-                     result_modality=result_modality)
+                     result_modality=result_modality,
+                     allowed_ids=allowed)
     if not hits:
         import logging
         logging.getLogger(__name__).warning(
@@ -267,6 +270,8 @@ def _bridge_search_all(data: dict, modality: str, top_k: int,
     feat = _bridge_query_feature(modality, data, tmp_path)
     if not feat:
         return None
+    engine = get_hashing_engine()
+    allowed = engine._allowed_ids(viewer) if viewer else None
 
     channels = []
     # 图像查询：文本与语音结果分别走对应桥接
@@ -277,7 +282,7 @@ def _bridge_search_all(data: dict, modality: str, top_k: int,
                 continue
             rmod = "text" if pair is TEXT_IMAGE else "audio"
             hits = br.search(feat, modality, top_k=max(top_k * 2, 20),
-                             result_modality=rmod)
+                             result_modality=rmod, allowed_ids=allowed)
             if hits:
                 channels.append((f"bridge:{pair[0]}-{pair[1]}", rmod, hits))
     if not channels:

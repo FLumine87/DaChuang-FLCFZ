@@ -197,6 +197,36 @@ class ImageTextBridge:
         return True
 
     # ------------------------------------------------------------------
+    def add_unit(self, unit_id: str, meta: Dict, feature: List[float],
+                 modality: Optional[str] = None) -> bool:
+        """增量加入一个单元（运行时新增的采集数据）。
+
+        不需要重训：投影矩阵 W 已训练好，直接用它编码即可（推理路径）。
+        新单元没有主题标签 → 它不参与 S 监督，但**可以被检索到**
+        （作为候选参与打分），这正是「用户自己刚采集的图文对能被搜到」。
+
+        modality 为该单元所属的模态（text / image / audio）。
+        """
+        if not self.trained or self.index is None:
+            return False
+        mod = modality or meta.get("modality") or "text"
+        if mod not in (self.model.W or {}):
+            return False
+        code = list(self.model.encode({mod: list(feature)}))
+        m = dict(meta)
+        m["record_id"] = meta.get("record_id") or unit_id
+        m["modality"] = mod
+        m["tags"] = meta.get("tags") or []
+        m["window"] = 0
+        m["code"] = code
+        self.units[unit_id] = m
+        self.index.insert(unit_id, code, m, window=0)
+        rid = m["record_id"]
+        if rid not in self.records:
+            self.records[rid] = {"record_id": rid, "tags": m["tags"]}
+        return True
+
+    # ------------------------------------------------------------------
     def encode_query(self, feature: List[float], modality: str) -> List[float]:
         """查询侧：连续实数向量 u（保留投影幅值，供非对称距离 u·s）。"""
         if not self.trained:
@@ -205,11 +235,16 @@ class ImageTextBridge:
 
     def search(self, feature: List[float], modality: str,
                top_k: int = 30, result_modality: Optional[str] = None,
-               exclude_record: Optional[str] = None) -> List[Dict]:
+               exclude_record: Optional[str] = None,
+               allowed_ids: Optional[set] = None) -> List[Dict]:
         """桥接检索。
 
         modality        : 查询模态（text / image），决定用哪个投影矩阵
         result_modality : 限定结果模态（文查图 → "image"，图查文 → "text"）
+        allowed_ids     : 可见性白名单（按 scope 与调用者身份算出的单元集合）。
+                          None 表示不过滤（内部评测 / 全库扫描）。
+                          运行时采集的数据带 scope（public / reviewing / 私有），
+                          必须与主引擎同一套可见性规则，否则会泄露未审核数据。
 
         打分走非对称距离 u·s：查询端用连续向量 u，库端用 ±1 二值码，
         与主引擎一致（见 MultiTableHashIndex.search 的 query_vec 参数）。
@@ -223,6 +258,7 @@ class ImageTextBridge:
             u, top_k=max(top_k * 4, 60),
             modality_filter=result_modality,
             query_vec=u,
+            allowed_ids=allowed_ids,
         )
         out = []
         for uid, sim in zip(ids, sims):

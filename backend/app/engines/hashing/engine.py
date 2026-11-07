@@ -803,6 +803,44 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             if meta.get("scope") and rec.get("scope") in (None, "", "reviewing"):
                 rec["scope"] = meta.get("scope")
         self.index.insert(unit_id, code, meta, window=meta.get("window"))
+        # 同步到弱监督桥接：运行时新增的采集数据也要能被跨模态检索到。
+        # 语料来源的单元不进桥接（桥接自己从语料构建，见 build_bridges.py）。
+        self._sync_unit_to_bridges(unit_id, meta, feat, modality)
+
+    def _sync_unit_to_bridges(self, unit_id: str, meta: Dict,
+                               feat: Dict, modality: str) -> None:
+        """把新增单元同步进对应的桥接通道。
+
+        只处理非语料来源（runtime）—— 语料单元由 build_bridges.py 统一构建，
+        避免重复与不一致。桥接不可用时静默跳过（桥接是可选通道）。
+        """
+        try:
+            if (meta.get("source") or "") == "corpus":
+                return
+            if modality not in ("text", "image", "audio"):
+                return
+            feature = (feat or {}).get(modality)
+            if not feature:
+                return
+            from app.engines.hashing.bridge_manager import get_bridge_manager
+            mgr = get_bridge_manager()
+            # 语义侧模态（text / audio）与图像侧各成一对
+            pairs = []
+            if modality == "image":
+                pairs = [("text", "image"), ("audio", "image")]
+            elif modality in ("text", "audio"):
+                pairs = [(modality, "image")]
+            for pair in pairs:
+                br = mgr.get(pair)
+                if br is None:
+                    continue
+                if br.add_unit(unit_id, meta, list(feature), modality=modality):
+                    from app.engines.hashing.bridge_store import BridgeStore
+                    BridgeStore(mgr.data_dir, pair).upsert_units(
+                        {unit_id: br.units[unit_id]})
+        except Exception:
+            # 桥接是可选通道，同步失败不应影响主引擎的入库
+            pass
 
     # ------------------------- 语料播种（真实 / 合成多模态数据）-------------------------
 

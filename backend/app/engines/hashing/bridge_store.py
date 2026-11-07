@@ -1,21 +1,42 @@
-"""桥接的持久化：state.json（W 矩阵）+ index.db（位带索引与单元元信息）。
+"""桥接的持久化：模型参数（state.json）+ 单元索引（SQLite）。
 
-与主引擎的持久化方式保持一致：
-  主引擎  state.json（模型参数）+ index.db（索引单元）
-  桥接    bridge_<pair>_state.json（模型参数）+ bridge_<pair>_index.db（索引单元）
+与主引擎的持久化方式一致：
+  主引擎  hashing_state.json（模型参数）+ index.db（索引单元）
+  桥接    bridge_<pair>_state.json（模型参数）+ bridge_<pair>_units.db（单元）
 
-为什么要持久化：桥接训练要 30~60 秒（3000 行 n×n 监督矩阵的特征分解），
-每次服务重启都重训不可接受；且线上与评测必须用同一份码，否则查询码与库码不同源。
+为什么单元放 SQLite 而不是全塞 state.json
+--------------------------------------
+桥接的语料单元有 6000~9000 个，state.json 约 9.4MB。
+运行时新增的采集数据要增量写入 —— 若每次新增都重写整个 JSON，
+一次采集就是 9.4MB 的写放大。SQLite upsert 一行即可，
+加载时从库里读全部单元重建位带索引。
+
+单元表结构与主引擎的 units 表同构，便于同一套 meta 字段
+（标签溯源需要 dataset / alert_level / media_path 等）。
 """
 import json
 import os
 import sqlite3
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
-from .cmfh import OnlineSupervisedCMFH
 from .multi_table_index import MultiTableHashIndex
 
-STATE_VERSION = 3
+STATE_VERSION = 4
+
+_UNITS_SCHEMA = (
+    """CREATE TABLE IF NOT EXISTS bridge_units(
+    unit_id TEXT PRIMARY KEY,
+    record_id TEXT,
+    modality TEXT,
+    code TEXT,
+    tags TEXT,
+    source TEXT,
+    scope TEXT,
+    meta TEXT
+)""",
+    "CREATE INDEX IF NOT EXISTS ix_bridge_rec ON bridge_units(record_id)",
+    "CREATE INDEX IF NOT EXISTS ix_bridge_src ON bridge_units(source)",
+)
 
 
 class BridgeStore:
@@ -23,14 +44,36 @@ class BridgeStore:
 
     def __init__(self, data_dir: str, pair: Tuple[str, str]):
         self.dir = data_dir
-        self.pair = pair
+        self.pair = tuple(pair)
         tag = f"{pair[0]}-{pair[1]}"
         self.state_path = os.path.join(data_dir, f"bridge_{tag}_state.json")
-        self.index_path = os.path.join(data_dir, f"bridge_{tag}_index.db")
+        self.units_path = os.path.join(data_dir, f"bridge_{tag}_units.db")
 
     # ------------------------------------------------------------------
-    def save(self, bridge) -> None:
-        """保存模型参数与索引单元。"""
+    def _conn(self) -> sqlite3.Connection:
+        os.makedirs(self.dir, exist_ok=True)
+        conn = sqlite3.connect(self.units_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        for stmt in _UNITS_SCHEMA:
+            conn.execute(stmt)
+        return conn
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _row(uid: str, m: Dict):
+        return (
+            uid, m.get("record_id"), m.get("modality"),
+            json.dumps(m.get("code") or []),
+            json.dumps(m.get("tags") or [], ensure_ascii=False),
+            m.get("source") or "runtime", m.get("scope"),
+            json.dumps({k: v for k, v in m.items()
+                        if k not in ("code", "tags")},
+                       ensure_ascii=False, default=str),
+        )
+
+    # ------------------------------------------------------------------
+    def save_model(self, bridge) -> None:
+        """只存模型参数（单元另存 units.db）。"""
         os.makedirs(self.dir, exist_ok=True)
         state = {
             "version": STATE_VERSION,
@@ -44,18 +87,69 @@ class BridgeStore:
             "B": bridge.model.B,
             "continuous": bridge.model.continuous,
             "feature_spec": bridge.feature_spec,
-            "units": {uid: {k: v for k, v in m.items() if k != "code"}
-                      for uid, m in bridge.units.items()},
-            "codes": {uid: m.get("code") for uid, m in bridge.units.items()},
-            "records": bridge.records,
         }
         tmp = self.state_path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False)
         os.replace(tmp, self.state_path)
 
+    def save_units(self, units: Dict[str, Dict]) -> None:
+        """全量覆盖写入单元（构建时用）。"""
+        conn = self._conn()
+        try:
+            conn.execute("DELETE FROM bridge_units")
+            conn.executemany(
+                "INSERT OR REPLACE INTO bridge_units VALUES (?,?,?,?,?,?,?,?)",
+                [self._row(uid, m) for uid, m in units.items()])
+            conn.commit()
+        finally:
+            conn.close()
+
+    def upsert_units(self, units: Dict[str, Dict]) -> int:
+        """增量写入单元（运行时新增采集数据时用）。"""
+        if not units:
+            return 0
+        conn = self._conn()
+        try:
+            conn.executemany(
+                "INSERT OR REPLACE INTO bridge_units VALUES (?,?,?,?,?,?,?,?)",
+                [self._row(uid, m) for uid, m in units.items()])
+            conn.commit()
+            return len(units)
+        finally:
+            conn.close()
+
+    def load_units(self) -> Dict[str, Dict]:
+        conn = self._conn()
+        try:
+            out = {}
+            for r in conn.execute("SELECT * FROM bridge_units"):
+                try:
+                    meta = json.loads(r["meta"] or "{}")
+                except Exception:
+                    meta = {}
+                try:
+                    code = json.loads(r["code"] or "[]")
+                except Exception:
+                    code = []
+                try:
+                    tags = json.loads(r["tags"] or "[]")
+                except Exception:
+                    tags = []
+                meta.update({"record_id": r["record_id"],
+                             "modality": r["modality"],
+                             "tags": tags, "code": code})
+                if r["source"]:
+                    meta.setdefault("source", r["source"])
+                if r["scope"]:
+                    meta.setdefault("scope", r["scope"])
+                out[r["unit_id"]] = meta
+            return out
+        finally:
+            conn.close()
+
     # ------------------------------------------------------------------
-    def load(self) -> Optional[object]:
+    def load(self):
         """加载已保存的桥接；没有或版本不符返回 None。"""
         if not os.path.exists(self.state_path):
             return None
@@ -85,14 +179,12 @@ class BridgeStore:
         br.feature_spec = st.get("feature_spec") or {}
         br.pair = tuple(st.get("pair") or self.pair)
 
-        codes = st.get("codes") or {}
-        units = st.get("units") or {}
-        br.units = {}
-        for uid, meta in units.items():
-            m = dict(meta)
-            m["code"] = codes.get(uid) or []
-            br.units[uid] = m
-        br.records = st.get("records") or {}
+        br.units = self.load_units()
+        br.records = {}
+        for m in br.units.values():
+            rid = m.get("record_id")
+            if rid and rid not in br.records:
+                br.records[rid] = {"record_id": rid, "tags": m.get("tags") or []}
 
         br.index = MultiTableHashIndex(
             code_length=br.K, band_bits=br.band_bits,

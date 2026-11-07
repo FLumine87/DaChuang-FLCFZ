@@ -104,8 +104,10 @@ def build(pair, lambda_s, train_max, code_length, data_dir):
     print(f"  训练完成，{len(br.units)} 单元，耗时 {time.time()-t0:.1f}s")
 
     store = BridgeStore(data_dir, pair)
-    store.save(br)
+    store.save_model(br)
+    store.save_units(br.units)
     print(f"  已落库 → {store.state_path}")
+    print(f"         → {store.units_path}")
     return br
 
 
