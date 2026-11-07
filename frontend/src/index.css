@@ -2422,3 +2422,45 @@ html:not(.app-booted) .page-enter {
     margin-top: 0.65rem;
   }
 }
+
+/* ============================================================================
+   管理端案例详情抽屉 / 筛查小结弹窗的进出场（2026-11-07）
+   抽屉从右侧滑入、遮罩淡入；关闭时反向滑出（组件在 200ms 后卸载）。
+   时长与曲线沿用项目里其它动效（220–280ms、cubic-bezier(.22,1,.36,1)）。
+   ========================================================================== */
+@keyframes case-drawer-in {
+  from { transform: translateX(100%); opacity: 0.85; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes case-drawer-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0.85; }
+}
+@keyframes case-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes case-scrim-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes case-modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.case-drawer-in { animation: case-drawer-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.case-drawer-out { animation: case-drawer-out 200ms cubic-bezier(0.4, 0, 1, 1) both; }
+.case-scrim-in { animation: case-scrim-in 240ms ease-out both; }
+.case-scrim-out { animation: case-scrim-out 200ms ease-in both; }
+.case-modal-in { animation: case-modal-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .case-drawer-in,
+  .case-drawer-out,
+  .case-scrim-in,
+  .case-scrim-out,
+  .case-modal-in {
+    animation: none !important;
+  }
+}
