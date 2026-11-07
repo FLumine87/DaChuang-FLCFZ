@@ -26,6 +26,8 @@ export default function Alerts() {
   const [warningEvents, setWarningEvents] = useState<WarningEvent[]>([]);
   const [statusNotice, setStatusNotice] = useState<{ kind: 'busy' | 'ok' | 'error'; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  /** 点了详情栏的 × 之后收起成一张小卡；再点小卡展开回来（不是清空选择） */
+  const [detailCollapsed, setDetailCollapsed] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -60,6 +62,7 @@ export default function Alerts() {
     }
     if (!filtered.some((a) => a.id === selectedAlert)) {
       setSelectedAlert(filtered[0].id);
+      setDetailCollapsed(false);
     }
   }, [loading, filtered, selectedAlert]);
 
@@ -171,6 +174,7 @@ export default function Alerts() {
                     key={alert.id}
                     onClick={() => {
                       setSelectedAlert(alert.id);
+                      setDetailCollapsed(false);
                       setStatusNotice(null);
                     }}
                     aria-pressed={isSelected}
@@ -197,7 +201,7 @@ export default function Alerts() {
                       </span>
                       {/* 明确写出“可以点开” —— 评审说不知道右边会有内容，问题就出在这 */}
                       <span className="inline-flex items-center gap-0.5 font-medium text-primary-600">
-                        {isSelected ? '正在查看' : '查看详情'}
+                        {isSelected && !detailCollapsed ? '正在查看' : '查看详情'}
                         <ChevronRight className="h-3.5 w-3.5" />
                       </span>
                     </div>
@@ -225,8 +229,10 @@ export default function Alerts() {
             title={selected?.title}
             subtitle={selected ? `${selected.id} · ${selected.createdAt}` : undefined}
             meta={selected ? <AlertBadge level={selected.level} /> : undefined}
+            collapsed={detailCollapsed}
+            onExpand={() => setDetailCollapsed(false)}
             onClose={() => {
-              setSelectedAlert(null);
+              setDetailCollapsed(true);
               setStatusNotice(null);
             }}
             emptyIcon={<ShieldAlert className="h-6 w-6" />}
