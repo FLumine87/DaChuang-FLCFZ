@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { navigateWithTransition } from "../utils/viewTransition";
-import { ArrowRight, Check, Moon, Sun } from "lucide-react";
+import { ArrowRight, Bell, Check, FileText, Layers, Moon, Search, Sun } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
 import {
   AlertVisual,
@@ -645,124 +645,89 @@ export default function LandingPage() {
           {/* 外层 data-reveal 负责"框"本身的渐入，内层才是内容：
               否则框会瞬间出现、内容再逐条浮现，看着像"空盒子先落地"。 */}
           <div data-reveal data-visual>
-            <div className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-9">
-            <p className="text-[13px] font-medium tracking-[0.18em] text-slate-500">评估链路</p>
+            <div className="@container rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-8">
+              <p className="text-[13px] font-medium tracking-[0.18em] text-slate-500">
+                平台概览
+              </p>
 
-            {/* 四步链路：每格居中，正好落在下方图表的里程碑与纵向网格线上。
-                原来是绝对定位 + 右对齐，每个标签"右端贴线、左端参差"，看着就是没对齐。
-                箭头不能跟着标签走：整格是居中的，箭头贴在文字右边就落在格子中间偏左，
-                和下一格之间空出一大块（用户反馈"箭头太靠左"）。
-                桌面改为绝对定位到**格子右边界**（= 两标签之间的空隙正中，
-                也就是下方 25%/50%/75% 三条网格线的位置）。
-                窄屏是两列，只有同一行内的相邻两步（0→1、2→3）才画内联箭头，
-                否则 1→2 的箭头会指向下一行的左后方，属于误导。 */}
-            <div className="mt-6 grid grid-cols-2 gap-y-2 sm:grid-cols-4">
-              {["三模态采集", "哈希检索", "RAG 报告", "分级预警"].map((step, index) => (
-                <span
-                  key={step}
-                  className="relative flex items-center justify-center whitespace-nowrap text-[14px] font-semibold text-slate-800 sm:text-[15px]"
-                >
-                  {step}
-                  {index < 3 && (
-                    <>
-                      <span
-                        aria-hidden="true"
-                        className="pointer-events-none absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 text-[13px] text-slate-300 sm:block"
-                      >
+              {/* 服务流程：采集 → 分析 → 报告 → 复核。
+                  这里只留四个动作词，具体能力由下方四张卡片承担 ——
+                  比原来"四列标签 + 折线图"更像一张入口图，也不会和左栏文案抢注意力。 */}
+              <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[14px] font-medium text-slate-600 sm:text-[15px]">
+                {["采集", "分析", "报告", "复核"].map((step, index) => (
+                  <span key={step} className="flex items-center gap-2.5">
+                    {step}
+                    {index < 3 && (
+                      <span aria-hidden="true" className="text-[13px] text-slate-400">
                         →
                       </span>
-                      {index % 2 === 0 && (
-                        <span aria-hidden="true" className="ml-1.5 text-[13px] text-slate-300 sm:hidden">
-                          →
-                        </span>
-                      )}
-                    </>
-                  )}
-                </span>
-              ))}
+                    )}
+                  </span>
+                ))}
+              </div>
+
+              {/* 四张能力卡。
+                  颜色全部走语义令牌（--color-white / --color-slate-* / --color-primary-*），
+                  深色模式由 .dark 整体翻转：外框白 → 深蓝面板、内卡浅灰 → 比面板更深一档、
+                  强调色 primary-600 → 提亮的 primary-300，图标底色同步压暗。
+                  列数按**卡片自身宽度**（容器查询）切换，而不是按视口断点：
+                  页面在 1024–1199px 时右栏只有约 440px，写死两列会把标题挤到换行、
+                  三条要点互相压字；@container 直接量内容宽度，换列时机才准。 */}
+              <div className="mt-5 grid gap-2.5 @[400px]:grid-cols-2">
+                {[
+                  { icon: Layers, title: "多模态采集", note: "文本、语音与图像统一录入" },
+                  { icon: Search, title: "相似案例检索", note: "关联参考样例与专业知识" },
+                  { icon: FileText, title: "筛查报告生成", note: "汇总分析线索，呈现参考依据" },
+                  { icon: Bell, title: "分级预警处置", note: "辅助人工研判与后续跟踪" },
+                ].map(({ icon: Icon, title, note }) => (
+                  <div
+                    key={title}
+                    className="flex items-start gap-3.5 rounded-2xl border border-slate-200/70 bg-slate-50 p-4"
+                  >
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-50 text-primary-600 ring-1 ring-inset ring-primary-100/70 dark:text-primary-300 dark:ring-primary-400/20">
+                      <Icon className="h-5 w-5" strokeWidth={1.7} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-semibold leading-6 text-slate-800">
+                        {title}
+                      </p>
+                      <p className="mt-0.5 text-[13px] leading-5 text-slate-500">{note}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 border-t border-dashed border-slate-200" />
+
+              {/* 三条要点横排，用竖线分隔（对齐参考图）。
+                  文字统一 14px；开头的能力词用强调色，后半句保持中性，
+                  这样一眼能扫到 "3 模态 / RAG / 人工" 三个抓手。 */}
+              <div className="mt-5 grid gap-3 @[440px]:grid-cols-3 @[440px]:gap-0">
+                {[
+                  { value: "3 模态", label: "联合分析" },
+                  { value: "RAG", label: "报告辅助生成" },
+                  { value: "人工", label: "复核与处置" },
+                ].map((item, index) => (
+                  <div
+                    key={item.value}
+                    className={`min-w-0 whitespace-nowrap text-[14px] leading-6 ${
+                      index === 0
+                        ? "@[440px]:pr-4"
+                        : "@[440px]:border-l @[440px]:border-slate-200 @[440px]:px-4"
+                    }`}
+                  >
+                    <b className="font-semibold text-primary-600 dark:text-primary-300">
+                      {item.value}
+                    </b>
+                    <span className="ml-1.5 text-slate-500">{item.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              <p className="mt-5 text-[13px] leading-6 text-slate-500">
+                多源线索形成报告，预警结果衔接人工复核。
+              </p>
             </div>
-
-            {/* 这张示意图的 viewBox 是 900×240，也就是 **3.75:1**。
-                这里原来写的是 aspect-[4.4/1]，而且加了 preserveAspectRatio="none"
-                —— 两者一起把图横向拉宽了 17%，曲线和网格都变形。
-                （这段是 edd7307 引入的，不是本次改动带来的；团队 main 上同样如此。）
-                现在：比例改成与 viewBox 一致的 15/4，并去掉 preserveAspectRatio，
-                让它按设计比例等比缩放，无论容器多宽都不会变形。 */}
-            <svg
-              viewBox="0 0 900 240"
-              className="mt-3 aspect-[15/4] w-full"
-              role="img"
-              aria-label="三模态采集、哈希检索、RAG 报告、分级预警四个环节的状态演进示意"
-            >
-              <defs>
-                <linearGradient id="introChartFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-primary-500)" stopOpacity="0.2" />
-                  <stop offset="100%" stopColor="var(--color-primary-500)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path d="M0 70H900M0 135H900M0 200H900" className="chart-grid" />
-              <g className="chart-guide" strokeWidth="1" strokeDasharray="4 6">
-                <line x1="112.5" y1="10" x2="112.5" y2="216" />
-                <line x1="337.5" y1="10" x2="337.5" y2="216" />
-                <line x1="562.5" y1="10" x2="562.5" y2="216" />
-                <line x1="787.5" y1="10" x2="787.5" y2="216" />
-              </g>
-              <path
-                d="M0 172C37.5 172 75 156 112.5 156C150 156 262.5 118 337.5 118C412.5 118 487.5 92 562.5 92C637.5 92 712.5 58 787.5 58C830 58 870 40 900 40V240H0Z"
-                fill="url(#introChartFill)"
-              />
-              <path
-                d="M0 172C37.5 172 75 156 112.5 156C150 156 262.5 118 337.5 118C412.5 118 487.5 92 562.5 92C637.5 92 712.5 58 787.5 58C830 58 870 40 900 40"
-                fill="none"
-                className="stroke-primary-500"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-              <g className="fill-white stroke-primary-500" strokeWidth="3">
-                <circle cx="112.5" cy="156" r="5" />
-                <circle cx="337.5" cy="118" r="5" />
-                <circle cx="562.5" cy="92" r="5" />
-                <circle cx="787.5" cy="58" r="5" />
-              </g>
-            </svg>
-
-            {/* 一句话说清这张图在表达什么。
-                上一版写成了"横轴为上面四个环节，纵轴为累计可用的判断依据……"，
-                在落地页上讲坐标轴太像规格说明书了（用户："太奇怪了，还是换掉吧"），
-                这里改成人话；末尾原本还挂了个"（示意图）"，用户要求删掉，
-                并且这句说明靠右排（text-right），与左侧的正文错开。 */}
-            <p className="mt-3 text-right text-[13px] leading-5 text-slate-500">
-              每走完一个环节，能用来判断的信息就多一层。
-            </p>
-
-            <div className="mt-6 grid gap-2.5 border-t border-dashed border-slate-200 pt-5 sm:grid-cols-3">
-              {[
-                { value: "3", label: "模态 · 9 类特征" },
-                { value: "毫秒级", label: "相似样例检索" },
-                { value: "4", label: "级预警阈值" },
-              ].map((item) => (
-                <span key={item.label} className="flex items-baseline gap-2">
-                  <b className="text-[22px] font-medium leading-none tabular-nums text-primary-600">
-                    {item.value}
-                  </b>
-                  <span className="text-[14px] text-slate-500">{item.label}</span>
-                </span>
-              ))}
-            </div>
-
-            <div className="mt-6 grid gap-2.5 border-t border-dashed border-slate-200 pt-5 sm:grid-cols-3">
-              {[
-                { title: "文本记录", note: "认知模式与语言逻辑" },
-                { title: "语音采样", note: "语音语调与情绪波动" },
-                { title: "图像采集", note: "面部表情与绘画笔迹" },
-              ].map((item) => (
-                <div key={item.title} className="min-w-0">
-                  <p className="text-[15px] font-semibold text-slate-800">{item.title}</p>
-                  <p className="mt-1 text-[13px] leading-5 text-slate-500">{item.note}</p>
-                </div>
-              ))}
-            </div>
-          </div>
           </div>
         </div>
       </section>
