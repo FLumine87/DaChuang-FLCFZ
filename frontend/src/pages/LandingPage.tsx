@@ -108,39 +108,107 @@ export default function LandingPage() {
     return () => window.removeEventListener("resize", sync);
   }, [active]);
 
-  /* 换页滑动：不拦截滚轮，手势走原生滚动，停下后用自定义缓动落到整屏 */
+  /* 桌面端整屏翻页：
+     · 向下——累计 40px 就直接接管，边收手势边播一屏缓动；一次手势只翻一屏，
+       惯性尾巴被吞掉，等滚轮真正停下 180ms 后才允许下一次。
+     · 向上——不接管，继续走原生滚动（可连续穿过多屏），停手后吸附；
+       向下动画中一旦明确向上滑，立即取消动画、把控制权交还原生滚动。
+     · 尺寸只在挂载 / resize / 内容尺寸变化时测量，滚动过程不读布局。 */
   useEffect(() => {
     const NAV_H = 64;
-    const DURATION = 550;
-    const SETTLE_DELAY = 180;
-    const FAST_DURATION = 320;
+    const TRIGGER_PX = 40;     // 向下累计 40px 即出发（30–50 之间，按手感再调）
+    const DURATION = 500;      // 一屏动画时长：起步柔和、后半程减速
+    const GESTURE_GAP = 120;   // 两段滚轮间隔超过它 → 算新手势
+    const UNLOCK_QUIET = 180;  // 动画结束后滚轮静默 180ms 才解锁下一屏
+    const REVERSE_PX = 12;     // 动画中反向累计超过它 → 交还控制
+    const UP_TRIGGER = 0.28;   // 向上沿用原来的 28% 屏高阈值
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     const desktop = window.matchMedia("(min-width: 1024px) and (min-height: 600px)");
 
+    /* —— 缓存的布局数据：滚动时只读这些，不再反复量 DOM —— */
+    let screens: HTMLElement[] = [];
+    let tops: number[] = [];
+    let maxScroll = 0;
+    let fits = false;
+
     let raf = 0;
-    let settleTimer: number | undefined;
     let animating = false;
-    let targetIdx = -1;
+    let animFrom = 0;
+    let animDelta = 0;
+    let animStart = 0;
+    let animMs = 0;
+    let animTarget = 0;
 
-    const screensOf = () =>
-      Array.from(document.querySelectorAll<HTMLElement>(".auth-screen"));
+    /* 一次手势的状态机 */
+    let lastWheelAt = 0;
+    let accDown = 0;
+    let accUp = 0;
+    let locked = false;        // 这次手势已经用掉一次翻页
+    let aborted = false;       // 向下动画被反向手势打断：只允许往上落屏
+    let upStartY = -1;
+    let upTimer = 0;
+    let touchStartY = -1;
+    let measureRaf = 0;
+    let ro: ResizeObserver | null = null;
 
+    const clampY = (y: number) => Math.max(0, Math.min(maxScroll, y));
     const ease = (t: number) =>
       t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
-    const posOf = (el: HTMLElement) => {
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      return Math.max(0, Math.min(max, el.offsetTop - NAV_H));
+    /* 取"参与布局的那一层"：每屏的第一个子元素是绝对定位的极光背景，
+       用它量高度会永远等于整屏，兜底判断形同失效。 */
+    const contentRow = (el: HTMLElement) =>
+      Array.from(el.children).find((child) => {
+        const pos = getComputedStyle(child).position;
+        return pos !== "absolute" && pos !== "fixed";
+      }) as HTMLElement | undefined;
+
+    const contentFits = (els: HTMLElement[]) => {
+      const avail = window.innerHeight - NAV_H;
+      return els.every((el) => {
+        const row = contentRow(el);
+        if (!row) return true;
+        const kids = Array.from(row.children).filter((k) => {
+          const pos = getComputedStyle(k).position;
+          return pos !== "absolute" && pos !== "fixed";
+        });
+        /* 用 offsetHeight 而不是 getBoundingClientRect：
+           入场动画的 transform 会改变 rect，但不会改变布局高度，
+           用 rect 会在动画中途误判"这一屏装不下"而关掉整屏翻页。 */
+        const tallest = kids.length
+          ? Math.max(...kids.map((k) => (k as HTMLElement).offsetHeight))
+          : row.offsetHeight;
+        const style = getComputedStyle(row);
+        const padding =
+          parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        return tallest + padding <= avail + 4;
+      });
     };
 
-    const actualIndex = () => {
-      const els = screensOf();
-      const y = window.scrollY + NAV_H + 4;
-      let idx = 0;
-      els.forEach((el, i) => {
-        if (el.offsetTop <= y) idx = i;
+    const measure = () => {
+      screens = Array.from(document.querySelectorAll<HTMLElement>(".auth-screen"));
+      maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      tops = screens.map((el) => clampY(el.offsetTop - NAV_H));
+      fits = desktop.matches && contentFits(screens);
+    };
+
+    const scheduleMeasure = () => {
+      if (measureRaf) return;
+      measureRaf = requestAnimationFrame(() => {
+        measureRaf = 0;
+        measure();
       });
-      return idx;
+    };
+
+    const observeScreens = () => {
+      if (typeof ResizeObserver === "undefined") return;
+      ro?.disconnect();
+      ro = new ResizeObserver(scheduleMeasure);
+      screens.forEach((el) => {
+        ro!.observe(el);
+        const row = contentRow(el);
+        if (row) ro!.observe(row);
+      });
     };
 
     const cancelGlide = () => {
@@ -149,149 +217,196 @@ export default function LandingPage() {
       animating = false;
     };
 
-    const glideTo = (target: number, msOverride?: number) => {
+    const glideToY = (target: number, msOverride?: number) => {
       cancelGlide();
-      const els0 = screensOf();
-      if (els0.length) {
-        let best = 0;
-        let bestGap = Infinity;
-        els0.forEach((el, i) => {
-          const gap = Math.abs(posOf(el) - target);
-          if (gap < bestGap) {
-            bestGap = gap;
-            best = i;
-          }
-        });
-        targetIdx = best;
-      }
-      const startY = window.scrollY;
-      const delta = target - startY;
+      const from = window.scrollY;
+      const to = clampY(target);
+      const delta = to - from;
       const ms = reduced.matches ? 0 : (msOverride ?? DURATION);
+      animTarget = to;
       if (Math.abs(delta) < 2) return;
-      if (ms === 0) {
-        window.scrollTo(0, target);
+      if (!ms) {
+        window.scrollTo(0, to);
         return;
       }
-      const t0 = performance.now();
+      animFrom = from;
+      animDelta = delta;
+      animMs = ms;
+      animStart = performance.now();
       animating = true;
       const step = (now: number) => {
-        const p = Math.min(1, (now - t0) / ms);
-        window.scrollTo(0, startY + delta * ease(p));
+        const p = Math.min(1, (now - animStart) / animMs);
+        window.scrollTo(0, animFrom + animDelta * ease(p));
         if (p < 1) {
           raf = requestAnimationFrame(step);
         } else {
           animating = false;
           raf = 0;
+          window.scrollTo(0, animTarget);
         }
       };
       raf = requestAnimationFrame(step);
     };
-    glideRef.current = glideTo;
+    glideRef.current = glideToY;
 
-    const nearestTop = (from?: number) => {
-      const els = screensOf();
-      if (!els.length) return window.scrollY;
-      const y = from ?? window.scrollY;
-      let best = els[0];
+    const nearestIndex = (from: number) => {
+      let best = 0;
       let bestGap = Infinity;
-      els.forEach((el) => {
-        const gap = Math.abs(el.offsetTop - NAV_H - y);
+      tops.forEach((t, i) => {
+        const gap = Math.abs(t - from);
         if (gap < bestGap) {
           bestGap = gap;
-          best = el;
+          best = i;
         }
       });
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      return Math.max(0, Math.min(max, best.offsetTop - NAV_H));
+      return best;
     };
 
-    /* 滚轮/触摸手势的落点判断。
-       原实现用 nearestTop()——"离哪屏近就落哪屏"，需要滚过半屏才会翻页，
-       于是常规一次滚动（4 格 ≈ 480px）会原地回弹，观感就是"上下滑动没反应"。
-       改为方向优先：本次手势累计滚过 28% 屏高就翻一屏，否则回到起点那一屏。 */
-    const SCROLL_TRIGGER = 0.28;
-    let gestureStartY = -1;
-
-    const topOf = (el: HTMLElement) =>
-      Math.max(
-        0,
-        Math.min(
-          document.documentElement.scrollHeight - window.innerHeight,
-          el.offsetTop - NAV_H,
-        ),
-      );
-
-    /* 从 from 位置按方向取相邻一屏 */
-    const stepFrom = (from: number, dir: number) => {
-      const tops = screensOf().map(topOf);
-      if (dir > 0) return tops.find((t) => t > from + 4) ?? tops[tops.length - 1];
-      const back = tops.filter((t) => t < from - 4);
-      return back.length ? back[back.length - 1] : tops[0];
+    /* 当前位置所在的那一屏（顶边 ≤ y + 4 的最后一屏）。
+       被反向打断的向下动画只能落到这一屏或更上面一屏，绝不补完原来的下落。 */
+    const indexAtOrAbove = (y: number) => {
+      let idx = 0;
+      for (let i = 0; i < tops.length; i++) if (tops[i] <= y + 4) idx = i;
+      return idx;
     };
 
-    const settleTarget = () => {
-      if (gestureStartY < 0) return nearestTop();
-      const delta = window.scrollY - gestureStartY;
-      const avail = window.innerHeight - NAV_H;
-      if (Math.abs(delta) > avail * SCROLL_TRIGGER) {
-        return stepFrom(gestureStartY, delta > 0 ? 1 : -1);
+    const stepIndex = (from: number, dir: number) => {
+      if (dir > 0) {
+        for (let i = 0; i < tops.length; i++) if (tops[i] > from + 4) return i;
+        return Math.max(0, tops.length - 1);
       }
-      return nearestTop(gestureStartY);
+      for (let i = tops.length - 1; i >= 0; i--) if (tops[i] < from - 4) return i;
+      return 0;
     };
 
-    const scheduleSettle = () => {
-      window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(() => {
-        /* 双保险：即便有别的路径调进来，非桌面也一律不平移 */
-        if (animating || !desktop.matches || !contentFits()) return;
-        const target = settleTarget();
-        gestureStartY = -1;
-        glideTo(target);
-      }, SETTLE_DELAY);
+    const nextTop = (from: number) => {
+      for (const t of tops) if (t > from + 4) return t;
+      return null;
     };
 
-    /* 取"参与布局的那一层"：加入极光背景后，每屏的第一个子元素是绝对定位的
-       背景层（Aurora），若仍用 firstElementChild 会量到背景层（高度恒等于整屏），
-       兜底判断会永远为真、形同失效。这里改成取第一个非绝对定位的子元素。 */
-    const contentRow = (el: HTMLElement) =>
-      Array.from(el.children).find((child) => {
-        const pos = getComputedStyle(child).position;
-        return pos !== "absolute" && pos !== "fixed";
-      }) as HTMLElement | undefined;
+    /* 向下：达到触发值后立刻翻一屏，不再等滚轮停 */
+    const triggerDown = () => {
+      locked = true;
+      aborted = false;
+      accDown = 0;
+      clearTimeout(upTimer);
+      upStartY = -1;
+      const target = nextTop(window.scrollY);
+      if (target == null) return;
+      glideToY(target, DURATION);
+    };
 
-    const contentFits = () => {
+    /* 向上：手势停稳后落屏，沿用原来的"过 28% 才翻、否则回原屏" */
+    const scheduleUpSettle = () => {
+      clearTimeout(upTimer);
+      upTimer = window.setTimeout(() => {
+        if (animating || !desktop.matches || !fits || !tops.length) return;
+        const target = aborted
+          ? tops[indexAtOrAbove(window.scrollY)]
+          : (() => {
+              const from = upStartY >= 0 ? upStartY : window.scrollY;
+              const delta = window.scrollY - from;
+              const avail = window.innerHeight - NAV_H;
+              return Math.abs(delta) > avail * UP_TRIGGER
+                ? tops[stepIndex(from, -1)]
+                : tops[nearestIndex(from)];
+            })();
+        aborted = false;
+        upStartY = -1;
+        glideToY(target, DURATION);
+      }, UNLOCK_QUIET);
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      if (!desktop.matches || !fits || !tops.length) return;
+      if (event.ctrlKey) return; // 触控板捏合缩放
+      const unit =
+        event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
+      const dy = event.deltaY * unit;
+      const dx = event.deltaX * unit;
+      if (Math.abs(dy) < Math.abs(dx)) return; // 横向手势不接管
+
+      const now = performance.now();
+      const quiet = now - lastWheelAt;
+      if (!animating) {
+        if (locked) {
+          /* 动画结束还不够：必须等滚轮真正停下，惯性尾巴才不会接着翻页 */
+          if (quiet > UNLOCK_QUIET) {
+            locked = false;
+            accDown = 0;
+            accUp = 0;
+            upStartY = -1;
+          }
+        } else if (quiet > GESTURE_GAP) {
+          accDown = 0;
+          accUp = 0;
+          upStartY = -1;
+        }
+      }
+      lastWheelAt = now;
+
+      if (dy > 0) {
+        /* 向下由脚本接管：既避免"原生滚一段 + 再吸附"的两段感，
+           也顺手把这次手势的后续惯性全部吞掉。 */
+        event.preventDefault();
+        aborted = false;
+        clearTimeout(upTimer);
+        upStartY = -1;
+        if (locked || animating) return;
+        accDown += dy;
+        if (accDown >= TRIGGER_PX) triggerDown();
+        return;
+      }
+
+      if (dy < 0) {
+        /* 向下动画中明确反向：立刻交还原生滚动（向上逻辑保持原样） */
+        if (animating) {
+          accUp += -dy;
+          if (accUp < REVERSE_PX) {
+            event.preventDefault();
+            return;
+          }
+          cancelGlide();
+          aborted = true;
+          accUp = 0;
+        }
+        locked = false;
+        accDown = 0;
+        if (upStartY < 0) upStartY = window.scrollY;
+        scheduleUpSettle();
+        /* 不 preventDefault：向上继续走原生滚动 */
+      }
+    };
+
+    /* 桌面触屏（一体机 / 触控笔记本）：沿用原来的"原生滚 + 停手吸附" */
+    const onTouchStart = () => {
+      if (!desktop.matches || !fits) return;
+      touchStartY = window.scrollY;
+      locked = false;
+      accDown = 0;
+      accUp = 0;
+      cancelGlide();
+    };
+
+    const onTouchEnd = () => {
+      if (!desktop.matches || !fits || touchStartY < 0 || !tops.length) return;
+      const from = touchStartY;
+      touchStartY = -1;
+      const delta = window.scrollY - from;
       const avail = window.innerHeight - NAV_H;
-      return screensOf().every((el) => {
-        const row = contentRow(el);
-        if (!row) return true;
-        /* 只统计参与布局的子元素：绝对定位的装饰层（如背景圆环）不算内容高度，
-           否则它会被误判成"这一屏装不下"，从而把整屏翻页整个关掉。 */
-        const kids = Array.from(row.children).filter((k) => {
-          const pos = getComputedStyle(k).position;
-          return pos !== "absolute" && pos !== "fixed";
-        });
-        const tallest = kids.length
-          ? Math.max(...kids.map((k) => k.getBoundingClientRect().height))
-          : row.getBoundingClientRect().height;
-        const style = getComputedStyle(row);
-        const padding =
-          parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-        return tallest + padding <= avail + 4;
-      });
-    };
-
-    const onScroll = () => {
-      if (!desktop.matches || animating || !contentFits()) return;
-      scheduleSettle();
+      const target =
+        Math.abs(delta) > avail * UP_TRIGGER
+          ? tops[stepIndex(from, delta > 0 ? 1 : -1)]
+          : tops[nearestIndex(from)];
+      glideToY(target, DURATION);
     };
 
     const goBy = (dir: 1 | -1) => {
-      const els = screensOf();
-      if (!els.length) return;
-      const base = targetIdx >= 0 ? targetIdx : actualIndex();
-      const to = Math.min(els.length - 1, Math.max(0, base + dir));
+      if (!tops.length) return;
+      const base = nearestIndex(window.scrollY);
+      const to = Math.min(tops.length - 1, Math.max(0, base + dir));
       if (to === base) return;
-      glideTo(posOf(els[to]), animating ? FAST_DURATION : undefined);
+      glideToY(tops[to], DURATION);
     };
 
     /* 键盘翻页：↑ ↓ / PageUp PageDown / 空格；输入框内不抢键 */
@@ -304,46 +419,40 @@ export default function LandingPage() {
       const down = event.key === "ArrowDown" || event.key === "PageDown" || isSpace;
       const up = event.key === "ArrowUp" || event.key === "PageUp";
       if (!down && !up) return;
-      if (!desktop.matches || !contentFits()) return;
+      if (!desktop.matches || !fits || animating) return;
       event.preventDefault();
       goBy(down ? 1 : -1);
     };
 
-    const onUserInput = () => {
-      /* ★ 手机上必须是**普通滚动**，不进这套"落屏"。
-         用户反馈："这两个界面的上下滑动逻辑应该是一样的，统一为登录界面的
-         上下滑动逻辑……我在主页端都看不了下面的信息。"
-         根因就是这里原先没有 desktop 判断：touchstart / touchmove 直接
-         scheduleSettle()，而 settleTarget 的规则是"本次手势没滚过 28% 屏高
-         就回到起点那一屏" —— 手机上一次短滑就当场被弹回原处，
-         表现就是"滑下去又跳回顶部、看不到下面的内容"（录屏逐帧可见：
-         下滑 → 回标题 → 再下滑 → 再回标题）。
-         桌面端（≥1024 且 ≥600 高）保留原来的整屏落屏，观感不变。
-         这也是本次第二次修同一个现象 —— 上一轮只去掉了 CSS 的 scroll-snap，
-         而真正接管手势的是这段 JS。 */
-      if (!desktop.matches || !contentFits()) return;
-      /* 记下手势起点：落点按“滚过 28% 就翻页”判断（见 settleTarget） */
-      if (gestureStartY < 0) gestureStartY = window.scrollY;
-      targetIdx = -1;
+    /* 初始测量 + 只在 resize / 字体加载 / 内容尺寸变化时重测 */
+    measure();
+    observeScreens();
+    window.addEventListener("load", scheduleMeasure);
+    window.addEventListener("resize", scheduleMeasure);
+    void document.fonts?.ready.then(scheduleMeasure).catch(() => {});
+    const onDesktopChange = () => {
       cancelGlide();
-      scheduleSettle();
+      measure();
+      observeScreens();
     };
+    desktop.addEventListener?.("change", onDesktopChange);
 
-    window.addEventListener("wheel", onUserInput, { passive: true });
-    window.addEventListener("touchstart", onUserInput, { passive: true });
-    window.addEventListener("touchmove", onUserInput, { passive: true });
+    window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
     window.addEventListener("keydown", onKeyNav);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
     return () => {
-      window.removeEventListener("wheel", onUserInput);
-      window.removeEventListener("touchstart", onUserInput);
-      window.removeEventListener("touchmove", onUserInput);
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("keydown", onKeyNav);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      window.clearTimeout(settleTimer);
-      cancelAnimationFrame(raf);
+      window.removeEventListener("load", scheduleMeasure);
+      window.removeEventListener("resize", scheduleMeasure);
+      desktop.removeEventListener?.("change", onDesktopChange);
+      ro?.disconnect();
+      cancelAnimationFrame(measureRaf);
+      window.clearTimeout(upTimer);
+      cancelGlide();
       glideRef.current = null;
     };
   }, []);
