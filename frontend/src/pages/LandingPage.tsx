@@ -410,8 +410,9 @@ export default function LandingPage() {
         upStartY = -1;
         if (animating) return;
         if (locked) {
-          /* 动画结束还不够：必须等滚轮真正静下来，惯性尾巴才不会接着翻页 */
-          if (quiet <= UNLOCK_QUIET) return;
+          /* 动画结束还不够：必须等滚轮真正静下来、且动画已经收尾，
+             惯性尾巴才不会接着翻页 */
+          if (quiet <= UNLOCK_QUIET || now - animEndAt <= UNLOCK_QUIET) return;
           locked = false;
           resetGesture();
         } else if (isNew) {
