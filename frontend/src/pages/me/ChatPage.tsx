@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Send, Sparkles, RefreshCw, AlertTriangle, MessageCircleHeart, HardDrive } from 'lucide-react';
-import { api, type ChatTurn, type ExtractResult, type InferenceRunResult, type CheckinMessage } from '../../services/api';
+import { api, type ChatTurn, type ExtractResult, type InferenceRunResult } from '../../services/api';
 import { getCurrentSession } from '../../auth/session';
 import { briefErrorMessage } from '../../services/http';
 import {
@@ -21,6 +21,10 @@ interface ChatMessage {
   offline?: boolean;
   /** 对话服务端处于演示模式（未配 LLM 或 Mock），回复来自本机文案 */
   replyMock?: boolean;
+  /** 这条是「今日关怀问询」的问题，不是 AI 回复：不显示"本机文案"等回复标记 */
+  checkin?: boolean;
+  /** 问询来源说明（本机问询/知识图谱未连接等） */
+  checkinNote?: string;
 }
 
 const WELCOME = '你好，我是你的 AI 心理陪伴助手。和我聊聊最近的状态、喜欢的事或烦恼吧——我会把关键信息整理进你的个人知识图谱，并在需要时为你生成状态报告。';
@@ -47,7 +51,9 @@ export default function ChatPage() {
   const [localCount, setLocalCount] = useState(() => readLocalKg(userId).triples.length);
   /** 服务端是否处于演示（mock）模式：右上角如实标注，不把演示抽取说成真实抽取 */
   const [mockServer, setMockServer] = useState<boolean | null>(null);
+  const [checkinBusy, setCheckinBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -170,6 +176,56 @@ export default function ChatPage() {
     setBusy(false);
   };
 
+  /* 今日关怀问询：不再弹模态框让用户先关掉再输入。
+     问询直接作为一条 assistant 消息进入对话流，并聚焦输入框——
+     用户看到问题后就在下面回复，回复会带着这条问题进入聊天历史。 */
+  const askDailyCheckin = async () => {
+    if (checkinBusy) return;
+    /* 本次对话里已经有问询：不重复插一条，直接把光标送回输入框 */
+    if (messages.some((m) => m.checkin)) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      inputRef.current?.focus();
+      return;
+    }
+    setCheckinBusy(true);
+    try {
+      const r = await api.getDailyCheckin(userId);
+      setMessages((prev) => {
+        if (prev.some((m) => m.checkin)) return prev;
+        return [
+          ...prev,
+          {
+            id: Date.now(),
+            role: 'assistant',
+            text: r.message,
+            checkin: true,
+            checkinNote: r.neo4j_connected
+              ? ''
+              : '服务端知识图谱未连接：本次回复的抽取结果会存在本机。',
+          },
+        ];
+      });
+    } catch (e) {
+      const signals = await collectLocalSignals(userId);
+      setMessages((prev) => {
+        if (prev.some((m) => m.checkin)) return prev;
+        return [
+          ...prev,
+          {
+            id: Date.now(),
+            role: 'assistant',
+            text: buildLocalCheckin(signals),
+            checkin: true,
+            checkinNote: `本机问询（服务端暂时取不到${briefErrorMessage(e, '') ? `：${briefErrorMessage(e, '')}` : '，已改用本机记录'}）：回复后内容会存进本机记录。`,
+          },
+        ];
+      });
+    } finally {
+      setCheckinBusy(false);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  };
+
   return (
     /* chat-fullheight：配合 index.css 的 :has 规则把高度链打通到视口，
        消息少时输入框也贴在底部（主流对话软件的布局） */
@@ -193,7 +249,15 @@ export default function ChatPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <DailyCheckinButton userId={userId} />
+          <button
+            type="button"
+            onClick={() => void askDailyCheckin()}
+            disabled={checkinBusy}
+            className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-primary-50 px-4 py-2 text-sm font-medium text-primary-600 hover:bg-primary-100 disabled:opacity-50 cursor-pointer"
+          >
+            <MessageCircleHeart className={`h-4 w-4 ${checkinBusy ? 'animate-pulse' : ''}`} />
+            今日问询
+          </button>
           <RunInferenceButton userId={userId} />
         </div>
       </div>
@@ -221,6 +285,11 @@ export default function ChatPage() {
             >
               {/* 流式占位：回复气泡还没拿到第一个字时，就地显示思考动画；
                   有内容后同一气泡直接显示文本，不再有第二个"正在思考中" */}
+              {m.checkin && (
+                <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium tracking-[0.12em] text-primary-600">
+                  <MessageCircleHeart className="h-3.5 w-3.5" /> 今日关怀问询
+                </p>
+              )}
               {m.text ? (
                 <p className="whitespace-pre-wrap">{m.text}</p>
               ) : (
@@ -238,7 +307,7 @@ export default function ChatPage() {
                   离线模式
                 </span>
               )}
-              {m.replyMock && !m.offline && (
+              {m.replyMock && !m.offline && !m.checkin && (
                 <span className="mt-2 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
                   本机文案 · 未走大模型
                 </span>
@@ -262,6 +331,9 @@ export default function ChatPage() {
                   </p>
                 </div>
               )}
+              {m.checkinNote && (
+                <p className="mt-2 text-[11px] leading-5 text-slate-400">{m.checkinNote}</p>
+              )}
             </div>
           </div>
         ))}
@@ -270,6 +342,7 @@ export default function ChatPage() {
 
       <div className="mt-4 flex gap-2 shrink-0 pt-1">
         <textarea
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -278,7 +351,11 @@ export default function ChatPage() {
               send();
             }
           }}
-          placeholder="聊聊你的状态、兴趣或烦恼…（Enter 发送，Shift+Enter 换行）"
+          placeholder={
+            messages[messages.length - 1]?.checkin
+              ? '回答今天的问题…（Enter 发送，Shift+Enter 换行）'
+              : '聊聊你的状态、兴趣或烦恼…（Enter 发送，Shift+Enter 换行）'
+          }
           rows={2}
           className="flex-1 resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-300"
         />
@@ -292,73 +369,6 @@ export default function ChatPage() {
         </button>
       </div>
     </div>
-  );
-}
-
-function DailyCheckinButton({ userId }: { userId: string }) {
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState<CheckinMessage | null>(null);
-  /** 本地兜底问询（服务端拿不到时）：文案取自后端同一套问询模板，见 localKg.buildLocalCheckin */
-  const [local, setLocal] = useState<string | null>(null);
-  const [err, setErr] = useState('');
-  const [show, setShow] = useState(false);
-
-  const fetchCheckin = async () => {
-    setLoading(true);
-    setErr('');
-    setLocal(null);
-    try {
-      const r = await api.getDailyCheckin(userId);
-      setMsg(r);
-      setShow(true);
-    } catch (e) {
-      /* 服务端拿不到也照样给一句：用本机已有数据（兴趣/记录）挑一条问询，并注明来源 */
-      setErr(briefErrorMessage(e, '未连接到服务端'));
-      setMsg(null);
-      const signals = await collectLocalSignals(userId);
-      setLocal(buildLocalCheckin(signals));
-      setShow(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <>
-      <button
-        onClick={fetchCheckin}
-        disabled={loading}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-50 text-primary-600 text-sm font-medium hover:bg-primary-100 disabled:opacity-50 cursor-pointer"
-      >
-        <MessageCircleHeart className={`w-4 h-4 ${loading ? 'animate-pulse' : ''}`} /> 今日问询
-      </button>
-
-      {show && (msg || local) && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={() => setShow(false)}>
-          <div
-            className="ui-card max-w-md w-full p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.45)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-                <MessageCircleHeart className="w-4 h-4 text-primary-600" /> 今日关怀问询
-              </h3>
-              <button onClick={() => setShow(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">✕</button>
-            </div>
-            <div className="bg-primary-50 rounded-xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-              {msg ? msg.message : local}
-            </div>
-            <p className="text-xs text-slate-400 mt-3">
-              {msg ? '回复后内容会自动整理进你的个人图谱' : '本机问询（服务端未连接）：回复后内容会存进本机记录'}
-            </p>
-            {msg && !msg.neo4j_connected && (
-              <p className="text-xs text-slate-400 mt-1">服务端知识图谱未连接：本次抽取结果会存在本机。</p>
-            )}
-            {err && <p className="text-xs text-slate-400 mt-2">服务端问询暂时取不到（{err}），已改用本机问询。</p>}
-          </div>
-        </div>
-      )}
-    </>
   );
 }
 
