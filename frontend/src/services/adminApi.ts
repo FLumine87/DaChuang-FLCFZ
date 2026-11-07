@@ -12,6 +12,25 @@ import {
 
 export { USE_MOCK };
 
+export interface AdminSupplement {
+  id: number;
+  name: string;
+  kind: 'text' | 'audio' | 'image';
+  screeningId?: string;
+  text?: string;
+  filename?: string;
+  description?: string;
+  createdAt: string;
+  analysis?: { levelLabel?: string; conclusion?: string; reason?: string; alertId?: string; [key: string]: unknown };
+}
+
+export async function listAdminSupplements(filters: {
+  keyword?: string; kind?: string; page?: number;
+}): Promise<Page<AdminSupplement>> {
+  if (USE_MOCK) return { items: [], total: 0, page: 1, pageSize: 50 };
+  return request.get<Page<AdminSupplement>>(`/api/admin/supplements?${params(filters)}`);
+}
+
 export interface AdminStats {
   totalScreenings: number;
   monthlyScreenings: number;

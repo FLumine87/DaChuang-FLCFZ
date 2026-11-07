@@ -173,6 +173,41 @@ async def get_admin_screenings(ctx: RequestContext):
     return success_response(data=items)
 
 
+async def get_admin_supplements(ctx: RequestContext):
+    """管理端查看个人端实际保存的多模态采集，含未关联问卷的独立采集。"""
+    from app.handlers.personal import _supplement_dict
+    query = ctx.query_params
+    try:
+        page = max(1, int(query.get("page", 1)))
+    except (ValueError, TypeError):
+        raise HttpError(400, "页码无效")
+    where, params = [], []
+    kind = query.get("kind")
+    if kind:
+        if kind not in ("text", "audio", "image"):
+            raise HttpError(400, "采集类型无效")
+        where.append("sp.kind = ?")
+        params.append(kind)
+    if query.get("keyword"):
+        where.append("(u.name LIKE ? OR sp.screening_id LIKE ? OR sp.filename LIKE ?)")
+        params.extend([f"%{str(query['keyword']).strip()}%"] * 3)
+    clause = " WHERE " + " AND ".join(where) if where else ""
+    source = " FROM screening_supplements sp LEFT JOIN users u ON sp.user_id = u.id"
+    count = await db.query_one_a("SELECT COUNT(*) AS c" + source + clause, params)
+    rows = await db.query_a(
+        "SELECT sp.*, u.name AS owner_name" + source + clause +
+        " ORDER BY sp.created_at DESC, sp.id DESC LIMIT 50 OFFSET ?", params + [(page - 1) * 50])
+    items = []
+    for row in rows:
+        item = _supplement_dict(row)
+        # 查询列表只返回记录与分析，文件取用沿用现有权限链路。
+        item.pop("url", None)
+        item["name"] = row.get("owner_name") or "未关联账号"
+        items.append(item)
+    return success_response(data={"items": items, "total": count["c"] if count else 0,
+                                  "page": page, "pageSize": 50})
+
+
 async def get_admin_alerts(ctx: RequestContext):
     q = ctx.query_params
     where, params = [], []
