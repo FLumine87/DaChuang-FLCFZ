@@ -102,17 +102,24 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
 }
 
 export async function listAdminAlerts(filters: {
-  keyword?: string; level?: string; status?: string; page?: number;
+  keyword?: string; level?: string; status?: string; page?: number; pageSize?: number;
 }): Promise<Page<AlertRecord>> {
+  const pageSize = filters.pageSize ?? 50;
   if (USE_MOCK) {
     const filtered = demoAlerts.filter((a) =>
       (!filters.keyword || a.name.includes(filters.keyword) || a.id.includes(filters.keyword)) &&
       (!filters.level || a.level === filters.level) &&
       (!filters.status || a.status === filters.status));
     const page = filters.page || 1;
-    return { items: filtered.slice((page - 1) * 50, page * 50), total: filtered.length, page, pageSize: 50 };
+    return {
+      items: filtered.slice((page - 1) * pageSize, page * pageSize),
+      total: filtered.length, page, pageSize,
+    };
   }
-  return request.get<Page<AlertRecord>>(`/api/admin/alerts?${params(filters)}`);
+  return request.get<Page<AlertRecord>>(`/api/admin/alerts?${params({
+    keyword: filters.keyword, level: filters.level, status: filters.status,
+    page: filters.page, page_size: pageSize,
+  })}`);
 }
 
 export async function getAdminAlert(id: string): Promise<AdminAlertDetail> {

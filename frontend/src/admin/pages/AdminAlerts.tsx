@@ -16,6 +16,15 @@ const statusLabel: Record<AlertRecord['status'], string> = {
   pending: '待处理', processing: '处理中', resolved: '已解决', closed: '已关闭',
 };
 const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
+/** 预警列表每页 4 条：右侧详情拉到与列表同高，整块刚好铺满一屏，不再是一条长滚动 */
+const PAGE_SIZE = 4;
+
+/** 页码列表：总页数 ≤5 全列，否则围绕当前页取 5 个 */
+function pageList(current: number, total: number): number[] {
+  if (total <= 5) return Array.from({ length: total }, (_, i) => i + 1);
+  const start = Math.min(Math.max(current - 2, 1), total - 4);
+  return Array.from({ length: 5 }, (_, i) => start + i);
+}
 
 export default function AdminAlerts() {
   const [keyword, setKeyword] = useState('');
@@ -51,7 +60,7 @@ export default function AdminAlerts() {
 
   useEffect(() => {
     let active = true;
-    listAdminAlerts({ keyword: keyword.trim(), level, status, page })
+    listAdminAlerts({ keyword: keyword.trim(), level, status, page, pageSize: PAGE_SIZE })
       .then((items) => { if (active) { setResult(items); setListError(''); } })
       .catch((reason: unknown) => { if (active) { setResult(null); setListError(reason instanceof Error ? reason.message : '加载失败'); } })
       .finally(() => { if (active) setListLoading(false); });
@@ -115,36 +124,32 @@ export default function AdminAlerts() {
 
   const dirty = detail && (editStatus !== detail.status || assigneeId !== detail.assigneeId || note.trim().length > 0);
   const hasMore = result ? page * result.pageSize < result.total : false;
+  const totalPages = Math.max(1, Math.ceil((result?.total ?? 0) / (result?.pageSize ?? PAGE_SIZE)));
   const selectedRow = result?.items.find((item) => item.id === selectedId);
 
-  return <div className="space-y-5">
-    {/* 这一块以前又渲染了一遍「预警管理」大标题 + 说明，和外壳的页头
-        （管理端 · 健康管理 / 预警管理 / 查看风险变化…）叠成两层。
-        外壳那层带面包屑、两端页面统一，所以这里只留筛选与“演示数据”标记；
-        标记收进卡头，不再单独占一行。 */}
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium text-slate-600">筛选预警</p>
-        {USE_MOCK && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">演示数据，操作仅在本页有效</span>}
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-      <label className="relative">
+  return <div className="space-y-3">
+    {/* 筛选条不单独占一张卡：页面头（标题+说明）已经很高，
+        筛选再套一张卡会把列表推到首屏之外。这里用一条紧凑的输入行，
+        让「4 条/页 + 等高的详情栏」尽量在一屏内铺满，不用上下滚。
+        演示数据标记放在这一行末尾。 */}
+    <div className="flex flex-wrap items-center gap-3">
+      <label className="relative min-w-[220px] flex-1">
         <span className="sr-only">搜索姓名或预警编号</span>
         <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
         <input className={inputClass + ' pl-9'} value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); resetAutoSelect(); }}
           placeholder="搜索姓名或预警编号" />
       </label>
-      <label><span className="sr-only">风险等级</span><select className={inputClass} value={level}
+      <label className="sm:w-44"><span className="sr-only">风险等级</span><select className={inputClass} value={level}
         onChange={(event) => { setLevel(event.target.value); setPage(1); resetAutoSelect(); }}>
         <option value="">全部风险等级</option><option value="red">红色</option><option value="orange">橙色</option>
         <option value="yellow">黄色</option><option value="green">绿色</option>
       </select></label>
-      <label><span className="sr-only">处理状态</span><select className={inputClass} value={status}
+      <label className="sm:w-44"><span className="sr-only">处理状态</span><select className={inputClass} value={status}
         onChange={(event) => { setStatus(event.target.value); setPage(1); resetAutoSelect(); }}>
         <option value="">全部处理状态</option>{Object.entries(statusLabel).map(([value, label]) =>
           <option key={value} value={value}>{label}</option>)}
       </select></label>
-      </div>
+      {USE_MOCK && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">演示数据，操作仅在本页有效</span>}
     </div>
     {listError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
       预警列表加载失败：{listError} <button type="button" className="ml-2 underline"
@@ -152,6 +157,7 @@ export default function AdminAlerts() {
     </div>}
     <MasterDetail
       width="md"
+      matchList
       list={
         <div className="space-y-3">
           {listLoading && <div className="space-y-3" role="status" aria-label="正在加载预警">
@@ -170,8 +176,8 @@ export default function AdminAlerts() {
                     <p className="text-xs text-slate-500">{alert.id} · {alert.screeningId || '无关联筛查'}</p></div></div>
                 <AdminStatusBadge status={alert.status} />
               </div>
-              <p className="mt-3 text-sm text-slate-600">{alert.trigger || alert.description || '无触发说明'}</p>
-              <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+              <p className="mt-2 line-clamp-2 text-sm text-slate-600">{alert.trigger || alert.description || '无触发说明'}</p>
+              <div className="mt-1.5 flex items-center justify-between text-xs text-slate-400">
                 <span>{alert.createdAt} · {alert.assignee}</span>
                 <span className="inline-flex items-center gap-0.5 font-medium text-primary-600">
                   {selectedId === alert.id ? '正在处理' : '查看详情'}<ChevronRight className="h-3.5 w-3.5" />
@@ -180,17 +186,33 @@ export default function AdminAlerts() {
             </button>)}
           {!listLoading && result && result.total > 0 && <div className="flex items-center justify-between text-sm text-slate-500">
             <span>共 {result.total} 条 · 第 {page} 页</span>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-1.5">
               <button type="button" disabled={page <= 1} onClick={() => { setPage((value) => value - 1); resetAutoSelect(); }}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1 disabled:opacity-40">上一页</button>
+                className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1 disabled:cursor-not-allowed disabled:opacity-40">上一页</button>
+              {pageList(page, totalPages).map((number) => (
+                <button
+                  key={number}
+                  type="button"
+                  onClick={() => { setPage(number); resetAutoSelect(); }}
+                  aria-current={number === page ? 'page' : undefined}
+                  className={`grid h-8 min-w-8 cursor-pointer place-items-center rounded-lg border px-2 ${
+                    number === page
+                      ? 'border-primary-500 bg-primary-50 font-medium text-primary-600'
+                      : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                  }`}
+                >
+                  {number}
+                </button>
+              ))}
               <button type="button" disabled={!hasMore} onClick={() => { setPage((value) => value + 1); resetAutoSelect(); }}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1 disabled:opacity-40">下一页</button>
+                className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1 disabled:cursor-not-allowed disabled:opacity-40">下一页</button>
             </div>
           </div>}
         </div>
       }
       detail={
         <DetailPanel
+          embedded
           selectionKey={selectedId}
           title={selectedId ?? '预警详情'}
           subtitle={detail ? `${detail.name} · ${detail.screeningId || '无关联筛查'}` : selectedRow ? `${selectedRow.name} · ${selectedRow.screeningId || '无关联筛查'}` : undefined}

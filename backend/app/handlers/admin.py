@@ -191,17 +191,24 @@ async def get_admin_alerts(ctx: RequestContext):
         page = max(1, int(q.get("page", 1)))
     except (ValueError, TypeError):
         page = 1
+    # 每页条数可由前端指定（1–100），默认 50；管理端预警列表改成 4 条/页时用它。
+    try:
+        page_size = int(q.get("page_size", 50))
+    except (ValueError, TypeError):
+        page_size = 50
+    page_size = max(1, min(100, page_size))
     total_row = await db.query_one_a("SELECT COUNT(*) AS c FROM alerts a" + clause, params)
     rows = await db.query_a(
         "SELECT a.*, s.screening_id AS public_screening_id, u.name AS assignee_name "
         "FROM alerts a LEFT JOIN screenings s ON a.screening_id = s.id "
         "LEFT JOIN users u ON a.assignee_id = u.id" + clause +
-        " ORDER BY a.created_at DESC, a.id DESC LIMIT 50 OFFSET ?", params + [(page - 1) * 50])
+        " ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?",
+        params + [page_size, (page - 1) * page_size])
     return success_response(data={
         "items": [_admin_alert_dict(a) for a in rows],
         "total": total_row["c"] if total_row else 0,
         "page": page,
-        "pageSize": 50,
+        "pageSize": page_size,
     })
 
 

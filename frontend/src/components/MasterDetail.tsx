@@ -29,16 +29,38 @@ export function MasterDetail({
   list,
   detail,
   width = 'md',
+  align = 'start',
+  matchList = false,
 }: {
   /** 左列：列表 + 分页等 */
   list: ReactNode;
   /** 右列：通常是一个 <DetailPanel> */
   detail: ReactNode;
   width?: keyof typeof WIDTH;
+  /**
+   * start（默认）：两列各自按内容高度排；
+   * stretch：右栏拉到与左栏同高（管理端预警页用，避免右侧空出一条）。
+   */
+  align?: 'start' | 'stretch';
+  /**
+   * 详情栏高度跟随左列（而不是被自己的内容撑高）：
+   * 右侧经常比左侧高（表单/历史），用 absolute 让详情不参与行高计算，
+   * 行高只由列表决定，详情再撑满这一行。配合 <DetailPanel embedded>。
+   */
+  matchList?: boolean;
 }) {
+  if (matchList) {
+    return (
+      <div className={`grid items-start gap-5 ${WIDTH[width]}`}>
+        <div className="min-w-0">{list}</div>
+        <div className="relative self-stretch">
+          <div className="lg:absolute lg:inset-0 lg:flex lg:flex-col">{detail}</div>
+        </div>
+      </div>
+    );
+  }
   return (
-    /* items-start：两列各自按内容高度排，右侧不再被左列拉成一块大白板 */
-    <div className={`grid items-start gap-5 ${WIDTH[width]}`}>
+    <div className={`grid gap-5 ${align === 'stretch' ? 'items-stretch' : 'items-start'} ${WIDTH[width]}`}>
       <div className="min-w-0">{list}</div>
       {detail}
     </div>
@@ -56,6 +78,7 @@ export function DetailPanel({
   emptyIcon,
   emptyTitle = '选择一项查看详情',
   emptyDescription,
+  embedded = false,
   children,
 }: {
   /** 当前选中的 id；null 表示未选中。同时用来判断移动端是否要滚到详情 */
@@ -70,6 +93,7 @@ export function DetailPanel({
   emptyIcon?: ReactNode;
   emptyTitle?: string;
   emptyDescription?: ReactNode;
+  embedded?: boolean;
   children?: ReactNode;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -94,8 +118,11 @@ export function DetailPanel({
       ref={ref}
       className={[
         'flex scroll-mt-24 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm',
-        /* 粘顶：顶栏是 sticky 的 h-16，留 24px 呼吸位；限高后详情自己滚 */
-        'lg:sticky lg:top-[88px] lg:max-h-[calc(100dvh-112px)]',
+        embedded
+          ? /* 嵌在等高的格子里：撑满、内部滚动，不再 sticky */
+            'h-full min-h-0'
+          : /* 粘顶：顶栏是 sticky 的 h-16，留 24px 呼吸位；限高后详情自己滚 */
+            'lg:sticky lg:top-[88px] lg:max-h-[calc(100dvh-112px)]',
       ].join(' ')}
       aria-label="详情"
     >
@@ -144,7 +171,7 @@ export function DetailPanel({
           </div>
         </>
       ) : (
-        <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center lg:min-h-[420px]">
+        <div className="flex min-h-[320px] flex-1 flex-col items-center justify-center px-6 py-12 text-center lg:min-h-[420px]">
           <span className="grid h-12 w-12 place-items-center rounded-full bg-slate-50 text-slate-300">
             {emptyIcon ?? <MousePointerClick className="h-6 w-6" />}
           </span>
