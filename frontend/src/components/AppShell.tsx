@@ -504,21 +504,6 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             </div>
           ))}
         </nav>
-        {/* 底部说明卡：与卡片同一套圆角与"淡玻璃"底色，
-            在毛玻璃侧栏上不再是一块突兀的实心浅灰块。 */}
-        <div className="sidebar-label sidebar-promo mx-5 mb-5 mt-auto shrink-0 rounded-2xl border border-slate-200/70 bg-white/70 p-5 text-center">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <p className="text-sm font-semibold text-slate-800">
-            每一份关注，都有意义
-          </p>
-          <p className="mt-2 whitespace-normal text-xs leading-5 text-slate-500">
-            {isAdmin
-              ? "从筛查到跟进，让关怀及时抵达。"
-              : "从了解自己开始，照顾好每一天。"}
-          </p>
-        </div>
         <div className="sidebar-footer">
           <span className="sidebar-label">
             心理健康 · {isAdmin ? "管理工作空间" : "个人健康空间"}

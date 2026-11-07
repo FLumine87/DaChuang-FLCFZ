@@ -429,14 +429,6 @@ html.theme-switching *::after {
   .app-shell[data-collapsed="true"] .sidebar-label {
     display: none;
   }
-  /* 矮屏（笔记本 700–820px）侧栏放不下 9 个导航项 + 这张纯装饰的卡片：
-     卡片会把「健康管理」整组挤到滚动区外，看起来像菜单缺了一项。
-     这一档直接收起装饰卡，把高度让给导航本身（收起态它本来就不显示）。 */
-  @media (max-height: 820px) {
-    .sidebar-promo {
-      display: none;
-    }
-  }
   .sidebar-link {
     display: flex;
     align-items: center;
