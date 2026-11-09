@@ -97,7 +97,9 @@ class AdminContextTests(unittest.IsolatedAsyncioTestCase):
         engines._HASHING_ENGINE = MockHashingEngine()
         try:
             sup = db.execute("INSERT INTO screening_supplements(user_id,kind,text) VALUES(?,'text','验收')", (self.uid,))
-            report = await personal._analyze_collection(RequestContext("POST", "/"), sup, "text",
+            ctx = RequestContext("POST", "/")
+            ctx.user = {"sub": str(self.uid), "role": "user"}
+            report = await personal._analyze_collection(ctx, sup, "text",
                                                          {"text": "验收"}, self.uid, None)
             self.assertEqual(report["levelLabel"], "未评估")
             self.assertFalse(report["isAlert"])

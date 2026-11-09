@@ -81,6 +81,16 @@ class ReferenceInferenceTest(unittest.TestCase):
         self.assertFalse(report.alert_created)
         self.assertIn("不生成心理风险等级", report.summary)
 
+    def test_recent_graph_keyword_is_not_verified_current_crisis(self):
+        from datetime import datetime
+        data = {'symptoms':[{'name':'自杀意念','last_seen':datetime.now().isoformat(),'cnt':1}], 'disorder_total_count':[{'total':1}]}
+        with patch.object(inference_agent, 'neo4j_health', return_value=True), patch.object(inference_agent, 'get_driver', return_value=DummyDriver()), patch.object(inference_agent, '_run', side_effect=lambda session,key,uid:data.get(key, [])):
+            report = inference_agent.run_inference('isolated-user')
+        self.assertTrue(report.crisis)
+        self.assertTrue(report.crisis_recent_reference)
+        self.assertFalse(report.crisis_verified)
+        self.assertEqual(report.crisis_sources, ['graph'])
+
     def test_only_trigger_still_matches_a_disorder(self):
         """只有诱因、没有任何症状时也应给出候选（改造前恒为空）。"""
         data = {

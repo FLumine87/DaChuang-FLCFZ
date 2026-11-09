@@ -86,7 +86,7 @@ class ReviewTests(unittest.IsolatedAsyncioTestCase):
         item = await self.send()
         path = f"/api/personal/reviews/{item['id']}/submit"
         self.assertEqual((await self.call("POST", path, {"answers": {"1": 0}}, who="user"))[0], 400)
-        answers = {str(i): 1 for i in range(1, 10)}
+        answers = {str(i): (0 if i == 9 else 1) for i in range(1, 10)}
         for _ in range(2):
             status, response = await self.call("POST", path, {"answers": answers, "score": 27, "level": "red"}, who="user")
             self.assertEqual(status, 200, response)
@@ -94,9 +94,18 @@ class ReviewTests(unittest.IsolatedAsyncioTestCase):
         rows = db.query("SELECT * FROM screenings")
         self.assertEqual(len(rows), 1)
         self.assertEqual((rows[0]["score"], rows[0]["alert_level"], rows[0]["user_id"], rows[0]["case_id"]),
-                         (9, "yellow", self.uid, self.case))
+                         (8, "yellow", self.uid, self.case))
         self.assertEqual(db.query_one("SELECT COUNT(*) AS c FROM review_notifications WHERE recipient_id=?", (self.staff,))["c"], 1)
         self.assertEqual(db.query_one("SELECT state FROM agent_workspace_tasks")["state"], "confirmed")
+
+    async def test_review_scoring_matches_current_pss_and_phq_safety_rules(self):
+        from app.services.screening_assessment import QUESTIONNAIRE_VERSION
+        answers = {str(i): 0 for i in range(1, 11)}
+        self.assertEqual(review_service.score_answers('PSS-10', answers, version=QUESTIONNAIRE_VERSION, encoding='option-index'), (16, 40, 'yellow'))
+        with self.assertRaises(Exception):
+            review_service.score_answers('PSS-10', answers)
+        safety = {str(i): (1 if i == 9 else 0) for i in range(1, 10)}
+        self.assertEqual(review_service.score_answers('PHQ-9', safety), (1, 27, 'orange'))
 
     async def test_review_notification_and_internal_note_are_private(self):
         item = await self.send()

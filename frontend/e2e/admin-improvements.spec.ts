@@ -17,6 +17,7 @@ test.beforeEach(async ({ page }) => {
       trendData: [], alertDistribution: [], alertRecords: [alert] };
     else if (path.endsWith('/alerts')) data = { items: [alert], total: 1, page: 1, pageSize: 50 };
     else if (path.endsWith('/ALT-TEST')) data = alert;
+    else if (path.endsWith('/work-queue')) data = {date:'2026-11-09',tasks:[],unassignedAlerts:1,pendingReview:0,dueToday:0,overdue:0};
     else if (path.endsWith('/supplements')) data = { items: [{ id: 1, name: '测试成员', kind: 'audio', filename: 'sample.wav',
       createdAt: '2026-11-06', analysis: { levelLabel: '关注', conclusion: '实际保存的结论', alertId: 'ALT-TEST' } }],
       total: 1, page: 1, pageSize: 50 };

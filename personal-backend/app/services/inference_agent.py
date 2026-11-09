@@ -533,8 +533,7 @@ def run_inference(user_id: str) -> RiskReport:
         factors.append(f"以下个人记录暂未纳入推断（词表未覆盖）：{'、'.join(sorted(set(unmapped)))}")
     if crisis_hits:
         if crisis_recent:
-            factors.append(f"检测到安全线索：{'、'.join(crisis_hits)}；请立即核实本人当前状态，"
-                           "必要时联系学校心理咨询中心或拨打 12356 心理援助热线")
+            factors.append(f"图谱近期记录包含待核实的安全线索：{'、'.join(crisis_hits)}；请及时核实本人、时间和语境，必要时寻求专业支持。")
         else:
             factors.append(f"图谱存在历史安全线索：{'、'.join(crisis_hits)}；需核实本人、时间与语境，"
                            "不要把历史关键词当作当前已确认危机")
@@ -578,7 +577,8 @@ def run_inference(user_id: str) -> RiskReport:
         disclaimer=DISCLAIMER,
         alert_created=False,  # 由路由层在写入预警后置 True
         created_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
-        crisis_verified=crisis_recent,
+        crisis_verified=False,  # 图谱时间新不代表本人当前状态已核实
+        crisis_recent_reference=crisis_recent,
         crisis_sources=crisis_sources,
         unmapped_terms=sorted(set(unmapped)),
     )
@@ -590,9 +590,9 @@ _SUMMARY_PROMPT = """你是心理状况推理报告撰写助手。基于以下�
 1. 客观陈述匹配到的风险因素，不夸大、不诊断；
 2. 给出 2-3 条缓解建议（优先使用 recommendations 中结合兴趣的条目）；
 3. 本模块只输出图谱参考，overall_score 是匹配支持分；不能据此评定健康、疾病或风险等级。
-4. 安全线索分两种情形，措辞必须区分：crisis_verified=true 表示本人近期直接表达过，
-   应立即建议联系学校心理中心或拨打 12356 心理援助热线；crisis_verified=false 时
-   只说明"图谱中有历史线索、待核实"，不得渲染成当前已确认危机。
+4. 图谱关键词与记录时间不能证明当前状态已核实。crisis_verified=false 时，
+   只说明"图谱中有待核实线索"；crisis_recent_reference=true 仅表示记录较近，建议及时核实，
+   不得渲染成当前已确认危机。
 5. 若 unmapped_terms 非空，用一句话如实说明"部分记录未纳入分析"，不要假装已全部理解。
 6. 语气温暖、支持性，第二人称。直接输出正文，不要标题。"""
 

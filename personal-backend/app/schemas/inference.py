@@ -73,6 +73,7 @@ class RiskReport(BaseModel):
             "True 才应触发危机提示与人工复核；False 表示只是图谱里的历史线索，需核实"
         ),
     )
+    crisis_recent_reference: bool = Field(default=False, description="仅表示图谱线索记录较近，不代表当前状态已核实")
     crisis_sources: list[str] = Field(
         default_factory=list,
         description="命中安全线索的出处：'text'=本次文本直检、'graph'=历史图谱节点",
