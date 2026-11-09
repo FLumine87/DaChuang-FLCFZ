@@ -35,6 +35,15 @@ env/
 *.sqlite3
 backup_*.db
 
+# ---- 弱监督桥接的模型状态（语料衍生物，本地重建）----
+# 桥接的投影矩阵 W 与单元码依赖于本地 real_corpus.db（不入库），
+# 换机器后语料不同、模型即失效；由 scripts/build_bridges.py 一键重建
+# （20~70 秒），没有必要把十几 MB 的二进制衍生品提交进仓库。
+backend/data/hashing/bridge_*_state.json
+
+# ---- AI 助手工作区（个人笔记与实验记忆，不属于项目代码）----
+.workbuddy/
+
 # ---- 上传文件 ----
 uploads/
 *.wav
@@ -137,3 +146,4 @@ _shots/
 
 # 设计稿演示工程的依赖，不入库
 design/home-react/node_modules/
+.trial-data/

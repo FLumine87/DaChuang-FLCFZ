@@ -1,0 +1,16 @@
+{
+ "image_feature": "cnn",
+ "lambda_s": 0.6,
+ "code_length": 64,
+ "train_rows": 4646,
+ "文搜图": {
+  "map@10": 0.1874,
+  "queries": 397
+ },
+ "图搜文": {
+  "map@10": 0.4965,
+  "queries": 93
+ },
+ "units": 9292,
+ "records": 4646
+}

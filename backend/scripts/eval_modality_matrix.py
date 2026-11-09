@@ -76,20 +76,26 @@ def code_distance(engine):
 
 
 async def run(engine, queries):
-    cells = {("text", "text"): [], ("text", "audio"): [],
-             ("audio", "text"): [], ("audio", "audio"): []}
+    # 九个格子：查询模态 × 结果模态。
+    # 原版只有 text/audio 四格，图像查询（queries 表里有 93 条 image 查询）
+    # 被 `if not text: return None` 直接跳过 —— 图像侧的效果从未被评测过，
+    # 导致「图像特征换 CNN」「图像是否参与配对」这类改动无法验证。
+    cells = {(qm, rm): []
+             for qm in ("text", "audio", "image")
+             for rm in ("text", "audio", "image")}
     skipped = 0
 
     async def ev(q, qmod):
         text = (q.get("text") or "").strip()
         path = q.get("media_path")
-        if not text:
-            return None
         kw = {"query": text, "modality": qmod, "top_k": CANDIDATES, "viewer": None}
-        if qmod == "audio":
+        if qmod in ("audio", "image"):
+            # 媒体查询必须给 media_path，且文件得在
             if not path or not os.path.exists(path):
                 return None
             kw["media_path"] = path
+        elif not text:
+            return None
         hits, _info = await engine.search_with_info(**kw)
         own = q.get("record_id")
         themes = q.get("themes") or []
@@ -102,7 +108,7 @@ async def run(engine, queries):
 
     for q in queries:
         qmod = q.get("modality")
-        if qmod not in ("text", "audio"):
+        if qmod not in ("text", "audio", "image"):
             continue
         res = await ev(q, qmod)
         if res is None:
@@ -117,7 +123,7 @@ async def run(engine, queries):
             return _jaccard(themes, other.get("tags")) >= JACCARD_MIN
 
         # 按结果模态过滤，记录级去重（保留最高分）
-        for rmod in ("text", "audio"):
+        for rmod in ("text", "audio", "image"):
             seen, ranked = set(), []
             for h in hits:
                 if h.get("modality") != rmod:
@@ -142,13 +148,18 @@ def main():
 
     queries = load_queries()
     print(f"查询 {len(queries)} 条（文 {sum(1 for q in queries if q['modality']=='text')} / "
-          f"音 {sum(1 for q in queries if q['modality']=='audio')}）")
+          f"音 {sum(1 for q in queries if q['modality']=='audio')} / "
+          f"图 {sum(1 for q in queries if q['modality']=='image')}）")
 
     cells, skipped = asyncio.run(run(engine, queries))
-    print(f"跳过 {skipped} 条（缺文本或音频文件）\n")
+    print(f"跳过 {skipped} 条（缺文本或媒体文件）\n")
 
     labels = {("text", "text"): "文搜文", ("text", "audio"): "文搜音",
-              ("audio", "text"): "音搜文", ("audio", "audio"): "音搜音"}
+              ("text", "image"): "文搜图",
+              ("audio", "text"): "音搜文", ("audio", "audio"): "音搜音",
+              ("audio", "image"): "音搜图",
+              ("image", "text"): "图搜文", ("image", "audio"): "图搜音",
+              ("image", "image"): "图搜图"}
     print(f"{'格子':<8}{'mAP@10':>10}{'查询数':>8}")
     result = {}
     for key, label in labels.items():
@@ -157,9 +168,20 @@ def main():
         result[label] = {"map@10": m, "queries": len(aps)}
         print(f"{label:<8}{m:>10.4f}{len(aps):>8}")
 
+    # 分组均值：文-音 / 图像相关 / 全体
+    def _mean(names):
+        vs = [result[n]["map@10"] for n in names if result[n]["queries"]]
+        return round(sum(vs) / len(vs), 4) if vs else 0.0
+
+    ta = _mean(["文搜文", "文搜音", "音搜文", "音搜音"])
+    im = _mean(["文搜图", "音搜图", "图搜文", "图搜音", "图搜图"])
+    allm = _mean(list(labels.values()))
+    result["group_mean"] = {"text_audio": ta, "image_related": im, "all": allm}
+    print(f"\n文-音四格均值 {ta:.4f}　图像相关五格均值 {im:.4f}　九格均值 {allm:.4f}")
+
     dist, n = code_distance(engine)
     result["alignment"] = {"text_audio_hamming": dist, "records": n}
-    print(f"\n同记录文本-语音码平均汉明距离 {dist} / 64 位（{n} 条记录）")
+    print(f"同记录文本-语音码平均汉明距离 {dist} / 64 位（{n} 条记录）")
     print(f"索引：{len(engine.units)} 单元 / {len(engine.records)} 记录")
 
     if args.out:

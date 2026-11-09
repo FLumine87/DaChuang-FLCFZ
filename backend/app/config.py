@@ -8,7 +8,7 @@ from functools import lru_cache
 
 
 def _coerce(current, value):
-    """按字段当前类型把字符串值转换为 bool/int/float/str。"""
+    """按字段当前类型把字符串值转换为 bool/int/float/str/tuple。"""
     if isinstance(current, bool):
         return str(value).lower() in ("1", "true", "yes", "on")
     if isinstance(current, int):
@@ -21,6 +21,12 @@ def _coerce(current, value):
             return float(value)
         except (TypeError, ValueError):
             return current
+    if isinstance(current, tuple):
+        # 逗号分隔的字符串 -> 元组；空值表示不限制
+        raw = str(value).strip()
+        if not raw:
+            return current
+        return tuple(p.strip() for p in raw.split(",") if p.strip())
     return value
 
 
@@ -83,6 +89,28 @@ class Settings:
     # 训练采样的有标签比例；0 表示不裁剪，保留全部无标签样本参与重构。
     # 仅评测复现项目书实验口径（70%）时才设成 0.7。
     HASHING_LABELED_RATIO: float = 0
+    # 参与「配对训练」的模态集合。共享码空间要求各模态视图真同源
+    # （同一对象的文字/语音/图像），弱配对的视图会污染共享码空间：
+    # FER2013 是纯图像集，与文本/语音没有任何同源关系，仅按情绪语义对齐挂接。
+    #
+    # 但默认仍保持 ("text","image","audio")（队长原行为），实测理由：
+    # 排除 image 后图像单元没有自己的投影矩阵，查询侧只能退回文本编码器
+    # （实测图像码与同记录文本码 100% 相同，图搜文实为文本查询的镜像，
+    #  指标虚高而图像模态没有独立检索能力）。
+    # → 图像要用弱监督桥接另建通道，而不是在共享码空间里「摘出去」。
+    # 置为 ("text","audio") 仅供对照实验，须同时把图像查询路由到独立图像库。
+    HASHING_TRAIN_MODALITIES: tuple = ("text", "image", "audio")
+    # 主引擎的图像特征来源："hand" = 192 维手工描述子（强度分块 ⊕ HOG）；
+    # "cnn" = 微调 MobileNetV2 的 1280 维表情特征（models/mobilenetv2-fer.onnx）。
+    # 两者有真实权衡（实测同语料 653 查询）：
+    #   hand: 图搜图 0.197 / 图搜文 0.331 / 图搜音 0.257
+    #   cnn : 图搜图 0.362 / 图搜文 0.162 / 图搜音 0.132
+    # CNN 让图像自身检索大涨（同模态），却让图像查文本/语音崩塌 —— CNN 特征
+    # 由 FER 的 7 类表情定义，与文本语义空间不同构，强行放进共享码空间会偏。
+    # 因此主引擎默认保持 "hand"（队长原行为，跨模态可用），
+    # 图像单模态检索走独立图像库（image_index.py，CNN + PCA + ITQ）。
+    # 模型文件缺失或 onnxruntime 不可用时自动退回，不报错。
+    HASHING_IMAGE_FEATURE: str = "hand"
     # 无标签窗口的表权重下限：覆盖率 0 时打这个折扣，避免无监督模型与有监督同权
     HASHING_LABEL_COVERAGE_FLOOR: float = 0.55
     # 混合视图（未指定结果模态）是否按模态轮转交错排序：
@@ -128,6 +156,15 @@ class Settings:
     DEEPSEEK_TEMPERATURE: float = 0.7
 
     def __init__(self) -> None:
+        # 环境变量优先（便于对照实验临时覆盖，如 HASHING_TRAIN_MODALITIES）
+        for key in ("HASHING_TRAIN_MODALITIES", "HASHING_DATA_DIR",
+                    "HASHING_TEXT_BACKEND", "HASHING_IMAGE_FEATURE", "HASHING_LAMBDA_S",
+                    "HASHING_CODE_LENGTH", "HASHING_BAND_BITS",
+                    "HASHING_PROBE_BITS", "HASHING_WINDOW_TRAIN_MAX",
+                    "HASHING_TRAIN_MAX"):
+            raw = os.environ.get(key)
+            if raw and hasattr(self, key):
+                setattr(self, key, _coerce(getattr(self, key), raw))
         # 从 backend/.env 加载（简单 KEY=VALUE 解析；环境变量优先）
         env_file = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"
@@ -142,6 +179,9 @@ class Settings:
                     k = k.strip()
                     v = v.strip().strip('"').strip("'")
                     if v and hasattr(self, k):
+                        # 环境变量已覆盖过的字段不再被 .env 覆盖
+                        if k in os.environ:
+                            continue
                         setattr(self, k, _coerce(getattr(self, k), v))
 
     def apply_worker_overrides(self, env) -> None:

@@ -37,6 +37,7 @@
 import asyncio
 import datetime
 import json
+import logging
 import math
 import os
 import random
@@ -80,6 +81,9 @@ except Exception:  # 依赖未安装时（如独立跑算法脚本）使用兜�
 # v6：单元新增 media_meta（图像/语音命中展示真实文件名与数据集自带标注）
 STATE_VERSION = 6
 TRAIN_MODALITIES = ("text", "image", "audio")
+logger = logging.getLogger(__name__)
+# 微调 MobileNetV2 的表情特征维度（models/mobilenetv2-fer.onnx 的输出）
+_CNN_IMAGE_DIM = 1280
 MODALITY_LABEL = {"text": "文本", "image": "图像", "audio": "语音"}
 # 媒体缩略图缓存上限（条）；超出后整体清空，避免长期运行内存膨胀
 _MEDIA_CACHE_MAX = 600
@@ -443,16 +447,23 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
 
         * 文本：TF 哈希桶 ⊕ 主题语义桥（`features.semantic_feature`）
         * 图像：`real_features.image_feature`（192 维手工描述子）
+          或微调 MobileNetV2 的 1280 维 CNN 特征（`HASHING_IMAGE_FEATURE=cnn`）
         * 语音：`real_features.audio_feature`（64 维 MFCC ⊕ 韵律）
 
-        媒体特征抽取失败（文件损坏 / 缺 Pillow）时退回文本编码器，
+        媒体特征抽取失败（文件损坏 / 缺 Pillow / 缺模型）时退回文本编码器，
         保证编码永远能产出有效码，不会退化成全零码。
         """
         if modality == "image" and media_path:
             key = ("image", media_path)
             if key in self._feat_cache:
                 return {"image": self._feat_cache[key]}
-            f = RF.image_feature(media_path)
+            f = None
+            # CNN 特征优先：手工 192 维描述子抓不住表情细节，
+            # 实测 top-10 同类率贴着随机线；CNN 特征在独立图像库上 0.501。
+            if str(getattr(settings, "HASHING_IMAGE_FEATURE", "hand")).lower() == "cnn":
+                f = self._cnn_image_feature(media_path)
+            if not f:
+                f = RF.image_feature(media_path)
             if f:
                 self._remember_feature(key, f)
                 return {"image": f}
@@ -465,6 +476,26 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 self._remember_feature(key, f)
                 return {"audio": f}
         return {"text": F.semantic_feature(text)}
+
+    def _cnn_image_feature(self, path: str) -> Optional[List[float]]:
+        """微调 MobileNetV2 的 1280 维表情特征；不可用时返回 None 退回手工特征。"""
+        enc = getattr(self, "_fer_encoder", None)
+        if enc is None:
+            try:
+                from app.engines.hashing.fer_encoder import FerEncoder
+                enc = FerEncoder()
+            except Exception:
+                enc = False
+            self._fer_encoder = enc
+        if not enc or not getattr(enc, "available", False):
+            return None
+        try:
+            vec = enc.feature(path)
+            if vec:
+                return list(vec)
+        except Exception:
+            return None
+        return None
 
     def _remember_feature(self, key, vec) -> None:
         """媒体特征缓存：训练与重编码会反复用到同一批图像/语音。
@@ -483,10 +514,24 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
 
         feature 为索引库里存的已抽取特征：命中则直接复用，
         避免每次重训都把几千个图像/语音文件重新解码一遍。
+
+        但图像特征有「手工 192 维」与「CNN 1280 维」两种规格，语料里预抽取的
+        可能是旧的 192 维 —— 若当前配置要用 CNN，直接复用会让 CNN 开关失效。
+        因此图像按当前 HASHING_IMAGE_FEATURE 期望的维度校验，不匹配就重新抽取。
         """
         if feature and modality in ("image", "audio"):
+            if modality == "image" and self._image_feature_dim_mismatch(feature):
+                return list(self._feature_of(modality, text, media_path).values())[0]
             return list(feature)
         return list(self._feature_of(modality, text, media_path).values())[0]
+
+    def _image_feature_dim_mismatch(self, feature: List[float]) -> bool:
+        """图像特征维度与当前配置不符时返回 True（需要重新抽取）。"""
+        want_cnn = (str(getattr(settings, "HASHING_IMAGE_FEATURE", "hand")).lower() == "cnn")
+        n = len(feature)
+        if want_cnn:
+            return n != _CNN_IMAGE_DIM
+        return n == _CNN_IMAGE_DIM
 
     def _view_text(self, view: Any) -> str:
         """视图兼容取值：新结构是 {text, path}，旧结构是纯字符串。"""
@@ -504,18 +549,29 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         recs = [r for r in records if r.get("views")]
         if not recs:
             return None
+        # 参与配对训练的模态集合（默认 text + audio，见 config.HASHING_TRAIN_MODALITIES）。
+        # 共享码空间的前提是各模态视图**真同源**（同一对象的文字/语音/图像）。
+        # FER2013 是纯图像集，与文本/语音无任何同源关系，仅按情绪语义对齐挂接，
+        # 属于「同类别不同对象」。把这类视图纳入训练，模型会学到虚假的对应关系，
+        # 反而污染了本来正确的文-音对齐（实测图像查询 mAP 0.096、image->audio
+        # 一致性 0.509 与随机无异）。因此默认把 image 排除在配对训练之外 ——
+        # 图像仍保留在索引中可被检索与展示，只是不参与共享码空间的学习。
+        train_mods = tuple(m for m in settings.HASHING_TRAIN_MODALITIES
+                           if m in TRAIN_MODALITIES)
+        if not train_mods:
+            train_mods = ("text",)
         # 不同数据集的记录可能带不同的模态集合（例如纯图像记录与「文本+语音」记录混合）。
         # 若直接取全局交集会得到空集并静默退化为「纯文本」，导致图像/语音编码器根本没被训练
         # （表现为图像/语音检索指标全 0）。这里改为取「模态集合相同的最大分组」做配对训练：
         # 同组内模态严格对齐，跨组不影响；只有单模态可用时才退回纯文本兜底。
         groups: Dict[frozenset, List[Dict]] = {}
         for r in recs:
-            sig = frozenset(m for m in r["views"] if m in TRAIN_MODALITIES)
+            sig = frozenset(m for m in r["views"] if m in train_mods)
             groups.setdefault(sig, []).append(r)
         best_sig = max(groups, key=lambda s: (len(s), len(groups[s])))
         if len(best_sig) >= 2:
             recs = groups[best_sig]
-            mods = [m for m in TRAIN_MODALITIES if m in best_sig]
+            mods = [m for m in train_mods if m in best_sig]
         else:
             mods = ["text"]
             recs = [{"record_id": r["record_id"],
@@ -664,6 +720,26 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 return model
         return self.model
 
+    def _borrowed_sibling_code(self, record_id: Optional[str],
+                               exclude_unit_id: str) -> Optional[List[int]]:
+        """取同记录已编码单元的码，供未参与训练的模态借用。
+
+        共享码空间的语义是「同一记录的不同模态视图共享同一个码」，所以当某模态
+        不参与配对训练（图像为弱配对，W 中无其投影）时，它的码应当与该记录的
+        其他视图一致，而不是退化成全 0/全 1。
+
+        只在同一记录内借用，不跨记录 —— 跨记录借用等于凭空制造错误的对应关系。
+        """
+        if not record_id:
+            return None
+        for uid, m in self.units.items():
+            if uid == exclude_unit_id or m.get("record_id") != record_id:
+                continue
+            code = m.get("code")
+            if code:
+                return list(code)
+        return None
+
     def _add_unit(self, unit_id: str, meta: Dict) -> None:
         """编码并入索引（单元 = 记录在某模态下的视图），同时登记记录级信息。
 
@@ -683,6 +759,15 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         else:
             feat = self._feature_of(modality, content, meta.get("media_path"))
         code = encoder.encode(feat)
+        # 该模态未参与配对训练（默认 image，见 HASHING_TRAIN_MODALITIES）：
+        # encoder.W 里没有它的投影矩阵，encode 会返回全 0 → 符号化后码全是 1，
+        # 这样的单元会污染索引（所有图像单元码相同）。改为借用**同记录**已编码
+        # 单元的码：共享码空间的定义就是「同一记录的不同模态视图共享同一个码」，
+        # 因此图像视图应该与该记录的文本/语音视图落在同一位置。
+        if not encoder.W.get(modality):
+            borrowed = self._borrowed_sibling_code(meta.get("record_id"), unit_id)
+            if borrowed:
+                code = borrowed
         meta = dict(meta)
         meta["code"] = list(code)
         # 媒体特征随单元落库：重训与重编码直接复用，不必重新解码图像/语音。
@@ -718,6 +803,44 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             if meta.get("scope") and rec.get("scope") in (None, "", "reviewing"):
                 rec["scope"] = meta.get("scope")
         self.index.insert(unit_id, code, meta, window=meta.get("window"))
+        # 同步到弱监督桥接：运行时新增的采集数据也要能被跨模态检索到。
+        # 语料来源的单元不进桥接（桥接自己从语料构建，见 build_bridges.py）。
+        self._sync_unit_to_bridges(unit_id, meta, feat, modality)
+
+    def _sync_unit_to_bridges(self, unit_id: str, meta: Dict,
+                               feat: Dict, modality: str) -> None:
+        """把新增单元同步进对应的桥接通道。
+
+        只处理非语料来源（runtime）—— 语料单元由 build_bridges.py 统一构建，
+        避免重复与不一致。桥接不可用时静默跳过（桥接是可选通道）。
+        """
+        try:
+            if (meta.get("source") or "").startswith("corpus"):
+                return
+            if modality not in ("text", "image", "audio"):
+                return
+            feature = (self._cnn_image_feature(meta.get("media_path")) if modality == "image" and meta.get("media_path") else (feat or {}).get(modality))
+            if not feature:
+                return
+            from app.engines.hashing.bridge_manager import get_bridge_manager
+            mgr = get_bridge_manager()
+            # 语义侧模态（text / audio）与图像侧各成一对
+            pairs = []
+            if modality == "image":
+                pairs = [("text", "image"), ("audio", "image")]
+            elif modality in ("text", "audio"):
+                pairs = [(modality, "image")]
+            for pair in pairs:
+                br = mgr.get(pair)
+                if br is None:
+                    continue
+                if br.add_unit(unit_id, meta, list(feature), modality=modality):
+                    from app.engines.hashing.bridge_store import BridgeStore
+                    BridgeStore(mgr.data_dir, pair).upsert_units(
+                        {unit_id: br.units[unit_id]})
+        except Exception:
+            # 桥接是可选通道，同步失败不应影响主引擎的入库
+            pass
 
     # ------------------------- 语料播种（真实 / 合成多模态数据）-------------------------
 
@@ -736,6 +859,17 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             try:
                 rows = [dict(r) for r in conn.execute(
                     "SELECT * FROM units ORDER BY record_id, modality")]
+                # 排序保证「参与配对训练的模态」先于「借用兄弟码的模态」入库：
+                # 未训练的模态（如默认排除的 image）需要借用同记录已编码单元的码，
+                # 若它先入库就借不到。模态优先级取自 HASHING_TRAIN_MODALITIES，
+                # 其余模态排最后。同一记录内仍保持 record_id 聚集。
+                _prio = {m: i for i, m in enumerate(
+                    tuple(settings.HASHING_TRAIN_MODALITIES)
+                    + tuple(m for m in TRAIN_MODALITIES
+                            if m not in settings.HASHING_TRAIN_MODALITIES))}
+                rows.sort(key=lambda r: (r.get("record_id") or "",
+                                         _prio.get(r.get("modality"), 99),
+                                         r.get("modality") or ""))
                 meta = {}
                 try:
                     meta = {r["key"]: r["value"] for r in conn.execute("SELECT * FROM meta")}
@@ -981,10 +1115,22 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         # 该模态没有投影矩阵时（例如演示语料只训练了文本），退回文本编码器，
         # 否则 encode_continuous 会因维度不匹配返回全零码 → 所有相似度相等。
         if modality in ("image", "audio") and modality in (self.model.W or {}):
-            f = (RF.image_feature(src) if modality == "image" and src
+            f = (((self._cnn_image_feature(src) or RF.image_feature(src))
+                  if str(settings.HASHING_IMAGE_FEATURE).lower() == "cnn"
+                  else RF.image_feature(src)) if modality == "image" and src
                  else RF.audio_feature(src) if modality == "audio" and src else None)
             if f:
                 return {modality: f}
+        elif modality in ("image", "audio"):
+            # 该模态没有自己的编码器：静默退回文本会把「图像查询」变成
+            # 「用图片路径当文本查」，检索结果与文本查询完全相同 ——
+            # 指标看着高，实际图像模态根本没参与检索。
+            # 这里显式告警，调用方应把这类查询路由到该模态的独立通道。
+            logger.warning(
+                "模态 %s 无投影矩阵（模型只训了 %s），本次查询退回文本编码器；"
+                "该模态的检索结果不具备独立意义，应改走独立通道。",
+                modality, sorted((self.model.W or {}).keys()),
+            )
         return {"text": F.semantic_feature(text or (src or ""))}
 
     async def encode(self, data: Any, modality: str) -> List[int]:
@@ -1751,6 +1897,8 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             "feature_dim": self._feature_dim(),
             "code_length": self.code_length,
             "text_backend": _F.TEXT_BACKEND,
+            "image_backend": str(settings.HASHING_IMAGE_FEATURE).lower(),
+            "train_modalities": list(settings.HASHING_TRAIN_MODALITIES),
             "lambda_s": self.model.lambda_s,
             "modalities": self.model.modalities,
             "W": self.model.W,
@@ -1787,6 +1935,10 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         # 维度校验已能拦住两者，这里再加一道显式判断，防止将来出现同维度的后端
         from app.engines.hashing import features as _F
         if state.get("text_backend") not in (None, _F.TEXT_BACKEND):
+            return False
+        if state.get("image_backend", "hand") != str(settings.HASHING_IMAGE_FEATURE).lower():
+            return False
+        if tuple(state.get("train_modalities", TRAIN_MODALITIES)) != tuple(settings.HASHING_TRAIN_MODALITIES):
             return False
         W = state.get("W") or {}
         if not W:
@@ -1862,10 +2014,14 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             window = meta.get("window")
             encoder = self._encoder_for(window)
             mod = meta.get("modality") or "text"
-            if meta.get("feature") and mod in ("image", "audio"):
+            if (meta.get("feature") and mod in ("image", "audio")
+                    and encoder.W.get(mod)
+                    and len(meta["feature"]) == len(encoder.W[mod][0])):
                 feat = {mod: meta["feature"]}
             else:
                 feat = self._feature_of(mod, content, meta.get("media_path"))
+            if mod in ("image", "audio") and feat.get(mod):
+                meta["feature"] = list(feat[mod])
             code = encoder.encode(feat)
             meta["code"] = list(code)
             self.index.insert(uid, code, meta, window=window)

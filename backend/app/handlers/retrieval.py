@@ -10,6 +10,7 @@ from app.engines.agent import build_evidence_pack
 from app.engines.hashing.query_media import (
     MediaQueryError, decode_media_query, remove_media_query,
 )
+from app.engines.hashing.label_provenance import reference_labels
 
 # 前端可选的检索范围：全部 / 文本 / 图像 / 语音
 _MODALITY_FILTERS = ("text", "image", "audio")
@@ -40,6 +41,134 @@ def _params(data: dict, default_top_k: int = 5):
     except (TypeError, ValueError):
         top_k = default_top_k
     return modality, mf, max(1, min(50, top_k))
+
+
+def _bridge_query_feature(modality: str, data: dict, tmp_path):
+    from app.engines.hashing import features as F, real_features as RF
+    from app.engines.hashing.fer_encoder import get_encoder
+    try:
+        if modality == 'text':
+            return list(F.semantic_feature(data.get('query') or ''))
+        if modality == 'audio':
+            return RF.audio_feature(tmp_path) if tmp_path else None
+        encoder = get_encoder()
+        return encoder.feature(tmp_path) if encoder and encoder.available and tmp_path else None
+    except Exception:
+        return None
+
+
+def _bridge_units(engine, bridge, viewer):
+    """Resolve bridge aliases to canonical main-index units; use current permissions."""
+    canonical = {}
+    for uid, meta in engine.units.items():
+        canonical.setdefault((meta.get('record_id'), meta.get('modality')), uid)
+    allowed = engine._allowed_ids(viewer)
+    aliases = {}
+    for uid, meta in bridge.units.items():
+        target = uid if uid in engine.units else canonical.get((meta.get('record_id'), meta.get('modality')))
+        if target is not None and (allowed is None or target in allowed):
+            aliases[uid] = target
+    return aliases
+
+
+def _bridge_hit(engine, hit, uid, query_modality, route):
+    """Return the same unit identity, labels and media contract as normal retrieval."""
+    from app.engines.hashing import features as F
+    import math
+    meta = engine.units[uid]
+    score = float(hit.get('sim') or 0)
+    if not math.isfinite(score):
+        raise ValueError('Invalid bridge similarity')
+    score = max(0., min(1., score))
+    provenance = reference_labels(meta)
+    return {
+        'id': uid, 'unit_id': uid, 'record_id': meta.get('record_id') or uid,
+        'modality': meta['modality'], 'modality_label': {'text':'文本','image':'图像','audio':'语音'}[meta['modality']],
+        'summary': meta.get('excerpt') or F.deidentify(meta.get('content') or meta.get('summary') or '', meta.get('deid_terms')),
+        'similarity': round(score, 4), 'score': round(score, 4),
+        'tags': meta.get('tags') or [], 'date': meta.get('date') or '',
+        'cross_modal': meta['modality'] != query_modality,
+        'media': engine._media_url(meta.get('media_path'), meta['modality']),
+        'media_kind': meta.get('media_kind'), 'media_meta': meta.get('media_meta'),
+        'dataset': meta.get('dataset') or '', 'data_source': 'bridge', **provenance,
+        'explain': {'route':route, 'source':'bridge', 'hamming_distance':None,
+                    'hamming_similarity':None, 'asymmetric_score':round(score,4),
+                    'note':'弱监督桥接参考；跨数据集配对不代表本人多模态一致性'},
+    }
+
+
+def _bridge_search(data, modality, result_modality, top_k, tmp_path, viewer):
+    from app.engines.hashing.bridge_manager import get_bridge_manager
+    manager = get_bridge_manager()
+    channel, payload = manager.route(modality, result_modality)
+    if channel != 'bridge':
+        return None
+    pair, bridge = payload
+    feature = _bridge_query_feature(modality, data, tmp_path)
+    if not feature:
+        return None
+    engine = get_hashing_engine()  # Initialized by perform_search before any bridge lookup.
+    aliases = _bridge_units(engine, bridge, viewer)
+    hits = bridge.search(feature, modality, top_k=top_k, result_modality=result_modality, allowed_ids=set(aliases))
+    route = f'bridge:{pair[0]}-{pair[1]}'
+    results = [_bridge_hit(engine, hit, aliases[hit['unit_id']], modality, route)
+               for hit in hits if hit.get('unit_id') in aliases]
+    if not results:
+        return None
+    return results, {'route':route,'index_size':len(bridge.units),'bridge_stats':manager.status()}
+
+
+def _merged_score(main_score, bridge_score, weight):
+    return weight * main_score + (1. - weight) * bridge_score
+
+
+async def _merged_search(data, modality, result_modality, top_k, tmp_path, viewer):
+    bridged = _bridge_search(data, modality, result_modality, max(top_k * 6,60), tmp_path, viewer)
+    if bridged is None:
+        return None
+    engine = get_hashing_engine()
+    main_hits, _ = await engine.search_with_info(query=data.get('query',''), modality=modality,
+        top_k=max(top_k * 6,60), modality_filter=result_modality, media_path=tmp_path, viewer=viewer)
+    main = {hit['id']:hit for hit in main_hits}
+    bridge = {hit['id']:hit for hit in bridged[0]}
+    results = []
+    for uid in main.keys() | bridge.keys():
+        hit = dict(bridge.get(uid) or main[uid])
+        hit['similarity'] = hit['score'] = round(_merged_score(main.get(uid,{}).get('similarity',0), bridge.get(uid,{}).get('similarity',0), .5),4)
+        hit['explain'] = {**(hit.get('explain') or {}), 'route':'merged:main+bridge',
+                          'main_score':main.get(uid,{}).get('similarity'), 'bridge_score':bridge.get(uid,{}).get('similarity'),
+                          'note':'两通道相似度加权；不表示患病概率'}
+        results.append(hit)
+    results.sort(key=lambda hit:(-hit['similarity'],hit['id']))
+    return results[:top_k], {'route':'merged:main+bridge','merge_weight':.5}
+
+
+async def _bridge_search_all(data, modality, top_k, tmp_path, viewer):
+    """Keep all result modalities and canonical unit IDs, not one view per record."""
+    engine = get_hashing_engine()
+    channels = {}
+    used = []
+    for target in ('text','audio'):
+        result = _bridge_search(data, modality, target, top_k, tmp_path, viewer)
+        if result is not None:
+            channels[target] = result[0]
+            used.append(result[1]['route'])
+    if not used:
+        return None
+    for target in ('text','audio','image'):
+        if target not in channels:
+            channels[target], _ = await engine.search_with_info(query=data.get('query',''), modality=modality,
+                top_k=top_k, modality_filter=target, media_path=tmp_path, viewer=viewer)
+    results, seen = [], set()
+    for offset in range(top_k):
+        for target in ('text','audio','image'):
+            if offset < len(channels[target]):
+                hit = channels[target][offset]
+                if hit['id'] not in seen:
+                    seen.add(hit['id']); results.append(hit)
+        if len(results) >= top_k:
+            break
+    return results[:top_k], {'route':'bridge:multi','channels':used,'balanced':True}
 
 
 def _image_corpus_search(data: dict, top_k: int):
@@ -105,8 +234,10 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
     modality, modality_filter, top_k = _params(data, default_top_k)
     # 路由规则：
     #   上传图像 + 范围「仅图像线索」→ 全量图像库（同模态近邻，35887 张）
-    #   上传图像 + 范围「全部模态」  → 主引擎（跨模态，图搜文/图搜语音）
-    #   文字 / 语音查询              → 主引擎（跨模态）
+    #   图→文 / 图→音              → 可用的弱监督桥接；模型缺失回退主引擎
+    #   文→图                     → 主引擎和桥接加权；音→图保留主引擎
+    #   其余                       → 主引擎共享码空间
+    #   上传图像 + 范围「全部模态」  → 按结果模态交错展示，保留不同模态单元
     # 前端上传图像时默认把范围设为「仅图像线索」，因此图搜图自动走新库，
     # 无需前端改动；corpus=image 仍保留为显式覆盖入口。
     has_media = bool(data.get("media_base64") or data.get("media"))
@@ -115,6 +246,8 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
             or (data.get("corpus") or "").strip() == "image"):
         return _image_corpus_search(data, top_k)
     engine = get_hashing_engine()
+    if getattr(engine, '_initialized', False) is not True:
+        await engine.initialize()
     tmp_path = None
     try:
         raw = data.get("media_base64") or data.get("media")
@@ -123,6 +256,35 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
                 tmp_path = decode_media_query(raw, data.get("media_name") or "", modality)
             except MediaQueryError as exc:
                 raise HttpError(400, str(exc)) from exc
+        # 桥接分支：
+        #   结果模态明确指定且与查询模态构成桥接对 → 走对应桥接
+        #   文→图 且结果模态是「图像」          → 主引擎 + 桥接分数合并
+        #   结果模态不限（「全部模态」）且查询是图像 → 多通道合并
+        #     （主引擎的图文对齐弱，图搜文仅 0.26；混排会挤掉桥接命中的文本）
+        bridge_capable = hasattr(engine, 'units') and hasattr(engine, '_allowed_ids')
+        if bridge_capable and modality_filter and modality_filter != modality:
+            if modality_filter == "image" and modality == "text":
+                # 只对文→图启用合并：实测文搜图合并 +9.4 点
+                # （main 0.2351 / bridge 0.2756 / w0.5 0.3292），
+                # 而音→图合并是负收益（main 0.1664 / bridge 0.1118 /
+                # 所有合并策略 0.104~0.117）—— 桥接在音搜图上本身更弱，
+                # 合并进来只会稀释主引擎的结果。
+                merged = await _merged_search(data, modality, modality_filter,
+                                              top_k, tmp_path, viewer)
+                if merged is not None:
+                    results, info = merged
+                    return results, info, modality, modality_filter
+            bridged = None if (modality, modality_filter) == ("audio", "image") else _bridge_search(data, modality, modality_filter,
+                                     top_k, tmp_path, viewer)
+            if bridged is not None:
+                results, info = bridged
+                return results, info, modality, modality_filter
+        elif bridge_capable and not modality_filter and modality == "image":
+            merged = await _bridge_search_all(data, modality, top_k,
+                                         tmp_path, viewer)
+            if merged is not None:
+                results, info = merged
+                return results, info, modality, modality_filter
         results, info = await engine.search_with_info(
             query=data.get("query", ""), modality=modality,
             top_k=top_k, modality_filter=modality_filter, media_path=tmp_path,

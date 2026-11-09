@@ -1,0 +1,58 @@
+{
+ "pair": "audio",
+ "K": 64,
+ "results": [
+  {
+   "lambda_s": 50.0,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.1293,
+    "queries": 163
+   },
+   "i2q": {
+    "map@10": 0.4193,
+    "queries": 93
+   },
+   "seconds": 509.1
+  },
+  {
+   "lambda_s": 100.0,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.1657,
+    "queries": 163
+   },
+   "i2q": {
+    "map@10": 0.3545,
+    "queries": 93
+   },
+   "seconds": 411.0
+  },
+  {
+   "lambda_s": 200.0,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.1353,
+    "queries": 163
+   },
+   "i2q": {
+    "map@10": 0.3919,
+    "queries": 93
+   },
+   "seconds": 73.9
+  },
+  {
+   "lambda_s": 400.0,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.138,
+    "queries": 163
+   },
+   "i2q": {
+    "map@10": 0.3865,
+    "queries": 93
+   },
+   "seconds": 486.1
+  }
+ ]
+}

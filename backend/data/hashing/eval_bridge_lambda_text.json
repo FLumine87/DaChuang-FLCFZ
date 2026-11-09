@@ -1,0 +1,71 @@
+{
+ "pair": "text",
+ "K": 64,
+ "results": [
+  {
+   "lambda_s": 0.6,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.1799,
+    "queries": 397
+   },
+   "i2q": {
+    "map@10": 0.4452,
+    "queries": 93
+   },
+   "seconds": 36.7
+  },
+  {
+   "lambda_s": 2.0,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.189,
+    "queries": 397
+   },
+   "i2q": {
+    "map@10": 0.4588,
+    "queries": 93
+   },
+   "seconds": 38.0
+  },
+  {
+   "lambda_s": 5.0,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.268,
+    "queries": 397
+   },
+   "i2q": {
+    "map@10": 0.502,
+    "queries": 93
+   },
+   "seconds": 35.8
+  },
+  {
+   "lambda_s": 10.0,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.2761,
+    "queries": 397
+   },
+   "i2q": {
+    "map@10": 0.5567,
+    "queries": 93
+   },
+   "seconds": 66.2
+  },
+  {
+   "lambda_s": 20.0,
+   "K": 64,
+   "q2i": {
+    "map@10": 0.3,
+    "queries": 397
+   },
+   "i2q": {
+    "map@10": 0.5776,
+    "queries": 93
+   },
+   "seconds": 31.7
+  }
+ ]
+}
