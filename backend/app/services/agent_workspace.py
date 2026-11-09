@@ -66,9 +66,13 @@ async def records_for(scope):
     if scope == "demo":
         return demo_records()
     columns = {r["name"] for r in await db.query_a("PRAGMA table_info(screenings)")}
-    case_column = "s.case_id" if "case_id" in columns else "NULL AS case_id"
+    case_column = ("CASE WHEN s.case_id IS NOT NULL THEN "
+                   "(SELECT c.id FROM cases c WHERE c.id=s.case_id "
+                   "AND (s.user_id IS NULL OR c.user_id IS NULL OR s.user_id=c.user_id)) "
+                   "ELSE (SELECT MIN(c.id) FROM cases c WHERE c.user_id=s.user_id HAVING COUNT(*)=1) "
+                   "END AS case_id") if "case_id" in columns else "NULL AS case_id"
     rows = await db.query_a(
-        f"SELECT s.id, {case_column}, s.department, s.questionnaire_id, q.name AS questionnaire, "
+        f"SELECT s.id, s.user_id, {case_column}, s.department, s.questionnaire_id, q.name AS questionnaire, "
         "s.score, s.max_score, s.alert_level, s.status, "
         "COALESCE(s.screening_date,s.created_at) AS date "
         "FROM screenings s LEFT JOIN questionnaires q ON q.id=s.questionnaire_id "
@@ -77,6 +81,19 @@ async def records_for(scope):
     for row in await db.query_a("SELECT screening_id,file_type FROM media_files"):
         if row["file_type"] in ("text", "audio", "image"):
             media[row["screening_id"]].add(row["file_type"])
+    by_code = {r["screening_id"]: r["id"] for r in await db.query_a("SELECT id,screening_id FROM screenings")}
+    for item in await db.query_a("SELECT screening_id,kind FROM screening_supplements WHERE screening_id IS NOT NULL"):
+        if item["kind"] in ("text", "audio", "image") and item["screening_id"] in by_code:
+            media[by_code[item["screening_id"]]].add(item["kind"])
+    unique_cases = {r["user_id"]: r["id"] for r in await db.query_a(
+        "SELECT user_id,MIN(id) AS id FROM cases WHERE user_id IS NOT NULL GROUP BY user_id HAVING COUNT(*)=1")}
+    standalone = defaultdict(set)
+    for item in await db.query_a("SELECT user_id,kind FROM screening_supplements WHERE screening_id IS NULL"):
+        if item["kind"] in ("text", "audio", "image"):
+            standalone[item["user_id"]].add(item["kind"])
+    for row in rows:
+        if row["case_id"] and unique_cases.get(row["user_id"]) == row["case_id"]:
+            media[row["id"]].update(standalone[row["user_id"]])
     return [{
         **r, "subject": f"case:{r['case_id']}" if r["case_id"] else f"screening:{r['id']}",
         "ref": f"案例 {r['case_id']}" if r["case_id"] else f"筛查 {r['id']}",
@@ -197,7 +214,8 @@ async def propose_tasks(scope, subjects, actor):
         task_id = f"{scope}:{item['subject']}:{kind}"
         event = [{"at": now(), "actor": actor, "action": "proposed",
                   "evidence_ids": item["evidence_ids"],
-                  "note": "由工作流生成待审核草案；期限为演示配置，待人工调整"}]
+                  "note": "由工作流生成待审核草案；期限为默认计划，待人工调整" if scope == "live"
+                          else "由工作流生成待审核草案；期限为演示配置，待人工调整"}]
         inserted = await db.mutate_returning_a(
             "INSERT OR IGNORE INTO agent_workspace_tasks "
             "(id,scope,subject,kind,title,state,due_at,events,created_at,updated_at) "
@@ -219,6 +237,14 @@ async def case_detail(scope, subject):
             row = next((s for s in subjects if s["subject"] == f"case:{found['id']}"), None)
     if row is None:
         raise HttpError(404, "没有已完成且关联到该案例的筛查；请先完成案例关联")
+    live_materials = []
+    if scope == "live" and row["subject"].startswith("case:"):
+        from app.services import case_context
+        case = await db.query_one_a("SELECT * FROM cases WHERE id=?", (row["subject"][5:],))
+        context = await case_context.load(case)
+        live_materials = [{"kind": item["kind"], "title": item.get("filename") or f"采集 {item['id']}",
+                           "source": "个人端已保存采集", "text": item.get("text") or item.get("description") or "已登记文件；原文件未在此展示"}
+                          for item in context["supplements"]]
     return {**row, "tasks": [t for t in await tasks_for(scope) if t["subject"] == row["subject"]],
             "materials": [
                 {"kind": "text", "title": "虚构学习日记", "source": "项目原创合成素材",
@@ -227,7 +253,7 @@ async def case_detail(scope, subject):
                  "url": "/agent-demo/diary.wav"},
                 {"kind": "image", "title": "日程记录卡", "source": "项目原创 SVG，非受试者照片",
                  "url": "/agent-demo/planner.svg"},
-            ] if scope == "demo" and row["subject"] == "demo:001" else []}
+            ] if scope == "demo" and row["subject"] == "demo:001" else live_materials}
 
 
 async def update_task(task_id, data, actor):

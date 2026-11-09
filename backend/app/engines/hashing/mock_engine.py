@@ -86,6 +86,8 @@ class MockHashingEngine(HashingEngineInterface):
         top_k: int = 5,
         modality_filter: str = None,
         exclude_ids: list = None,
+        media_path: str = None,
+        viewer: dict = None,
     ) -> List[Dict]:
         random.seed(hash(query) % (2**32))
 
@@ -123,7 +125,8 @@ class MockHashingEngine(HashingEngineInterface):
         return ("text", "image", "audio")[idx % 3]
 
     async def search_with_info(self, query: str, modality: str = "text", top_k: int = 5,
-                               modality_filter: str = None, exclude_ids: list = None):
+                               modality_filter: str = None, exclude_ids: list = None,
+                               media_path: str = None, viewer: dict = None):
         """与真实引擎保持同一签名：返回 (结果列表, 检索过程信息)。"""
         results = await self.search(query, modality=modality, top_k=top_k,
                                    modality_filter=modality_filter, exclude_ids=exclude_ids)

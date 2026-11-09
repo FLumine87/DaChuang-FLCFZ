@@ -19,6 +19,7 @@ export interface Run {
 }
 export interface Workspace { scope: Scope; latest_run: Run | null; tasks: Task[]; available_subjects: number; departments: string[] }
 export interface CaseDetail extends Subject {
+  assessmentState?: { status: 'none' | 'unknown' | 'current' | 'outdated'; newRecords: number; changedRecords: number; removedRecords?: number };
   assessment?: { id: string; created_at: string; summary: string; recommendation: string; evidence_ids: string[]; limits: string[]; trace: { tool: string; summary: string }[] } | null;
   history: { id: string; date: string; score: number; max_score: number; questionnaire: string }[];
   tasks: Task[];

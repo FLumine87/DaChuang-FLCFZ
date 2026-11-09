@@ -4,6 +4,7 @@ import uuid
 
 from app.db import database as db
 from app.services import agent_workspace as workspace
+from app.services import case_context
 
 
 async def ensure_schema():
@@ -20,11 +21,14 @@ async def detail(scope, subject):
         "SELECT payload FROM agent_workspace_case_runs WHERE scope=? AND subject=? "
         "ORDER BY created_at DESC,id DESC LIMIT 1", (scope, case["subject"]))
     case["assessment"] = json.loads(latest["payload"]) if latest else None
+    if scope == "live":
+        case["assessmentState"] = await case_context.assessment_state(case["subject"])
     return case
 
 
 async def run(scope, subject, actor):
     await ensure_schema()
+    evidence = await case_context.snapshot(subject) if scope == "live" else None
     case = await workspace.case_detail(scope, subject)
     priority = case["alert_level"] in ("red", "orange", "yellow")
     created = await workspace.propose_tasks(scope, [case] if priority else [], actor)
@@ -43,6 +47,8 @@ async def run(scope, subject, actor):
             {"tool": "propose_tasks", "summary": f"新增 {created} 条待审核草案；已有任务不被覆盖"},
         ],
     }
+    if scope == "live":
+        assessment["evidence_snapshot"] = evidence
     await db.execute_a(
         "INSERT INTO agent_workspace_case_runs VALUES(?,?,?,?,?,?)",
         (assessment["id"], scope, case["subject"], actor,

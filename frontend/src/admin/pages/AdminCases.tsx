@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Search } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 /* 走 adminApi 的分页接口：后端 /api/admin/cases 返回的是 { items, total, page, pageSize }
    信封，不是裸数组。以前这里用 mockApi.getAdminCases()，它把这个对象直接当数组返回，
    页面再 .filter() 就抛 "caseRecords.filter is not a function"，整页白屏。 */
@@ -26,6 +27,7 @@ const statusLabel: Record<CaseRecord['status'], string> = {
 const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
 
 export default function AdminCases() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
@@ -33,7 +35,7 @@ export default function AdminCases() {
   const [result, setResult] = useState<Page<CaseRecord> | null>(null);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedId = searchParams.get('case');
   const [detail, setDetail] = useState<AdminCaseDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
@@ -72,7 +74,8 @@ export default function AdminCases() {
   }, [selectedId, reload]);
 
   function choose(id: string) {
-    setSelectedId(id); setDetail(null); setDetailLoading(true);
+    if (id === selectedId) return;
+    setSearchParams({ case: id }); setDetail(null); setDetailLoading(true); setDetailError('');
     setActionError(''); setNotice(''); setEventTitle(''); setEventDescription('');
   }
 
@@ -137,12 +140,12 @@ export default function AdminCases() {
       案例列表加载失败：{listError} <button type="button" className="ml-2 underline"
         onClick={() => { setListLoading(true); setReload((value) => value + 1); }}>重试</button></div>}
     {/* 窄屏单列，≥lg 才分左右：详情面板在手机上排到列表下面，而不是被挤成一条 */}
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
+    <div className={selectedId ? 'grid gap-5 lg:grid-cols-[minmax(240px,1fr)_minmax(0,2fr)]' : 'grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]'}>
       <div>
         {listLoading && <p role="status" className="text-sm text-slate-500">正在加载案例…</p>}
         {!listLoading && result?.items.length === 0 &&
           <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">当前条件下没有案例记录。</div>}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className={selectedId ? 'grid gap-3' : 'grid gap-3 sm:grid-cols-2'}>
           {!listLoading && result?.items.map((item) => <button type="button" key={item.id} onClick={() => choose(item.id)}
             aria-pressed={selectedId === item.id}
             className={'rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:border-primary-300 ' +
@@ -171,7 +174,7 @@ export default function AdminCases() {
       </div>
       <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         {!selectedId && <p className="text-sm text-slate-500">选择一个案例查看筛查、预警和跟进时间线。</p>}
-        {selectedId && <button type="button" onClick={() => { setSelectedId(null); setDetail(null); }}
+        {selectedId && <button type="button" onClick={() => { setSearchParams({}); setDetail(null); setDetailError(''); }}
           className="mb-4 inline-flex items-center gap-1 text-sm text-primary-700 hover:underline"><ArrowLeft className="h-4 w-4" /> 返回列表</button>}
         {detailLoading && <p role="status" className="text-sm text-slate-500">正在加载详情…</p>}
         {detailError && <p role="alert" className="text-sm text-rose-700">详情加载失败：{detailError}</p>}
@@ -185,6 +188,28 @@ export default function AdminCases() {
             {detail.age == null ? '年龄未记录' : detail.age + ' 岁'} · {detail.gender || '性别未记录'} · {detail.department || '院系未记录'}
           </p>
           {detail.tags.length > 0 && <p className="mt-2 text-xs text-slate-500">标签：{detail.tags.join('、')}</p>}
+          <section className="mt-4 space-y-2 rounded-xl bg-slate-50 p-3 text-sm">
+            <h4 className="font-medium text-slate-800">研判与资料更新</h4>
+            {detail.ownershipAmbiguous && <p className="text-amber-800">该账号存在多个案例，仅显示明确关联的记录，独立采集尚待核对归属。</p>}
+            <p>{detail.assessmentState?.status === 'outdated'
+              ? `上次研判后新增 ${detail.assessmentState.newRecords} 条、修改 ${detail.assessmentState.changedRecords} 条、移除 ${detail.assessmentState.removedRecords || 0} 条材料，请重新复核。`
+              : detail.assessmentState?.status === 'current' ? '当前材料与最近个案研判一致。'
+                : detail.assessmentState?.status === 'unknown' ? '旧研判没有材料快照，需重新研判确认。' : '尚无已保存的个案研判。'}</p>
+            <Link className="text-primary-600 hover:underline" to={`/admin/agent-workbench?caseId=${encodeURIComponent(detail.id)}`}>在 Agent 工作台复核 →</Link>
+          </section>
+          <section className="mt-5 space-y-2 border-t border-slate-100 pt-4">
+            <h4 className="font-medium text-slate-900">多模态采集</h4>
+            {!detail.supplements?.length && <p className="text-sm text-slate-500">暂无关联采集。</p>}
+            {detail.supplements?.map((item) => <details key={item.id} className="rounded-lg bg-slate-50 p-2 text-xs">
+              <summary>{({ text: '文本', audio: '语音', image: '图像' } as Record<string, string>)[item.kind] || item.kind} · {item.createdAt}</summary>
+              <p className="mt-2 whitespace-pre-wrap">{item.text || item.description || item.filename || '无补充说明'}</p>
+            </details>)}
+          </section>
+          <section className="mt-5 space-y-2 border-t border-slate-100 pt-4">
+            <h4 className="font-medium text-slate-900">关联随访任务</h4>
+            {!detail.tasks?.length && <p className="text-sm text-slate-500">暂无业务空间任务。</p>}
+            {detail.tasks?.map((task) => <p key={task.id} className="text-xs text-slate-600">{task.title} · {task.assignee || '待分配'} · 计划 {task.due_at}</p>)}
+          </section>
           {detail.userId == null && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
             该案例尚未关联账号。为避免同名记录混入，历史筛查与预警暂不自动汇总。
           </p>}

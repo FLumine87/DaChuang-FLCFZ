@@ -78,11 +78,27 @@ export interface Assignee {
 }
 
 export interface AdminCaseDetail extends CaseRecord {
+  agentSubject?: string;
+  ownershipAmbiguous?: boolean;
+  supplements?: { id: number; kind: string; text?: string; filename?: string; description?: string; createdAt: string }[];
+  tasks?: { id: string; title: string; state: string; assignee: string; due_at: string }[];
+  assessmentState?: { status: 'none' | 'unknown' | 'current' | 'outdated'; createdAt?: string; newRecords: number; changedRecords: number; removedRecords?: number };
   userId: number | null;
   notes: string;
   screenings: { id: string; questionnaire: string; score: number; maxScore: number; alertLevel: string; date: string }[];
   alerts: { id: string; level: string; status: string; createdAt: string }[];
   timeline: { id: number | string; type: string; title: string; description: string; date: string }[];
+}
+
+export interface WorkQueue {
+  date: string; timezone: string; openAlerts: number; unassignedAlerts: number;
+  dueToday: number; overdue: number; pendingReview: number;
+  tasks: { id: string; subject: string; caseId?: string; title: string; state: string; assignee: string; due_at: string }[];
+}
+export async function getWorkQueue(): Promise<WorkQueue> {
+  if (USE_MOCK) return { date: '', timezone: '', openAlerts: 0, unassignedAlerts: 0,
+    dueToday: 0, overdue: 0, pendingReview: 0, tasks: [] };
+  return request.get<WorkQueue>('/api/admin/work-queue');
 }
 
 let demoAlerts = sampleAlerts.map((item) => ({ ...item }));

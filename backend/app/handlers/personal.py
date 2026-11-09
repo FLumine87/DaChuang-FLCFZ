@@ -332,6 +332,17 @@ async def _analyze_collection(ctx: RequestContext, sup_id, kind: str, data: dict
             media_path=_resolve_upload_path(data.get("url") or "") if kind in ("audio", "image") else None,
             viewer=viewer_of(ctx),
         )
+        if isinstance(info, dict) and info.get("mode") == "mock":
+            report = {
+                "supplementId": sup_id, "modality": kind, "query": query[:120], "level": None, "levelLabel": "未评估",
+                "isAlert": False, "alertId": None, "hits": [], "index": info,
+                "reason": "当前检索引擎为演示模式",
+                "conclusion": "采集已保存。当前为演示检索，不生成业务风险结论或预警。",
+                "createdAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            }
+            await db.execute_a("UPDATE screening_supplements SET analysis=? WHERE id=?",
+                               (json.dumps(report, ensure_ascii=False), sup_id))
+            return report
     except Exception:
         import traceback
         traceback.print_exc()

@@ -23,8 +23,8 @@ function dialogKeys(event: KeyboardEvent<HTMLElement>, close: () => void) {
 
 export default function AgentWorkspaceV2() {
   const [searchParams] = useSearchParams();
-  const [scope, setScope] = useState<Scope>(searchParams.get('caseId') ? 'live' : 'demo');
-  const [tab, setTab] = useState('overview');
+  const [scope, setScope] = useState<Scope>(searchParams.get('caseId') || searchParams.get('scope') === 'live' ? 'live' : 'demo');
+  const [tab, setTab] = useState(searchParams.get('tab') === 'tasks' ? 'tasks' : 'overview');
   const [days, setDays] = useState(30);
   const [department, setDepartment] = useState('all');
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -172,14 +172,16 @@ export default function AgentWorkspaceV2() {
       {detailError ? <div role="alert" className="aw-error">{detailError}</div> : !detail ? <div className="aw-empty"><Loader2 className="aw-spin" />正在读取档案…</div> : <>
         <p className="aw-breadcrumb">个人档案 / 证据与处置</p><h2>{detail.ref}</h2><div className="aw-case-meta"><Level value={detail.alert_level} /><span>{detail.department}</span><span>{detail.questionnaire}</span></div>
         <div className="aw-case-lead"><ShieldCheck size={24} /><div><h3>建议由授权工作人员复核</h3><p>{detail.reasons.join('；')}。该结论沿用已记录预警等级。</p></div></div>
+        {detail.assessmentState?.status === 'outdated' && <p role="status" className="aw-error">这份研判后新增 {detail.assessmentState.newRecords} 条、修改 {detail.assessmentState.changedRecords} 条、移除 {detail.assessmentState.removedRecords || 0} 条材料，原记录已保留，请重新运行个案研判。</p>}
+        {detail.assessmentState?.status === 'unknown' && <p className="aw-footnote">旧研判没有材料快照，请重新运行后确认资料范围。</p>}
         <h3>筛查时间线</h3><div className="aw-history">{detail.history.map(h => <div key={h.id}><span className="aw-history-dot" /><div><strong>{h.score} <small>/ {h.max_score}</small></strong><p>{h.questionnaire}</p><small>{date(h.date)}</small></div></div>)}</div>
         <section className="aw-individual"><button className="aw-primary" disabled={caseBusy} onClick={runIndividual}>{caseBusy ? <Loader2 className="aw-spin" size={16} /> : <Play size={16} />}{caseBusy ? '正在研判…' : '运行个案研判'}</button>
           {detail.assessment && <div><h3>个案研判记录</h3><p>{detail.assessment.summary}</p><p>{detail.assessment.recommendation}</p><small>保存于 {date(detail.assessment.created_at)} · AI 未接入</small><details><summary>工具执行与证据边界</summary>{detail.assessment.trace.map(step => <p key={step.tool}>{step.summary} <code>{step.tool}</code></p>)}{detail.assessment.limits.map(limit => <p key={limit}>{limit}</p>)}</details></div>}
         </section>
         <h3>多模态资料</h3><p className="aw-muted">用于展示材料与核查来源，不从表情或声音直接推断心理状态。</p>
-        <div className="aw-materials">{detail.materials.map(m => <article key={m.kind}><h4>{m.kind === 'text' ? <FileText size={16} /> : m.kind === 'audio' ? <Mic size={16} /> : <Image size={16} />}{m.title}</h4>
-          {m.text && <p>{m.text}</p>}{m.kind === 'audio' && <audio controls preload="none" src={assetPath(m.url)}>当前浏览器不支持音频播放。</audio>}
-          {m.kind === 'image' && <img src={assetPath(m.url)} alt="演示日程记录卡，无真人照片" />}<small>{m.source}</small></article>)}</div>
+        <div className="aw-materials">{detail.materials.map((m, index) => <article key={m.title + index}><h4>{m.kind === 'text' ? <FileText size={16} /> : m.kind === 'audio' ? <Mic size={16} /> : <Image size={16} />}{m.title}</h4>
+          {m.text && <p>{m.text}</p>}{m.kind === 'audio' && m.url && <audio controls preload="none" src={assetPath(m.url)}>当前浏览器不支持音频播放。</audio>}
+          {m.kind === 'image' && m.url && <img src={assetPath(m.url)} alt="演示日程记录卡，无真人照片" />}<small>{m.source}</small></article>)}</div>
         {!detail.materials.length && <p className="aw-no-data">暂无可展示的三模态材料。不会用其他人的素材补成该案例的证据。</p>}
         <details className="aw-evidence"><summary>查看研判依据与数据缺口</summary><p>引用筛查记录：{detail.evidence_ids.join('、')}</p>{detail.missing.map(m => <p key={m}>{m}</p>)}</details>
         <h3>处置与随访</h3>{detail.tasks.map(task => <TaskCard key={task.id} task={task} onAction={action => setEditing({ task, action })} />)}

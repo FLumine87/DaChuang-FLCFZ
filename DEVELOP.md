@@ -210,6 +210,8 @@ DaChuang-FLCFZ/
 
 | 2026-11-06 | 管理端四项建议落地：首页预警直达、卡片引导、多模态采集查询、媒体检索修复及录音入口 | backend/app/handlers、frontend/src/admin、frontend/src/services/adminApi.ts、测试和 docs/ADMIN_IMPROVEMENTS_2026-11-06.md | 基于 ec75988；8 项后端测试、4 项浏览器回归和构建通过；独立分支交队长合并，未部署 |
 
+| 2026-11-06 | 业务联动第二轮：修正线上公开演示账号提示；新增真实今日待办；统一案例与 Agent 数据归属、采集及独立预警；保存研判材料快照并提示变化；修复模拟检索参数兼容及模拟结果边界 | backend/app、frontend/src/admin、登录配置与测试；详见 docs/ADMIN_WORKFLOW_2026-11-06.md | 独立分支 codex/admin-workflow-20261106，交队长审阅合并；本地临时数据库及真实 HTTP 链路验证，未部署 |
+
 ---
 
 ## 六、技术要点与风险备忘
