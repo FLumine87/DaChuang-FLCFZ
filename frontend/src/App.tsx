@@ -3,6 +3,8 @@ import { lazy, Suspense, type ReactElement } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import DashboardV2 from './pages/DashboardV2';
+import ReviewTasks from './pages/ReviewTasks';
+
 import DataCollection from './pages/DataCollection';
 import ScreeningRecords from './pages/ScreeningRecords';
 import AccountSettings from './pages/AccountSettings';
@@ -141,6 +143,8 @@ export default function App() {
         <Route path="diary" element={<Navigate to="/personal/records" replace />} />
         {/* 账号设置：整页而不是弹窗，从顶栏头像菜单进来 */}
         <Route path="settings" element={<AccountSettings />} />
+        <Route path="reviews" element={<ReviewTasks />} />
+
         <Route path="alerts" element={<Alerts />} />
         <Route path="cases" element={<Cases />} />
         {/* 智能心理助手（个人端 Agent + 知识图谱） */}

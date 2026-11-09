@@ -11,6 +11,7 @@ import {
 import type { CaseRecord } from '../data/adminMockData';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import AdminStatusBadge from '../components/AdminStatusBadge';
+import CaseReviews from '../components/CaseReviews';
 
 /* 案例管理：列表 + 详情 + 改状态/备注 + 追加跟进 + 时间线。
    这一整套（列表筛选分页、详情抽屉、案例维护、新增跟进、时间线）曾经在
@@ -230,6 +231,7 @@ export default function AdminCases() {
                   <span>{item.createdAt} · {item.id} · {item.status === 'pending' ? '待处理' : item.status === 'processing' ? '处理中' : item.status === 'resolved' ? '已解决' : '已关闭'}</span>
                 </li>)}</ul>}
           </section>
+          <CaseReviews key={detail.id} caseId={detail.id} recipient={detail.name} tasks={detail.tasks || []} />
           <section className="mt-5 space-y-3 border-t border-slate-100 pt-4">
             <h4 className="font-medium text-slate-900">案例维护</h4>
             <label className="block text-sm text-slate-600">状态<select className={inputClass + ' mt-1'} value={editStatus}
