@@ -115,6 +115,36 @@ export function appendLocalTriples(
   return next;
 }
 
+/**
+ * 删除本机三元组（知识图谱页的「删除节点」用）。
+ *
+ * 两种删法，都由调用方指明：
+ *   · byName  —— 删掉所有 tail 等于该名字的记录（图谱上同一个点可能由多条
+ *                relation 汇成，比如「音乐:周杰伦」既有 LIKES 又有 FOLLOWS；
+ *                用户点删除时想删的是"这个点"，不是一个关系，所以默认按名字删）。
+ *   · byTriple —— 只删指定的 relation+tail 那一条（精确删，留给将来的细粒度入口）。
+ *
+ * 返回删除后的整份记录，调用方直接拿去刷新界面，不用再读一次 localStorage。
+ */
+export function removeLocalTriples(
+  username: string,
+  target: { name: string; relation?: string },
+): LocalKgStore {
+  const store = readLocalKg(username);
+  const rest = store.triples.filter((t) => {
+    if (t.tail !== target.name) return true;
+    if (target.relation && t.relation !== target.relation) return true;
+    return false;
+  });
+  const next: LocalKgStore = { triples: rest, updatedAt: new Date().toISOString() };
+  try {
+    localStorage.setItem(localKgKey(username), JSON.stringify(next));
+  } catch {
+    /* 写不进去（隐私模式/配额）也不抛错：本次会话界面已按返回值刷新 */
+  }
+  return next;
+}
+
 /* ────────────────────────── 本地关键词（补充记录用） ────────────────────────── */
 
 /**

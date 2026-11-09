@@ -11,7 +11,6 @@ from .core.neo4j import neo4j_health
 from .db.database import init_db
 
 app = FastAPI(title=settings.app_name, version="0.2.0")
-
 # 前端 Vite 开发服务器（5173 被占用时 Vite 会自动用 5174/5175…，全部放行）
 app.add_middleware(
     CORSMiddleware,
@@ -29,13 +28,11 @@ app.add_middleware(
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
-    # 启动定时日常问询调度器（可选，默认开启）
-    if settings.enable_daily_checkin:
-        try:
-            from .services.daily_checkin_scheduler import start_scheduler
-            start_scheduler()
-        except Exception as e:
-            print(f"[warn] 定时问询调度器启动失败: {e}")
+    # 每日问询已改为「当天第一次登录时触发」（POST /api/v1/checkin/ensure），
+    # 服务端不再起任何定时器 —— 原先的 APScheduler 调度器已移除。
+    # 问询时机由"用户真的来了"决定，而不是靠一个到点就跑的闹钟：
+    # 到点跑出来的问询，用户不在线就只能躺在库里；改成登录触发后，
+    # 问询出现的那一刻用户就在系统里，闭环是通的。
 
 
 app.include_router(kg_router, prefix="/api/v1")

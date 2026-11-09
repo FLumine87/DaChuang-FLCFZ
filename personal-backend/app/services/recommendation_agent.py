@@ -204,12 +204,15 @@ def _fetch_general_content(limit: int = 3) -> list[dict]:
 
 
 def _load_interests_by_cat(user_id: str) -> dict[str, list[str]]:
-    """查用户兴趣画像并按 category 分组。调用方需保证 Neo4j 可用。"""
+    """查用户兴趣画像并按 category 分组。调用方需保证 Neo4j 可用。
+
+    category 优先取边属性（本用户的归类），节点属性仅作历史数据兜底。
+    """
     driver = get_driver()
     with driver.session() as session:
         rows = session.run(
-            "MATCH (u:User {user_id:$uid})-[:LIKES|FOLLOWS]->(i:Interest) "
-            "RETURN i.name AS name, i.category AS category",
+            "MATCH (u:User {user_id:$uid})-[r:LIKES|FOLLOWS]->(i:Interest) "
+            "RETURN i.name AS name, coalesce(r.category, i.category) AS category",
             uid=user_id,
         ).data()
     interests_by_cat: dict[str, list[str]] = {}

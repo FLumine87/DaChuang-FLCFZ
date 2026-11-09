@@ -10,6 +10,7 @@ import re
 import httpx
 
 from ..config import settings
+from .clinical_lexicon import CRISIS_CANONICAL
 
 SYSTEM_PROMPT = """你是个人心理知识图谱的信息抽取 Agent。从用户输入中抽取与用户本人相关的事实，只输出 JSON 数组，不要输出任何其他文字。
 
@@ -28,7 +29,16 @@ SYSTEM_PROMPT = """你是个人心理知识图谱的信息抽取 Agent。从用�
 规则：
 1. 只抽取输入中明确提及的事实，禁止推测。
 2. 主语永远是用户本人，输出中不要再出现主语。
-3. 没有可抽取的事实时输出 []。"""
+3. 没有可抽取的事实时输出 []。
+4. 症状名尽量使用规范表述，优先从以下词表选择：
+   焦虑、失眠、早醒、情绪低落、兴趣减退、无价值感、注意力不集中、
+   疲惫、心慌、食欲下降、易怒、回避社交。
+   （用户说"睡不着"→失眠、"疲乏"→疲惫、"心悸"→心慌、"自卑"→无价值感，
+    但仍以用户实际表达为准，不要强行往词表上靠。）
+5. **安全优先**：如果用户表达自伤、自杀意念或危机处境（如"想死"、"不想活"、
+   "活着没意思"），除正常抽取外，必须额外输出一条
+   {{"relation": "SHOWS_SYMPTOM", "object": "自杀意念"}}。
+   这是安全兜底，不允许因为"难归类"而省略。"""
 
 
 def mock_mode() -> bool:
@@ -166,7 +176,17 @@ _MOCK_INTERESTS = {
     "看电影": ("看电影", "影视"), "追剧": ("追剧", "影视"),
 }
 
-_MOCK_SYMPTOMS = ["失眠", "焦虑", "抑郁", "情绪低落", "注意力下降", "注意力不集中", "食欲下降", "疲惫", "心慌", "压力大"]
+_MOCK_SYMPTOMS = ["失眠", "焦虑", "抑郁", "情绪低落", "注意力下降", "注意力不集中", "食欲下降", "疲惫", "心慌", "压力大",
+                  # 口语近义（与 clinical_lexicon.SYMPTOM_ALIASES 对齐，演示模式下也能落进图谱）
+                  "入睡困难", "睡不着", "疲乏", "疲劳", "心悸", "社交回避", "自卑", "反复思虑", "烦躁"]
+
+# 危机信号：Mock 模式原先完全没有这一项，导致"想死"这类输入抽不出任何三元组，
+# 图谱里永远不会有安全线索、crisis 恒为 False。安全兜底不能只在真实 LLM 通路存在。
+_MOCK_CRISIS_WORDS = [
+    "自杀", "自伤", "自残", "轻生", "想死", "不想活", "活不下去",
+    "活着没意思", "活着没意义", "不如死", "结束生命", "了结自己",
+    "跳楼", "割腕", "一了百了", "遗书",
+]
 
 _MOCK_EMOTIONS = {
     "开心": "8", "高兴": "8", "兴奋": "9", "平静": "6",
@@ -188,6 +208,11 @@ def _mock_extract(text: str) -> list[dict]:
     for kw in _MOCK_SYMPTOMS:
         if kw in text:
             triples.append({"relation": "SHOWS_SYMPTOM", "object": kw})
+    # 安全兜底：命中危机表述时统一落成规范节点名，与真实 LLM 通路一致。
+    # 放在症状之后、且去重，避免同一句里既说"想死"又说"自杀"时写两条。
+    if any(w in text for w in _MOCK_CRISIS_WORDS):
+        if not any(t.get("object") == CRISIS_CANONICAL for t in triples):
+            triples.append({"relation": "SHOWS_SYMPTOM", "object": CRISIS_CANONICAL})
     for kw, value in _MOCK_EMOTIONS.items():
         if kw in text:
             triples.append({"relation": "EXPERIENCED_EMOTION", "object": kw, "value": value})

@@ -1,17 +1,18 @@
-"""定时日常问询 Agent（阶段 3.5）。
+"""每日问询 Agent（阶段 3.5）。
 
-每天定时（可配置时间）向用户发送个性化日常询问，
+用户**当天第一次登录进系统时**触发一次，生成个性化日常询问，
 如"今天有没有吃到什么好吃的？""有看到什么好看的风景吗？"等。
+一天只问询一次（由 `checkin_service.ensure_daily_checkin` 保证幂等）。
 
 设计思路：
-1. 查询 Neo4j 中所有有图谱数据的用户
-2. 按用户兴趣画像生成个性化问询（LLM，失败则用模板）
-3. 问询内容作为系统消息推送给前端（存为待回复状态，前端轮询获取）
+1. 查询 Neo4j 中该用户的兴趣画像（不是"所有用户"——登录触发的入口天然知道是谁）
+2. 按兴趣画像生成个性化问询（LLM，失败则用模板）
+3. 问询落库为待回复状态，前端在个人端工作台弹出提示
 4. 用户回复后正常走 extract 链路，写回图谱
 
-启动方式：
-- 服务启动时自动启动调度器（enable_daily_checkin=True）
-- 时间默认 20:00，可通过 DAILY_CHECKIN_HOUR / DAILY_CHECKIN_MINUTE 配置
+触发方式（2026-11-07 调整）：
+- 前端进入个人端工作台时调 `POST /api/v1/checkin/ensure`（幂等，一天一条）
+- **不再**由 APScheduler 定时触发：到点跑出来的问询，用户不在线就只能躺在库里
 """
 
 import time
@@ -59,14 +60,18 @@ def get_all_users() -> list[str]:
 
 
 def get_user_interests(user_id: str) -> list[dict]:
-    """获取用户兴趣画像（含 category）。"""
+    """获取用户兴趣画像（含 category）。
+
+    category 优先取本用户的边属性，节点属性仅作改造前历史数据的兜底：
+    节点是跨用户共享的，读节点属性会把别人的归类当成自己的。
+    """
     if not neo4j_health():
         return []
     driver = get_driver()
     with driver.session() as session:
         rows = session.run(
-            "MATCH (u:User {user_id: $uid})-[:LIKES|FOLLOWS]->(i:Interest) "
-            "RETURN i.name AS name, i.category AS category",
+            "MATCH (u:User {user_id: $uid})-[r:LIKES|FOLLOWS]->(i:Interest) "
+            "RETURN i.name AS name, coalesce(r.category, i.category) AS category",
             uid=user_id,
         ).data()
     return rows
@@ -101,9 +106,10 @@ def generate_checkin_message(user_id: str, interests: list[dict]) -> str:
 
 
 def run_daily_checkin() -> dict:
-    """对所有用户执行一次日常问询（通常由调度器定时触发）。
+    """对所有用户执行一次日常问询（管理员手动全量触发用，见 /checkin/daily/all）。
 
-    返回 {user_id: message} 字典，供 API 层推送给前端。
+    正常链路由登录触发走 `checkin_service.ensure_daily_checkin`（单用户、幂等）；
+    这个全量版本保留给管理端调试，落库时同样按"一天一条"去重。
     """
     users = get_all_users()
     result = {}

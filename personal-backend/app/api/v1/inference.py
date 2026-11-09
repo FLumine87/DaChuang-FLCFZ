@@ -1,14 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from ...core.auth import assert_owns, require_user
 from ...schemas.inference import InferenceRequest, InferenceRunResponse
 from ...services import alert_service, recommendation_agent
 from ...services.inference_agent import run_inference
 
-router = APIRouter(tags=["inference"])
+router = APIRouter(tags=["inference"], dependencies=[Depends(require_user)])
 
 
 @router.post("/inference/run", response_model=InferenceRunResponse)
-def inference_run(body: InferenceRequest) -> InferenceRunResponse:
+def inference_run(body: InferenceRequest, user: dict = Depends(require_user)) -> InferenceRunResponse:
     """心理状况推理 + 缓解推荐（阶段 3）。
 
     推理 Agent：聚合个人 KG + 对照领域 KG，输出结构化参考报告。
@@ -17,6 +18,7 @@ def inference_run(body: InferenceRequest) -> InferenceRunResponse:
     Neo4j 不可用时：Mock 模式走本地记录 + 模板通路（report.mock=True），
     其余情况仍然 503。
     """
+    assert_owns(user, body.user_id, what="该用户的推理报告")
     try:
         report = run_inference(body.user_id)
     except RuntimeError as exc:

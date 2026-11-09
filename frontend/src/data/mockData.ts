@@ -38,7 +38,10 @@ export interface ScreeningRetrievalSnapshot {
   matches?: {
     name: string;
     score: number;
+    /** 症状画像被命中的比例；纯描述覆盖面，不是患病概率 */
     coverage?: number;
+    /** 命中症状的平均特异性（IDF），越高越有指向性 */
+    specificity?: number;
     matched_symptoms?: string[];
     matched_triggers?: string[];
   }[];

@@ -11,6 +11,8 @@
 // 原先硬编码 http://localhost:8001 会让 .env.local 里的代理配置完全失效，
 // 且浏览器会跨源直连（localhost vs 127.0.0.1 也不同源）。
 
+import { getToken } from './http';
+
 /* /api/v1/* 由 personal-backend（FastAPI + Neo4j）提供 —— 它和主后端不是同一个服务：
  *   · 开发：vite.config.ts 把 /api/v1 代理到 VITE_PERSONAL_PROXY_TARGET（默认 8001），
  *           所以这里留空、走同源相对路径即可；
@@ -28,6 +30,30 @@ const BASE = PERSONAL_BASE
        (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
        '')
     : '';
+
+/* 个人端后端（8001）已加鉴权：所有业务接口都要求带上主服务端登录时签发的
+   Bearer JWT，并校验「令牌身份 == 请求里的 user_id」。
+   这里复用 http.ts 里那份 token（localStorage / sessionStorage 各存一份，
+   登录时写入、登出时清除），保证与主后端请求用的是同一枚凭证。
+   为什么不用 http.ts 的 axios 实例：这一组接口走的是 VITE_PERSONAL_API_BASE /
+   开发代理的另一台服务，且要支持 SSE 流式，fetch 更直接。 */
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * 把个人端的鉴权失败翻译成用户能看懂的一句话。
+ *
+ * 为什么单独处理：改造前接口无鉴权，改造后若用户处于「演示登录」（mock token，
+ * 签名后端不认）或凭证已过期，页面会拿到一个 401，若不拦就会
+ * 把裸 JSON 渲染上屏。这里给一句能直接显示的说明，其余状态码照旧。
+ */
+function authErrorMessage(status: number, raw: string): string {
+  if (status === 401) return '登录已过期或当前为演示登录，请重新登录后使用个性化功能';
+  if (status === 403) return '无权访问他人的个人数据（当前登录账号与目标用户不一致）';
+  return `请求失败 ${status}: ${raw.slice(0, 200)}`;
+}
 
 export interface Triple {
   subject: string;
@@ -69,14 +95,29 @@ export interface ExtractResult {
   neo4j_connected: boolean;
   /** 后端处于 Mock（演示）模式：抽取走内置关键词引擎，也未写入图数据库 */
   mock?: boolean;
+  /**
+   * 本次文本中直检到的安全线索关键词（后端在**原文**上扫描，不经语义归一）。
+   * 非空表示这是一次真实的危机表达，界面应立即给出求助指引 ——
+   * 不能等推理报告生成（报告要跑几十秒的 LLM，且危机信号可能被归一掉）。
+   */
+  crisis_hits?: string[];
 }
 
 export interface MatchedDisorder {
   name: string;
   matched_symptoms: string[];
   matched_triggers: string[];
+  /** 加权匹配分：Σ 症状特异性权重 + Σ 诱因权重 */
   score: number;
+  /**
+   * 该障碍的症状被命中比例，仅描述"线索覆盖面"。
+   * 注意：**不是患病概率，也不是与本人的相似度** —— 界面上不要只写"覆盖 X%"。
+   */
   coverage: number;
+  /** 命中症状的平均特异性（IDF）：越高说明命中的越是指向性症状 */
+  specificity?: number;
+  /** 未按特异性加权的原始匹配分 */
+  raw_score?: number;
 }
 
 export interface CopingRecommendation {
@@ -105,6 +146,15 @@ export interface RiskReport {
   mock?: boolean;
   /** 前端本机组装（服务端推理不可用时的兜底） */
   local?: boolean;
+  /**
+   * 安全线索是否来自本人近期直接表达。true 才应给出即时求助指引；
+   * false 表示只是图谱里的历史线索，需核实，不渲染成当前已确认危机。
+   */
+  crisis_verified?: boolean;
+  /** 安全线索出处：'text'=本次文本直检、'graph'=历史图谱节点 */
+  crisis_sources?: string[];
+  /** 未能归一、因而没参与匹配的个人记录名（词典未覆盖，界面应如实提示） */
+  unmapped_terms?: string[];
 }
 
 export interface InferenceRunResult {
@@ -127,6 +177,44 @@ export interface AlertItem {
 export interface CheckinMessage {
   user_id: string;
   message: string;
+  neo4j_connected: boolean;
+}
+
+// 每日问询记录（当天首次进入 AI 陪伴对话页时落库，前端可拉取；2026-11-07 打通"生成即送达"的闭环）
+export interface DailyCheckinItem {
+  id: number;
+  user_id: string;
+  message: string;
+  /** declined = 用户明确「不想回复」：今天不再打扰，也不再出现在待回复列表 */
+  status: 'pending' | 'replied' | 'declined' | 'expired';
+  reply: string;
+  source: string;
+  checkin_date: string;
+  created_at: string;
+  replied_at: string;
+}
+
+export interface CheckinPendingResult {
+  user_id: string;
+  pending: DailyCheckinItem[];
+  count: number;
+  neo4j_connected: boolean;
+}
+
+export interface CheckinReplyResult {
+  checkin: DailyCheckinItem;
+  extracted: number;
+  neo4j_connected: boolean;
+  mock: boolean;
+}
+
+/** 登录触发「今日问询」的返回：created=false 表示今天已有，直接复用 */
+export interface DailyCheckinEnsureResult {
+  user_id: string;
+  created: boolean;
+  checkin: DailyCheckinItem | null;
+  message: string;
+  expired: number;
   neo4j_connected: boolean;
 }
 
@@ -178,12 +266,12 @@ export async function* streamRequest<T>(
     );
   }
   const resp = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(init?.headers ?? {}) },
   });
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`请求失败 ${resp.status}: ${text.slice(0, 200)}`);
+    throw new Error(authErrorMessage(resp.status, text));
   }
   if (!resp.body) return;
 
@@ -219,12 +307,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
   const resp = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(init?.headers ?? {}) },
   });
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`请求失败 ${resp.status}: ${text.slice(0, 200)}`);
+    throw new Error(authErrorMessage(resp.status, text));
   }
   return resp.json() as Promise<T>;
 }
@@ -257,6 +345,16 @@ export const api = {
 
   getGraph: (userId: string) => request<GraphData>(`/api/v1/kg/graph/${encodeURIComponent(userId)}`),
 
+  /**
+   * 删除个人子图里的一个节点（服务端只删"该用户 → 该节点"的边，不影响其他用户）。
+   * node_id 可直接传图谱给的 `Label:name`；后端会拆出标签与名字。
+   */
+  deleteGraphNode: (userId: string, nodeId: string) =>
+    request<{ user_id: string; node_id: string; deleted: number; neo4j_connected: boolean; mock?: boolean }>(
+      '/api/v1/kg/node/delete',
+      { method: 'POST', body: JSON.stringify({ user_id: userId, node_id: nodeId }) },
+    ),
+
   runInference: (userId: string) =>
     request<InferenceRunResult>('/api/v1/inference/run', {
       method: 'POST',
@@ -270,9 +368,47 @@ export const api = {
 
   health: () => request<{ status: string; neo4j_connected: boolean; mock_mode: boolean }>('/api/v1/health'),
 
-  // 阶段 3.5：日常问询 + 兴趣推送
+  // 每日问询（阶段 3.5；2026-11-07 起改为「当天首次登录触发」，一天只问一次）
   getDailyCheckin: (userId: string) =>
     request<CheckinMessage>(`/api/v1/checkin/daily?user_id=${encodeURIComponent(userId)}`),
+
+  /**
+   * 登录触发「今日问询」。幂等：今天已有记录时后端直接返回既有那条
+   * （created=false），不会重复生成、也不会重复调大模型。
+   */
+  ensureDailyCheckin: (userId: string) =>
+    request<DailyCheckinEnsureResult>(
+      `/api/v1/checkin/ensure?user_id=${encodeURIComponent(userId)}`,
+      { method: 'POST' },
+    ),
+
+  /** 拉取待回复的问询（登录触发落库的那条，此前前端完全拿不到） */
+  getPendingCheckins: (userId: string, limit = 5) =>
+    request<CheckinPendingResult>(
+      `/api/v1/checkin/pending?user_id=${encodeURIComponent(userId)}&limit=${limit}`,
+    ),
+
+  /** 回复某条问询：标记已回复并把回复内容抽取进个人图谱 */
+  replyCheckin: (checkinId: number, userId: string, reply: string) =>
+    request<CheckinReplyResult>(`/api/v1/checkin/${checkinId}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, reply }),
+    }),
+
+  /**
+   * 「不想回复」某条问询：pending → declined（不写任何回复正文）。
+   * 流转后该条不再出现在待回复列表，今天也不会再弹窗打扰。
+   */
+  declineCheckin: (checkinId: number, userId: string) =>
+    request<CheckinReplyResult>(`/api/v1/checkin/${checkinId}/decline`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId }),
+    }),
+
+  getCheckinHistory: (userId: string, limit = 20) =>
+    request<DailyCheckinItem[]>(
+      `/api/v1/checkin/history?user_id=${encodeURIComponent(userId)}&limit=${limit}`,
+    ),
 
   getInterestFeed: (userId: string, limit = 4) =>
     request<CopingRecommendation[]>(`/api/v1/recommendations/by_interest?user_id=${encodeURIComponent(userId)}&limit=${limit}`),
