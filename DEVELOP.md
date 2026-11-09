@@ -208,6 +208,8 @@ DaChuang-FLCFZ/
 | 2026-11-07 | 报告统一为“得出结论/简短参考依据/心理建议”；新增默认开启且可关闭的原始文字分析，切换只重生成报告并保留偏好；大模型可细化综合结论和建议，后端风险不变 | personal.py、screening_assessment.py、DeepSeek/Zhipu提示词、检索页/结论卡/请求契约及回归 | 关闭时原文及含原文的签名令牌不进入模型提示；当前文字模型不直接解读图片/语音，页面如实说明 |
 | 2026-11-07 | 修复报告前后相同的实际运行问题：旧后端未重载导致模型正文仍被旧规则覆盖，已重新启动本机服务；心理建议移除nextAction导航兜底，失败明确提示并支持只重试报告 | screening_assessment.py、Retrieval.tsx、RetrievalAssessmentCard.tsx及回归 | 80项后端、8项页面测试通过；虚构输入实测真实模型返回不同正文与具体建议；本机服务健康，未部署线上 |
 
+| 2026-11-06 | 管理端四项建议落地：首页预警直达、卡片引导、多模态采集查询、媒体检索修复及录音入口 | backend/app/handlers、frontend/src/admin、frontend/src/services/adminApi.ts、测试和 docs/ADMIN_IMPROVEMENTS_2026-11-06.md | 基于 ec75988；8 项后端测试、4 项浏览器回归和构建通过；独立分支交队长合并，未部署 |
+
 ---
 
 ## 六、技术要点与风险备忘

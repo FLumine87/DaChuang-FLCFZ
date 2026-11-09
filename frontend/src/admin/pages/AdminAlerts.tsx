@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Search, MousePointerClick } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import {
   getAdminAlert, listAdminAlerts, listAdminAssignees, updateAdminAlert, USE_MOCK,
   type AdminAlertDetail, type Assignee, type Page,
@@ -17,6 +18,7 @@ const statusLabel: Record<AlertRecord['status'], string> = {
 const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-100';
 
 export default function AdminAlerts() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [keyword, setKeyword] = useState('');
   const [level, setLevel] = useState('');
   const [status, setStatus] = useState('');
@@ -25,7 +27,7 @@ export default function AdminAlerts() {
   const [result, setResult] = useState<Page<AlertRecord> | null>(null);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedId = searchParams.get('alert');
   const [detail, setDetail] = useState<AdminAlertDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
@@ -69,7 +71,8 @@ export default function AdminAlerts() {
   }, [selectedId, reload]);
 
   function choose(id: string) {
-    setSelectedId(id); setDetail(null); setDetailLoading(true); setNotice(''); setSaveError('');
+    if (id === selectedId) return;
+    setSearchParams({ alert: id }); setDetail(null); setDetailLoading(true); setDetailError(''); setNotice(''); setSaveError('');
   }
 
   function cancel() {
@@ -134,7 +137,7 @@ export default function AdminAlerts() {
           <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">当前条件下没有预警记录。</div>}
         {!listLoading && result?.items.map((alert) =>
           <button type="button" key={alert.id} onClick={() => choose(alert.id)}
-            aria-pressed={selectedId === alert.id}
+            aria-pressed={selectedId === alert.id} aria-label={`查看预警 ${alert.id} 的详情`}
             className={'w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:border-sky-300 ' +
               (selectedId === alert.id ? 'border-sky-500 ring-2 ring-sky-100' : 'border-slate-200')}>
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -145,6 +148,7 @@ export default function AdminAlerts() {
             </div>
             <p className="mt-3 text-sm text-slate-600">{alert.trigger || alert.description || '无触发说明'}</p>
             <p className="mt-2 text-xs text-slate-400">{alert.createdAt} · {alert.assignee}</p>
+            <span className="mt-2 inline-block text-xs font-medium text-primary-600">查看详情与处置 →</span>
           </button>)}
         {!listLoading && result && result.total > 0 && <div className="flex items-center justify-between text-sm text-slate-500">
           <span>共 {result.total} 条 · 第 {page} 页</span>
@@ -174,7 +178,7 @@ export default function AdminAlerts() {
             </p>
           </div>
         )}
-        {selectedId && <button type="button" onClick={() => { setSelectedId(null); setDetail(null); }}
+        {selectedId && <button type="button" onClick={() => { setSearchParams({}); setDetail(null); setDetailError(''); }}
           className="mb-4 inline-flex items-center gap-1 text-sm text-sky-700 hover:underline"><ArrowLeft className="h-4 w-4" /> 返回列表</button>}
         {detailLoading && (
           <div className="flex flex-1 items-center justify-center text-sm text-slate-400" role="status">

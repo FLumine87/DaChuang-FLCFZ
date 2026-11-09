@@ -366,7 +366,9 @@ export default function AdminDashboard() {
                         </span>
                         <div>
                           <p className="font-medium text-slate-700">
-                            {alert.name}
+                            <Link to={`/admin/alerts?alert=${encodeURIComponent(alert.id)}`} className="text-primary-600 hover:underline">
+                              {alert.name} · 查看详情 →
+                            </Link>
                           </p>
                           <p
                             className="mt-1 max-w-52 truncate text-xs text-slate-400"
