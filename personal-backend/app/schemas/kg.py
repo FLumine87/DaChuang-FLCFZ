@@ -32,6 +32,13 @@ class ExtractResponse(BaseModel):
     written: int = Field(description="成功写入 Neo4j 的三元组数量")
     neo4j_connected: bool
     mock: bool = Field(default=False, description="是否处于 Mock（演示）模式，前端据此如实标注")
+    crisis_hits: list[str] = Field(
+        default_factory=list,
+        description=(
+            "本次文本中直检到的安全线索原文关键词。非空表示这是一次**真实的危机表达**，"
+            "前端应立即给出求助指引，不应等到推理报告生成"
+        ),
+    )
 
 
 class TriplesRequest(BaseModel):
@@ -82,6 +89,31 @@ class GraphResponse(BaseModel):
     links: list[GraphLink]
     neo4j_connected: bool
     mock: bool = Field(default=False, description="是否处于 Mock（演示）模式，前端据此如实标注")
+
+
+class DeleteNodeRequest(BaseModel):
+    """删除用户子图里的某个节点。
+
+    **只删这个用户到该节点的边，不删节点本身** —— 叶子节点（Interest/Emotion/…）
+    是按名字全局 MERGE 的、跨用户共享（见 kg_service 的模块注释）。若直接
+    DETACH DELETE 节点，会把其他用户挂在同一个「失眠」「周杰伦」上的边一并抹掉。
+    对"我的知识图谱"这个页面来说，用户要的是"这条记录从我这里消失"，
+    所以语义就是：删我的边。
+    """
+
+    user_id: str = Field(min_length=1)
+    # 既接受图谱返回的 "Interest:民谣" 这种带标签前缀的 id，
+    # 也接受裸名字 "民谣"（按名字删时逐个标签试）。
+    node_id: str = Field(min_length=1, description="节点 id（Label:name）或节点名")
+    label: Optional[str] = Field(default=None, description="节点类型；缺省时从 node_id 的 'Label:name' 前缀解析")
+
+
+class DeleteNodeResponse(BaseModel):
+    user_id: str
+    node_id: str
+    deleted: int = Field(description="实际删除的边数（0 表示该用户身上本来就没有这条边）")
+    neo4j_connected: bool
+    mock: bool = Field(default=False)
 
 
 def coerce_triples(raw: list[dict]) -> list["Triple"]:

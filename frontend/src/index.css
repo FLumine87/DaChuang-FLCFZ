@@ -529,6 +529,30 @@ html.theme-switching *::after {
     flex-direction: column;
     min-height: 0;
   }
+  /* 知识图谱页：整页撑满「视口 − 顶栏 − main 的 32px 上下内边距」，
+     让「标题卡 + 星图 + 图例」正好落在**一屏之内**。
+     改造前实测（1440×900）：内容 841px 对可用 772px，要多滚 69px 才看全星图，
+     而星图本身还是按 900:560 等比撑宽到 674px 高。
+     这里给的是 height 而不是 min-height：min-height 只会"至少这么高"，
+     内容更多时容器照样长高、依旧要滚；要的是"就这么多，多的由星图卡片让出来"。
+     星图卡片因此必须可收缩（flex-1 min-h-0），否则整条高度链不成立。
+     极小视口下星图会被压到 0 高、内容溢出到文档流 —— 那种情况退回滚动，
+     比硬裁掉内容好。 */
+  .app-content:has(.kg-fullheight) {
+    display: flex;
+    flex-direction: column;
+    /* 与对话页同一套口径：main 盒高 = 视口 − 顶栏 − 24px 留白
+       （盒高含自身 32px 内边距，故内容区底边离视口底约 56px）。
+       24px 而不是把 32px 内边距全算进来，是为了让底部留白与对话页一致，
+       两页互切时内容底边不会忽高忽低。 */
+    height: calc(100dvh - var(--topbar-height, 4rem) - 24px);
+  }
+  .app-content:has(.kg-fullheight) .page-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
   .app-content > .page-body > div > .flex.gap-3 {
     flex-wrap: wrap;
   }
@@ -2096,4 +2120,207 @@ html:not(.app-booted) .page-enter {
 
 @media (prefers-reduced-motion: reduce) {
   .hero-stagger > * { animation: none; }
+}
+
+/* ==========================================================================
+   AI 陪伴对话页的机器人（AiCompanionBot.tsx）
+   动作克制：缓慢呼吸浮动 + 偶尔眨眼 + 嘴巴慢慢开合 —— 心理陪伴场景要的是
+   安定感，不用弹跳/闪烁这类易引发焦虑的动效。prefers-reduced-motion 下完全静止。
+
+   ⚠️ 一个容易踩的坑：SVG 子元素上的 CSS transform 长度是**用户坐标系单位**，
+   不是屏幕像素。本轮 viewBox 从 152 高变成 432 高，同一段 translateY 的
+   视觉位移因此缩到 1/3 —— 老数值照搬过来会"看不出来在动"。
+   下面所有位移值都是按新 viewBox 等比换算过的（保持占整体高度的比例不变）。
+   ========================================================================== */
+
+/* ── 旋转支点：一律走 transform-box: fill-box ────────────────────────────────
+   不能用 transform-origin: 340px 346px 这种写法。本组件 viewBox 的原点不是
+   0,0（是 "210 8 …"），而 transform-box 默认的 view-box 参考框把长度类
+   origin 解释为**相对 viewBox 原点**的偏移 —— 那样写会落到 210+340=550 上，
+   旋转整个跑飞。fill-box + 百分比则始终跟着元素自己的包围盒走，与 viewBox
+   原点无关，换成任何坐标系都不会错。 */
+.bot-pivot-bottom { transform-box: fill-box; transform-origin: center bottom; }
+.bot-pivot-top    { transform-box: fill-box; transform-origin: center top; }
+
+/* ── 歪头 ─────────────────────────────────────────────────────────────────
+   闲站时的"小反应"。要点三个：
+
+   · 支点在**脖子**。本组（头 + 天线 + 侧凸块）的包围盒下缘恰好落在头壳
+     底边 y=229 —— 天线在上、侧凸块在两侧，都不会把下缘拉低。配合
+     .bot-pivot-bottom 的 center bottom，转出来才是"歪头"而不是"原地打转"。
+   · 周期 13s，但**大部分时间角度是 0**：只在 26%–38% 之间轻轻歪一下（7°），
+     其余时间是 0。这样它看起来是"偶尔有个小动作"，
+     而不是一颗一直在摇的头。用 ease-in-out 让起落不生硬。
+   · 幅度 7°。再大就不像发呆，像在撒娇；再小则看不出来。
+
+   走路（.bot-tilt 不挂）和探看（改用固定内联 3°）时都不走这个动画 ——
+   一边迈腿一边歪头会显得抽搐，见 AiCompanionBot 里的类名条件。 */
+@keyframes bot-tilt {
+  0%,  24%  { transform: rotate(0deg); }
+  30%       { transform: rotate(7deg); }
+  36%       { transform: rotate(-6deg); }
+  42%, 100% { transform: rotate(0deg); }
+}
+
+.bot-tilt {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: bot-tilt 13s ease-in-out infinite;
+}
+
+/* 呼吸：幅度约为整体高度的 2.3%（与改造前比例一致） */
+@keyframes bot-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+
+/* 眨眼：大部分时间睁着，短暂闭合一下，像真人而不是机械闪烁 */
+@keyframes bot-blink {
+  0%, 91%, 100% { transform: scaleY(1); }
+  94%           { transform: scaleY(0.08); }
+}
+
+.bot-float {
+  animation: bot-float 4.2s ease-in-out infinite;
+}
+
+.bot-blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bot-blink 5.4s ease-in-out infinite;
+}
+
+/* 机器人"陪着等回复"：在落脚点上极轻地左右摇，像在耐心等你。 */
+@keyframes bot-perch {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(9px); }
+}
+
+.bot-perch {
+  animation: bot-perch 2.8s ease-in-out infinite;
+}
+
+/* ── 嘴巴：微笑弧线 ↔ 正圆张口 ─────────────────────────────────────────────
+   两个形状**各自独立、用交叉淡化切换**，不做形状插值。原因：弧线变形到圆形
+   的中间态是一个奇怪的曲边图形，看着像卡顿；交叉淡化虽然有一瞬叠影，
+   但读起来是干净的"嘴开了"。静默 4.4s → 张 1.4s → 合，周期 7.2s。
+   两个口型的中心同高（y≈191），所以切换时嘴巴不会上下跳。 */
+.bot-mouth-smile { animation: bot-mouth-smile 7.2s ease-in-out infinite; }
+.bot-mouth-open  { transform-box: fill-box; transform-origin: center; animation: bot-mouth-open 7.2s ease-in-out infinite; }
+
+@keyframes bot-mouth-smile {
+  0%, 61%, 100% { opacity: 1; }
+  68%, 86%      { opacity: 0; }
+}
+@keyframes bot-mouth-open {
+  0%, 61%, 100% { opacity: 0; transform: scale(0.6); }
+  68%, 86%      { opacity: 1; transform: scale(1); }
+}
+
+/* ── 走路 ─────────────────────────────────────────────────────────────────
+   五组动画必须**同周期（1.15s）同缓动**，否则起伏和迈腿会错拍，
+   看起来像在原地抽搐而不是走路。
+   周期从 0.8s 放宽到 1.15s：行走速度降到 40px/s（约常速步行的一半），
+   步频不跟着降就成了"原地小碎步划过屏幕"，一慢下来就露馅。
+   · bot-walk —— 身体起伏：一步一沉，幅度约整体高度的 1.6%。
+   · bot-leg-near / bot-leg-far —— 两条腿绕髋关节反向摆 20°。
+     正交摆（一条前一条后）才是走路；同相摆看起来像踢腿。
+   · bot-arm-near / bot-arm-far —— 双臂反相摆（与同侧腿相反），幅度收一半：
+     手臂短、又在身体侧后方，同幅度会显得像在甩手。 */
+@keyframes bot-walk {
+  0%, 100% { transform: translateY(0); }
+  25%      { transform: translateY(-7px); }
+  75%      { transform: translateY(-7px); }
+}
+@keyframes bot-leg-near {
+  0%, 100% { transform: rotate(20deg); }
+  50%      { transform: rotate(-20deg); }
+}
+@keyframes bot-leg-far {
+  0%, 100% { transform: rotate(-20deg); }
+  50%      { transform: rotate(20deg); }
+}
+@keyframes bot-arm-near {
+  0%, 100% { transform: rotate(-11deg); }
+  50%      { transform: rotate(11deg); }
+}
+@keyframes bot-arm-far {
+  0%, 100% { transform: rotate(11deg); }
+  50%      { transform: rotate(-11deg); }
+}
+
+.bot-walk      { animation: bot-walk 1.15s ease-in-out infinite; }
+.bot-leg-near  { animation: bot-leg-near 1.15s ease-in-out infinite; }
+.bot-leg-far   { animation: bot-leg-far 1.15s ease-in-out infinite; }
+/* 摆臂的支点在**肩关节**，不在手臂包围盒的几何中心：肩在各自包围盒的
+   内侧偏上（约 22% / 78%, 14%）。用 center top 摆会变成"以手腕为轴甩手"。 */
+.bot-arm-near  { transform-origin: 22% 14%; animation: bot-arm-near 1.15s ease-in-out infinite; }
+.bot-arm-far   { transform-origin: 78% 14%; animation: bot-arm-far 1.15s ease-in-out infinite; }
+
+/* ── 深浅色的可见性微调 ─────────────────────────────────────────────────────
+   机体是一套"深色金属材质"，浅底上是靠近黑描边立住的剪影；换到深色主题，
+   机体和背景同为深色，必须把轮廓高光提亮、背景光晕加强，才不会糊成一团。 */
+.bot-halo { opacity: 0.55; }
+.bot-rim  { opacity: 0.28; }
+
+.dark .bot-halo { opacity: 0.95; }
+.dark .bot-rim  { opacity: 0.55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bot-float,
+  .bot-blink,
+  .bot-perch,
+  .bot-tilt,
+  .bot-walk,
+  .bot-leg-near,
+  .bot-leg-far,
+  .bot-arm-near,
+  .bot-arm-far,
+  .bot-mouth-smile,
+  .bot-mouth-open { animation: none; }
+  /* 关掉动画后 .bot-mouth-open 会停在"完全不透明"的初始态，张开与微笑两个
+     形状叠在一起。这里显式把它藏掉，让静止画面保持"微笑"这一个状态。 */
+  .bot-mouth-open { opacity: 0; }
+}
+
+/* ═══════════════════ 知识图谱 · 3D 星空（2026-11-08 第四轮） ═══════════════════
+   图谱改成"深空球体"后，需要两条纯装饰性动画：
+     · kg-twinkle      —— 近景星点缓慢闪烁；
+     · kg-halo-pulse   —— 点击某节点时，同类型节点的光晕同步呼吸。
+   两条都只动 opacity / transform（合成层），不触发布局重排；
+   代价低的另一面是它们可以被 prefers-reduced-motion 整体关停 —— 见文件末尾。
+   ─────────────────────────────────────────────────────────────────────────── */
+
+@keyframes kg-twinkle {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+
+/* 闪烁周期刻意拉开到 4.4s：星空的呼吸要慢，快了就变成"屏幕在抖"。
+   各星点的差异靠 animation-delay（内联 style，按索引算）而不是改周期，
+   周期一致、相位错开，读起来才是同一片夜空。 */
+.kg-twinkle {
+  animation: kg-twinkle 4.4s ease-in-out infinite;
+}
+
+@keyframes kg-halo-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50%      { opacity: 0.9;  transform: scale(1.22); }
+}
+
+/* 同类发光的光晕：支点必须在节点自身中心（节点内是 translate 后的原点 0,0，
+   所以 fill-box + 50% 50% 正好是圆心）。用 50% 而非中心偏移，
+   是为了让光晕"从节点长出来"而不是"围着节点公转"。 */
+.kg-halo-pulse {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: kg-halo-pulse 2.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kg-twinkle,
+  .kg-halo-pulse { animation: none; }
+  /* 关掉动画后光晕定格在起始帧（淡），所以给一个够看的静态值兜底，
+     "同类发光"这个功能语义不能因为关了动画就消失。 */
+  .kg-halo-pulse { opacity: 0.75; }
 }

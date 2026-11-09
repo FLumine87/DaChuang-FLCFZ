@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Bell, RefreshCw, AlertTriangle, Music, Trophy, BookOpen, Film, UtensilsCrossed, Heart, HardDrive } from 'lucide-react';
-import { api, type AlertItem, type InferenceRunResult, type CopingRecommendation } from '../../services/api';
+import { api, type InferenceRunResult, type CopingRecommendation } from '../../services/api';
+import { getWarnings } from '../../services/mockApi';
+import type { WarningEvent } from '../../data/mockData';
 import { getCurrentSession } from '../../auth/session';
 import { briefErrorMessage } from '../../services/http';
 import { buildLocalFeed, buildLocalReport, collectLocalSignals, type LocalAdvice } from '../../services/localKg';
@@ -19,7 +21,13 @@ export default function FeedPage() {
   const userId = session?.username ?? 'demo_user';
 
   const [feed, setFeed] = useState<InferenceRunResult | null>(null);
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  /**
+   * 预警统一取自主服务端（8000 GET /api/personal/warnings）。
+   * 个人端（8001）不产预警：它的图谱推理只输出参考，筛查分层由主业务后端统一判定，
+   * 所以 /api/v1/alerts 永远是空表。此前这里调的是 8001，导致"累积预警"恒为 0 条，
+   * 与「预警」页显示的条数互相矛盾——同一个概念两个数据源。现统一到服务端。
+   */
+  const [alerts, setAlerts] = useState<WarningEvent[]>([]);
   const [interestFeed, setInterestFeed] = useState<CopingRecommendation[]>([]);
   /** 本机记录生成的条目（L1）：服务端没有内容时用它兜底 */
   const [localItems, setLocalItems] = useState<LocalAdvice[]>([]);
@@ -41,7 +49,7 @@ export default function FeedPage() {
 
     const [feedResult, alertResult] = await Promise.allSettled([
       api.runInference(userId),
-      api.listAlerts(userId),
+      getWarnings(),
     ]);
 
     if (feedResult.status === 'fulfilled') {
@@ -153,7 +161,7 @@ export default function FeedPage() {
             <p className="text-xs text-slate-500">累积预警</p>
             <p className="text-lg font-bold mt-1 text-slate-700">{alerts.length} 条</p>
             <p className="text-xs text-slate-400 mt-1">
-              {alerts.filter((a) => a.status === 'pending').length} 条待确认
+              {alerts.filter((a) => a.status !== 'resolved').length} 条待处理
             </p>
           </div>
         </div>
@@ -209,7 +217,7 @@ export default function FeedPage() {
         </div>
       )}
 
-      {/* 预警记录 */}
+      {/* 预警记录（统一取自主服务端，与「预警」页同源） */}
       {alerts.length > 0 && (
         <div className="ui-card p-5">
           <h3 className="text-sm font-semibold text-slate-800 mb-3">预警记录</h3>
@@ -217,19 +225,24 @@ export default function FeedPage() {
             {alerts.map((a) => (
               <div key={a.id} className="flex items-center gap-3 border border-slate-100 rounded-xl px-4 py-3">
                 <span className={`px-2 py-1 rounded text-xs font-bold ${
-                  a.level === 'red' ? 'bg-danger-50 text-danger-600' : 'bg-orange-50 text-orange-600'
-                }`}>{a.level === 'red' ? '红' : '橙'}</span>
+                  a.level === 'red' ? 'bg-danger-50 text-danger-600' :
+                  a.level === 'orange' ? 'bg-orange-50 text-orange-600' :
+                  a.level === 'yellow' ? 'bg-warning-50 text-warning-600' :
+                  'bg-success-50 text-success-600'
+                }`}>{
+                  a.level === 'red' ? '红' : a.level === 'orange' ? '橙' :
+                  a.level === 'yellow' ? '黄' : '绿'
+                }</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-slate-700 truncate">{a.title}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{a.created_at.slice(0, 16)} · {a.reason ?? ''}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{(a.createdAt ?? '').slice(0, 16)} · {a.reason ?? ''}</p>
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full ${
-                  a.status === 'pending' ? 'bg-warning-50 text-warning-600' :
-                  a.status === 'closed' ? 'bg-slate-100 text-slate-500' :
-                  'bg-primary-50 text-primary-600'
+                  a.status === 'new' ? 'bg-warning-50 text-warning-600' :
+                  a.status === 'tracking' ? 'bg-primary-50 text-primary-600' :
+                  'bg-slate-100 text-slate-500'
                 }`}>
-                  {a.status === 'pending' ? '待确认' : a.status === 'confirmed' ? '已确认' :
-                   a.status === 'processing' ? '跟进中' : '已关闭'}
+                  {a.status === 'new' ? '待确认' : a.status === 'tracking' ? '跟进中' : '已缓解'}
                 </span>
               </div>
             ))}
@@ -265,10 +278,16 @@ function FeedItems({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-800">{item.name}</p>
+              {/* break-words 是必需的，不是装饰：推荐文案里会带程序拼接的搜索链接
+                  （网易云是 https://music.163.com/#/search/m/?s=%E7%A7%A6... 这种
+                  百分号编码串），整串没有任何空格。whitespace-pre-wrap 只保留换行，
+                  它的 overflow-wrap 仍是默认的 normal —— 不在"词内"断行，于是这条
+                  长链接会把文字顶出卡片右边界（用户截图反馈的问题）。
+                  break-words 让超长不可断串在必要时从任意位置折行，中文正文不受影响。 */}
               {item.suggestion && (
-                <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap leading-relaxed">{item.suggestion}</p>
+                <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap break-words leading-relaxed">{item.suggestion}</p>
               )}
-              <p className="text-xs text-primary-600 mt-2">{item.reason}</p>
+              <p className="text-xs text-primary-600 mt-2 break-words">{item.reason}</p>
             </div>
           </div>
         );

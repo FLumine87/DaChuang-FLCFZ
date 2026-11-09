@@ -31,8 +31,9 @@ if not exist venv (
 
 call venv\Scripts\activate.bat
 
-REM 检查依赖是否已安装
-venv\Scripts\python.exe -c "import apscheduler" 2>nul
+REM 检查依赖是否已安装（用 fastapi 作判据；原先用 apscheduler，
+REM 它已随「定时问询」改为「登录触发」一并移除）
+venv\Scripts\python.exe -c "import fastapi" 2>nul
 if errorlevel 1 (
     echo 安装依赖...
     venv\Scripts\pip.exe install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/

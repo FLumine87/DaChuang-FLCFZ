@@ -20,14 +20,16 @@
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
+from ...core.auth import assert_owns, require_user
 from ...schemas.chat import CompanionChatRequest, CompanionChatResponse
 from ...services import kg_service
 from ...services.llm_client import chat_messages, mock_mode, stream_chat_messages
 
-router = APIRouter(tags=["companion-chat"])
+# 整个路由组统一要求登录（第 1 步）。
+router = APIRouter(tags=["companion-chat"], dependencies=[Depends(require_user)])
 
 COMPANION_SYSTEM_PROMPT = """你是「心晴伙伴」，一位温暖的 AI 心理陪伴助手，陪伴大学生和年轻人聊聊近况。
 
@@ -64,7 +66,8 @@ def _kg_context(user_id: str) -> tuple[str, bool]:
 
 
 @router.post("/chat/companion", response_model=CompanionChatResponse)
-def companion_chat(body: CompanionChatRequest) -> CompanionChatResponse:
+def companion_chat(body: CompanionChatRequest, user: dict = Depends(require_user)) -> CompanionChatResponse:
+    assert_owns(user, body.user_id, what="该用户的对话")
     mock = mock_mode()
     kg_prompt, kg_used = _kg_context(body.user_id)
     if mock:
@@ -86,7 +89,7 @@ def companion_chat(body: CompanionChatRequest) -> CompanionChatResponse:
 
 
 @router.post("/chat/companion/stream")
-def companion_chat_stream(body: CompanionChatRequest):
+def companion_chat_stream(body: CompanionChatRequest, user: dict = Depends(require_user)):
     """陪伴对话流式版（2026-10-15）：SSE 逐段返回增量文本。
 
     解决的问题：非流式要等大模型把整段回复全部生成完才返回，用户干等
@@ -96,6 +99,7 @@ def companion_chat_stream(body: CompanionChatRequest):
     每帧：`data: {"delta":"增量文本"}`；结束帧：`data: [DONE]`。
     Mock 模式直接返回 JSON（reply=""/mock=True），由前端回退本地文案。
     """
+    assert_owns(user, body.user_id, what="该用户的对话")
     if mock_mode():
         return CompanionChatResponse(user_id=body.user_id, reply="", mock=True, kg_context_used=False)
 

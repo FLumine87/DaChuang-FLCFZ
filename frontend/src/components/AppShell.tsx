@@ -308,7 +308,12 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
      外壳这一层如果照旧渲染「个人端 · 工作空间 / 个人首页 / …」，
      页名就会在一屏里出现两遍 —— 这正是评审提过的重复。
      管理端首页没做改造，所以只管个人端。 */
-  const hasOwnHero = isDashboard && !isAdmin;
+  /* 知识图谱页同理：它自带标题卡（「我的个人知识图谱」+ 连接状态 + 刷新），
+     外壳再渲染一次「我的知识图谱 / 把记录里的线索连成图…」既是同一句话
+     说两遍，又白占约 120px —— 而这一页要在一屏里放下整张星图（见 index.css
+     的 .kg-fullheight 高度链）。让位之后，内容区高度 = 视口 − 顶栏 − 24px，
+     星图作为该页唯一可伸缩的一块吃掉剩余高度。 */
+  const hasOwnHero = (isDashboard && !isAdmin) || location.pathname === `${root}/me/kg`;
   const results = items.filter((item) =>
     `${item.label}${item.description}`.includes(query.trim()),
   );

@@ -140,7 +140,7 @@ if (-not $SkipAgent) {
         if ($agentPython) {
             $agentDepsOk = $false
             try {
-                & $agentPython -c "import fastapi, uvicorn, neo4j, apscheduler, sqlalchemy, pydantic_settings, httpx" 2>$null
+                & $agentPython -c "import fastapi, uvicorn, neo4j, sqlalchemy, pydantic_settings, httpx" 2>$null
                 $agentDepsOk = ($LASTEXITCODE -eq 0)
             } catch { $agentDepsOk = $false }
             if (-not $agentDepsOk) {

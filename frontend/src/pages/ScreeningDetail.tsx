@@ -60,8 +60,18 @@ function RetrievalSnapshotSection({ snapshot }: { snapshot: ScreeningRetrievalSn
                         参考匹配分 {row.score}
                       </span>
                       {typeof row.coverage === 'number' && (
+                        /* 不能只写"覆盖 X%"：读者很容易理解成"我有 X% 概率是这个病"。
+                           它实际是"该障碍的症状画像有多大比例被命中"，纯描述线索覆盖面。 */
                         <span className="text-[11px] text-slate-400">
-                          覆盖 {Math.round(row.coverage * 100)}%
+                          症状画像命中 {Math.round(row.coverage * 100)}%
+                        </span>
+                      )}
+                      {typeof row.specificity === 'number' && row.specificity > 0 && (
+                        <span
+                          className="text-[11px] text-slate-400"
+                          title="命中症状的指向性：越高表示命中的越是被少数障碍引用的症状，参考价值越大"
+                        >
+                          指向性 {row.specificity.toFixed(1)}
                         </span>
                       )}
                     </div>

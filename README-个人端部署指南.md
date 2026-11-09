@@ -73,6 +73,34 @@ venv\Scripts\python.exe -m uvicorn app.main:app --port 8001 --host 127.0.0.1
 保持该窗口打开（关闭即停止）。启动后访问 `http://localhost:8001/docs` 可看到 Swagger。
 也可以直接双击 `backend\start.bat`（等效命令）。
 
+### 2.4 鉴权配置（必读）
+
+个人端后端**已启用鉴权**（2026-11-08 加入）。它不自己签发凭证，只校验主服务端
+（8000）登录时签发的 HS256 JWT。因此：
+
+1. `personal-backend/.env` 的 `SECRET_KEY` 必须与主服务端 `backend/.env` 的
+   `SECRET_KEY` **完全一致**。两边不一致 → 签名验不过 → 所有业务接口 401。
+   主服务端没有 `backend/.env` 时用的是内置默认值，个人端也保持同一默认值即可互通；
+   **部署上线时两边都要换成同一个随机长串**（不要把真实密钥提交进仓库）。
+
+2. 所有业务接口（`/kg/*`、`/checkin/*`、`/chat/*`、`/inference/run`、`/alerts*`）
+   都要求请求头带 `Authorization: Bearer <token>`，并校验「令牌身份 == 请求里的
+   `user_id`」——用自己的凭证读他人数据一律 403。前端已自动注入该头，无需手动处理。
+   只有 `/api/v1/health` 保持公开。
+
+3. 开发便利开关 `ALLOW_ANONYMOUS_LOCAL`（默认 `False`）：
+   设为 `True` 时，来自本机 `127.0.0.1` 的请求可免凭证访问。
+   仅用于跑仓库里那些不带凭证的历史验证脚本（`scripts/verify_*.py|mjs`）。
+   **把启动命令改成 `--host 0.0.0.0`（对外提供服务）时必须保持 `False`**，
+   否则等于没加鉴权。
+
+4. 鉴权回归验证：
+
+```bat
+venv\Scripts\python.exe scripts\verify_auth.py            :: 后端：60 条断言
+node scripts\verify_auth_frontend.mjs                     :: 前端：凭证注入 8 条
+```
+
 ## 3. 前端配置与启动
 
 ```bat
