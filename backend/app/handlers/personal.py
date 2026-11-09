@@ -278,6 +278,10 @@ def _report_hit(h: dict) -> dict:
             "screeningUsable": h.get("screening_usable", h.get("screeningUsable")),
             "referenceOnly": h.get("reference_only", h.get("referenceOnly")),
             "labelDescription": h.get("label_description") or h.get("labelDescription"),
+            "media": h.get("media"),
+            "mediaKind": h.get("media_kind") or h.get("mediaKind"),
+            "mediaMeta": h.get("media_meta") or h.get("mediaMeta"),
+            "crossModal": h.get("cross_modal", h.get("crossModal")),
         }.items() if v is not None
     }
 
@@ -332,6 +336,18 @@ async def _analyze_collection(ctx: RequestContext, sup_id, kind: str, data: dict
         import traceback
         traceback.print_exc()
         info = {"source": "unavailable", "message": "参考检索暂不可用，仍可依据本人信息继续筛查"}
+    if data.get("analysisMode") == "retrieval":
+        supplement = await db.query_one_a("SELECT * FROM screening_supplements WHERE id=? AND user_id=?", (sup_id, user_id))
+        observations = await db.query_a("SELECT kind,text,created_at FROM screening_supplements WHERE user_id=? ORDER BY id DESC LIMIT 500", (user_id,))
+        hits = [to_frontend_hit(hit) for hit in results]
+        source = retrieval_service.snapshot(query, hits, kind)
+        assessment = retrieval_service.build_retrieval_screening(query, hits, modality=kind, supplement_id=sup_id, observations=observations)
+        assessment["retrievalToken"] = retrieval_service.seal_snapshot(user_id, source)
+        report = await _collection_report(ctx, assessment, results, info, kind, query)
+        report["hits"] = hits
+        report["retrievalSnapshot"] = source
+        await assessment_service.save_assessment(supplement, assessment, report=report)
+        return report
     screening, supplement, observations = await assessment_service.owned_context(
         user_id, (screening_row or {}).get("screening_id"), sup_id)
     previous = assessment_service._json(supplement.get("analysis"))
@@ -344,6 +360,8 @@ async def _analyze_collection(ctx: RequestContext, sup_id, kind: str, data: dict
 
 async def _collection_report(ctx, assessment, results, info, kind, query, previous=None):
     previous = previous or {}
+    previous_hits = {hit["id"]: hit for hit in previous.get("hits", []) if hit.get("id")}
+    report_hits = [{**previous_hits.get(hit.get("id"), {}), **_report_hit(hit)} for hit in results]
     alert_id = previous.get("alertId")
     if assessment["level"] in ("orange", "red"):
         # One open assessment alert per supplement, even after repeated refresh/follow-up.
@@ -359,7 +377,7 @@ async def _collection_report(ctx, assessment, results, info, kind, query, previo
     return {"modality": kind, "query": query[:500], "level": assessment["level"] or "unknown",
             "levelLabel": assessment["levelLabel"], "isAlert": assessment["level"] in ("orange", "red"),
             "reason": assessment["retrievalContribution"], "conclusion": assessment["conclusion"],
-            "hits": [_report_hit(hit) for hit in results], "alertId": alert_id,
+            "hits": report_hits, "alertId": alert_id,
             "index": info, "assessment": assessment, "supplementId": assessment.get("supplementId"),
             "createdAt": datetime.now().strftime("%Y-%m-%d %H:%M")}
 

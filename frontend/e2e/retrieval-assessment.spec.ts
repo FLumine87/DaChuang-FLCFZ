@@ -40,6 +40,8 @@ async function setup(page: Page, history = false, ragResponse: (body: Record<str
     await route.fulfill({ json:{ code:0,data } });
   });
   await page.goto('/#/personal/retrieval');
+  await expect(page).toHaveURL(/screening\?tab=retrieval/);
+  await expect(page.getByPlaceholder(hint)).toBeVisible();
   return { requests, saved:()=>saved };
 }
 
@@ -203,4 +205,103 @@ test('历史记录恢复保存的检索证据，不读取旧量表', async ({pag
   expect(calls.requests.some(r=>r.path==='/api/personal/search')).toBe(false);
   expect(calls.requests.some(r=>r.path==='/api/personal/screenings')).toBe(false);
   expect(calls.saved()).toBe(0);
+});
+
+for (const modality of ['text', 'audio', 'image'] as const) {
+  test(`${modality}采集仅在本次提交后显示结论，忽略历史报告`, async ({page}) => {
+    const calls = await setup(page, false, async () => ({mock:false,report:{summary:'采集记录的大模型综合结论',riskLevel:'low',sections:[{title:'参考依据',content:'采用该次采集的实际命中。'}],recommendations:['记录情绪变化并安排适当休息。']}}));
+    const report = {modality,query:modality === 'text' ? '开心' : '',supplementId:41,level:'green',levelLabel:'积极情绪匹配',isAlert:false,reason:'本次命中',conclusion:positive,
+      hits:[{id:'unit-1',recordId:'reference-1',modality,summary:'本次采集的参考素材',similarity:.85,tags:[],alertLevel:'unknown',media:modality === 'text' ? undefined : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX2sAAAAASUVORK5CYII=',mediaKind:modality === 'audio' ? 'speech_pcm16' : 'image'}]};
+    await page.route('**/api/personal/supplements', route => route.fulfill({json:{code:0,data:[{id:41,kind:modality,text:report.query,analysis:report}]}}));
+    await page.goto(`/#/personal/screening?tab=${modality}`);
+    await page.reload();
+    const card = page.getByTestId('retrieval-assessment');
+    await expect(card).toHaveCount(0);
+    await expect(page.getByRole('checkbox',{name:'结合本次原始输入分析',exact:true})).toHaveCount(0);
+    expect(calls.requests.some(r=>r.path==='/api/personal/rag-report')).toBe(false);
+    expect(calls.requests.some(r=>r.path==='/api/personal/retrieval-screening')).toBe(false);
+    const submissions: Record<string,unknown>[] = [];
+    await page.route('**/api/personal/supplements', async route => {
+      if (route.request().method() === 'POST') {
+        submissions.push(route.request().postDataJSON());
+        report.query = String(submissions.at(-1)?.text ?? '');
+        await route.fulfill({json:{code:0,data:{id:41,report}}});
+      } else await route.fulfill({json:{code:0,data:[]}});
+    });
+    await page.route('**/api/upload', route => route.fulfill({json:{code:0,data:{file_path:'/uploads/current-file',file_name:'current-file',file_id:'current-file',analysis:''}}}));
+    if (modality === 'text') {
+      await page.getByLabel('文本采集内容').fill('本次新输入');
+      await expect(card).toHaveCount(0);
+      await page.getByRole('button',{name:'保存到我的档案',exact:true}).click();
+    } else {
+      await page.locator(`input[type=file][accept^="${modality}/"]`).setInputFiles({name:modality === 'image' ? 'current.png' : 'current.wav',mimeType:modality === 'image' ? 'image/png' : 'audio/wav',buffer:Buffer.from('test-file')});
+      await expect(card).toHaveCount(0);
+      await page.getByRole('button',{name:'送入动态哈希引擎',exact:true}).click();
+    }
+    await expect(card.getByRole('heading',{name:'多模态心理筛查结论',exact:true})).toBeVisible();
+    await expect(card.getByText('采集记录的大模型综合结论',{exact:true})).toBeVisible();
+    await expect(card.getByTestId('psychological-advice')).toContainText('记录情绪变化并安排适当休息。');
+    await expect(page.getByText('本次采集的参考素材',{exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:/检索参考/})).toBeVisible();
+    await expect(page.getByRole('checkbox',{name:'结合本次原始输入分析',exact:true})).toBeVisible();
+    if (modality === 'audio') await expect(page.getByAltText('语音梅尔频谱')).toBeVisible();
+    if (modality === 'image') await expect(page.getByAltText('面部图像')).toBeVisible();
+    expect(calls.requests.some(r=>r.path==='/api/personal/search')).toBe(false);
+    expect(calls.requests.some(r=>r.path==='/api/personal/screenings')).toBe(false);
+    expect(submissions).toHaveLength(1);
+    expect(submissions[0]).toMatchObject({kind:modality,analysisMode:'retrieval'});
+    if (modality === 'text') await page.getByLabel('文本采集内容').clear();
+    if (modality === 'image') await page.getByRole('button',{name:'移除这张图片'}).click();
+    if (modality === 'audio') await page.getByRole('button',{name:'文本采集',exact:true}).click();
+    await expect(card).toHaveCount(0);
+    await page.getByRole('button',{name:modality === 'audio' ? '语音采集' : '量表填写',exact:true}).click();
+    await page.getByRole('button',{name:modality === 'audio' ? '文本采集' : modality === 'image' ? '图像采集' : '文本采集',exact:true}).click();
+    await expect(card).toHaveCount(0);
+    await page.reload();
+    await expect(card).toHaveCount(0);
+  });
+}
+
+test('文本采集保存后原地生成同款结果，不绑定量表或重复保存', async ({page}) => {
+  await setup(page, false, async () => ({mock:false,report:{summary:'新采集的大模型综合结论',riskLevel:'low',sections:[{title:'参考依据',content:'本次采集的检索证据。'}],recommendations:['保持规律休息并记录近期感受。']}}));
+  const savedBodies: Record<string,unknown>[] = [];
+  await page.route('**/api/personal/supplements', async route => {
+    if (route.request().method() === 'POST') {
+      savedBodies.push(route.request().postDataJSON());
+      await route.fulfill({json:{code:0,data:{id:41,report:{modality:'text',query:'今天开心',supplementId:41,level:'green',hits:[{id:'unit-1',modality:'text',summary:'新采集参考',similarity:.85,tags:[],alertLevel:'unknown'}],assessment:assessment()}}}});
+    } else await route.fulfill({json:{code:0,data:[]}});
+  });
+  await page.goto('/#/personal/screening?tab=text');
+  await page.getByPlaceholder('今天感觉……最近睡眠……人际上……').fill('今天开心');
+  await page.getByRole('button',{name:'保存到我的档案',exact:true}).click();
+  await expect(page.getByTestId('retrieval-assessment').getByText('新采集的大模型综合结论',{exact:true})).toBeVisible();
+  await expect(page.getByText('新采集参考',{exact:true})).toBeVisible();
+  expect(savedBodies).toEqual([{kind:'text',text:'今天开心',analysisMode:'retrieval'}]);
+  await expect(page).toHaveURL(/tab=text/);
+});
+
+test('提交尚未完成时清空文字，迟到的保存响应不能显示旧结论', async ({page}) => {
+  const calls = await setup(page);
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { release = resolve; });
+  let started = false;
+  await page.route('**/api/personal/supplements', async route => {
+    if (route.request().method() === 'POST') {
+      started = true;
+      await waiting;
+      await route.fulfill({json:{code:0,data:{id:41,report:{modality:'text',query:'旧输入',supplementId:41,hits:[],assessment:assessment()}}}});
+    } else await route.fulfill({json:{code:0,data:[]}});
+  });
+  try {
+    await page.goto('/#/personal/screening?tab=text');
+    const input = page.getByLabel('文本采集内容');
+    await input.fill('旧输入');
+    await page.getByRole('button',{name:'保存到我的档案',exact:true}).click();
+    await expect.poll(()=>started).toBe(true);
+    await input.clear();
+    release();
+    await expect(page.getByRole('button',{name:'保存到我的档案',exact:true})).toBeDisabled();
+    await expect(page.getByTestId('retrieval-assessment')).toHaveCount(0);
+    expect(calls.requests.some(r=>r.path==='/api/personal/rag-report')).toBe(false);
+  } finally { release(); }
 });

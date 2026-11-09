@@ -131,6 +131,33 @@ class RetrievalEndpointTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(data['report']['originalInput']['used'], enabled)
             self.assertEqual(data['report']['originalInput']['enabled'], enabled)
 
+    async def test_collection_modes_use_actual_retrieval_snapshot_without_questionnaires(self):
+        for modality in ('text', 'audio', 'image'):
+            with self.subTest(modality=modality):
+                engine = Mock()
+                reference = hit('unit-collection', 'happy', modality=modality)
+                reference.update({'media':'data:image/png;base64,test','media_kind':'speech_pcm16' if modality == 'audio' else 'image','media_meta':{'dataset':'test'}})
+                engine.search_with_info = AsyncMock(return_value=([reference], {}))
+                with patch('app.engines.get_hashing_engine', return_value=engine), \
+                     patch.object(personal, '_index_supplement', AsyncMock()), \
+                     patch.object(personal, '_resolve_upload_path', return_value='/local/actual-file'), \
+                     patch.object(personal.assessment_service, 'owned_context', side_effect=AssertionError('must not read questionnaires')):
+                    data = (await personal.save_personal_supplement(self.ctx({'kind':modality,'text':'开心' if modality == 'text' else '',
+                        'url':'/uploads/test','analysisMode':'retrieval'})))['data']
+                report = data['report']
+                self.assertEqual(report['assessment']['analysisMode'], 'retrieval')
+                self.assertEqual(report['assessment']['level'], 'green')
+                self.assertEqual(report['retrievalSnapshot']['modality'], modality)
+                self.assertEqual(report['hits'][0]['mediaMeta']['dataset'], 'test')
+                kwargs = engine.search_with_info.call_args.kwargs
+                self.assertEqual(kwargs['modality'], modality)
+                self.assertEqual(kwargs['media_path'], None if modality == 'text' else '/local/actual-file')
+                restored = (await personal.personal_retrieval_screening(self.ctx({'supplementId':data['id']})))['data']['assessment']
+                self.assertEqual(restored['queryModality'], modality)
+                stored = json.loads(db.query_one('SELECT analysis FROM screening_supplements WHERE id=?', (data['id'],))['analysis'])
+                self.assertEqual(stored['hits'][0]['media'], reference['media'])
+                self.assertEqual(stored['hits'][0]['mediaKind'], reference['media_kind'])
+
     async def test_rag_media_does_not_claim_to_have_read_original_and_rejects_invalid_switch(self):
         token = rs.seal_snapshot(1, rs.snapshot('', [hit('a', 'happy')], 'image'))
         engine = AsyncMock()

@@ -465,6 +465,7 @@ export interface PersonalSupplement {
  * 与挂记录路径一样，返回哈希检索引擎的检索报告。
  */
 export async function saveUserSupplement(supplement: {
+  analysisMode?: 'retrieval';
   retrievalToken?: string;
   kind: 'text' | 'audio' | 'image';
   text?: string;

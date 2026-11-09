@@ -2,15 +2,12 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   FileText, Mic, ImageIcon, Upload, Sparkles,
-  Square, Play, Pause, Trash2, CheckCircle2, AlertCircle, AlertTriangle, X,
+  Square, Play, Pause, Trash2, CheckCircle2, AlertCircle, X,
   ClipboardList, Search, ArrowRight,
 } from 'lucide-react';
 import {
   uploadFile,
-  getScreeningRecords,
-  saveScreeningSupplement,
   saveUserSupplement,
-  getPersonalSupplements,
   type CollectionAnalysis,
 } from '../services/mockApi';
 import ScreeningWorkspace from './ScreeningWorkspace';
@@ -22,23 +19,13 @@ interface PersistResult {
   report: CollectionAnalysis | null;
 }
 
-/* 采集落库：上传完把这条记录挂到最近一次筛查上（后端接口
-   POST /api/personal/screenings/{id}/supplement）。
-   还没有任何筛查记录时**回退到用户名下**（POST /api/personal/supplements）——
-   否则就是"只上传不挂靠"：内容传上去了，但首页「最近一次输入」与
-   检索页「我的记录」都看不到它。两种挂靠的读取端已合并展示。
-   保存时后端会同步跑一次哈希检索引擎：返回检索报告（等级/结论/命中），
-   达到预警级别时预警已挂载到预警中心（响应里的 report.alertId）。 */
+/* 采集按用户独立保存，使用同次多模态检索生成筛查快照，不绑定量表。 */
 async function persistCollection(
   kind: 'text' | 'audio' | 'image',
   payload: { text?: string; filename?: string; url?: string; description?: string },
 ): Promise<PersistResult> {
   try {
-    const records = await getScreeningRecords();
-    const target = records.find((r) => r.status === 'completed') ?? records[0];
-    const report = target
-      ? await saveScreeningSupplement(target.id, { kind, ...payload })
-      : await saveUserSupplement({ kind, ...payload });
+    const report = await saveUserSupplement({ kind, ...payload, analysisMode: 'retrieval' });
     return { ok: true, report };
   } catch {
     /* 落库失败不阻塞用户 —— 文件已经传上去了，页面照常提示成功 */
@@ -52,144 +39,6 @@ async function persistCollection(
    合并成一页后，采集完顺手就能检索，不用在两个菜单之间来回跳。 */
 type Tab = 'text' | 'audio' | 'image' | 'scale' | 'retrieval';
 type RecordState = 'idle' | 'requesting' | 'recording' | 'stopped';
-
-/* 报告与命中的等级外观：与全站 稳定/关注/警告/高危 同一套口径。
-   edge 是卡片左侧的竖色条（一眼看出风险档位），bar 是相似度进度条的填充色。 */
-const LEVEL_TONE: Record<string, { badge: string; dot: string; text: string; edge: string; bar: string }> = {
-  unknown: { badge: 'border-slate-200 bg-slate-50 text-slate-600', dot: 'bg-slate-400', text: 'text-slate-500', edge: 'border-l-slate-300', bar: 'bg-slate-400' },
-  green: { badge: 'border-success-500/30 bg-success-50 text-success-700', dot: 'bg-success-500', text: 'text-success-600', edge: 'border-l-success-500', bar: 'bg-success-500' },
-  yellow: { badge: 'border-warning-500/30 bg-warning-50 text-warning-700', dot: 'bg-warning-500', text: 'text-warning-600', edge: 'border-l-warning-500', bar: 'bg-warning-500' },
-  orange: { badge: 'border-orange-500/30 bg-orange-50 text-orange-700', dot: 'bg-orange-500', text: 'text-orange-600', edge: 'border-l-orange-500', bar: 'bg-orange-500' },
-  red: { badge: 'border-danger-500/30 bg-danger-50 text-danger-700', dot: 'bg-danger-500', text: 'text-danger-600', edge: 'border-l-danger-500', bar: 'bg-danger-500' },
-};
-const LEVEL_NAME: Record<string, string> = { unknown: '未评估', green: '稳定', yellow: '关注', orange: '警告', red: '高危' };
-const MODALITY_NAME: Record<string, string> = { text: '文本', audio: '语音', image: '图像' };
-const MODALITY_ICON = { text: FileText, audio: Mic, image: ImageIcon } as const;
-
-/* 一次采集的哈希检索报告卡
-   设计要点：
-     · 左侧竖色条 = 风险档位，扫一眼就知道这条重不重要；
-     · 结论是主角（大一号字），依据退成小字；
-     · 命中记录不再是一排数字，改成"模态 → 摘要 → 相似度条 → 标签"的整齐行，
-       相似度用进度条而不是裸小数，方便横向比较；
-     · 达到预警级别时底部给一条醒目的回执，带跳转。 */
-function ReportCard({ report }: { report: CollectionAnalysis }) {
-  const tone = LEVEL_TONE[report.level] ?? LEVEL_TONE.unknown;
-  const Icon = MODALITY_ICON[report.modality] ?? FileText;
-  const topHits = report.hits.slice(0, 5);
-
-  return (
-    <article
-      className={`overflow-hidden rounded-2xl border border-slate-200 border-l-4 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${tone.edge}`}
-    >
-      <div className="p-5">
-        {/* 标题行 */}
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-50">
-              <Icon className="h-4 w-4 text-slate-500" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[14px] font-semibold text-slate-800">筛查评估与检索参考</p>
-              <p className="mt-0.5 text-[11.5px] text-slate-400">
-                {MODALITY_NAME[report.modality] ?? ''}线索
-                {report.createdAt ? ` · ${report.createdAt}` : ''}
-                {topHits.length > 0 ? ` · 命中 ${report.hits.length} 条` : ''}
-              </p>
-            </div>
-          </div>
-
-          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium ${tone.badge}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
-            {report.levelLabel}
-          </span>
-        </div>
-
-        {/* 结论：这份报告的正题 */}
-        <p className="mt-4 text-[14px] leading-7 text-slate-700">{report.conclusion}</p>
-        <p className="mt-1.5 text-[12px] leading-5 text-slate-400">评估依据：{report.reason}</p>
-
-        {/* 命中记录 */}
-        {topHits.length > 0 && (
-          <div className="mt-4 rounded-xl bg-slate-50/80 p-3.5">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-[12px] font-medium text-slate-600">最相似的语料记录</p>
-              <span className="text-[11px] text-slate-400">
-                真实数据集 · 跨模态检索
-                {report.hits.length > topHits.length ? ` · 仅显示前 ${topHits.length} 条` : ''}
-              </span>
-            </div>
-
-            <ul className="mt-2 space-y-1.5">
-              {topHits.map((hit) => {
-                const hTone = LEVEL_TONE[hit.alertLevel] ?? LEVEL_TONE.unknown;
-                const pct = Math.round(hit.similarity * 100);
-                return (
-                  <li
-                    key={hit.id}
-                    className="rounded-lg bg-white px-3 py-2 ring-1 ring-slate-100"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10.5px] text-slate-500">
-                        {hit.modalityLabel ?? MODALITY_NAME[hit.modality ?? ''] ?? '—'}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-slate-600">
-                        {hit.summary}
-                      </span>
-                      <span className={`shrink-0 text-[11px] font-medium ${hTone.text}`}>
-                        {LEVEL_NAME[hit.alertLevel] ?? '未评估'}
-                      </span>
-                    </div>
-                    {/* 相似度：数字 + 细条，方便横向比较 */}
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className={`h-full rounded-full ${hTone.bar}`}
-                          style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
-                        />
-                      </div>
-                      <span className="shrink-0 text-[10.5px] tabular-nums text-slate-400">
-                        {pct}%
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-
-        {/* 预警回执 */}
-        {report.alertId && (
-          <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-danger-500/30 bg-danger-50 px-3.5 py-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" />
-            <div className="min-w-0">
-              <p className="text-[12.5px] font-medium text-danger-700">本次分析达到预警级别</p>
-              <p className="mt-0.5 text-[11.5px] leading-5 text-danger-700/80">
-                已生成预警 {report.alertId}，并同步到预警中心。
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* 底部操作 */}
-        {report.supplementId && (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3.5">
-            <p className="text-[11px] text-slate-400">
-              报告已随这条记录挂到你的档案
-            </p>
-            <Link
-              to={`/personal/screening?tab=retrieval&assessmentSupplementId=${report.supplementId}${report.query ? `&q=${encodeURIComponent(report.query)}` : ''}`}
-              className="inline-flex items-center gap-1 text-[12.5px] font-medium text-primary-600 hover:text-primary-700"
-            >
-              查看采用依据并继续本次筛查
-            </Link>
-          </div>
-        )}
-      </div>
-    </article>
-  );
-}
 
 interface AudioEntry {
   id: string;
@@ -220,8 +69,24 @@ function formatBytes(bytes: number) {
   return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
 
+interface CollectionInputProps {
+  onReport: (report: CollectionAnalysis) => void;
+  onInputChange: () => void;
+}
+
+function useCollectionRevision(onInputChange: () => void) {
+  const revision = useRef(0);
+  useEffect(() => () => { revision.current++; }, []);
+  const invalidate = useCallback(() => {
+    revision.current++;
+    onInputChange();
+  }, [onInputChange]);
+  return { revision, invalidate };
+}
+
 // ─── Audio Tab ────────────────────────────────────────────────────────────────
-function AudioTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
+function AudioTab({ onReport, onInputChange }: CollectionInputProps) {
+  const { revision, invalidate } = useCollectionRevision(onInputChange);
   const [recordState, setRecordState] = useState<RecordState>('idle');
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
@@ -245,6 +110,8 @@ function AudioTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
   }, []);
 
   const startRecording = async () => {
+    invalidate();
+    setSubmitted(false);
     setError('');
     setRecordState('requesting');
     try {
@@ -291,7 +158,9 @@ function AudioTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
   };
 
   const handleUpload = (files: FileList | null) => {
-    if (!files) return;
+    if (!files?.length) return;
+    invalidate();
+    setSubmitted(false);
     Array.from(files).forEach((file) => {
       const url = URL.createObjectURL(file);
       setAudioList((prev) => [
@@ -320,6 +189,8 @@ function AudioTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
   };
 
   const removeAudio = (id: string) => {
+    invalidate();
+    setSubmitted(false);
     audioRefs.current[id]?.pause();
     delete audioRefs.current[id];
     if (playingId === id) setPlayingId(null);
@@ -423,13 +294,17 @@ function AudioTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
         {audioList.length > 0 && !submitted && (
           <button
             onClick={async () => {
+              const sequence = revision.current;
               setUploadError('');
               const failed: string[] = [];
               for (const entry of audioList) {
                 if (!entry.file) continue;
                 try {
                   const up = await uploadFile(entry.file);
+                  if (sequence !== revision.current) return;
                   const res = await persistCollection('audio', { filename: up.filename, url: up.url, description: up.analysis });
+                  if (sequence !== revision.current) return;
+                  if (!res.ok) throw new Error('本次采集保存失败，请重试');
                   if (res.report) onReport(res.report);
                 } catch (e) {
                   console.error('上传音频失败', e);
@@ -438,6 +313,7 @@ function AudioTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
               }
               // 只有真正全部成功才报成功。之前无论成败都显示"哈希编码完成"，
               // 而后端 /api/upload 目前固定返回 503，属于误报。
+              if (sequence !== revision.current) return;
               if (failed.length) {
                 setUploadError(`${failed.length} 个文件未能上传：${failed.join('、')}`);
               } else {
@@ -472,7 +348,8 @@ function AudioTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
 }
 
 // ─── Image Tab ────────────────────────────────────────────────────────────────
-function ImageTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
+function ImageTab({ onReport, onInputChange }: CollectionInputProps) {
+  const { revision, invalidate } = useCollectionRevision(onInputChange);
   const [images, setImages] = useState<ImageEntry[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -480,7 +357,9 @@ function ImageTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const addFiles = useCallback((files: FileList | null) => {
-    if (!files) return;
+    if (!files?.length) return;
+    invalidate();
+    setSubmitted(false);
     Array.from(files).forEach((file) => {
       if (!file.type.startsWith('image/')) return;
       const url = URL.createObjectURL(file);
@@ -490,9 +369,13 @@ function ImageTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
       ]);
     });
     setSubmitted(false);
-  }, []);
+  }, [invalidate]);
 
-  const remove = (id: string) => setImages((prev) => prev.filter((img) => img.id !== id));
+  const remove = (id: string) => {
+    invalidate();
+    setSubmitted(false);
+    setImages((prev) => prev.filter((img) => img.id !== id));
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -557,13 +440,17 @@ function ImageTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
         {images.length > 0 && !submitted && (
           <button
             onClick={async () => {
+              const sequence = revision.current;
               setUploadError('');
               const failed: string[] = [];
               for (const img of images) {
                 if (!img.file) continue;
                 try {
                   const up = await uploadFile(img.file);
+                  if (sequence !== revision.current) return;
                   const res = await persistCollection('image', { filename: up.filename, url: up.url, description: up.analysis });
+                  if (sequence !== revision.current) return;
+                  if (!res.ok) throw new Error('本次采集保存失败，请重试');
                   if (res.report) onReport(res.report);
                 } catch (e) {
                   console.error('上传图像失败', e);
@@ -571,6 +458,7 @@ function ImageTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
                 }
               }
               // 同上：只有真正全部成功才报成功，避免"哈希编码完成"的误报
+              if (sequence !== revision.current) return;
               if (failed.length) {
                 setUploadError(`${failed.length} 张图像未能上传：${failed.join('、')}`);
               } else {
@@ -605,7 +493,8 @@ function ImageTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
 }
 
 // ─── Text Tab ─────────────────────────────────────────────────────────────────
-function TextTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
+function TextTab({ onReport, onInputChange }: CollectionInputProps) {
+  const { revision, invalidate } = useCollectionRevision(onInputChange);
   const [freeText, setFreeText] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -624,10 +513,13 @@ function TextTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
       setError('请先写下此刻的感受，再保存');
       return;
     }
+    const sequence = revision.current;
+    onInputChange();
     setSaving(true);
     setError('');
     try {
       const res = await persistCollection('text', { text: content });
+      if (sequence !== revision.current) return;
       if (res.ok) {
         setSaved(true);
         setSavedSupplementId(res.report?.supplementId ?? null);
@@ -656,6 +548,8 @@ function TextTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
         aria-label="文本采集内容"
         value={freeText}
         onChange={(e) => {
+          invalidate();
+          setSavedSupplementId(null);
           setFreeText(e.target.value);
           setSaved(false);
           setError('');
@@ -704,6 +598,23 @@ function TextTab({ onReport }: { onReport: (r: CollectionAnalysis) => void }) {
   );
 }
 
+// 结果只属于当前表单会话；切换标签卸载后不恢复历史结果。
+function CollectionSession({ kind }: { kind: 'text' | 'audio' | 'image' }) {
+  const [report, setReport] = useState<CollectionAnalysis | null>(null);
+  const clearReport = useCallback(() => setReport(null), []);
+  const receiveReport = useCallback((value: CollectionAnalysis) => {
+    if (value.modality === kind) setReport(value);
+  }, [kind]);
+  const Input = kind === 'text' ? TextTab : kind === 'audio' ? AudioTab : ImageTab;
+  return <div className="space-y-6">
+    <Input onReport={receiveReport} onInputChange={clearReport} />
+    {report && <section aria-label="本次采集分析结果" className="space-y-3">
+      <p className="text-sm font-medium text-primary-600">本次采集分析结果</p>
+      <Retrieval key={report.supplementId} collectionReport={report} />
+    </section>}
+  </div>;
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function DataCollection() {
   const [params, setParams] = useSearchParams();
@@ -730,29 +641,6 @@ export default function DataCollection() {
     next.delete('paper');
     setParams(next, { replace: true });
   };
-
-  /* 检索报告（新提交的在前）。进入页面时先载入挂载历史里带分析的记录，
-     本次会话新提交的实时插到最前 —— 刷新/换设备都还能看到结论。 */
-  const [reports, setReports] = useState<CollectionAnalysis[]>([]);
-  const pushReport = useCallback((report: CollectionAnalysis) => {
-    setReports((prev) => [report, ...prev].slice(0, 5));
-  }, []);
-  useEffect(() => {
-    let alive = true;
-    getPersonalSupplements()
-      .then((list) => {
-        if (!alive) return;
-        const history = list
-          .filter((s) => s.analysis)
-          .map((s) => s.analysis as CollectionAnalysis)
-          .slice(0, 5);
-        if (history.length) setReports((prev) => (prev.length ? prev : history));
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const tabs: { id: Tab; label: string; icon: typeof FileText }[] = [
     { id: 'text', label: '文本采集', icon: FileText },
@@ -801,60 +689,13 @@ export default function DataCollection() {
         })}
       </div>
 
-      {activeTab === 'text' && <TextTab onReport={pushReport} />}
-      {activeTab === 'audio' && <AudioTab onReport={pushReport} />}
-      {activeTab === 'image' && <ImageTab onReport={pushReport} />}
+      {(activeTab === 'text' || activeTab === 'audio' || activeTab === 'image') && <CollectionSession key={activeTab} kind={activeTab} />}
       {activeTab === 'scale' && <ScreeningWorkspace />}
       {/* 检索分析：与采集同页。Retrieval 的根元素是 space-y-6 的普通容器，
           直接嵌进来即可，不需要为它另做一套页面外壳。 */}
       {activeTab === 'retrieval' && <Retrieval />}
 
-      {/* ============ 检索报告（本页底部）============
-          提交后由后端哈希检索引擎同步分析；报告连同结论一起挂载在补充记录上，
-          这里展示最新的几份（含进入页面前的历史结论）。
-          量表页不显示：那一页自己就有作答记录与检索快照，底部再挂一段
-          采集报告会把"填量表"这件事冲散。
-          检索分析页也不显示：那一页本身就是检索，再挂一遍历史报告是重复信息。 */}
-      {(activeTab === 'text' || activeTab === 'audio' || activeTab === 'image') && (
-        <div className="pt-2">
-          <div className="ml-2 flex flex-wrap items-baseline justify-between gap-2">
-            <div>
-              <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-primary-500">
-                检索报告
-              </p>
-              <p className="mt-1 text-[12px] text-slate-400">
-                {reports.length > 0
-                  ? `最近 ${reports.length} 次提交的分析 · 新的在前`
-                  : '提交后会在这里生成'}
-              </p>
-            </div>
-            {reports.length > 0 && (
-              <span className="text-[11px] text-slate-400">
-                按系统等级从高到低比对
-              </span>
-            )}
-          </div>
 
-          {reports.length > 0 ? (
-            <div className="mt-3 space-y-4">
-              {reports.map((report, idx) => (
-                <ReportCard key={`${report.createdAt ?? ''}-${idx}`} report={report} />
-              ))}
-            </div>
-          ) : (
-            <div className="ui-card mt-3 p-8 text-center">
-              <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-primary-50">
-                <Sparkles className="h-5 w-5 text-primary-500" />
-              </span>
-              <p className="mt-3 text-sm text-slate-500">还没有检索报告</p>
-              <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-6 text-slate-400">
-                提交一段文字、语音或图像之后，后端会同步跑一次跨模态检索，
-                把相似语料、风险等级与处置建议生成报告挂到你的档案里 —— 结果会出现在这里。
-              </p>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

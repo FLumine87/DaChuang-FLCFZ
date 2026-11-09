@@ -95,7 +95,7 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export default function Retrieval() {
+export default function Retrieval({ collectionReport }: { collectionReport?: CollectionAnalysis } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<'all' | 'text' | 'audio' | 'image'>('all');
@@ -117,6 +117,7 @@ export default function Retrieval() {
   const [mine, setMine] = useState<typeof corpusRecords>([]);
   const savedReportsRef = useRef<Map<number, CollectionAnalysis>>(new Map());
   useEffect(() => {
+    if (collectionReport) return;
     let alive = true;
     getPersonalSupplements().then((sups) => {
       if (!alive) return;
@@ -131,7 +132,7 @@ export default function Retrieval() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [collectionReport]);
   const [report, setReport] = useState<RagReport | null>(null);
   const [includeOriginalInput, setIncludeOriginalInput] = useState(() => localStorage.getItem('psych_retrieval_include_original') !== 'false');
   const includeOriginalInputRef = useRef(includeOriginalInput);
@@ -379,12 +380,13 @@ export default function Retrieval() {
     }
   };
 
-  const openSavedAssessment = async (row: (typeof corpusRecords)[number]) => {
+  const openSavedAssessment = async (row: (typeof corpusRecords)[number], reportOverride?: CollectionAnalysis) => {
     if (!row.supplementId) { setQuery(row.text); return; }
     const sequence = ++searchSeqRef.current;
     ++reportSeqRef.current;
-    const saved = savedReportsRef.current.get(row.supplementId);
+    const saved = reportOverride ?? savedReportsRef.current.get(row.supplementId);
     const previousHits: RetrievalResult[] = (saved?.hits ?? []).map((hit) => ({
+      ...hit, explain: typeof hit.explain === 'object' ? hit.explain : undefined,
       id: hit.id, similarity: hit.similarity, modality: ['text', 'audio', 'image'].includes(hit.modality ?? '') ? hit.modality as 'text' | 'audio' | 'image' : 'text',
       summary: hit.summary || '', tags: hit.tags ?? [], date: hit.date || '',
       alertLevel: ['green', 'yellow', 'orange', 'red'].includes(hit.alertLevel) ? hit.alertLevel as 'green' | 'yellow' | 'orange' | 'red' : 'unknown',
@@ -393,7 +395,8 @@ export default function Retrieval() {
     setAssessmentLoading(true); setAssessmentError(null); setError(null);
     assessmentQueryRef.current = row.text;
     savedContextRef.current = { id: row.supplementId, query: row.text };
-    assessmentInputRef.current = { query: row.text, modality: row.text ? 'text' : row.audio ? 'audio' : 'image', file: null };
+    assessmentInputRef.current = { query: row.text, modality: saved?.modality ?? (row.text ? 'text' : row.audio ? 'audio' : 'image'), file: null };
+    setIndexInfo((saved?.index ?? null) as RetrievalIndexInfo | null);
     try {
       const current = await assessRetrieval({ query: row.text, supplementId: row.supplementId });
       if (sequence !== searchSeqRef.current) return;
@@ -560,6 +563,14 @@ export default function Retrieval() {
   const autoContext = `${autoQuery}|${searchParams.get('assessmentSupplementId') || ''}|${searchParams.get('screeningId') || ''}`;
   const autoRanRef = useRef<string | null>(null);
   useEffect(() => {
+    if (collectionReport?.supplementId) {
+      const context = `collection-${collectionReport.supplementId}`;
+      if (autoRanRef.current === context) return;
+      autoRanRef.current = context;
+      void openSavedAssessment({ id: `SUP-${collectionReport.supplementId}`, date: '', themes: [], level: 'unknown', severity: 0,
+        context: '本次采集', text: collectionReport.query ?? '', audio: '', image: '', supplementId: collectionReport.supplementId }, collectionReport);
+      return;
+    }
     const savedId = Number(searchParams.get('assessmentSupplementId'));
     if ((!autoQuery.trim() && !savedId) || autoRanRef.current === autoContext) return;
     autoRanRef.current = autoContext;
@@ -572,11 +583,15 @@ export default function Retrieval() {
     setQuery(autoQuery);
     void handleSearch(undefined, autoQuery, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoContext]);
+  }, [autoContext, collectionReport]);
 
   return (
     <div className="space-y-6">
-      <div className="ui-card p-5">
+      {collectionReport && <div className="ui-card p-4">
+        <label className="inline-flex cursor-pointer items-center gap-2.5"><input type="checkbox" aria-label="结合本次原始输入分析" checked={includeOriginalInput} onChange={(event) => changeOriginalInput(event.target.checked)} className="h-4 w-4" /><span className="text-sm font-medium text-slate-700">结合本次原始输入分析</span></label>
+        <p className="mt-1 text-xs leading-5 text-slate-500">默认结合原始文字与本次检索证据；关闭后只依据检索结果。当前大模型不直接解读原始图片或语音。</p>
+      </div>}
+      {!collectionReport && <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
           <Hash className="w-5 h-5 text-primary-600" />
           动态跨模态哈希检索
@@ -880,6 +895,7 @@ export default function Retrieval() {
         )}
       </div>
 
+      }
       {loading && (
         <div className="ui-card p-12 flex flex-col items-center gap-4 text-slate-400">
           <Loader2 className="w-10 h-10 animate-spin text-primary-500" />
@@ -954,7 +970,7 @@ export default function Retrieval() {
                   </p>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-2.5">
+              {!collectionReport && <div className="flex shrink-0 items-center gap-2.5">
                 {/* 分析已自动并入上方结论卡，这里保留返回入口。 */}
                 <button
                   type="button"
@@ -970,7 +986,7 @@ export default function Retrieval() {
                 >
                   <ArrowLeft className="w-4 h-4" /> 返回历史记录
                 </button>
-              </div>
+              </div>}
             </div>
             {/* 命中主题分布柱状图：让使用者一眼看出"这批相似参考集中在哪些困扰主题上"，
                 而不是逐条去读。数据直接来自检索结果的 tags 字段（不需要额外接口）。
