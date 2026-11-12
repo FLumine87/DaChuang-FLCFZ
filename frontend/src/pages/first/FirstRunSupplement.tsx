@@ -136,7 +136,7 @@ export default function FirstRunSupplement() {
       }
       steps={firstRunSteps(3)}
     >
-      <div className="mx-auto w-full max-w-[560px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)] sm:p-7">
+      <div className="mx-auto w-full max-w-[560px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7">
         <span className="inline-flex items-center gap-2 rounded-full bg-success-50 px-3 py-1.5 text-[13px] font-medium text-success-600">
           <Check className="h-3.5 w-3.5" />
           量表已完成

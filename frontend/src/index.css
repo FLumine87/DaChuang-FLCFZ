@@ -529,7 +529,8 @@ html.theme-switching *::after {
     flex-direction: column;
     min-height: 0;
   }
-  /* 知识图谱页：整页撑满「视口 − 顶栏 − main 的 32px 上下内边距」，
+
+    /* 知识图谱页：整页撑满「视口 − 顶栏 − main 的 32px 上下内边距」，
      让「标题卡 + 星图 + 图例」正好落在**一屏之内**。
      改造前实测（1440×900）：内容 841px 对可用 772px，要多滚 69px 才看全星图，
      而星图本身还是按 900:560 等比撑宽到 674px 高。
@@ -553,7 +554,8 @@ html.theme-switching *::after {
     flex-direction: column;
     min-height: 0;
   }
-  .app-content > .page-body > div > .flex.gap-3 {
+
+.app-content > .page-body > div > .flex.gap-3 {
     flex-wrap: wrap;
   }
   .app-content .recharts-text {
@@ -883,7 +885,13 @@ h1.text-3xl {
 @media (min-width: 640px) {
   .dash-hero-title { font-size: 2.75rem; } /* 44px */
 }
+/* 1024–1439：内容区被 290px 侧栏吃掉后只剩 ~670–1090px，
+   54px 的 11 字标题要 ~600px，会和右侧「今日行动计划」叠在一起。
+   这一档先给 44px；1440 以上空间够了再放到 54px。 */
 @media (min-width: 1024px) {
+  .dash-hero-title { font-size: 2.75rem; } /* 44px */
+}
+@media (min-width: 1440px) {
   .dash-hero-title { font-size: 3.375rem; } /* 54px */
 }
 h2,
@@ -922,14 +930,15 @@ h3.text-2xl {
 .auth-snap {
   scroll-padding-top: 4rem;
 }
-@media (hover: none) {
-  .auth-snap {
-    scroll-snap-type: y proximity;
-  }
-}
-.auth-snap .auth-screen {
-  scroll-snap-align: start;
-}
+/* 触屏**不再做原生吸附**。
+   这里原来写的是 @media (hover: none) { scroll-snap-type: y proximity } ——
+   触屏上每滑一下都会被"吸"到最近的 .auth-screen 边界，手感就是"拖动一下就回弹"。
+   桌面端本来就靠 JS 做落屏缓动（上面那段注释写了"关掉原生吸附、避免两边抢滚动"），
+   触屏则完全没有接管滚动，纯靠原生吸附 —— 于是只有手机上会弹。
+   用户对比了另一个系统（纯普通滚动）后明确要求：
+   "不要学搞那种拖动一下就回弹的机制了"。
+   去掉之后触屏就是普通滚动，与那个参考系统一致。
+   scroll-snap-align 一并删掉：没有吸附容器时它本来也不起作用。 */
 
 /* 视口较矮（常见笔记本）时收紧章节上下留白，尽量保证一屏装得下。
    2rem 而非 3rem：文案加了要点列表后，"核心技术"屏在 1280×800 下差 8px 装不下，
@@ -1387,6 +1396,46 @@ html.reveal-ready .auth-screen.is-inview [data-reveal] img {
    正解是**命名 + 显式取消两端的动画**：老快照直接隐藏、新快照直接显示，
    于是顶栏在转场中是一块稳定的、瞬间切换的导航条 —— 既没有 ghost，
    也没有反复淡入。 */
+/* ==========================================================================
+   安全区（状态栏 / 刘海 / 底部手势条）
+   --------------------------------------------------------------------------
+   问题：APK 里 WebView 默认铺满整屏（含状态栏区域），而项目里此前**一处
+   env(safe-area-inset-*) 都没用过** —— 于是顶栏的「品牌 / 登录 / 主题」被手机的
+   时间、信号、电量盖住（用户真机截图确认）。
+   逐机型适配不现实，正确做法是让系统把"该让开多少"报给 CSS：
+     · frontend/index.html 的 viewport 必须带 viewport-fit=cover，
+       否则 env(safe-area-inset-*) 恒为 0、这条规则等于没写；
+     · 5 个页面的顶栏都带 .nav-blur，一条规则全覆盖；
+     · 只有真机（带刘海/状态栏覆盖）才会给出非零值，桌面浏览器一律 0，
+       不会平白多出留白。
+   ========================================================================== */
+.nav-blur {
+  /* 只下移，**不要动 height**。
+     上一版我在外层加了 height: calc(4rem + 安全区)，把顶栏压出了"胶囊和正文叠在一起"
+     的破版（用户真机截图）。原因是搞错了层级：
+         <header class="nav-blur">        ← 外层，装的是**两行**
+             <div class="… h-16 …">       ← 品牌栏 64px（h-16 在这一层）
+             <div class="nav-chips …">    ← 手机端胶囊栏，约 40px
+         </header>
+     外层自然高度约 104px。写死 64px 等于把两行压成一行高，第二行的胶囊只能溢出，
+     压到下面正文上。这里只保留 padding-top（安全区为 0 时完全不影响布局），
+     高度交回给内容自然撑开。 */
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* 右下角浮动按钮（返回顶部）：避开底部手势条 / Home 指示条 */
+.fixed.bottom-6.right-6 {
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  right: calc(1.5rem + env(safe-area-inset-right, 0px));
+}
+
+/* 整屏分屏（登录页 / 落地页 / 首次引导，共 5 处 min-h-screen 的页面里都用了
+   .auth-screen）：在竖屏手机上把底部安全区算进去，
+   否则最后一行内容会压在手势条底下。 */
+.auth-screen {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 .nav-blur {
   view-transition-name: app-nav;
 }
@@ -1448,7 +1497,7 @@ html:not(.app-booted) .page-enter {
       1) 只动 transform（合成层，不触发重排/重绘），三个光斑 42~60s 缓慢漂移；
       2) 低不透明度叠在浅底上，颜色全部取自项目品牌色（蓝 / 青 / 淡紫），
          避免出现"彩色塑料感"。
-   登录屏刻意不放这一层（登录页保持干净），只有内容屏使用。
+   登录页与主页共用这一层，配色与动态效果保持一致。
    ========================================================================== */
 .aurora {
   position: absolute;
@@ -1531,6 +1580,162 @@ html:not(.app-booted) .page-enter {
     animation: none;
   }
 }
+
+/* --------------------------------------------------------------------------
+   公共入口背景的三个变体
+   —— 主页首屏、登录、首次筛查共用同一套蓝白 / 蓝紫语言，只调整"装饰的量"：
+      rich    内容屏 / 工作台：三团光 + 三片玻璃（原样）
+      calm    登录、首次选择：一片大曲面 + 两团淡光，去掉青色光团
+      minimal 主页首屏：人物插画已经承担弧面，背景只留一层淡雾
+      still   正式答题：形状与颜色不变，只停漂移，阅读区保持稳定
+   —— 视觉方向统一为"左白右蓝紫"，与首屏人物插画的弧面方向一致。
+   -------------------------------------------------------------------------- */
+.aurora--calm .glass-1,
+.aurora--calm .glass-3,
+.aurora--minimal .glass {
+  display: none;
+}
+
+.aurora--calm span:nth-child(2),
+.aurora--minimal span:nth-child(2) {
+  display: none;
+}
+
+/* calm：左上一团淡蓝、右下一团淡紫；右上一片大曲面承接登录卡 */
+.aurora--calm span:nth-child(1) {
+  width: 56vw;
+  height: 56vw;
+  left: -20vw;
+  top: -24vw;
+  opacity: 0.55;
+}
+
+.aurora--calm span:nth-child(3) {
+  width: 48vw;
+  height: 48vw;
+  right: -16vw;
+  bottom: -22vw;
+  left: auto;
+  opacity: 0.5;
+}
+
+.aurora--calm .glass-2 {
+  width: 64vw;
+  height: 54vw;
+  right: -16vw;
+  top: -14vw;
+  border-radius: 46% 54% 58% 42% / 52% 48% 52% 48%;
+  background: linear-gradient(
+    140deg,
+    rgba(255, 255, 255, 0.48) 0%,
+    rgba(176, 205, 255, 0.26) 52%,
+    rgba(160, 170, 255, 0.14) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow:
+    inset 0 -30px 70px -30px rgba(110, 150, 255, 0.18),
+    0 30px 90px -60px rgba(70, 95, 255, 0.35);
+  opacity: 0.9;
+  transform: rotate(0deg);
+  animation-duration: 70s;
+}
+
+/* minimal：首屏只保留很淡的蓝雾，把装饰让给人物插画 */
+.aurora--minimal span:nth-child(1) {
+  width: 62vw;
+  height: 62vw;
+  left: -24vw;
+  top: -30vw;
+  opacity: 0.4;
+}
+
+.aurora--minimal span:nth-child(3) {
+  width: 42vw;
+  height: 42vw;
+  right: -14vw;
+  bottom: -24vw;
+  left: auto;
+  opacity: 0.32;
+}
+
+.aurora--calm::after,
+.aurora--minimal::after {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(247, 250, 255, 0.72) 30%,
+    rgba(228, 240, 255, 0.42) 62%,
+    rgba(208, 222, 255, 0.28) 100%
+  );
+}
+
+/* 深色：保持同一构图，明暗层次重新安排；不出现白雾 */
+.dark .aurora--calm span:nth-child(1),
+.dark .aurora--calm span:nth-child(3),
+.dark .aurora--minimal span:nth-child(1),
+.dark .aurora--minimal span:nth-child(3) {
+  opacity: 0.26;
+}
+
+.dark .aurora--calm .glass-2 {
+  background: linear-gradient(
+    140deg,
+    rgba(104, 134, 240, 0.16) 0%,
+    rgba(70, 92, 186, 0.1) 52%,
+    rgba(44, 56, 116, 0.06) 100%
+  );
+  border-color: rgba(146, 178, 255, 0.12);
+  box-shadow:
+    inset 0 -30px 70px -30px rgba(18, 32, 74, 0.5),
+    0 30px 90px -60px rgba(4, 10, 28, 0.8);
+  opacity: 0.55;
+}
+
+.dark .aurora--calm::after,
+.dark .aurora--minimal::after {
+  background: linear-gradient(
+    100deg,
+    rgba(8, 13, 26, 0.96) 0%,
+    rgba(12, 19, 36, 0.86) 34%,
+    rgba(20, 31, 58, 0.58) 68%,
+    rgba(30, 42, 82, 0.34) 100%
+  );
+}
+
+/* 深色下左栏文字落在整片暗底上，空白会显得比浅色更"空"。
+   这里在左侧补一层非常淡的蓝紫柔光：不改变"右下大曲面"的构图，
+   也不跨到正文上形成第二块形状，只把文字背后的明度垫起来。
+   浅色模式不需要（白色与蓝白渐变本身已经有层次）。 */
+.dark .aurora--calm::before {
+  content: "";
+  position: absolute;
+  left: 3%;
+  top: 26%;
+  width: 46vw;
+  height: 42vw;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(70, 95, 255, 0.26) 0%,
+    rgba(70, 95, 255, 0.11) 44%,
+    transparent 72%
+  );
+  filter: blur(12px);
+  pointer-events: none;
+}
+
+/* 正式答题：形状保留、动画全停（只停漂移，不改变深浅色下的样子） */
+.aurora--still,
+.aurora--still span,
+.aurora--still .glass {
+  animation: none !important;
+}
+
+.aurora--still span,
+.aurora--still .glass {
+  will-change: auto !important;
+}
+
 
 /* 顶栏：不再有自己的底色。
    之前给顶栏一块淡紫蓝（--color-header），与页面底色（--color-page）不是同一个色，
@@ -1952,11 +2157,33 @@ html:not(.app-booted) .page-enter {
    「有不如死掉或用某种方式 / 伤害自己的念头」就是这么被折断的。
    自然折行会先把第一行填满再换行，读起来才是一个完整的短语。
    写在未分层区域，确保压得过任何 text-* 工具类。 */
+/* 02–04 的左侧主标题。
+   必须用类选择器显式给字号：全局 h1 { font-size: 1.625rem } 在无层级区域，
+   会压过 Tailwind 的 text-[52px]（和题干 h3 是同一类问题）。
+   52px 与入口页的 60px 拉开一档，但明显高于原来的 26px。 */
+.first-run-title {
+  font-size: 2.375rem; /* 38px */
+  line-height: 1.25;
+}
+
+@media (min-width: 640px) {
+  .first-run-title {
+    font-size: 2.75rem; /* 44px */
+  }
+}
+
+@media (min-width: 1024px) {
+  .first-run-title {
+    font-size: 3.25rem; /* 52px */
+  }
+}
+
 .first-run-question {
   text-wrap: normal;
   overflow-wrap: break-word;
   word-break: normal;
   hyphens: none;
+  /* 题干字号沿用原来的视觉（全局 h3 的 17px）。 */
 }
 
 /* 换题时的题目淡入：只动 opacity/transform，避免整卡重排 */
@@ -2121,6 +2348,126 @@ html:not(.app-booted) .page-enter {
 @media (prefers-reduced-motion: reduce) {
   .hero-stagger > * { animation: none; }
 }
+
+/* ==========================================================================
+   下拉提醒（ScrollHint）—— 仅手机端
+   --------------------------------------------------------------------------
+   手机屏幕短，登录页 / 首次引导 / 量表填写这类页面一屏装不下，
+   而用户看不出"下面还有内容"，容易以为页面就这些。
+   这个胶囊在底部提示，滚到底自动消失。
+   ========================================================================== */
+.scroll-hint-pill {
+  /* 轻微的上下浮动：1.6s 一次、幅度 3px —— 是"提示"不是"闪烁" */
+  animation: scroll-hint-bob 1.6s ease-in-out infinite;
+}
+
+@keyframes scroll-hint-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(3px); }
+}
+
+/* 箭头稍微快半拍，和胶囊错开，看起来像"往下带一下" */
+.scroll-hint-arrow {
+  animation: scroll-hint-arrow 1.6s ease-in-out infinite;
+}
+
+@keyframes scroll-hint-arrow {
+  0%, 100% { transform: translateY(-1px); opacity: 0.75; }
+  50%      { transform: translateY(1px);  opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-hint-pill,
+  .scroll-hint-arrow {
+    animation: none !important;
+  }
+}
+
+/* ============================================================================
+   主页首屏在「矮屏」上的收紧（2026-11-07）
+   背景：13–16 寸笔记本加上浏览器工具栏后，可视高度常常只有 700–820px；
+   首屏原本按 900+ 设计，矮屏时「立即体验」下面的两个立项标签会被推到
+   首屏之外，看起来像"页面没做完/被切掉"。这里只收紧首屏 (#top)，
+   其它章节的节奏不动：标题小一档、正文行高与字号收一档、纵向留白压一压，
+   目标是 700px 高度内也能完整看到 CTA 与标签。
+   ========================================================================== */
+@media (max-height: 820px) {
+  #top {
+    padding-top: 1.25rem;
+    padding-bottom: 1.5rem;
+  }
+  #top .auth-section-title {
+    font-size: 2.5rem; /* 40px，原 52px */
+    line-height: 1.15;
+    margin-top: 1rem;
+  }
+  #top .hero-body {
+    margin-top: 1.25rem;
+    font-size: 1rem;
+    line-height: 1.75;
+  }
+  #top .hero-badges {
+    margin-top: 0.85rem;
+  }
+}
+
+/* 更矮（约 700px，13 寸全屏 + 工具栏）：再收一档字号 */
+@media (max-height: 740px) {
+  #top .auth-section-title {
+    font-size: 2.15rem;
+    line-height: 1.15;
+  }
+  #top .hero-body {
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+  #top .hero-badges {
+    margin-top: 0.65rem;
+  }
+}
+
+/* ============================================================================
+   管理端案例详情抽屉 / 筛查小结弹窗的进出场（2026-11-07）
+   抽屉从右侧滑入、遮罩淡入；关闭时反向滑出（组件在 200ms 后卸载）。
+   时长与曲线沿用项目里其它动效（220–280ms、cubic-bezier(.22,1,.36,1)）。
+   ========================================================================== */
+@keyframes case-drawer-in {
+  from { transform: translateX(100%); opacity: 0.85; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes case-drawer-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0.85; }
+}
+@keyframes case-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes case-scrim-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes case-modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.case-drawer-in { animation: case-drawer-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.case-drawer-out { animation: case-drawer-out 200ms cubic-bezier(0.4, 0, 1, 1) both; }
+.case-scrim-in { animation: case-scrim-in 240ms ease-out both; }
+.case-scrim-out { animation: case-scrim-out 200ms ease-in both; }
+.case-modal-in { animation: case-modal-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .case-drawer-in,
+  .case-drawer-out,
+  .case-scrim-in,
+  .case-scrim-out,
+  .case-modal-in {
+    animation: none !important;
+  }
+}
+
 
 /* ==========================================================================
    AI 陪伴对话页的机器人（AiCompanionBot.tsx）
@@ -2324,3 +2671,4 @@ html:not(.app-booted) .page-enter {
      "同类发光"这个功能语义不能因为关了动画就消失。 */
   .kg-halo-pulse { opacity: 0.75; }
 }
+

@@ -1,3 +1,70 @@
+# 心理筛查预警系统 · 前端改版（FLCFZ-frontend）
+
+> 本仓库是大创项目「基于动态跨模态哈希检索和 RAG 的心理筛查预警系统」的**前端改版部分**，
+> 由龚家轩（`gongjiaxuan885`）在 2026-10-09 ~ 10-11 完成：重做信息架构、统一设计语言、
+> 补齐双角色（学生端 / 管理端）共 13 个页面，并交付一套 16 页高保真静态原型。
+
+## 🖥 在线预览（无需安装，点开即看）
+
+**https://soaringdragont.github.io/FLCFZ-frontend/**
+
+单文件成果展示页：成果概览 + 10 张界面截图 + 可交互原型（内嵌，可直接点按操作）。
+默认浅色主题，右上角可切换深色。
+
+## 本轮前端改版内容
+
+- **13 个页面**：学生端 6 页 + 管理端 7 页，对齐真实路由
+- **19/19 项交互检查通过**，0 控制台报错 / 0 未捕获异常 / 0 失败请求
+- **3 种分辨率适配**（含 390px 移动端）
+- **默认浅色主题** + 侧边栏折叠、深浅色切换
+- **16 页高保真静态原型**（`prototype/`），含单文件版（双击即看，离线可用）
+- 46 个前端相关提交，最新在 `feature/frontend-redesign` 分支（`6d8b592`）
+
+## 本机运行
+
+### 连真实后端（完整功能，推荐）
+
+macOS 双击根目录的 **「启动本地环境-连后端.command」** 即可：脚本会依次确保主后端
+`:8000`、侧车后端 `:8001`、前端 `:5173` 就绪，然后打开浏览器。前端以
+`--mode backend` 启动（`VITE_STRICT_BACKEND=1`）：**所有数据走真实后端，接口失败会
+直接报错，不会静默回退演示数据**。
+
+手动启动等价于：
+
+```bash
+# 1. 主后端（登录 / 筛查 / 检索 / 预警 / 案例 / 管理端）
+cd backend && ./venv/bin/python -m app.main
+
+# 2. 侧车后端（AI 对话 / 知识图谱 / 推理 / 推送）
+cd personal-backend && ./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001
+
+# 3. 前端（连后端模式）
+cd frontend
+npm install
+npm run dev -- --mode backend    # http://127.0.0.1:5173/
+```
+
+账号：普通用户 `xiaoyu / 123456`；管理端 `adminer / admin` 或 `admin / admin123`。
+知识图谱需要 Neo4j（未启动时显示本机记录）；AI 对话要真实大模型需在
+`personal-backend/.env` 填真实 `LLM_API_KEY` 并把 `ENABLE_MOCK_ENGINES` 改为 `False`。
+
+### 纯前端演示（不需要后端）
+
+```bash
+cd frontend
+npm install
+npm run dev:demo     # http://127.0.0.1:5174/，内置演示数据
+```
+
+## 原型直开
+
+- 单文件版：`prototype/原型-单文件.html`（双击即可，全部内联，离线可用）
+- 多文件版入口：`prototype/index.html`
+
+---
+
+以下是原项目 README：
+
 # 基于动态跨模态哈希检索和RAG的心理筛查预警系统
 
 ## 项目简介

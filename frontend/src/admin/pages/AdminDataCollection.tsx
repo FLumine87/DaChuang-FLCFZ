@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   FileText, Mic, ImageIcon, Search, ChevronDown,
-  AlertTriangle, CheckCircle2, Clock, Loader2, Eye, X,
+  AlertTriangle, CheckCircle2, Clock, Loader2, Eye, X, RefreshCw,
 } from 'lucide-react';
 import {
   type TextSubmission, type AudioSubmission, type ImageSubmission, type AnalysisStatus,
 } from '../data/adminMockData';
 import { getAdminCollectionData } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
+import MultimodalFlowTabs from '../components/MultimodalFlowTabs';
 
 type Tab = 'text' | 'audio' | 'image';
 
@@ -145,7 +147,7 @@ function TextTab({ rows }: { rows: TextSubmission[] }) {
         </div>
 
         {/* Detail panel */}
-        <div className="ui-card p-5 h-fit sticky top-6">
+        <div className="ui-card p-5 h-fit lg:sticky lg:top-[80px]">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -158,6 +160,15 @@ function TextTab({ rows }: { rows: TextSubmission[] }) {
               <div className="p-3 bg-slate-50 rounded-lg text-sm text-slate-700 leading-6 border border-slate-200">
                 {selected.preview}
               </div>
+              {/* 采集 → 检索的页内互跳：这条日记本身就是一条可检索的多模态记录，
+                  直接带到检索页并自动跑一次，省掉“再复制粘贴一遍” */}
+              <Link
+                to={`/admin/retrieval?q=${encodeURIComponent(selected.preview)}`}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-700 hover:underline"
+              >
+                <Search className="h-3.5 w-3.5" />
+                用这段文字检索相似案例
+              </Link>
               <div>
                 <p className="text-xs text-slate-500 mb-1.5">关键词</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -259,7 +270,7 @@ function AudioTab({ rows }: { rows: AudioSubmission[] }) {
         </div>
 
         {/* Detail panel */}
-        <div className="ui-card p-5 h-fit sticky top-6">
+        <div className="ui-card p-5 h-fit lg:sticky lg:top-[80px]">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -367,7 +378,7 @@ function ImageTab({ rows }: { rows: ImageSubmission[] }) {
         </div>
 
         {/* Detail panel */}
-        <div className="ui-card p-5 h-fit sticky top-6">
+        <div className="ui-card p-5 h-fit lg:sticky lg:top-[80px]">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -425,6 +436,9 @@ export default function AdminDataCollection() {
     audio: AudioSubmission[];
     image: ImageSubmission[];
   } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -437,13 +451,18 @@ export default function AdminDataCollection() {
           image: d.imageSubmissions ?? [],
         });
       })
-      .catch(() => {
-        if (active) setData({ text: [], audio: [], image: [] });
+      .catch((reason: unknown) => {
+        if (active) {
+          setError(reason instanceof Error ? reason.message : '采集数据加载失败，请稍后重试');
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [reload]);
 
   // 风险提示条：本次会话里关掉就不再显示（用 sessionStorage —— 关掉浏览器即清空，
   // 所以下次上线仍会提醒）；条数变化（又有新数据被标记）时也会重新出现。
@@ -478,8 +497,49 @@ export default function AdminDataCollection() {
   // 0 条时整条不显示；本次已关闭且条数没变时也不显示
   const showRiskBanner = flaggedTotal > 0 && dismissedFlagged !== flaggedTotal;
 
+  if (loading && !data) {
+    return (
+      <div className="space-y-5">
+        <MultimodalFlowTabs active="collect" />
+        <div className="ui-card flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          正在加载采集数据…
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <div className="space-y-5">
+        <MultimodalFlowTabs active="collect" />
+        <div className="ui-card p-6">
+          <p className="text-[15px] font-medium text-slate-800">采集数据加载失败</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{error}</p>
+          <p className="mt-1 text-[12.5px] leading-5 text-slate-500">
+            这不等于没有采集记录；可能是网络或后端暂时不可用。
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              setError('');
+              setData(null);
+              setReload((value) => value + 1);
+            }}
+            className="ui-button ui-button-primary mt-4 inline-flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
+      <MultimodalFlowTabs active="collect" />
       {/* Header summary */}
       <div className="grid grid-cols-3 gap-4">
         {[

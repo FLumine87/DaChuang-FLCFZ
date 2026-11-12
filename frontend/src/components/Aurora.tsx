@@ -8,11 +8,27 @@
  * introSections.tsx 仍在原处重新导出，主页的引用不用改。
  *
  * 颜色与透明度写在 index.css 的 .aurora / .glass 里；深色模式自动压暗。
- * 登录屏刻意不放这一层（登录页保持干净），只有内容屏使用。
+ *
+ * 三个变体解决"主页 / 登录 / 首次筛查"之间的连续性：
+ *   · rich    —— 内容屏与工作台，保留三团光 + 三片玻璃（原样）；
+ *   · calm    —— 登录页、首次选择页：只留一片大曲面 + 两团淡光，去掉青色光团；
+ *   · minimal —— 主页首屏：人物插画已经承担了蓝紫弧面，背景只留一层很淡的蓝雾。
+ * still 用于正式答题：形状、颜色不变，只是停止漂移，阅读区域保持稳定。
  */
-export default function Aurora() {
+export type AuroraVariant = "rich" | "calm" | "minimal";
+
+export default function Aurora({
+  variant = "rich",
+  still = false,
+}: {
+  variant?: AuroraVariant;
+  still?: boolean;
+}) {
   return (
-    <div className="aurora" aria-hidden="true">
+    <div
+      className={`aurora aurora--${variant}${still ? " aurora--still" : ""}`}
+      aria-hidden="true"
+    >
       <span />
       <span />
       <span />

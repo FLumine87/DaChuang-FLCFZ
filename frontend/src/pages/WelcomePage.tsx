@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   BarChart3,
+  Check,
   HeartPulse,
   Lock,
   Moon,
@@ -100,7 +101,7 @@ export default function WelcomePage() {
         "结果仅供自我了解，不构成诊断",
       ]}
     >
-      <div className="mx-auto w-full max-w-[460px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)] sm:p-7">
+      <div className="mx-auto w-full max-w-[460px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7">
         <p className="text-[13px] font-medium tracking-[0.16em] text-primary-500">
           FIRST STEP
         </p>
@@ -126,19 +127,27 @@ export default function WelcomePage() {
                 role="radio"
                 aria-checked={active}
                 onClick={() => setScaleId(item.id)}
-                className={`flex min-h-[92px] flex-col items-start gap-2 rounded-2xl border p-4 text-left transition-all duration-200 ${
+                className={`relative flex min-h-[92px] flex-col items-start gap-2 rounded-2xl border p-4 text-left transition-all duration-200 ${
                   active
-                    ? "border-primary-500 bg-primary-50/70 text-primary-700 shadow-[0_10px_30px_-18px_rgba(70,95,255,0.55)]"
+                    ? "border-primary-500 bg-primary-50/70 text-slate-900 shadow-[0_10px_30px_-20px_rgba(70,95,255,0.45)]"
                     : "border-slate-200 bg-white text-slate-700 hover:border-primary-200 hover:bg-primary-50/40"
                 }`}
               >
+                {active && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute right-3 top-3 grid h-5 w-5 place-items-center rounded-full bg-primary-500 text-white"
+                  >
+                    <Check className="h-3 w-3" strokeWidth={3} />
+                  </span>
+                )}
                 <item.icon
-                  className={`h-6 w-6 ${active ? "text-primary-600" : "text-slate-400"}`}
+                  className={`h-6 w-6 ${active ? "text-primary-600 dark:text-primary-300" : "text-slate-400"}`}
                   strokeWidth={1.7}
                 />
                 <span className="text-sm font-medium">{item.label}</span>
                 <span
-                  className={`text-[12px] leading-5 ${active ? "text-primary-600/80" : "text-slate-400"}`}
+                  className={`text-[12px] leading-5 ${active ? "text-slate-500" : "text-slate-400"}`}
                 >
                   {item.hint}
                 </span>
@@ -157,7 +166,7 @@ export default function WelcomePage() {
         <button
           type="button"
           onClick={skip}
-          className="mt-3 h-12 w-full rounded-xl border border-slate-300 bg-white text-sm font-medium text-slate-700 transition-colors hover:border-primary-200 hover:text-primary-600"
+          className="mx-auto mt-3 block rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition-colors hover:text-primary-600"
         >
           先进入主页，稍后再做
         </button>

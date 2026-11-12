@@ -15,7 +15,9 @@ import {
   UserPlus,
 } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
+import Aurora from "../components/Aurora";
 import { apiLogin, apiRegister } from "../services/mockApi";
+import { isOfflineDemo } from "../services/http";
 import { adminDemo } from "../auth/demoCredentials";
 import { saveDisplayName, saveSessionToken } from "../auth/session";
 import { resolveEntryPath } from "../auth/entryPath";
@@ -146,7 +148,14 @@ export default function LoginPage() {
       }
       saveSessionToken(result.token, rememberMe);
       saveDisplayName(result.name);
-      setMessage("登录成功，正在进入系统…");
+      /* 连不上后端时 apiLogin 会自动用本机演示数据完成登录（result.offline）。
+         这里不再把它说成"登录成功"，而是如实说明进入了离线演示；
+         工作台顶栏也会挂着「离线演示」标记（AppShell）。 */
+      setMessage(
+        result.offline
+          ? "后端暂时连不上，已进入离线演示模式…"
+          : "登录成功，正在进入系统…",
+      );
       /* 直接跳，不再 setTimeout 等 500ms：那句话是给"跳转前"看的，
          但真实体感就是登录后干等半秒（用户提过等待太久）。
          个人账号第一次登录先进欢迎页；判据是账号的引导状态，不是"有没有筛查记录"：
@@ -174,7 +183,7 @@ export default function LoginPage() {
         setError(result.message || "注册失败");
         return;
       }
-      setMessage("注册成功，请使用新账号登录");
+      setMessage(result.message || "注册成功，请使用新账号登录");
       setTab("login");
       setPassword("");
       setConfirmPassword("");
@@ -228,36 +237,30 @@ export default function LoginPage() {
       {/* ============ 第 1 屏：登录（左宣传卡，右登录框） ============ */}
       <section
         id="login"
-        className="auth-screen relative flex items-center px-6 py-8 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)]"
+        className="auth-screen relative flex items-center overflow-hidden px-6 py-8 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)]"
       >
-        <div className="auth-art mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,620px)_minmax(0,450px)] lg:justify-center lg:gap-[72px] 2xl:grid-cols-[minmax(0,720px)_minmax(0,500px)] 2xl:gap-[96px]">
-          <div className="auth-orbit" />
-          <div className="auth-orbit scale-[1.35]" />
-          <div className="auth-orbit scale-[1.7]" />
+        <Aurora variant="calm" />
+        <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,620px)_minmax(0,450px)] lg:justify-center lg:gap-[72px] 2xl:grid-cols-[minmax(0,720px)_minmax(0,500px)] 2xl:gap-[96px]">
 
-          {/* 左：与平台简介屏同一套文字格式（眉标 + 大标题 + 正文 + 要点）
-              垂直定位：居中后再上提一档（lg:-top-16 = 64px），做**视觉居中**而非几何居中。
-              卡片下半部分（演示账号按钮 / 管理员入口 / 底部合规说明）是次要信息，
-              卡片的视觉重心因此高于它的几何中心；文字块按几何居中会显得往下沉
-              —— 实测 1440×900 上留白 200 / 下留白 200 时反馈"又太低了不协调"。
-              上提 64px 后约 136 / 264，与卡片的视觉重心对齐。
-              相对定位偏移不影响布局（不撑高栅格行），所以不会反过来影响右卡。
-              历史：这里原先写 lg:self-start（避免切 tab 时右卡变高把左栏往上顶），
-              代价是永远贴上沿，实测上留白 85 / 下留白 314，反馈"文字向上飘"。 */}
-          <div className="relative z-10 lg:-top-16">
+          {/* 左：与平台简介屏同一套文字格式（眉标 + 大标题 + 正文 + 要点）。
+              不再整体上提：那段偏移是为旧的短卡片调的，现在卡片更高、左栏内容更短，
+              上提会把空白全堆到下方，深色模式下尤其显得空。
+              改为几何居中，并把眉标/标题/正文/要点的间距各放大一档，
+              让文字块在竖直方向铺开，与右侧卡片等高对齐。 */}
+          <div className="relative z-10">
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
               关注状态 · 看见变化
             </p>
-            <h2 className="auth-section-title mt-6 max-w-[720px] text-balance tracking-tight text-slate-900">
+            <h2 className="auth-section-title mt-8 max-w-[720px] text-balance tracking-tight text-slate-900">
               从了解自己开始，照顾好每一天。
             </h2>
-            <p className="mt-8 max-w-[600px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
+            <p className="mt-10 max-w-[620px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.15]">
               连接筛查、记录与分析，让每一份关注都能得到回应；
               <br />
               登录后可查看筛查记录、状态趋势与评估报告。
             </p>
 
-            <ul className="mt-6 grid gap-1.5 border-t border-dashed border-slate-200 pt-5">
+            <ul className="mt-10 grid gap-2.5 border-t border-dashed border-slate-200 pt-7">
               {[
                 "三模态采集：文本、语音、图像",
                 "持续记录：状态趋势与量表同步归档",
@@ -276,7 +279,7 @@ export default function LoginPage() {
 
           {/* 右：登录卡 */}
           <div className="relative z-10 w-full">
-            <div className="mx-auto w-full max-w-[450px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)] sm:p-7 2xl:max-w-[500px]">
+            <div className="mx-auto w-full max-w-[450px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7 2xl:max-w-[500px]">
               <div className="mb-5">
                 <p
                   className={`text-[13px] font-medium tracking-[0.16em] ${
@@ -296,6 +299,15 @@ export default function LoginPage() {
                       : "建立属于你的健康档案，开始持续记录。"}
                 </p>
               </div>
+
+              {/* 后端连不上时如实说明：当前看到的是本机演示数据，不是服务器数据。
+                  放在表单上方而不是错误条，因为它描述的是整页的运行状态。 */}
+              {isOfflineDemo() && (
+                <p className="mb-4 rounded-xl border border-warning-500/40 bg-warning-50 px-4 py-3 text-sm leading-6 text-warning-600">
+                  后端暂时连不上，当前使用<strong className="font-semibold">离线演示数据</strong>
+                  （只保存在这台设备）。用下方演示账号可直接进入；退出登录后会重新尝试连接后端。
+                </p>
+              )}
 
               {!isAdmin && (
                 <div

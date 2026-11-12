@@ -51,13 +51,31 @@ export default function FirstRunQuestionnaire() {
   );
   const guide = getScaleGuide(scaleParam);
 
-  const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState<Record<number, number>>({});
+  /* 刷新/暂停后从草稿恢复：题号和已选答案都按账号存在 sessionStorage 里。
+     此前只存了量表 id，刷新会回到第 1 题、答案全丢 —— 这是实测反馈的问题。 */
+  const restored = useMemo(() => {
+    const draft = getDraft();
+    if (!draft || draft.scaleId !== scaleParam) return null;
+    const restoredAnswers = draft.answers
+      ? (Object.fromEntries(
+          Object.entries(draft.answers).map(([key, value]) => [Number(key), value]),
+        ) as Record<number, number>)
+      : {};
+    return { answers: restoredAnswers, currentIndex: draft.currentIndex ?? 0 };
+  }, [scaleParam]);
+  const [current, setCurrent] = useState(() => {
+    const last = Math.max(0, (definition?.questions.length ?? 1) - 1);
+    return Math.min(restored?.currentIndex ?? 0, last);
+  });
+  const [answers, setAnswers] = useState<Record<number, number>>(
+    () => restored?.answers ?? {},
+  );
   const [introOpen, setIntroOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  /* 卸载时清掉待执行的翻页定时器，避免在别的页面上改状态。
-     放在 hooks 区（早退分支之前）——hooks 不能被条件调用。 */
+  /* 选完自动翻页的待执行定时器；组件卸载时清掉，避免在别的页面改状态 */
+  const pendingAdvance = useRef<number | null>(null);
+
   useEffect(
     () => () => {
       if (pendingAdvance.current !== null) {
@@ -68,18 +86,19 @@ export default function FirstRunQuestionnaire() {
     [],
   );
 
-  /* 待执行的"选完自动翻页"定时器。
-     必须在早退分支之前声明（hooks 不能被条件调用）。
-     用它而不是时间戳锁：时间锁会让手快的人卡住（连续答题时后一次被吞掉），
-     而"取消待执行定时器"既能防重、又不会误伤正常节奏。 */
-  const pendingAdvance = useRef<number | null>(null);
-
   /* 进来就落一份草稿：中途回主页/刷新，02、03 还能接着走 */
   useEffect(() => {
     if (!definition) return;
     const draft = getDraft();
     if (!draft || draft.scaleId !== definition.id) startDraft(definition.id);
     window.scrollTo(0, 0);
+  }, [definition]);
+
+  /* 题号越界（例如草稿来自旧版量表）时收回范围内 */
+  useEffect(() => {
+    if (!definition) return;
+    const last = Math.max(0, definition.questions.length - 1);
+    setCurrent((value) => Math.min(value, last));
   }, [definition]);
 
   if (!definition || !guide) {
@@ -116,8 +135,21 @@ export default function FirstRunQuestionnaire() {
   /* PHQ-9 第 9 题（伤害自己的念头）：需要就地给出支持信息 */
   const isSafetyItem = definition.id === "PHQ-9" && question.id === 9;
 
-  /* 翻页防重锁：选完会自动翻页，若此刻又按了回车（或回车先触发、随后按钮的默认点击
-     又选了一次），两次触发会一次跳两题、漏答一半。450ms 内的重复触发只认一次。 */
+  /* 每次选择、翻题都落一次草稿：刷新、点「暂停作答」、临时离开都能接着答。
+     草稿按账号隔离（见 services/firstRun.ts），换账号不会串。 */
+  const persistProgress = (
+    nextAnswers: Record<number, number> = answers,
+    nextIndex: number = current,
+  ) => {
+    const draft = getDraft();
+    if (!draft || draft.scaleId !== definition.id) startDraft(definition.id);
+    saveDraft({ answers: nextAnswers, currentIndex: nextIndex });
+  };
+
+  /* 选完自动翻到下一题（180ms，让选中态先被看见）。
+     这是实际试用后保留的手感：一屏一题时每题都要再点一次「下一题」太累；
+     想核对或回改时，仍可用「上一题」或底部题号跳回，自动翻页不会锁死。
+     最后一题不自动翻——提交按钮就在下面，避免误提交。 */
   const cancelPendingAdvance = () => {
     if (pendingAdvance.current !== null) {
       window.clearTimeout(pendingAdvance.current);
@@ -125,29 +157,31 @@ export default function FirstRunQuestionnaire() {
     }
   };
 
-  /* 立即翻页：手动点「下一题」、按回车、跳题都用它。
-     关键是先取消待执行的自动翻页——否则"选完（排了 180ms 后翻页）+ 立刻点下一题"
-     会翻两次、静默跳掉一题，那一题没答案，末尾的提交按钮就一直是禁用的。 */
+  /* 手动点「下一题」、按回车、跳题都走这里：先取消待执行的自动翻页，
+     否则"选完排了 180ms 翻页 + 立刻手动翻"会一次跳两题、漏答一题。 */
   const goNextNow = () => {
     cancelPendingAdvance();
-    setCurrent((index) => Math.min(total - 1, index + 1));
+    const nextIndex = Math.min(total - 1, current + 1);
+    persistProgress(answers, nextIndex);
+    setCurrent(nextIndex);
   };
 
-  /* 选完延迟 180ms 翻页：让选中态先被看见 */
-  const scheduleAdvance = () => {
+  const scheduleAdvance = (nextAnswers: Record<number, number>) => {
     cancelPendingAdvance();
+    const nextIndex = Math.min(total - 1, current + 1);
     pendingAdvance.current = window.setTimeout(() => {
       pendingAdvance.current = null;
-      setCurrent((index) => Math.min(total - 1, index + 1));
+      persistProgress(nextAnswers, nextIndex);
+      setCurrent(nextIndex);
     }, 180);
   };
 
-  /* 选完自动翻到下一题（保留「上一题 / 下一题」用于回改）：
-     一屏一题时每题都要求"点选项 + 点下一题"，9 题就是 18 次点击，
-     走完一遍很累。最后一题不自动翻——提交按钮就在下面。 */
   const choose = (value: number) => {
-    setAnswers((prev) => ({ ...prev, [question.id]: value }));
-    if (!isLast) scheduleAdvance();
+    const nextAnswers = { ...answers, [question.id]: value };
+    setAnswers(nextAnswers);
+    /* 先存当前题，确保哪怕 180ms 内刷新也不会丢这一题 */
+    persistProgress(nextAnswers, current);
+    if (!isLast) scheduleAdvance(nextAnswers);
   };
 
   const submit = async () => {
@@ -226,12 +260,13 @@ export default function FirstRunQuestionnaire() {
       }
       steps={firstRunSteps(2)}
       afterBody={isSafetyItem ? <SafetySupportCard /> : undefined}
+      compact
     >
       {/* ============ 答题卡 ============ */}
       {/* 宽度全程不变（560px）：题目再长也让它自然折行，
           不做"遇到长题就加宽卡片"这种事——换题时卡片忽宽忽窄会很跳。
           第 9 题的支持信息因此放在左栏（与 01c 效果图一致），不挤占选项。 */}
-      <div className="mx-auto w-full max-w-[560px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.35)] sm:p-7">
+      <div className="mx-auto w-full max-w-[560px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-slate-900">
             {definition.id} {shortName(definition.id)}
@@ -280,7 +315,7 @@ export default function FirstRunQuestionnaire() {
             {/* 题目：按自然折行，不用 text-balance —— 平衡折行会在词中间提前断行 */}
             <h3
               key={question.id}
-              className="first-run-question question-enter text-[22px] font-medium leading-9 text-slate-900"
+              className="first-run-question question-enter min-h-[4.5rem] text-[22px] font-medium leading-9 text-slate-900"
             >
               {question.text}
             </h3>
@@ -297,7 +332,7 @@ export default function FirstRunQuestionnaire() {
                     onClick={() => choose(option.value)}
                     className={`flex w-full items-center gap-3.5 rounded-2xl border px-4 py-3.5 text-left text-[15px] transition-all duration-200 ${
                       active
-                        ? "border-primary-500 bg-primary-50/70 font-medium text-primary-700 shadow-[0_10px_30px_-20px_rgba(70,95,255,0.6)]"
+                        ? "border-primary-500 bg-primary-50/70 font-medium text-slate-900 shadow-[0_10px_30px_-22px_rgba(70,95,255,0.45)]"
                         : "border-slate-200 bg-white text-slate-700 hover:border-primary-200 hover:bg-primary-50/40"
                     }`}
                   >
@@ -343,6 +378,7 @@ export default function FirstRunQuestionnaire() {
                   type="button"
                   onClick={() => {
                     cancelPendingAdvance();
+                    persistProgress(answers, index);
                     setCurrent(index);
                   }}
                   className="rounded-lg border border-warning-500/40 bg-white px-2.5 py-1 text-[12px] text-slate-600 transition-colors hover:border-warning-500 hover:text-warning-600"
@@ -366,7 +402,12 @@ export default function FirstRunQuestionnaire() {
         <div className="mt-6 flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setCurrent((value) => Math.max(0, value - 1))}
+            onClick={() => {
+              cancelPendingAdvance();
+              const nextIndex = Math.max(0, current - 1);
+              persistProgress(answers, nextIndex);
+              setCurrent(nextIndex);
+            }}
             disabled={current === 0 || saving}
             className="ui-button h-12 flex-1 rounded-xl border-slate-300 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -378,7 +419,10 @@ export default function FirstRunQuestionnaire() {
           {isLast || allAnswered ? (
             <button
               type="button"
-              onClick={submit}
+              onClick={() => {
+                cancelPendingAdvance();
+                void submit();
+              }}
               disabled={!allAnswered || saving}
               className="ui-button ui-button-primary h-12 flex-[1.6] rounded-xl disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -412,9 +456,10 @@ export default function FirstRunQuestionnaire() {
           <span aria-hidden="true">·</span>
           <Link
             to="/personal/dashboard"
+            onClick={() => persistProgress(answers, current)}
             className="transition-colors hover:text-primary-600"
           >
-            暂停作答
+            暂停作答（已自动保存）
           </Link>
         </div>
       </div>

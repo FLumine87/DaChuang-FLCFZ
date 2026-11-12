@@ -23,3 +23,5 @@ _inf_check.json
 Thumbs.db
 .vscode/
 .idea/
+.env.*.bak
+.env.bak.*

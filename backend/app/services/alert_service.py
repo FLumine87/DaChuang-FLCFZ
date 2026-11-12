@@ -237,6 +237,14 @@ async def update_alert_by_user(alert_code: str, user_id: int, data: dict) -> Opt
     if target == row["status"]:
         return row
 
+    # 误点保护：个人端允许把「已缓解」**回退**为「跟踪中」（resolved → processing）。
+    # update_alert 的状态机是单向的（pending→processing→resolved→closed），
+    # 回退会被 409 挡掉；但个人端只有"跟踪中 / 已缓解"两个按钮，误点是高频操作，
+    # 所以这里单独走一条回退分支：改状态、清 resolved_at、追加署名记录，
+    # 并在 alert_events 里留审计（管理端的处理历史里能看到这次回退）。
+    if incoming == "tracking" and row["status"] == "resolved":
+        return await _revert_to_tracking(row, user_id)
+
     payload = {"status": target}
     # 状态机要求 pending→processing→resolved 逐级流转，且解决时必须填处理记录。
     # 个人端只点一个按钮、没有填写入口，所以这里代填一条**明确署名为自助**的记录：
@@ -244,3 +252,28 @@ async def update_alert_by_user(alert_code: str, user_id: int, data: dict) -> Opt
     if target == "resolved":
         payload["follow_up_notes"] = "用户自助标记：已缓解"
     return await update_alert(row["id"], payload, actor_id=user_id)
+
+
+async def _revert_to_tracking(row: dict, actor_id: int) -> Optional[dict]:
+    """个人端把已缓解的预警回退为跟踪中（resolved → processing）。
+
+    为什么绕过 update_alert：状态机只允许单向前进，回退会被判 409。
+    但"手滑点了已缓解"在个人端没有别的补救入口，所以单独实现一条，
+    并且保持和其他流转一样的可追溯性：
+      · alerts.status / resolved_at / updated_at 同步改掉；
+      · follow_up_notes 追加一行署名记录（管理端详情里能看到是谁、为什么）；
+      · alert_events 写一条 from=resolved / to=processing 的审计。
+    """
+    note = "用户自助回退：已缓解 → 跟踪中"
+    follow_up = ((row.get("follow_up_notes") or "") + "\n" + note).strip()
+    await db.execute_a(
+        "UPDATE alerts SET status = 'processing', resolved_at = NULL, "
+        "follow_up_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (follow_up, row["id"]),
+    )
+    await db.execute_a(
+        "INSERT INTO alert_events (alert_id, actor_id, from_status, to_status, note) "
+        "VALUES (?, ?, 'resolved', 'processing', ?)",
+        (row["id"], actor_id, note),
+    )
+    return await get_alert_by_id(row["id"])
