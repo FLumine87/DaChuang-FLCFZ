@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, Sparkles, Loader2, Camera, Mic, Image as ImageIcon, X } from 'lucide-react';
 import { adminSearch, fetchRetrievalMedia } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import CameraCapture from '../../components/CameraCapture';
 import ThemeHistogram from '../../components/ThemeHistogram';
+import MultimodalFlowTabs from '../components/MultimodalFlowTabs';
 import { useAudioRecorder } from '../../hooks/useAudioRecorder';
 import { toCorpusWavFile } from '../../utils/audioRecorder';
 import type { RetrievalResult } from '../data/adminMockData';
@@ -21,7 +23,8 @@ interface RagReport {
 }
 
 export default function AdminRetrieval() {
-  const [query, setQuery] = useState('');
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get('q') ?? '');
   const [loading, setLoading] = useState(false);
   const [shown, setShown] = useState(20);
   const [results, setResults] = useState<RetrievalResult[] | null>(null);
@@ -118,15 +121,16 @@ export default function AdminRetrieval() {
     }
   };
 
-  const handleSearch = async () => {
-    if (busy.current || reading || recorder.recording || (!query.trim() && !media)) return;
+  const handleSearch = async (override?: string) => {
+    const q = (override ?? query).trim();
+    if (busy.current || reading || recorder.recording || (!q && !media)) return;
     busy.current = true;
     setLoading(true);
     setSearchError('');
     setResults(null);
     setReport(null);
     try {
-      const res = await adminSearch(query, {
+      const res = await adminSearch(q, {
         modality,
         mediaBase64: media?.base64,
         mediaName: media?.name,
@@ -141,8 +145,20 @@ export default function AdminRetrieval() {
     }
   };
 
+  /* 从「多模态采集」详情带过来的 ?q= → 自动检索一次 */
+  const autoQuery = searchParams.get('q') ?? '';
+  const lastAutoQuery = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoQuery || lastAutoQuery.current === autoQuery) return;
+    lastAutoQuery.current = autoQuery;
+    setQuery(autoQuery);
+    void handleSearch(autoQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoQuery]);
+
   return (
     <div className="space-y-6">
+      <MultimodalFlowTabs active="search" />
       <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-3">跨模态哈希检索（管理端）</h3>
         <div className="flex flex-wrap gap-3">

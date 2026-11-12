@@ -52,6 +52,23 @@ function todayLabel() {
   return `${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${WEEKDAYS[d.getDay()]}`;
 }
 
+/** 把后端可能返回的 "2026-03-18" / "2026-03-18 09:12" / ISO 统一解析成日期 */
+function parseDateValue(value?: string | null): Date | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw)
+    ? raw.replace(" ", "T")
+    : raw;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function monthOf(value?: string | null): string {
+  const date = parseDateValue(value);
+  if (!date) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 /** 用各量表自己的 scoring() 扫出分档，避免另写一张阈值表 */
 function scoringBands(
   definition: QuestionnaireDefinition | undefined,
@@ -155,21 +172,43 @@ export default function Dashboard() {
     const bands = scoringBands(def, last?.maxScore ?? 0);
     const result = def && last ? def.scoring(last.score) : null;
 
+    /* 「最近 30 天」必须按今天的日期筛，而不是把全部历史累计进来。
+       演示数据是 3 月样例，11 月登录时不应显示成"最近 30 天"；样例只在
+       下方明确标注为「样例月份」。 */
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const inLast30Days = (value?: string | null) => {
+      const date = parseDateValue(value);
+      return Boolean(date && date >= cutoff && date <= now);
+    };
+    const recentRecords = records.filter((r) => inLast30Days(r.date));
+    /* 挂用户名下（未挂记录）的采集也计入：新账号采集后，
+       「这 30 天你记录了 N 次」与模态条形图不该还是 0。
+       挂记录的在上面已按记录计过，这里只补未挂记录且时间在 30 天内的，避免重复计数。 */
+    const userSupplements = supplements.filter((s) => !s.screeningId);
+    const recentSupplements = userSupplements.filter((s) => inLast30Days(s.createdAt));
+
     const counts: Record<string, number> = { 文本: 0, 语音: 0, 图像: 0 };
-    records.forEach((r) => {
+    recentRecords.forEach((r) => {
       const k = modalityOf(r);
       counts[k] = (counts[k] ?? 0) + 1;
     });
-    /* 挂用户名下（未挂记录）的采集也计入：新账号采集后，
-       「这 30 天你记录了 N 次」与模态条形图不该还是 0。
-       挂记录的在上面已按记录计过，这里只补未挂记录的，避免重复计数。 */
-    const userSupplements = supplements.filter((s) => !s.screeningId);
-    userSupplements.forEach((s) => {
+    recentSupplements.forEach((s) => {
       const k = s.kind === "audio" ? "语音" : s.kind === "image" ? "图像" : "文本";
       counts[k] = (counts[k] ?? 0) + 1;
     });
-    const totalRecords = records.length + userSupplements.length;
+    const totalRecords = recentRecords.length + recentSupplements.length;
     const maxCount = Math.max(1, ...Object.values(counts));
+
+    /* 演示数据所在的月份：只在"最近 30 天/本月为空"时展示，避免把旧样例说成现在 */
+    const allMonths = [
+      ...records.map((r) => monthOf(r.date)),
+      ...supplements.map((s) => monthOf(s.createdAt)),
+      ...(data.warningEvents ?? []).map((w) => monthOf(w.createdAt)),
+    ].filter(Boolean);
+    const latestSampleMonth = allMonths.sort().at(-1) ?? "";
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const sampleMonth = latestSampleMonth && latestSampleMonth !== currentMonth ? latestSampleMonth : "";
 
     const warning = (data.warningEvents ?? []).find((w) => w.status !== "resolved");
 
@@ -178,13 +217,22 @@ export default function Dashboard() {
        planItems —— 那套"按预警等级补一条 + 静态三条"的口径已被取代，
        留着只会让页面出现两套互相矛盾的待办。 */
 
-    /* 「最近预警」按数据里最新的那个月统计，避免演示数据（3 月）恒显示 0 */
+    /* 「最近预警」按**当前自然月**统计；当前月没有、但库里只有旧样例时，
+       不把旧数据说成「本月」，而是明确标注「样例月份 3 月」。 */
     const warnings = data.warningEvents ?? [];
-    /* 后端字段名可能不是 createdAt（真后端用 snake_case 时这里是 undefined），
-       一旦 undefined.slice() 会直接抛错、整页白屏，所以先取字符串再切。 */
-    const latestMonth = String(warnings[0]?.createdAt ?? "").slice(0, 7);
-    const monthWarnings = warnings.filter((w) => w.createdAt.startsWith(latestMonth));
-    const monthCounts = monthWarnings.reduce<Record<string, number>>((acc, w) => {
+    const monthWarnings = warnings.filter(
+      (w) => String(w.createdAt ?? "").slice(0, 7) === currentMonth,
+    );
+    const sampleWarnings = sampleMonth
+      ? warnings.filter((w) => String(w.createdAt ?? "").slice(0, 7) === sampleMonth)
+      : [];
+    const displayWarnings = monthWarnings.length ? monthWarnings : sampleWarnings;
+    const warningPeriodLabel = monthWarnings.length
+      ? "本月"
+      : sampleMonth
+        ? `样例月份 ${Number(sampleMonth.slice(5))} 月`
+        : "本月";
+    const monthCounts = displayWarnings.reduce<Record<string, number>>((acc, w) => {
       const label = LEVEL_LABEL[w.level] ?? "—";
       acc[label] = (acc[label] ?? 0) + 1;
       return acc;
@@ -195,6 +243,17 @@ export default function Dashboard() {
        新账号没有筛查记录时，采集挂在用户名下（supplements），
        用它保证"上传后一定看得到"，而不是只上传不挂靠。 */
     const draft = getDraft();
+    const draftDefinition = draft ? questionnaires.find((q) => q.id === draft.scaleId) : undefined;
+    const pendingDraft =
+      draft && !draft.recordId && draftDefinition
+        ? {
+            scaleId: draft.scaleId,
+            name: draftDefinition.name,
+            answered: Object.keys(draft.answers ?? {}).length,
+            total: draftDefinition.questions.length,
+            updatedAt: draft.updatedAt,
+          }
+        : null;
     const supplement =
       records.find((r) => r.supplement)?.supplement ??
       supplements[0] ??
@@ -247,6 +306,10 @@ export default function Dashboard() {
       maxCount,
       warning,
       monthWarnings,
+      displayWarnings,
+      warningPeriodLabel,
+      sampleMonth,
+      pendingDraft,
       retrievalQuery,
       monthBreakdown: Object.entries(monthCounts)
         .map(([k, v]) => `${k} ${v}`)
@@ -355,7 +418,12 @@ export default function Dashboard() {
 
   return (
     <div className="grid gap-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
+      {/* 右栏在 1024–1535 收窄到 380px：1440 以下的内容区只有 ~920–1090px，
+        430px 的卡片会把左栏挤到 500px 以内 —— 54px 的标题与"不换行"的灰字
+        都会横向溢出、压到卡片上（1270×750 实测）。2xl 再放开到 430。 */}
+      {/* 1180 以下改成单列：1024–1179 时内容区只有 670–820px，
+          380px 的计划卡会剩不下左栏（标题要断成三行，灰字压到卡片上）。 */}
+      <div className="grid gap-6 min-[1180px]:grid-cols-[minmax(0,1fr)_minmax(0,380px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
       {/* ============ 首屏：左标题 + 右「今日行动计划」（缩小后移到右上角） ============ */}
       {/* 左栏：标题 + 灰字 + 两个动作，整块在左栏内垂直居中（对齐右侧计划卡的高度） */}
       <div className="lg:flex lg:flex-col lg:justify-center" style={{ paddingTop: tune.offset }}>
@@ -378,13 +446,20 @@ export default function Dashboard() {
           你最近的状态，都在这里
         </h1>
         {/* 灰体小字：一句话交代这一页有什么，避免标题后面直接跳到大卡片 */}
-        <p className="mt-4 leading-8 text-slate-500 lg:whitespace-nowrap" style={{ fontSize: tune.sub }}>
+        <p className="mt-4 leading-8 text-slate-500" style={{ fontSize: tune.sub }}>
           近期的检测结果、最近一段时间的记录，以及需要你留意的地方，都整理在这一页。
         </p>
       </header>
         {/* 两个动作：从「今日行动计划」卡里拿出来，放到标题灰字下面 */}
+        {/* 手机端**不换行**、两张卡等宽等高；lg 以上恢复原来的"按内容宽度 + 可换行"。
+            原来只有 flex-wrap：390px 下可用宽度 342px，而两张卡的自然宽度是
+            168（min-w-[168px]）+ 12（gap）+ 242 = 422px，必然换行，
+            于是第一张窄、第二张宽，左边缘对不上（用户截图反馈"这两个没有对齐很奇怪"）。
+            手机端改成 flex-nowrap + 子项 flex-1 basis-0：两张各占一半、天然对齐；
+            min-w-[168px] 在手机上会让 flex-1 失效（不能收缩到 168 以下），
+            所以把它限制到 lg 以上（见 ActionStack）。 */}
         <div
-          className="flex flex-wrap items-center"
+          className="flex flex-nowrap items-stretch lg:flex-wrap lg:items-center"
           style={{
             marginTop: tune.btnPos === "bottom" ? "auto" : tune.gap,
             paddingTop: tune.btnPos === "bottom" ? tune.gap : 0,
@@ -401,15 +476,36 @@ export default function Dashboard() {
           />
           <ActionStack
             padY={tune.btnPad}
-            to="/personal/screening?tab=scale"
-            title="评估心理状态"
+            to={
+              view.pendingDraft
+                ? `/personal/first/questionnaire?scale=${encodeURIComponent(view.pendingDraft.scaleId)}`
+                : "/personal/screening?tab=scale"
+            }
+            title={view.pendingDraft ? "继续上次作答" : "评估心理状态"}
             meta={
-              view.last
-                ? `上次评估 ${view.last.date} · 建议每 2 周一次`
-                : "还没做过评估 · 约 3 分钟"
+              view.pendingDraft
+                ? `${view.pendingDraft.name} · 已答 ${view.pendingDraft.answered}/${view.pendingDraft.total} 题`
+                : view.last
+                  ? `上次评估 ${view.last.date} · 建议每 2 周一次`
+                  : "还没做过评估 · 约 3 分钟"
             }
           />
         </div>
+
+        {/* 中途退出后回到首页：明确给一个「继续作答」入口，并显示已答进度。
+            草稿按账号保存在本次标签页里，刷新后仍在。 */}
+        {view.pendingDraft && (
+          <Link
+            to={`/personal/first/questionnaire?scale=${encodeURIComponent(view.pendingDraft.scaleId)}`}
+            className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-primary-200 bg-primary-50/60 px-4 py-3 text-[13px] text-primary-700 transition-colors hover:bg-primary-50"
+          >
+            <span>
+              上次的《{view.pendingDraft.name}》还没答完，已保存到第{" "}
+              {Math.min(view.pendingDraft.answered + 1, view.pendingDraft.total)} 题附近
+            </span>
+            <span className="shrink-0 font-medium">继续作答 →</span>
+          </Link>
+        )}
       </div>
 
       {/* ============ ③ 今日行动计划（右栏） ============
@@ -721,6 +817,13 @@ export default function Dashboard() {
           <p className="mt-3 text-[24px] font-semibold leading-[1.3] text-slate-900">
             这 30 天你记录了 {view.totalRecords} 次
           </p>
+          {view.totalRecords === 0 && (
+            <p className="mt-2 text-[12.5px] leading-6 text-slate-400">
+              {view.sampleMonth
+                ? `最近 30 天还没有新记录。页面里的 ${Number(view.sampleMonth.slice(5))} 月数据是演示样例，不计入最近 30 天。`
+                : "最近 30 天还没有新记录，从上方「记录一下现在」开始即可。"}
+            </p>
+          )}
 
           <div className="mt-5">
             {(["文本", "语音", "图像"] as const).map((k) => (
@@ -765,8 +868,8 @@ export default function Dashboard() {
             <div className="min-w-0">
               <h2 className="text-[20px] font-semibold text-slate-900">最近预警</h2>
               <p className="mt-1 text-[13px] text-slate-500">
-                {view.monthWarnings.length
-                  ? `本月 ${view.monthWarnings.length} 条 · ${view.monthBreakdown}`
+                {view.displayWarnings.length
+                  ? `${view.warningPeriodLabel} ${view.displayWarnings.length} 条 · ${view.monthBreakdown}`
                   : "本月暂无新提醒"}
               </p>
             </div>
@@ -774,12 +877,12 @@ export default function Dashboard() {
               to="/personal/alerts"
               className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12.5px] text-slate-600 hover:border-primary-300 hover:text-primary-600"
             >
-              {view.monthWarnings.length > 2 ? `全部 ${view.monthWarnings.length} 条` : '全部'}
+              {view.displayWarnings.length > 2 ? `全部 ${view.displayWarnings.length} 条` : '全部'}
             </Link>
           </div>
 
           <ul className="mt-4 grid gap-3">
-            {view.monthWarnings.slice(0, 2).map((alert) => (
+            {view.displayWarnings.slice(0, 2).map((alert) => (
               <li key={alert.id} className="rounded-xl border border-slate-100 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[12.5px] tabular-nums text-slate-400">
@@ -809,8 +912,13 @@ export default function Dashboard() {
                 </p>
               </li>
             ))}
-            {!view.monthWarnings.length && (
+            {!view.displayWarnings.length && (
               <li className="py-6 text-center text-[13px] text-slate-400">本月暂无新提醒。</li>
+            )}
+            {view.sampleMonth && !view.monthWarnings.length && view.displayWarnings.length > 0 && (
+              <li className="text-center text-[11.5px] text-slate-400">
+                以上为 {Number(view.sampleMonth.slice(5))} 月演示样例；当前自然月暂无新提醒。
+              </li>
             )}
           </ul>
         </section>
@@ -822,8 +930,10 @@ export default function Dashboard() {
           心理援助热线 <b className="tabular-nums text-slate-800">12356</b>（24 小时）
         </span>
         <span className="text-slate-300">·</span>
+        {/* 这里没有真正的预约能力，按钮名称不能写成"预约"。
+            接入校心理中心的预约/联系方式后，再把入口和文案一起换掉。 */}
         <Link to="/personal/alerts" className="hover:text-primary-600">
-          预约校心理中心
+          查看预警与求助方式
         </Link>
         <span className="text-slate-300">·</span>
         <span>
@@ -854,7 +964,12 @@ function ActionStack({
     <Link
       to={to}
       style={{ paddingTop: padY, paddingBottom: padY }}
-      className={`grid min-w-[168px] gap-0 rounded-lg px-4 transition-colors ${
+      /* 手机端：flex-1 basis-0 让两张卡严格等分（都从 0 开始长大，所以宽度相同），
+         min-w-0 解除默认的最小内容宽度限制 —— 否则长文案"上次评估 2026-03-18 ·
+         建议每 2 周一次"会把卡片顶宽，两张就不等宽了。
+         lg 以上回到 min-w-[168px] + 不伸缩，保持桌面上"按内容宽度"的原样。
+         content-start 让标题和状态从顶部排，两卡等高时文字不会被拉伸开。 */
+      className={`grid min-w-0 flex-1 basis-0 content-start gap-0 rounded-lg px-4 transition-colors lg:flex-none lg:basis-auto lg:min-w-[168px] ${
         primary ? "ui-button-primary" : "ui-button"
       }`}
     >

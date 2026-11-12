@@ -2,25 +2,23 @@
  * entryPath.ts
  * 登录成功后该去哪里。
  *
- * 个人账号**只有「还没处理过引导」的才先进欢迎页**：看过欢迎页、点过
- * "先进入主页，稍后再做"、或已经做过一次首次筛查之后，一律直接进工作台，
- * 不再反复冒出来。
+ * 规则很简单：**管理员进管理端概览，个人用户进个人首页（工作台）**。
  *
- * 判据是账号的引导状态（services/firstRun.ts 的 needsFirstRunGuide），
- * 与"有没有筛查记录"无关——跳过引导的人本来就没有记录，用记录判的话他
- * 每次登录都会被再拦一次。
+ * 为什么不再自动进「首次引导欢迎页」：
+ *   以前个人账号第一次登录会被送到 /personal/welcome（无侧栏的全屏分屏页），
+ *   判据是浏览器 localStorage 里的引导状态。这套判据在真实使用里有两个硬伤：
+ *     1. 换浏览器 / 无痕 / 清过站点数据 = 状态丢失，于是**每次登录都再拦一次**；
+ *     2. 那一页是整屏分屏布局，在笔记本或缩放过的窗口里常常装不下，
+ *        用户看到的是"界面和屏幕对不上、下面被切掉"。
+ *   用户在 2026-11-07 明确要求不要再落到这个页面。现在登录一律进工作台，
+ *   首页空白时本来就有「评估心理状态 / 记录一下现在」两个入口，
+ *   心理筛查页也有「量表填写」标签 —— 首次筛查不依赖这个欢迎页。
  *
- * 演示时需要重新展示引导页，在浏览器控制台执行
- *   localStorage.removeItem('psych_first_run:v1:<用户名>')
- * 把该账号的状态清回全新即可（等价于 firstRun.ts 里的 resetFirstRun）。
- *
- * 另外这里**只**用于登录成功之后的跳转：带着会话打开 /login 不再自动放行——
- * 用户要求每次打开登录页都当作没登录过（输入框留空、正常走登录）。
+ * 欢迎页 / 三步首次引导仍然保留（/personal/welcome、/personal/first/*），
+ * 需要时可以显式访问，或从别的页面链接过去，只是不再由登录自动触发。
  */
-
-import { needsFirstRunGuide } from '../services/firstRun';
 
 export function resolveEntryPath(role: 'admin' | 'user' | undefined): string {
   if (role === 'admin') return '/admin/dashboard';
-  return needsFirstRunGuide() ? '/personal/welcome' : '/personal/dashboard';
+  return '/personal/dashboard';
 }

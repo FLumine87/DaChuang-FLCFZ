@@ -215,7 +215,7 @@ export function AssessVisual() {
           ))}
         </div>
         <p className="mt-4 text-[13px] leading-6 text-slate-500">
-          量表只作辅助校准，结论以三模态证据为主。
+          量表可以单独完成并生成基础结果；补充三模态线索后，才会与检索证据一起用于更完整的分析。未补充时，结果会明确标注仅基于量表。
         </p>
       </div>
     </Panel>

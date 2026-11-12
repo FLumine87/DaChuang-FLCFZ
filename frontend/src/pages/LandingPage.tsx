@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { navigateWithTransition } from "../utils/viewTransition";
 import { ArrowRight, Check, Moon, Sun } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
+import heroCalmLight from "../assets/hero-calm-light.webp";
+import heroCalmDark from "../assets/hero-calm-dark.webp";
 import {
   AlertVisual,
   AssessVisual,
@@ -108,170 +110,88 @@ export default function LandingPage() {
     return () => window.removeEventListener("resize", sync);
   }, [active]);
 
-  /* 换页滑动：不拦截滚轮，手势走原生滚动，停下后用自定义缓动落到整屏 */
+  /* 桌面端整屏翻页（一次手势只翻一屏，向上保持连续）：
+     · 向下——滚轮一进来先给一小段跟手位移，累计到 32px（标准化后）就锁定
+       「下一屏」为目标并接管动画；同一手势的惯性只做收尾，不再翻第二屏。
+     · 动画——ease-out，从当前位置直接走，不做"从零加速"；时长 360–540ms。
+     · 解锁——动画结束且滚轮静默 100ms 后，才允许下一次独立下滑。
+     · 向上——不接管，继续原生滚动，停手后按 28% 门槛吸附；下滑动画中
+       明确反向超过 10px 就取消动画、交还原生滚动。
+     · 布局只在挂载 / resize / 内容尺寸变化时测量，滚动过程只读缓存。 */
   useEffect(() => {
     const NAV_H = 64;
-    const DURATION = 550;
-    const SETTLE_DELAY = 180;
-    const FAST_DURATION = 320;
+    const DOWN_TRIGGER = 32;      // 标准化后的累计触发量（30–50 可调）
+    const DOWN_MIN_FLIP = 8;      // 手势结束时至少走过这么多才翻，避免轻微抖动误触
+    const DOWN_STEP_GAIN = 0.32;  // 触发前的跟手位移比例
+    const DOWN_STEP_MAX = 16;     // 单次跟手位移上限
+    const MAX_EVENT_PX = 60;      // 单次事件最多计 60px：鼠标滚轮一格约 100，触控板一格约 1–10
+    const DOWN_MS_MIN = 360;
+    const DOWN_MS_MAX = 540;
+    const GESTURE_GAP = 140;      // 两段滚轮间隔超过它 → 算新手势
+    const UNLOCK_QUIET = 100;     // 动画结束后滚轮静默这么久才解锁下一屏
+    const REVERSE_PX = 10;        // 下滑动画中反向超过它 → 交还控制
+    const UP_TRIGGER = 0.28;      // 触屏向上停手后的 28% 屏高阈值（滚轮向上已改为就近吸附）
+    const END_QUIET = 110;        // 不足 32px 就停手时，用这个间隔做兜底判定
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     const desktop = window.matchMedia("(min-width: 1024px) and (min-height: 600px)");
 
+    /* —— 缓存的布局数据：滚动时只读这些，不再反复量 DOM —— */
+    let screens: HTMLElement[] = [];
+    let tops: number[] = [];
+    let maxScroll = 0;
+    let viewH = 0;
+    let fits = false;
+
     let raf = 0;
-    let settleTimer: number | undefined;
     let animating = false;
-    let targetIdx = -1;
+    let animFrom = 0;
+    let animDelta = 0;
+    let animStart = 0;
+    let animMs = 0;
+    let animTarget = 0;
+    let animEndAt = 0;
 
-    const screensOf = () =>
-      Array.from(document.querySelectorAll<HTMLElement>(".auth-screen"));
+    /* 一次手势的状态机 */
+    let lastWheelAt = 0;
+    let gestureActive = false;
+    let lastDir: 1 | -1 | 0 = 0;
+    let gestureStartY = 0;
+    let gestureTarget: number | null = null;
+    let accDown = 0;
+    let accUp = 0;
+    let locked = false;        // 这次手势已经用掉一次翻页
+    let endTimer = 0;
+    let touchStartY = -1;
+    let measureRaf = 0;
+    let ro: ResizeObserver | null = null;
 
-    const ease = (t: number) =>
-      t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const clampY = (y: number) => Math.max(0, Math.min(maxScroll, y));
+    /* ease-out：接管时速度最大、后半程减速，避免"先停住再重新起步" */
+    const easeOut = (t: number) => 1 - Math.pow(1 - t, 2.6);
 
-    const posOf = (el: HTMLElement) => {
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      return Math.max(0, Math.min(max, el.offsetTop - NAV_H));
-    };
-
-    const actualIndex = () => {
-      const els = screensOf();
-      const y = window.scrollY + NAV_H + 4;
-      let idx = 0;
-      els.forEach((el, i) => {
-        if (el.offsetTop <= y) idx = i;
-      });
-      return idx;
-    };
-
-    const cancelGlide = () => {
-      if (raf) cancelAnimationFrame(raf);
-      raf = 0;
-      animating = false;
-    };
-
-    const glideTo = (target: number, msOverride?: number) => {
-      cancelGlide();
-      const els0 = screensOf();
-      if (els0.length) {
-        let best = 0;
-        let bestGap = Infinity;
-        els0.forEach((el, i) => {
-          const gap = Math.abs(posOf(el) - target);
-          if (gap < bestGap) {
-            bestGap = gap;
-            best = i;
-          }
-        });
-        targetIdx = best;
-      }
-      const startY = window.scrollY;
-      const delta = target - startY;
-      const ms = reduced.matches ? 0 : (msOverride ?? DURATION);
-      if (Math.abs(delta) < 2) return;
-      if (ms === 0) {
-        window.scrollTo(0, target);
-        return;
-      }
-      const t0 = performance.now();
-      animating = true;
-      const step = (now: number) => {
-        const p = Math.min(1, (now - t0) / ms);
-        window.scrollTo(0, startY + delta * ease(p));
-        if (p < 1) {
-          raf = requestAnimationFrame(step);
-        } else {
-          animating = false;
-          raf = 0;
-        }
-      };
-      raf = requestAnimationFrame(step);
-    };
-    glideRef.current = glideTo;
-
-    const nearestTop = (from?: number) => {
-      const els = screensOf();
-      if (!els.length) return window.scrollY;
-      const y = from ?? window.scrollY;
-      let best = els[0];
-      let bestGap = Infinity;
-      els.forEach((el) => {
-        const gap = Math.abs(el.offsetTop - NAV_H - y);
-        if (gap < bestGap) {
-          bestGap = gap;
-          best = el;
-        }
-      });
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      return Math.max(0, Math.min(max, best.offsetTop - NAV_H));
-    };
-
-    /* 滚轮/触摸手势的落点判断。
-       原实现用 nearestTop()——"离哪屏近就落哪屏"，需要滚过半屏才会翻页，
-       于是常规一次滚动（4 格 ≈ 480px）会原地回弹，观感就是"上下滑动没反应"。
-       改为方向优先：本次手势累计滚过 28% 屏高就翻一屏，否则回到起点那一屏。 */
-    const SCROLL_TRIGGER = 0.28;
-    let gestureStartY = -1;
-
-    const topOf = (el: HTMLElement) =>
-      Math.max(
-        0,
-        Math.min(
-          document.documentElement.scrollHeight - window.innerHeight,
-          el.offsetTop - NAV_H,
-        ),
-      );
-
-    /* 从 from 位置按方向取相邻一屏 */
-    const stepFrom = (from: number, dir: number) => {
-      const tops = screensOf().map(topOf);
-      if (dir > 0) return tops.find((t) => t > from + 4) ?? tops[tops.length - 1];
-      const back = tops.filter((t) => t < from - 4);
-      return back.length ? back[back.length - 1] : tops[0];
-    };
-
-    const settleTarget = () => {
-      if (gestureStartY < 0) return nearestTop();
-      const delta = window.scrollY - gestureStartY;
-      const avail = window.innerHeight - NAV_H;
-      if (Math.abs(delta) > avail * SCROLL_TRIGGER) {
-        return stepFrom(gestureStartY, delta > 0 ? 1 : -1);
-      }
-      return nearestTop(gestureStartY);
-    };
-
-    const scheduleSettle = () => {
-      window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(() => {
-        if (animating) return;
-        const target = settleTarget();
-        gestureStartY = -1;
-        glideTo(target);
-      }, SETTLE_DELAY);
-    };
-
-    /* 取"参与布局的那一层"：加入极光背景后，每屏的第一个子元素是绝对定位的
-       背景层（Aurora），若仍用 firstElementChild 会量到背景层（高度恒等于整屏），
-       兜底判断会永远为真、形同失效。这里改成取第一个非绝对定位的子元素。 */
+    /* 取"参与布局的那一层"：每屏的第一个子元素是绝对定位的极光背景，
+       用它量高度会永远等于整屏，兜底判断形同失效。 */
     const contentRow = (el: HTMLElement) =>
       Array.from(el.children).find((child) => {
         const pos = getComputedStyle(child).position;
         return pos !== "absolute" && pos !== "fixed";
       }) as HTMLElement | undefined;
 
-    const contentFits = () => {
-      const avail = window.innerHeight - NAV_H;
-      return screensOf().every((el) => {
+    const contentFits = (els: HTMLElement[]) => {
+      const avail = viewH;
+      return els.every((el) => {
         const row = contentRow(el);
         if (!row) return true;
-        /* 只统计参与布局的子元素：绝对定位的装饰层（如背景圆环）不算内容高度，
-           否则它会被误判成"这一屏装不下"，从而把整屏翻页整个关掉。 */
         const kids = Array.from(row.children).filter((k) => {
           const pos = getComputedStyle(k).position;
           return pos !== "absolute" && pos !== "fixed";
         });
+        /* 用 offsetHeight 而不是 getBoundingClientRect：
+           入场动画的 transform 会改变 rect，但不会改变布局高度，
+           用 rect 会在动画中途误判"这一屏装不下"而关掉整屏翻页。 */
         const tallest = kids.length
-          ? Math.max(...kids.map((k) => k.getBoundingClientRect().height))
-          : row.getBoundingClientRect().height;
+          ? Math.max(...kids.map((k) => (k as HTMLElement).offsetHeight))
+          : row.offsetHeight;
         const style = getComputedStyle(row);
         const padding =
           parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
@@ -279,18 +199,266 @@ export default function LandingPage() {
       });
     };
 
-    const onScroll = () => {
-      if (!desktop.matches || animating || !contentFits()) return;
-      scheduleSettle();
+    const measure = () => {
+      screens = Array.from(document.querySelectorAll<HTMLElement>(".auth-screen"));
+      viewH = window.innerHeight - NAV_H;
+      maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      tops = screens.map((el) => clampY(el.offsetTop - NAV_H));
+      fits = desktop.matches && contentFits(screens);
+    };
+
+    const scheduleMeasure = () => {
+      if (measureRaf) return;
+      measureRaf = requestAnimationFrame(() => {
+        measureRaf = 0;
+        measure();
+      });
+    };
+
+    const observeScreens = () => {
+      if (typeof ResizeObserver === "undefined") return;
+      ro?.disconnect();
+      ro = new ResizeObserver(scheduleMeasure);
+      screens.forEach((el) => {
+        ro!.observe(el);
+        const row = contentRow(el);
+        if (row) ro!.observe(row);
+      });
+    };
+
+    const cancelGlide = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      if (animating) animEndAt = performance.now();
+      animating = false;
+    };
+
+    const glideToY = (target: number, msOverride?: number) => {
+      cancelGlide();
+      const from = window.scrollY;
+      const to = clampY(target);
+      const delta = to - from;
+      /* 距离越短，动画越短：从 360ms 起，一屏约 500ms，不拖到 600 */
+      const autoMs = Math.min(
+        DOWN_MS_MAX,
+        Math.max(DOWN_MS_MIN, 300 + Math.abs(delta) * 0.32),
+      );
+      const ms = reduced.matches ? 0 : (msOverride ?? autoMs);
+      animTarget = to;
+      if (Math.abs(delta) < 2) {
+        animEndAt = performance.now();
+        return;
+      }
+      if (!ms) {
+        window.scrollTo(0, to);
+        animEndAt = performance.now();
+        return;
+      }
+      animFrom = from;
+      animDelta = delta;
+      animMs = ms;
+      animStart = performance.now();
+      animating = true;
+      const step = (now: number) => {
+        const p = Math.min(1, (now - animStart) / animMs);
+        window.scrollTo(0, animFrom + animDelta * easeOut(p));
+        if (p < 1) {
+          raf = requestAnimationFrame(step);
+        } else {
+          animating = false;
+          raf = 0;
+          window.scrollTo(0, animTarget);
+          animEndAt = performance.now();
+        }
+      };
+      raf = requestAnimationFrame(step);
+    };
+    /* 导航/页码点走这里：先解锁，再动画，避免点完还被上一条手势锁住 */
+    glideRef.current = (target: number) => {
+      locked = false;
+      gestureActive = false;
+      glideToY(target);
+    };
+
+    const nearestIndex = (from: number) => {
+      let best = 0;
+      let bestGap = Infinity;
+      tops.forEach((t, i) => {
+        const gap = Math.abs(t - from);
+        if (gap < bestGap) {
+          bestGap = gap;
+          best = i;
+        }
+      });
+      return best;
+    };
+
+    const stepIndex = (from: number, dir: number) => {
+      if (dir > 0) {
+        for (let i = 0; i < tops.length; i++) if (tops[i] > from + 4) return i;
+        return Math.max(0, tops.length - 1);
+      }
+      for (let i = tops.length - 1; i >= 0; i--) if (tops[i] < from - 4) return i;
+      return 0;
+    };
+
+    const nextTop = (from: number) => {
+      for (const t of tops) if (t > from + 4) return t;
+      return null;
+    };
+
+    /* 新手势：记录起点与"本次最远只到下一屏"的目标 */
+    const resetGesture = () => {
+      gestureActive = true;
+      lastDir = 1;
+      gestureStartY = window.scrollY;
+      gestureTarget = nextTop(gestureStartY);
+      accDown = 0;
+      accUp = 0;
+      clearTimeout(endTimer);
+    };
+
+    /* 向下：达到触发值后立刻翻一屏，不再等滚轮停；目标在手势开始时已固定 */
+    const triggerDown = () => {
+      if (locked || animating || !tops.length) return;
+      const target = gestureTarget ?? nextTop(window.scrollY);
+      locked = true;
+      accDown = 0;
+      clearTimeout(endTimer);
+      if (target == null) return;
+      glideToY(target);
+    };
+
+    /* 不足 32px 就停手：走过 8px 就当一次轻扫，翻到下一屏；否则回最近一屏。
+       这是"轻轻滑一下"和触控板噪声之间的兜底，不参与正常触发路径。 */
+    const endGesture = () => {
+      if (!gestureActive) return;
+      gestureActive = false;
+      if (animating || locked || !desktop.matches || !fits || !tops.length) return;
+      if (accDown >= DOWN_MIN_FLIP && gestureTarget != null) {
+        triggerDown();
+        return;
+      }
+      if (accDown > 0) {
+        const y = window.scrollY;
+        const nearest = tops[nearestIndex(y)];
+        if (Math.abs(nearest - y) > 2) glideToY(nearest, 320);
+      }
+      accDown = 0;
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      if (!desktop.matches || !fits || !tops.length) return;
+      if (event.ctrlKey) return; // 触控板捏合缩放
+      const unit =
+        event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
+      const rawY = event.deltaY * unit;
+      const rawX = event.deltaX * unit;
+      if (Math.abs(rawY) < Math.abs(rawX)) return; // 横向手势不接管
+      /* 鼠标滚轮一格 100、触控板一格 1–10：同时压到 60 以内，
+         再用累计 32px 统一判断，避免"鼠标一碰就翻、触控板滑不动" */
+      const px = Math.sign(rawY) * Math.min(Math.abs(rawY), MAX_EVENT_PX);
+      if (!px) return;
+
+      const now = performance.now();
+      const quiet = now - lastWheelAt;
+      const isNew = !gestureActive || quiet > GESTURE_GAP;
+      lastWheelAt = now;
+
+      if (px > 0) {
+        /* 向下由脚本接管：既避免"原生滚一段 + 再吸附"的两段感，
+           也顺手把这次手势的后续惯性全部吞掉。 */
+        event.preventDefault();
+        if (animating) return;
+        if (locked) {
+          /* 动画结束还不够：必须等滚轮真正静下来、且动画已经收尾，
+             惯性尾巴才不会接着翻页 */
+          if (quiet <= UNLOCK_QUIET || now - animEndAt <= UNLOCK_QUIET) return;
+          locked = false;
+          resetGesture();
+        } else if (isNew || lastDir === -1) {
+          resetGesture();
+        } else if (!gestureActive) {
+          resetGesture();
+        }
+
+        accDown += Math.abs(px);
+        /* 触发前先跟手走一小步，别停在原处等判定 */
+        if (gestureTarget != null) {
+          const y = window.scrollY;
+          const step = Math.min(Math.abs(px) * DOWN_STEP_GAIN, DOWN_STEP_MAX);
+          const nextY = Math.min(gestureTarget, y + step);
+          if (nextY > y) window.scrollTo(0, nextY);
+        }
+        clearTimeout(endTimer);
+        endTimer = window.setTimeout(endGesture, END_QUIET);
+        if (accDown >= DOWN_TRIGGER) triggerDown();
+        return;
+      }
+
+      /* 向下动画中明确反向：立刻交还原生滚动（向上逻辑保持原样） */
+      if (animating) {
+        accUp += Math.abs(px);
+        if (accUp < REVERSE_PX) {
+          event.preventDefault();
+          return;
+        }
+        cancelGlide();
+        accUp = 0;
+      } else if (locked && now - animEndAt <= UNLOCK_QUIET) {
+        /* 动画刚结束的 100ms 内，向上先走 10px 死区：
+           过滤触控板惯性尾巴的极小反向抖动，避免刚翻过去又被抖回来 */
+        accUp += Math.abs(px);
+        if (accUp < REVERSE_PX) {
+          event.preventDefault();
+          return;
+        }
+      }
+      locked = false;
+      accUp = 0;
+      accDown = 0;
+      lastDir = -1;
+      clearTimeout(endTimer);
+      gestureActive = true;
+      /* 向上完全交还原生连续滚动，不再做任何自动吸附：
+         之前"停手后按 28% 落屏"会在顶端小幅上滑时把页面判到上一屏，
+         用户看到的就是"明明还在这一屏，却被强行拉走"。 */
+    };
+
+    /* 桌面触屏（一体机 / 触控笔记本）：沿用原来的"原生滚 + 停手吸附" */
+    const onTouchStart = () => {
+      if (!desktop.matches || !fits) return;
+      cancelGlide();
+      touchStartY = window.scrollY;
+      locked = false;
+      gestureActive = false;
+      lastDir = 0;
+      accDown = 0;
+      accUp = 0;
+      clearTimeout(endTimer);
+    };
+
+    const onTouchEnd = () => {
+      if (!desktop.matches || !fits || touchStartY < 0 || !tops.length) return;
+      const from = touchStartY;
+      touchStartY = -1;
+      const delta = window.scrollY - from;
+      const target =
+        Math.abs(delta) > viewH * UP_TRIGGER
+          ? tops[stepIndex(from, delta > 0 ? 1 : -1)]
+          : tops[nearestIndex(from)];
+      glideToY(target);
     };
 
     const goBy = (dir: 1 | -1) => {
-      const els = screensOf();
-      if (!els.length) return;
-      const base = targetIdx >= 0 ? targetIdx : actualIndex();
-      const to = Math.min(els.length - 1, Math.max(0, base + dir));
+      if (!tops.length) return;
+      const base = nearestIndex(window.scrollY);
+      const to = Math.min(tops.length - 1, Math.max(0, base + dir));
       if (to === base) return;
-      glideTo(posOf(els[to]), animating ? FAST_DURATION : undefined);
+      locked = false;
+      gestureActive = false;
+      lastDir = 0;
+      glideToY(tops[to]);
     };
 
     /* 键盘翻页：↑ ↓ / PageUp PageDown / 空格；输入框内不抢键 */
@@ -303,34 +471,40 @@ export default function LandingPage() {
       const down = event.key === "ArrowDown" || event.key === "PageDown" || isSpace;
       const up = event.key === "ArrowUp" || event.key === "PageUp";
       if (!down && !up) return;
-      if (!desktop.matches || !contentFits()) return;
+      if (!desktop.matches || !fits || animating) return;
       event.preventDefault();
       goBy(down ? 1 : -1);
     };
 
-    const onUserInput = () => {
-      /* 记下手势起点：落点按“滚过 28% 就翻页”判断（见 settleTarget） */
-      if (gestureStartY < 0) gestureStartY = window.scrollY;
-      targetIdx = -1;
+    /* 初始测量 + 只在 resize / 字体加载 / 内容尺寸变化时重测 */
+    measure();
+    observeScreens();
+    window.addEventListener("load", scheduleMeasure);
+    window.addEventListener("resize", scheduleMeasure);
+    void document.fonts?.ready.then(scheduleMeasure).catch(() => {});
+    const onDesktopChange = () => {
       cancelGlide();
-      scheduleSettle();
+      measure();
+      observeScreens();
     };
+    desktop.addEventListener?.("change", onDesktopChange);
 
-    window.addEventListener("wheel", onUserInput, { passive: true });
-    window.addEventListener("touchstart", onUserInput, { passive: true });
-    window.addEventListener("touchmove", onUserInput, { passive: true });
+    window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
     window.addEventListener("keydown", onKeyNav);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
     return () => {
-      window.removeEventListener("wheel", onUserInput);
-      window.removeEventListener("touchstart", onUserInput);
-      window.removeEventListener("touchmove", onUserInput);
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("keydown", onKeyNav);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      window.clearTimeout(settleTimer);
-      cancelAnimationFrame(raf);
+      window.removeEventListener("load", scheduleMeasure);
+      window.removeEventListener("resize", scheduleMeasure);
+      desktop.removeEventListener?.("change", onDesktopChange);
+      ro?.disconnect();
+      cancelAnimationFrame(measureRaf);
+      window.clearTimeout(endTimer);
+      cancelGlide();
       glideRef.current = null;
     };
   }, []);
@@ -531,10 +705,18 @@ export default function LandingPage() {
         </div>
 
         {/* 移动端章节导航：顶栏在 lg 以下放不下 5 个章节（原来整条 nav 直接 hidden），
-            手机上就完全没法跳屏 —— 只能一路滑到底。这里补一条可横向滑动的胶囊条，
-            常驻在顶栏内随页面吸顶，随时能跳。lg 以上隐藏，桌面端仍用原来的滑动指示条。 */}
+            手机上就完全没法跳屏 —— 只能一路滑到底。这里补一条胶囊条，常驻顶栏内吸顶。
+            lg 以上隐藏，桌面端仍用原来的滑动指示条。
+
+            曾经是 overflow-x-auto 横滑、胶囊 shrink-0 固定宽度：5 个 × 13px 字号
+            在 390px 下需要约 364px，而可用宽度只有 342px（视口减去 px-6 两侧），
+            于是两端被裁掉 —— 用户看到的是"简介"（少了"平台"）和"隐…"，
+            反馈"跳转栏无法展示完全"。
+            现在改成**五等分铺满**：flex-1 + min-w-0 + 居中，任何宽度都完整可见，
+            不再需要横滑，也就没有"拖一下回弹"的横滑手感。
+            字号收到 12px、内边距收到 px-1，保证 360px 窄屏下 4 个汉字也放得下。 */}
         <nav
-          className="nav-chips mx-auto -mb-px flex w-full max-w-[1440px] gap-2 overflow-x-auto pb-2.5 lg:hidden"
+          className="nav-chips mx-auto -mb-px flex w-full max-w-[1440px] gap-1 pb-2.5 lg:hidden"
           aria-label="页面章节"
         >
           {navItems.map((item) => (
@@ -543,7 +725,7 @@ export default function LandingPage() {
               type="button"
               onClick={() => goToSection(item.id)}
               aria-current={active === item.id ? "true" : undefined}
-              className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-200 active:scale-[0.96] ${
+              className={`min-w-0 flex-1 truncate rounded-full px-1 py-1.5 text-center text-[12px] font-medium transition-colors duration-200 active:scale-[0.96] ${
                 active === item.id
                   ? "bg-primary-600 text-white"
                   : "bg-white/70 text-slate-600"
@@ -560,9 +742,29 @@ export default function LandingPage() {
         id="top"
         className="auth-screen relative flex items-center overflow-hidden px-6 py-16 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)] lg:py-12"
       >
-        <Aurora />
+        <Aurora variant="minimal" />
+        {/* 首屏右侧插画：人物和蓝紫弧面来自同一张参考图，只把背景的左侧、顶部做了
+            渐隐（人物本身保持不透明），所以不用 CSS 遮罩也能直接贴在页面背景上。
+            绝对定位到 section 右下角，向右、向下贴边出血，不占左栏的排版宽度；
+            窄屏（<lg）隐藏，改在左栏内容下面出一张通栏图。 */}
+        <div
+          aria-hidden="true"
+          data-reveal
+          className="pointer-events-none absolute inset-y-0 right-0 z-[1] hidden items-end justify-end lg:flex"
+        >
+          <img
+            src={heroCalmLight}
+            alt=""
+            className="block h-auto max-h-[calc(100%-64px)] w-[48vw] max-w-[760px] object-contain object-right-bottom dark:hidden"
+          />
+          <img
+            src={heroCalmDark}
+            alt=""
+            className="hidden h-auto max-h-[calc(100%-64px)] w-[48vw] max-w-[760px] object-contain object-right-bottom dark:block"
+          />
+        </div>
         <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
-          <div data-reveal>
+          <div data-reveal className="@container">
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
               平台概览
             </p>
@@ -572,7 +774,7 @@ export default function LandingPage() {
             {/* 首屏讲"这个产品能做什么"，技术路线留给「核心技术」屏。
                 依据申报书「使用说明」：用户经三模态采集 → 自动生成预警报告 →
                 管理端完成预警处置与个案跟踪。 */}
-            <p className="mt-8 max-w-[640px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
+            <p className="hero-body mt-8 max-w-[640px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
               面向校园、企业、社区的
                 <strong className="font-medium text-slate-800">心理筛查预警平台</strong>
               。用户完成一次文本、语音、图像的三模态采集，系统即以
@@ -581,15 +783,22 @@ export default function LandingPage() {
                 <strong className="font-medium text-slate-800">RAG</strong>
               结合心理知识库生成可追溯的筛查报告；管理端据此完成分级预警与个案跟踪。
             </p>
+            <p className="mt-4 max-w-[640px] rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-[14px] leading-7 text-slate-600">
+              实际使用分两种方式：只完成一份 2–4 分钟的标准化量表，就能得到量表分档与基础建议；如果愿意继续补充文本、语音或图像，系统才会启动跨模态检索与 RAG 报告。补充可以随时跳过，结果页会明确标明本次结论用了哪些依据。
+            </p>
 
             {/* 特性列表 + 首屏「立即体验」：与右上角「登录」同一个入口（进登录页后再切换身份）。
-                按钮放在列表右侧的空白处并底对齐，不给首屏多添一行高度。 */}
-            <div className="mt-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-t border-dashed border-slate-200 pt-4">
+                按钮与四条清单同处一行，垂直居中对齐（落在第二、三条之间），并在这行
+                剩余的横向空间里居中 —— 不是整栏居中，仍保持左栏的左对齐关系。
+                用容器查询按「左栏实际宽度」切两栏：只有宽度 ≥510px（清单 329 + 按钮 133
+                + 两侧各留 24）时才并排，1024 那种窄左栏自动落回按钮在下的单栏。
+                不要改成 justify-between：那会把按钮顶到右边缘，贴着右侧大卡片。 */}
+            <div className="mt-5 grid grid-cols-1 items-center gap-y-4 border-t border-dashed border-slate-200 pt-4 @[510px]:grid-cols-[auto_minmax(0,1fr)]">
               <ul className="grid gap-1">
                 {[
                   "动态跨模态哈希检索：毫秒级匹配相似案例",
                   "RAG 报告生成：以检索样例与心理知识库为依据",
-                  "三模态互补：文本、语音、图像同时进入评估",
+                  "三模态互补：补充后文本、语音、图像一起参与分析（可跳过）",
                   "处置闭环：高风险自动进入人工复核并留痕",
                 ].map((point) => (
                   <li
@@ -604,14 +813,14 @@ export default function LandingPage() {
               <button
                 type="button"
                 onClick={() => navigateWithTransition(navigate, "/login")}
-                className="group inline-flex shrink-0 items-center gap-2 rounded-full bg-primary-600 px-6 py-3 text-[15px] font-medium text-white shadow-[0_16px_34px_-18px_rgba(70,95,255,0.9)] transition-all duration-200 hover:bg-primary-700 active:scale-[0.97]"
+                className="group inline-flex shrink-0 items-center justify-self-start gap-2 rounded-full bg-primary-600 px-6 py-3 text-[15px] font-medium text-white shadow-[0_12px_28px_-18px_rgba(70,95,255,0.5)] transition-all duration-200 hover:bg-primary-700 active:scale-[0.97] @[510px]:justify-self-center"
               >
                 <span className="whitespace-nowrap">立即体验</span>
                 <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
               </button>
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center gap-2">
+            <div className="hero-badges mt-5 flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-500">
                 国家级大创立项 · 2026-06
               </span>
@@ -619,125 +828,23 @@ export default function LandingPage() {
                 金种子重点课题
               </span>
             </div>
-          </div>
 
-          {/* 外层 data-reveal 负责"框"本身的渐入，内层才是内容：
-              否则框会瞬间出现、内容再逐条浮现，看着像"空盒子先落地"。 */}
-          <div data-reveal data-visual>
-            <div className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-9">
-            <p className="text-[13px] font-medium tracking-[0.18em] text-slate-500">评估链路</p>
-
-            {/* 四步链路：每格居中，正好落在下方图表的里程碑与纵向网格线上。
-                原来是绝对定位 + 右对齐，每个标签"右端贴线、左端参差"，看着就是没对齐。
-                箭头不能跟着标签走：整格是居中的，箭头贴在文字右边就落在格子中间偏左，
-                和下一格之间空出一大块（用户反馈"箭头太靠左"）。
-                桌面改为绝对定位到**格子右边界**（= 两标签之间的空隙正中，
-                也就是下方 25%/50%/75% 三条网格线的位置）。
-                窄屏是两列，只有同一行内的相邻两步（0→1、2→3）才画内联箭头，
-                否则 1→2 的箭头会指向下一行的左后方，属于误导。 */}
-            <div className="mt-6 grid grid-cols-2 gap-y-2 sm:grid-cols-4">
-              {["三模态采集", "哈希检索", "RAG 报告", "分级预警"].map((step, index) => (
-                <span
-                  key={step}
-                  className="relative flex items-center justify-center whitespace-nowrap text-[14px] font-semibold text-slate-800 sm:text-[15px]"
-                >
-                  {step}
-                  {index < 3 && (
-                    <>
-                      <span
-                        aria-hidden="true"
-                        className="pointer-events-none absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 text-[13px] text-slate-300 sm:block"
-                      >
-                        →
-                      </span>
-                      {index % 2 === 0 && (
-                        <span aria-hidden="true" className="ml-1.5 text-[13px] text-slate-300 sm:hidden">
-                          →
-                        </span>
-                      )}
-                    </>
-                  )}
-                </span>
-              ))}
-            </div>
-
-            <svg
-              viewBox="0 0 900 240"
-              preserveAspectRatio="none"
-              className="mt-3 aspect-[4.4/1] w-full"
-              role="img"
-              aria-label="三模态采集、哈希检索、RAG 报告、分级预警四个环节的状态演进示意"
-            >
-              <defs>
-                <linearGradient id="introChartFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-primary-500)" stopOpacity="0.2" />
-                  <stop offset="100%" stopColor="var(--color-primary-500)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path d="M0 70H900M0 135H900M0 200H900" className="chart-grid" />
-              <g className="chart-guide" strokeWidth="1" strokeDasharray="4 6">
-                <line x1="112.5" y1="10" x2="112.5" y2="216" />
-                <line x1="337.5" y1="10" x2="337.5" y2="216" />
-                <line x1="562.5" y1="10" x2="562.5" y2="216" />
-                <line x1="787.5" y1="10" x2="787.5" y2="216" />
-              </g>
-              <path
-                d="M0 172C37.5 172 75 156 112.5 156C150 156 262.5 118 337.5 118C412.5 118 487.5 92 562.5 92C637.5 92 712.5 58 787.5 58C830 58 870 40 900 40V240H0Z"
-                fill="url(#introChartFill)"
+            {/* 手机 / 平板：右侧插画改为通栏放在内容下面，底部做一点渐隐，
+                避免图片下缘在页面中间切出一条硬边。桌面端由上面那张绝对定位图承担。 */}
+            <div className="mt-10 -mx-6 sm:-mx-10 lg:hidden">
+              <img
+                src={heroCalmLight}
+                alt=""
+                className="block w-full [mask-image:linear-gradient(to_bottom,#000_86%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,#000_86%,transparent)] dark:hidden"
               />
-              <path
-                d="M0 172C37.5 172 75 156 112.5 156C150 156 262.5 118 337.5 118C412.5 118 487.5 92 562.5 92C637.5 92 712.5 58 787.5 58C830 58 870 40 900 40"
-                fill="none"
-                className="stroke-primary-500"
-                strokeWidth="3"
-                strokeLinecap="round"
+              <img
+                src={heroCalmDark}
+                alt=""
+                className="hidden w-full [mask-image:linear-gradient(to_bottom,#000_86%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,#000_86%,transparent)] dark:block"
               />
-              <g className="fill-white stroke-primary-500" strokeWidth="3">
-                <circle cx="112.5" cy="156" r="5" />
-                <circle cx="337.5" cy="118" r="5" />
-                <circle cx="562.5" cy="92" r="5" />
-                <circle cx="787.5" cy="58" r="5" />
-              </g>
-            </svg>
-
-            {/* 一句话说清这张图在表达什么。
-                上一版写成了"横轴为上面四个环节，纵轴为累计可用的判断依据……"，
-                在落地页上讲坐标轴太像规格说明书了（用户："太奇怪了，还是换掉吧"），
-                这里改成人话；末尾原本还挂了个"（示意图）"，用户要求删掉，
-                并且这句说明靠右排（text-right），与左侧的正文错开。 */}
-            <p className="mt-3 text-right text-[13px] leading-5 text-slate-500">
-              每走完一个环节，能用来判断的信息就多一层。
-            </p>
-
-            <div className="mt-6 grid gap-2.5 border-t border-dashed border-slate-200 pt-5 sm:grid-cols-3">
-              {[
-                { value: "3", label: "模态 · 9 类特征" },
-                { value: "毫秒级", label: "相似样例检索" },
-                { value: "4", label: "级预警阈值" },
-              ].map((item) => (
-                <span key={item.label} className="flex items-baseline gap-2">
-                  <b className="text-[22px] font-medium leading-none tabular-nums text-primary-600">
-                    {item.value}
-                  </b>
-                  <span className="text-[14px] text-slate-500">{item.label}</span>
-                </span>
-              ))}
-            </div>
-
-            <div className="mt-6 grid gap-2.5 border-t border-dashed border-slate-200 pt-5 sm:grid-cols-3">
-              {[
-                { title: "文本记录", note: "认知模式与语言逻辑" },
-                { title: "语音采样", note: "语音语调与情绪波动" },
-                { title: "图像采集", note: "面部表情与绘画笔迹" },
-              ].map((item) => (
-                <div key={item.title} className="min-w-0">
-                  <p className="text-[15px] font-semibold text-slate-800">{item.title}</p>
-                  <p className="mt-1 text-[13px] leading-5 text-slate-500">{item.note}</p>
-                </div>
-              ))}
             </div>
           </div>
-          </div>
+
         </div>
       </section>
 
@@ -760,12 +867,12 @@ export default function LandingPage() {
         id="assess"
         eyebrow="评估维度"
         title={<>三模态线索与多维<span className="whitespace-nowrap">评估</span>指标</>}
-        desc="相比依赖人工访谈与单一量表的传统筛查，系统在同一时间轴上融合三条通道的线索，形成可纵向比较的个体状态画像；量表结果仅用于辅助校准，不作为独立判据。"
+        desc="相比依赖人工访谈与单一量表的传统筛查，系统在同一时间轴上融合三条通道的线索，形成可纵向比较的个体状态画像。量表可以单独完成并给出分档与基础建议；补充三条线索后，量表分数会与跨模态证据一起用于更完整的分析。"
         points={[
           "文本通道：认知模式与语言逻辑",
           "音频通道：语音语调、情绪波动与情感强度",
           "视觉通道：面部表情、绘画笔迹与情绪外露",
-          "标准化量表：PHQ-9 / GAD-7 / ISI / PSS-10 辅助校准",
+          "标准化量表：PHQ-9 / GAD-7 / ISI / PSS-10 可单独完成，也可与线索合并解读",
         ]}
         visual={<AssessVisual />}
       />

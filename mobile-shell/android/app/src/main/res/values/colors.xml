@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 主题色。styles.xml 里的 AppTheme 引用了这三个，但仓库里一直没有这个文件
+     （团队的安卓工程是从模板生成后手工精简的，colors.xml 漏了提交），
+     导致 resource linking 失败。取值与前端品牌色 品牌色 color-primary-500 一致。 -->
+<resources>
+    <color name="colorPrimary">#465FFF</color>
+    <color name="colorPrimaryDark">#3347CC</color>
+    <color name="colorAccent">#465FFF</color>
+    <color name="splashBackground">#465FFF</color>
+</resources>

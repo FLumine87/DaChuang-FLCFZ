@@ -87,9 +87,22 @@ export default function FeedPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  /* 推荐内容：服务端优先，其次本机记录（L1）。两者结构一致，渲染复用同一个组件。 */
-  const statusItems = feed && feed.content_feed.length > 0 ? feed.content_feed : localItems;
+  /* 推荐内容：服务端优先，其次本机记录（L1）。两者结构一致，渲染复用同一个组件。
+     注意"报告来自服务端"不等于"推荐内容也来自服务端"：服务端可能只回了报告、
+     content_feed 为空，此时列表实际是本机记录组装的。来源标识必须跟内容走，
+     否则就会出现"顶部写服务端推理、正文说本机记录"的自相矛盾。 */
+  const statusFromServer =
+    source === 'server' && Boolean(feed && feed.content_feed.length > 0);
+  const statusItems = statusFromServer ? feed!.content_feed : localItems;
   const interestItems = interestFeed.length > 0 ? interestFeed : localItems;
+  const reportSourceLabel =
+    source === 'local'
+      ? '本机记录整理'
+      : feed?.report.mock
+        ? '服务端演示模式 · 模板生成'
+        : '服务端推理';
+  const statusSourceLabel = statusFromServer ? '服务端内容' : '本机记录整理';
+  const interestSourceLabel = interestFeed.length > 0 ? '服务端兴趣画像' : '本机记录整理';
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto">
@@ -99,15 +112,11 @@ export default function FeedPage() {
             <Bell className="w-4 h-4 text-primary-600" /> 个性化推送
           </h2>
           <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span>基于你的心理状况评估 + 兴趣画像，为你定制缓解内容</span>
+            <span>根据你的量表记录、对话线索与兴趣画像整理缓解内容</span>
             {feed && (
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
                 <HardDrive className="w-3 h-3" />
-                {source === 'local'
-                  ? '本机组装（localStorage）'
-                  : feed.report.mock
-                    ? '演示模式 · 模板生成'
-                    : '服务端推理'}
+                报告来源：{reportSourceLabel}
               </span>
             )}
           </p>
@@ -192,7 +201,12 @@ export default function FeedPage() {
       {/* 缓解内容推送（按状态）：服务端有内容用服务端的，没有就用本机记录生成的条目 */}
       {feed && activeTab === 'status' && (
         <div className="ui-card p-5">
-          <h3 className="text-sm font-semibold text-slate-800 mb-3">为你推荐</h3>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-800">为你推荐</h3>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+              内容来源：{statusSourceLabel}
+            </span>
+          </div>
           {statusItems.length > 0 ? (
             <FeedItems items={statusItems} />
           ) : (
@@ -206,7 +220,12 @@ export default function FeedPage() {
       {/* 兴趣推送（绿级稳定期）：服务端兴趣画像优先，其次本机记录 */}
       {activeTab === 'interest' && (
         <div className="ui-card p-5">
-          <h3 className="text-sm font-semibold text-slate-800 mb-3">兴趣推送</h3>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-800">兴趣推送</h3>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+              内容来源：{interestSourceLabel}
+            </span>
+          </div>
           {interestItems.length > 0 ? (
             <FeedItems items={interestItems} />
           ) : (

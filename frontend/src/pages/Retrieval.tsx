@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   corpusRecords,
@@ -110,6 +110,8 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
   const [showAllResults, setShowAllResults] = useState(false);
   /* 语料库历史记录的模态分类：全部 / 文本 / 语音 / 图像 */
   const [histMode, setHistMode] = useState<'all' | Modality>('all');
+  /* 历史记录的数据来源：我的记录 / 参考语料。两者混排时容易让人把样例当成自己的历史 */
+  const [historySource, setHistorySource] = useState<'all' | 'mine' | 'corpus'>('all');
   /* 自己的记录：两路合并后置顶显示——
      ① 挂在筛查记录上的补充（records 上的 supplement 字段）；
      ② 直接挂在用户名下的补充（新账号还没做过筛查时的采集，见
@@ -530,21 +532,42 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
     (row[mode] ?? '').trim().length > 0;
   const corpusVisible = histMode === 'all' ? corpusRecords : corpusRecords.filter((r) => hasUnit(r, histMode));
   const mineVisible = histMode === 'all' ? mine : mine.filter((r) => hasUnit(r, histMode));
-  const historyRows = [...mineVisible, ...corpusVisible];
-  const historyTotal = historyRows.length;
+  const showMine = historySource !== 'corpus';
+  const showCorpus = historySource !== 'mine';
+  const historyTotal =
+    (showMine ? mineVisible.length : 0) + (showCorpus ? corpusVisible.length : 0);
+
+  /* 分两段展示，段内各自限额；「我的记录」永远排在参考语料前面。 */
+  const mineRows = showMine ? mineVisible.slice(0, shown) : [];
+  const corpusRows = showCorpus
+    ? corpusVisible.slice(0, Math.max(0, shown - mineRows.length))
+    : [];
+  const visibleRows = [
+    ...mineRows.map((row) => ({ row, group: 'mine' as const })),
+    ...corpusRows.map((row) => ({ row, group: 'corpus' as const })),
+  ];
+  const displayedCount = visibleRows.length;
 
   /* 每个模态下到底有多少条：直接印在按钮上 —— 语料每条都有三个单元，条数不变，
      光看列表看不出按钮有没有生效（2026-10-14 用户实测"点了没反应"），
      计数 + 行内单元正文 + 一句口径说明，三处一起把"确实切了"讲清楚。 */
-  const modalityCount = (mode: 'all' | Modality) =>
-    mode === 'all'
-      ? corpusRecords.length + mine.length
-      : corpusRecords.filter((r) => hasUnit(r, mode)).length +
-        mine.filter((r) => hasUnit(r, mode)).length;
+  const modalityCount = (mode: 'all' | Modality) => {
+    const mineCount = showMine
+      ? mode === 'all'
+        ? mine.length
+        : mine.filter((r) => hasUnit(r, mode)).length
+      : 0;
+    const corpusCount = showCorpus
+      ? mode === 'all'
+        ? corpusRecords.length
+        : corpusRecords.filter((r) => hasUnit(r, mode)).length
+      : 0;
+    return mineCount + corpusCount;
+  };
 
   /** 每个模态实际展示的是什么（说明文字必须与真实行为一致） */
   const HIST_MODE_DESC: Record<'all' | Modality, string> = {
-    all: '全部模态：语料条目显示文本单元，自己的记录按实际采集到的模态显示',
+    all: '全部模态：我的记录按实际采集到的模态显示，参考语料显示文本单元',
     text: '当前显示每条记录的文本单元（自述原文）',
     audio: '当前显示每条记录的语音单元文本（语音特征描述）',
     image: '当前显示每条记录的图像单元描述（非言语线索）',
@@ -1166,14 +1189,46 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
               <h2 className="text-base font-semibold text-slate-800">
-                历史记录
+                记录与参考语料
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                共 {historyTotal} 条（含你自己采集的 {mineVisible.length} 条）。
+                「我的记录」只属于你自己；「参考语料」是系统内置的相似样例，不是你的历史。
                 {HIST_MODE_DESC[histMode]}
                 ；点一条直接用它的文本检索。
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
+                {([
+                  ['all', '全部来源'],
+                  ['mine', '我的记录'],
+                  ['corpus', '参考语料'],
+                ] as const).map(([value, label]) => {
+                  const active = historySource === value;
+                  const count =
+                    value === 'all'
+                      ? mine.length + corpusRecords.length
+                      : value === 'mine'
+                        ? mine.length
+                        : corpusRecords.length;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => { setHistorySource(value); setShown(20); }}
+                      className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                        active
+                          ? 'border-primary-300 bg-primary-50 font-medium text-primary-600'
+                          : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {label}
+                      <span className={`ml-1 tabular-nums ${active ? '' : 'text-slate-400'}`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
                 {(['all', 'text', 'audio', 'image'] as const).map((m) => {
                   const active = histMode === m;
                   return (
@@ -1197,13 +1252,28 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
               </div>
             </div>
             <span className="text-xs tabular-nums text-slate-400">
-              已显示 {Math.min(shown, historyRows.length)} / {historyRows.length}
+              已显示 {displayedCount} / {historyTotal}
             </span>
           </div>
 
           <ul className="mt-4 grid gap-3">
-            {historyRows.slice(0, shown).map((r) => (
-              <li key={r.id}>
+            {visibleRows.map(({ row: r, group }, index) => {
+              const previousGroup = visibleRows[index - 1]?.group;
+              return (
+              <Fragment key={`${group}-${r.id}`}>
+                {group !== previousGroup && (
+                  <li className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 pb-2 pt-1">
+                    <span className="text-[13px] font-semibold text-slate-700">
+                      {group === 'mine' ? '我的记录' : '参考语料'}
+                    </span>
+                    <span className="text-[11.5px] text-slate-400">
+                      {group === 'mine'
+                        ? '仅你自己采集的内容，属于个人历史'
+                        : '系统内置样例，用于参考和对比，不属于你的历史'}
+                    </span>
+                  </li>
+                )}
+              <li>
                 <button
                   type="button"
                   onClick={() => void openSavedAssessment(r)}
@@ -1257,23 +1327,27 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
                   </div>
                 </button>
               </li>
-            ))}
+              </Fragment>
+              );
+            })}
           </ul>
 
           {/* 该模态下一条都没有时给一句说明，不留空白（例如还没有任何图像采集） */}
-          {historyRows.length === 0 && (
+          {historyTotal === 0 && (
             <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
-              当前筛选下还没有记录。切回「全部模态」，或先去「心理筛查」补一条这个模态的记录。
+              {historySource === 'mine'
+                ? '你还没有采集过这个模态的记录。可以先去「心理筛查」补一条，或切到「参考语料」看看系统样例。'
+                : '当前筛选下还没有记录。切回「全部来源」或「全部模态」试试。'}
             </p>
           )}
 
-          {shown < historyRows.length && (
+          {shown < historyTotal && (
             <button
               type="button"
               onClick={() => setShown((n) => n + 20)}
               className="ui-button mt-4 w-full"
             >
-              显示更多（还有 {historyRows.length - shown} 条）
+              显示更多（还有 {historyTotal - displayedCount} 条）
             </button>
           )}
         </div>

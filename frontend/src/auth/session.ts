@@ -9,8 +9,9 @@
  * 这样前端路由守卫与用户信息显示都能通用。
  */
 
-import { getToken, setToken, clearToken } from '../services/http';
+import { clearToken, getToken, resetOfflineDemo, setToken } from '../services/http';
 import { apiLogout } from '../services/mockApi';
+import { clearDraft } from '../services/firstRun';
 
 export type UserRole = 'admin' | 'user';
 
@@ -80,10 +81,17 @@ export function saveSessionToken(token: string, remember: boolean) {
 }
 
 export async function logout() {
+  /* 用户名要在清 token 之前取：草稿按账号隔离，退出时只清当前这个人的，
+     避免同一标签页换账号后还读得到上一个人的中途作答。 */
+  const username = getCurrentSession()?.username;
   try {
     await apiLogout();
   } finally {
+    clearDraft(username);
     clearToken();
+    /* 退出后回到"先试真实后端"的状态：离线演示只是这一次连不上时的兜底，
+       不应该粘住下一个账号。构建期就定死的演示包不受影响。 */
+    resetOfflineDemo();
     saveDisplayName(null); // 换账号时别把上一个人的显示名留在本机
   }
 }

@@ -110,3 +110,38 @@ LLM 可用时生成推荐语（ENABLE_LLM_CONTENT），失败回退模板。红�
 
 前端通过 `src/services/api.ts` 封装后端调用，默认指向 `http://localhost:8001`，
 可用环境变量 `VITE_API_BASE` 覆盖。前端登录用户名即 KG 的 user_id（如 `xiaoyu`）。
+
+
+## 接入真实大模型（陪伴对话 / 三元组抽取）
+
+`.env` 里三行决定它走真实大模型还是内置模板：
+
+```ini
+ENABLE_MOCK_ENGINES=False                        # 必须关掉，否则永远走内置逻辑
+LLM_BASE_URL=https://api.deepseek.com/v1         # 任何 OpenAI 兼容端点
+LLM_API_KEY=sk-你的真实key                        # 形如 sk- 后跟 30+ 位
+LLM_MODEL=deepseek-chat
+```
+
+改完重启本服务（`venv/bin/python -m uvicorn app.main:app --port 8001`），
+然后看 `GET /api/v1/health`：
+
+```json
+{"status":"ok","neo4j_connected":false,"mock_mode":false}
+```
+
+`mock_mode` 变成 **false** 就说明接上了。此时前端「AI 陪伴对话」会出现
+**逐字打字机效果**，回复由大模型生成、并从中抽取三元组补到该条回复下方。
+
+### 没有 Key 时怎么验证链路
+
+`scripts/fake_openai.py` 是一个**本地假的 OpenAI 兼容接口**（会按协议发 SSE），
+用来证明"问题只在 Key、不在代码"：
+
+```bash
+venv/bin/python scripts/fake_openai.py          # 起在 8899
+# 再把 .env 的 LLM_BASE_URL 指到 http://127.0.0.1:8899/v1，KEY 随便填
+```
+
+实测该链路下前端确实逐字流入（每 200ms 约 5 个字），三元组也能补上。
+**注意：它返回的是写死的文案，只用于验证，不要拿它演示。**

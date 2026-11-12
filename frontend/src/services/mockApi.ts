@@ -8,7 +8,15 @@
  * 要接后端只需改环境变量 VITE_USE_MOCK=false，组件无需改动。
  */
 
-import { request, USE_MOCK, getTokenUsername, isDemoToken } from './http';
+import {
+  activateOfflineDemo,
+  briefErrorMessage,
+  request,
+  STRICT_BACKEND,
+  USE_MOCK,
+  getTokenUsername,
+  isDemoToken,
+} from './http';
 import type { RetrievalAssessment } from './screeningAssessment';
 
 import {
@@ -174,11 +182,18 @@ export interface LoginResult {
   role?: 'admin' | 'user';
   name?: string;
   message?: string;
+  /**
+   * true = 这次登录是因为"连不上后端"才用本机演示数据完成的。
+   * 登录页据此把提示写成"已切到离线演示"，而不是假装连上了。
+   */
+  offline?: boolean;
 }
 
 export interface RegisterResult {
   ok: boolean;
   message?: string;
+  /** 同 LoginResult.offline：账号只建在本机。 */
+  offline?: boolean;
 }
 
 export interface SearchResponse<T> {
@@ -219,37 +234,108 @@ export interface AdminDashboardResponse {
 
 // ─── 认证 ────────────────────────────────────────────────────────────────────
 
+/* 打包成 App 后没有开发代理，请求失败时 axios 会抛出
+   "timeout of 15000ms exceeded" / "Network Error" 这类英文原文。
+   直接甩给用户看不懂，也不知道该做什么。这里统一换成能照着做的中文提示。
+   「连后端版」和「离线版」的失败原因不同，提示也分开：
+     · 连后端版：地址是电脑的局域网地址，手机不在同一 WiFi 或后端没启动就会超时
+     · 线上部署：地址是公网后端（Cloudflare Worker）；网络不通/服务异常与手机无关，
+       不能再提示"和电脑同一个 WiFi"——2026-11-07 线上就出现了这句误导性提示 */
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const LIVE_BUILD = Boolean(API_BASE);
+const API_IS_LAN = /\/\/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.0\.0\.0)/.test(
+  API_BASE,
+);
+const NETWORK_HINT = API_IS_LAN
+  ? '连不上服务器：请确认手机与电脑在同一个 WiFi，且电脑上的后端已启动'
+  : LIVE_BUILD
+    ? '连不上后端服务：网络不通或服务暂不可用，请稍后重试'
+    : '连不上服务器，请检查网络后重试';
+
+/** 登录/注册只等这么久：后端是公网服务时 8 秒足够；再久就该切离线演示，别让用户干等。 */
+const AUTH_TIMEOUT = 8000;
+
+/**
+ * 只有"请求根本没到后端"才允许降级到演示数据。
+ *
+ * 必须把 401（密码错误）、404（接口不存在）这类**后端已应答**的情况排除掉：
+ * 否则输错密码也会被"放行"进演示模式，等于把鉴权绕过。
+ */
+function isConnectivityError(reason: unknown): boolean {
+  const raw = reason instanceof Error ? reason.message : String(reason ?? '');
+  return /Network Error|Failed to fetch|Load failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|timeout of|status code 5(0[234]|2[1234])/i.test(
+    raw,
+  );
+}
+
+/**
+ * 后端能连上、但它自己 500（典型：线上 D1 结构旧 → D1_ERROR: no such column）。
+ *
+ * 这和"网络没通"不是一回事：网络问题在登录层已经降级；这里针对已经登录、
+ * 但某个读接口挂了的情况——页面不该整页停在错误态，也不该提示用户去查 WiFi。
+ * 退回演示数据至少能让人继续看界面，顶栏会明确标注「离线演示」。
+ */
+function isServerFailure(reason: unknown): boolean {
+  const status = (reason as { status?: number } | null)?.status;
+  if (typeof status === 'number' && status >= 500) return true;
+  const raw = reason instanceof Error ? reason.message : String(reason ?? '');
+  return /服务器内部错误|D1_ERROR|Internal Server Error|status code 5\d\d/i.test(raw);
+}
+
+/**
+ * 读接口失败时是否退回演示数据。
+ *
+ * 返回 true 时已经把全局切到离线演示（顶栏出现「离线演示」标记），
+ * 后续请求统一走本机数据，避免"一半真一半假"的会话。
+ */
+function fallbackToDemo(reason: unknown): boolean {
+  /* 严格后端模式：失败就是失败，不能换成演示数据 */
+  if (STRICT_BACKEND) return false;
+  if (isDemoToken()) return true;
+  if (!isServerFailure(reason)) return false;
+  activateOfflineDemo();
+  return true;
+}
+
+/** 构造标准 JWT 三段式演示 token：<header>.<payload>.<sig>，session.ts 解码第二段。 */
+function buildDemoToken(username: string, role: 'admin' | 'user'): string {
+  const header = btoa(JSON.stringify({ alg: 'none', typ: 'JWT' }));
+  const payload = btoa(
+    JSON.stringify({
+      username,
+      role,
+      exp: Date.now() + 24 * 3600 * 1000,
+    }),
+  );
+  return `${header}.${payload}.mock`;
+}
+
+function mockLoginResult(username: string, password: string): LoginResult {
+  const result = mockAuthLogin(username, password);
+  if (!result.ok) return { ok: false, message: result.message };
+  const role = result.role ?? 'user';
+  return {
+    ok: true,
+    token: buildDemoToken(username, role),
+    role,
+    name: role === 'admin' ? '管理员' : username,
+  };
+}
+
 export async function apiLogin(
   username: string,
   password: string
 ): Promise<LoginResult> {
   if (USE_MOCK) {
     await delay();
-    const result = mockAuthLogin(username, password);
-    if (!result.ok) return { ok: false, message: result.message };
-
-    // 构造一个标准 JWT 三段式 mock token：<header>.<payload>.<sig>
-    // 前端 session.ts 会解码第二段获取 username / role / exp
-    const header = btoa(JSON.stringify({ alg: 'none', typ: 'JWT' }));
-    const payload = btoa(
-      JSON.stringify({
-        username,
-        role: result.role,
-        exp: Date.now() + 24 * 3600 * 1000,
-      })
-    );
-    return {
-      ok: true,
-      token: `${header}.${payload}.mock`,
-      role: result.role,
-      name: result.role === 'admin' ? '管理员' : username,
-    };
+    return mockLoginResult(username, password);
   }
 
   try {
     const data = await request.post<{ token: string; role: string; name: string }>(
       '/api/auth/login',
-      { username, password }
+      { username, password },
+      { timeout: AUTH_TIMEOUT }
     );
     // 后端返回的role可能是'admin'或'counselor'，前端统一处理
     return { 
@@ -258,7 +344,30 @@ export async function apiLogin(
       role: data.role === 'admin' ? 'admin' : 'user' as 'admin' | 'user' 
     };
   } catch (err) {
-    return { ok: false, message: (err as Error).message };
+    /* 后端不可达时不再把用户挡在登录页：
+       切到本机演示数据，用演示账号完成登录（界面会标注「离线演示」）。
+       后端恢复后退出登录重进，就会重新走真实接口。 */
+    if (isConnectivityError(err)) {
+      if (STRICT_BACKEND) {
+        return {
+          ok: false,
+          message:
+            '连不上后端服务（当前是严格后端模式，不会使用演示数据）。' +
+            '请确认主后端已在 8000 端口启动，然后重试。',
+        };
+      }
+      activateOfflineDemo();
+      const fallback = mockLoginResult(username, password);
+      if (!fallback.ok) {
+        return {
+          ok: false,
+          offline: true,
+          message: `连不上后端服务，无法校验这个账号。可先用页面下方的演示账号离线体验。`,
+        };
+      }
+      return { ...fallback, offline: true };
+    }
+    return { ok: false, message: briefErrorMessage(err, NETWORK_HINT) };
   }
 }
 
@@ -272,10 +381,29 @@ export async function apiRegister(
     return mockAuthRegister(username, password);
   }
   try {
-    await request.post('/api/auth/register', { username, password, name, role: "user" });
+    await request.post('/api/auth/register', { username, password, name, role: "user" }, { timeout: AUTH_TIMEOUT });
     return { ok: true };
   } catch (err) {
-    return { ok: false, message: (err as Error).message };
+    if (isConnectivityError(err)) {
+      if (STRICT_BACKEND) {
+        return {
+          ok: false,
+          message:
+            '连不上后端服务（当前是严格后端模式，不会在本机创建演示账号）。' +
+            '请确认主后端已在 8000 端口启动，然后重试。',
+        };
+      }
+      activateOfflineDemo();
+      const fallback = mockAuthRegister(username, password);
+      return {
+        ...fallback,
+        offline: true,
+        message: fallback.ok
+          ? '后端连不上，已在本机创建演示账号（数据只保存在这台设备）'
+          : fallback.message,
+      };
+    }
+    return { ok: false, message: briefErrorMessage(err, NETWORK_HINT) };
   }
 }
 
@@ -300,7 +428,7 @@ export async function getScreeningRecords(): Promise<PersonalScreeningRecord[]> 
     return withLocalRetrieval(rows);
   } catch (err) {
     /* 同 getDashboardData：演示会话拿不到真实记录时退回演示数据，不整页报错 */
-    if (!isDemoToken()) throw err;
+    if (!fallbackToDemo(err)) throw err;
     await delay();
     return personalRecords();
   }
@@ -646,7 +774,7 @@ export async function getDashboardData(): Promise<DashboardResponse> {
     /* 演示会话（自签 alg=none token）在真实后端下必然 401。首页不该因此变成
        一行错误文字或一片空白，所以退回演示数据；真实账号失败照实抛出，
        由页面给出局部提示（见 Dashboard.tsx 的兜底分支）。 */
-    if (!isDemoToken()) throw err;
+    if (!fallbackToDemo(err)) throw err;
     await delay();
     return demoDashboard();
   }
@@ -661,17 +789,29 @@ export interface DashboardStats {
   completion_rate: number;
 }
 
+function demoDashboardStats(): DashboardStats {
+  return {
+    total_screenings: 300,
+    monthly_screenings: 261,
+    pending_alerts: 9,
+    completion_rate: 87,
+  };
+}
+
 export async function getDashboardStats(): Promise<DashboardStats> {
   if (USE_MOCK) {
     await delay();
-    return {
-      total_screenings: 300,
-      monthly_screenings: 261,
-      pending_alerts: 9,
-      completion_rate: 87,
-    };
+    return demoDashboardStats();
   }
-  return request.get<DashboardStats>('/api/dashboard/stats');
+  try {
+    return await request.get<DashboardStats>('/api/dashboard/stats');
+  } catch (err) {
+    /* 管理端首页指标：后端 5xx（如 D1 旧结构）时退回演示数字，
+       不让整个管理端停在"加载失败"。 */
+    if (!fallbackToDemo(err)) throw err;
+    await delay();
+    return demoDashboardStats();
+  }
 }
 
 export async function getWarnings(): Promise<WarningEvent[]> {
@@ -683,7 +823,7 @@ export async function getWarnings(): Promise<WarningEvent[]> {
     return await request.get<WarningEvent[]>('/api/personal/warnings');
   } catch (err) {
     /* 同 getDashboardData：演示会话拿不到真实预警时退回演示数据 */
-    if (!isDemoToken()) throw err;
+    if (!fallbackToDemo(err)) throw err;
     await delay();
     return [...warningEvents];
   }
@@ -732,7 +872,7 @@ export async function getCases() {
     return { ...data, screeningRecords: withLocalRetrieval(data.screeningRecords ?? []) };
   } catch (err) {
     /* 同 getDashboardData：演示会话下「我的档案」也退回演示数据 */
-    if (!isDemoToken()) throw err;
+    if (!fallbackToDemo(err)) throw err;
     await delay();
     return { screeningRecords: personalRecords(), warningEvents, userProfile, personalTimeline };
   }
@@ -855,29 +995,40 @@ export async function uploadFile(file: File): Promise<{ url: string; filename: s
 
 // ─── 管理端 ──────────────────────────────────────────────────────────────────
 
+function adminDashboardDemo(): AdminDashboardResponse {
+  /* 月份口径：**按数据里最新的那个月**统计，不用当前自然月。
+     演示数据是 2026-03、今天是 2026-10 —— 按自然月过滤会恒显示 0 条，
+     看起来像"本月没有预警"，其实是口径错了。
+     个人端「最近预警」卡片早就用了这个口径（见 Dashboard.tsx 同名判断），
+     管理端这里之前没跟上，所以「本月预警」一直是 0。 */
+  const monthPrefix =
+    alertRecords.map((a) => (a.createdAt ?? '').slice(0, 7)).sort().pop() ?? '';
+  return {
+    trendData,
+    alertDistribution,
+    monthlyAlertCounts: {
+      yellow: alertRecords.filter((item) => item.level === 'yellow' && item.createdAt.startsWith(monthPrefix)).length,
+      red: alertRecords.filter((item) => item.level === 'red' && item.createdAt.startsWith(monthPrefix)).length,
+    },
+    alertRecords,
+    screeningRecords: adminScreeningRecords,
+    caseRecords,
+  };
+}
+
 export async function getAdminDashboardData(): Promise<AdminDashboardResponse> {
   if (USE_MOCK) {
     await delay();
-    /* 月份口径：**按数据里最新的那个月**统计，不用当前自然月。
-       演示数据是 2026-03、今天是 2026-10 —— 按自然月过滤会恒显示 0 条，
-       看起来像"本月没有预警"，其实是口径错了。
-       个人端「最近预警」卡片早就用了这个口径（见 Dashboard.tsx 同名判断），
-       管理端这里之前没跟上，所以「本月预警」一直是 0。 */
-    const monthPrefix =
-      alertRecords.map((a) => (a.createdAt ?? '').slice(0, 7)).sort().pop() ?? '';
-    return {
-      trendData,
-      alertDistribution,
-      monthlyAlertCounts: {
-        yellow: alertRecords.filter((item) => item.level === 'yellow' && item.createdAt.startsWith(monthPrefix)).length,
-        red: alertRecords.filter((item) => item.level === 'red' && item.createdAt.startsWith(monthPrefix)).length,
-      },
-      alertRecords,
-      screeningRecords: adminScreeningRecords,
-      caseRecords,
-    };
+    return adminDashboardDemo();
   }
-  return request.get<AdminDashboardResponse>('/api/admin/dashboard');
+  try {
+    return await request.get<AdminDashboardResponse>('/api/admin/dashboard');
+  } catch (err) {
+    /* 同个人端：后端在线但 5xx 时退回演示数据，管理端不至于整页报错。 */
+    if (!fallbackToDemo(err)) throw err;
+    await delay();
+    return adminDashboardDemo();
+  }
 }
 
 export async function getAdminScreeningRecords(): Promise<AdminScreeningRecord[]> {

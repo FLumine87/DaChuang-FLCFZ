@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标的前景层：白色心电波。
+     路径与 frontend/public/favicon.svg 完全一致（viewBox 40×40）：
+         M8 21h7l4-11 5 21 3-10h5
+     画布 108×108，安全区是居中的 72×72（外圈可能被厂商遮罩切掉），
+     所以按 1.6 倍缩放（40 → 64）并居中平移 22，保证任何裁切样式下都完整。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportHeight="108"
+    android:viewportWidth="108">
+    <group
+        android:translateX="22"
+        android:translateY="22"
+        android:scaleX="1.6"
+        android:scaleY="1.6">
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M8,21h7l4,-11l5,21l3,-10h5"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2.6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>
