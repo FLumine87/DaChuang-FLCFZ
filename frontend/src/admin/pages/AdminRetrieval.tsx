@@ -168,7 +168,7 @@ export default function AdminRetrieval() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch(); }}
               placeholder="输入关键词或案例特征..."
               className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
@@ -224,7 +224,7 @@ export default function AdminRetrieval() {
             语音查询
           </button>
           <button
-            onClick={handleSearch}
+            onClick={() => void handleSearch()}
             disabled={loading || reading || recorder.recording || (!query.trim() && !media)}
             className="px-6 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >

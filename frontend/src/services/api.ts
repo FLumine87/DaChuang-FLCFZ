@@ -46,12 +46,12 @@ import { buildLocalCompanionReply } from './localCompanion';
  *
  * 这里原来写的是 `import.meta.env.DEV || Boolean(PERSONAL_BASE)`，
  * 想表达"开发时有 Vite 代理、打包后靠显式地址"。但实测踩坑：
- * 我们用 `vite build --mode capacitor` 构建离线包（自定义 mode），
+ * 我们用 `vite build --mode demo` 构建离线包（自定义 mode），
  * 此时 `import.meta.env.DEV` 的取值并不可靠 —— 结果**离线包也走了在线分支**，
  * 请求全部失败后才落到页面里写死的兜底文案，新加的离线实现根本没被调用。
  *
  * 改为**显式开关**，不依赖 DEV 的推断：
- *   · VITE_OFFLINE=1  → 强制离线（.env.capacitor 里设）
+ *   · VITE_OFFLINE=1  → 强制离线（离线构建的环境文件里设）
  *   · 配了后端地址    → 在线
  *   · 开发模式        → 在线（有 Vite 代理）
  */

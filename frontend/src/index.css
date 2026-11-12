@@ -529,3 +529,2146 @@ html.theme-switching *::after {
     flex-direction: column;
     min-height: 0;
   }
+
+    /* 知识图谱页：整页撑满「视口 − 顶栏 − main 的 32px 上下内边距」，
+     让「标题卡 + 星图 + 图例」正好落在**一屏之内**。
+     改造前实测（1440×900）：内容 841px 对可用 772px，要多滚 69px 才看全星图，
+     而星图本身还是按 900:560 等比撑宽到 674px 高。
+     这里给的是 height 而不是 min-height：min-height 只会"至少这么高"，
+     内容更多时容器照样长高、依旧要滚；要的是"就这么多，多的由星图卡片让出来"。
+     星图卡片因此必须可收缩（flex-1 min-h-0），否则整条高度链不成立。
+     极小视口下星图会被压到 0 高、内容溢出到文档流 —— 那种情况退回滚动，
+     比硬裁掉内容好。 */
+  .app-content:has(.kg-fullheight) {
+    display: flex;
+    flex-direction: column;
+    /* 与对话页同一套口径：main 盒高 = 视口 − 顶栏 − 24px 留白
+       （盒高含自身 32px 内边距，故内容区底边离视口底约 56px）。
+       24px 而不是把 32px 内边距全算进来，是为了让底部留白与对话页一致，
+       两页互切时内容底边不会忽高忽低。 */
+    height: calc(100dvh - var(--topbar-height, 4rem) - 24px);
+  }
+  .app-content:has(.kg-fullheight) .page-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+.app-content > .page-body > div > .flex.gap-3 {
+    flex-wrap: wrap;
+  }
+  .app-content .recharts-text {
+    font-family: var(--font-sans);
+  }
+  .app-content .recharts-tooltip-wrapper {
+    z-index: 10;
+  }
+  .app-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-200) transparent;
+  }
+  /* 卡片内的滚动容器（配合 components/ScrollArea.tsx）。
+     用户 2026-10-14 反馈："这个导航栏有点太隐蔽，都不知道下面还有内容"——
+     指的就是报告卡里那根几乎看不见的细条。这里换成 8px、圆角、slate-300/400
+     令牌取色，hover 再加深一档；firefox（scrollbar-width/scrollbar-color）与
+     webkit（::-webkit-scrollbar）双写，深浅色两套都跟着令牌走。 */
+  .scroll-visible {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-300) transparent;
+  }
+  .scroll-visible::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-visible::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scroll-visible::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-300);
+    border-radius: 9999px;
+  }
+  .scroll-visible:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-400);
+  }
+  .dark .scroll-visible {
+    scrollbar-color: var(--color-slate-500) transparent;
+  }
+  .dark .scroll-visible::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-500);
+  }
+  .dark .scroll-visible:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-400);
+  }
+  /* 细网格底纹层（内容屏的"纸面"质感）。
+     网格本身由下面的 .app-grid::before 画——那条规则原先挂在 .auth-shell 上，
+     但全项目没有任何组件用过这个类名，属于拆登录页时留下的死代码；
+     工作台正好要这层纹理，于是原地接管，不再复制一份同样的渐变。 */
+  .app-grid {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  /* 工作台里的极光刻意压低一档：登录页是"近白底 + 极淡纹理"，
+     主页那版极光原样铺满会让整个工作台泛蓝、离登录页反而更远。
+     深色模式仍由未分层的 .dark .aurora span（0.5）接管，不受这里影响。 */
+  .app-ambient .aurora span {
+    opacity: 0.6;
+  }
+  /* 那三片 40~58vw 的"玻璃"在主页是整屏背景的一部分，放到工作台里就变成
+     压在表格后面的浅蓝大方块（还能看到硬边），喧宾夺主。工作台只留柔和的
+     光斑与网格这两层安静的底纹。 */
+  .app-ambient .aurora .glass {
+    display: none;
+  }
+  .app-grid::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(#465fff0a 1px, transparent 1px),
+      linear-gradient(90deg, #465fff0a 1px, transparent 1px);
+    background-size: 52px 52px;
+    mask-image: linear-gradient(to bottom, black, transparent 82%);
+    pointer-events: none;
+  }
+  .auth-glow {
+    position: absolute;
+    width: 520px;
+    height: 520px;
+    border-radius: 999px;
+    filter: blur(2px);
+    pointer-events: none;
+  }
+  .auth-glow-left {
+    top: 8%;
+    left: -260px;
+    background: radial-gradient(circle, #465fff1f 0%, transparent 70%);
+  }
+  .auth-glow-right {
+    right: -220px;
+    bottom: -180px;
+    background: radial-gradient(circle, #12b76a12 0%, transparent 70%);
+  }
+  @media (max-width: 1023px) {
+    .app-sidebar,
+    .app-shell[data-collapsed="true"] .app-sidebar {
+      width: 290px;
+      transform: translateX(-100%);
+      /* 手机上侧栏是盖在深色遮罩上的抽屉：这里必须回到不透明，
+         否则玻璃会透出遮罩，抽屉整体发灰、文字对比度也掉下来。 */
+      background: var(--color-white);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .app-shell[data-mobile-open="true"] .app-sidebar {
+      transform: translateX(0);
+    }
+    .app-frame,
+    .app-shell[data-collapsed="true"] .app-frame {
+      margin-left: 0;
+    }
+    .app-shell[data-collapsed="true"] .sidebar-label {
+      display: initial;
+    }
+    .app-shell[data-collapsed="true"] .sidebar-link {
+      justify-content: flex-start;
+    }
+    .app-content {
+      padding: 20px;
+    }
+  }
+  @media (max-width: 639px) {
+    .app-content {
+      padding: 16px;
+    }
+    .app-content .page-body .flex.items-center.justify-between {
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ==========================================================================
+   深色模式：少量无法靠变量翻转的位置。
+   以下规则刻意写在 @layer 之外（无层级），优先级高于 Tailwind 的 utilities，
+   因此各页面 JSX 不需要额外添加 dark: 类。
+   ========================================================================== */
+
+/* text-white 与 bg-white 共用 --color-white：表面色在深色下要变深，
+   但强调色按钮/徽标上的白字必须保持白色。 */
+.dark .text-white {
+  color: #ffffff;
+}
+
+/* 强调色作为"文字/图标"用时，在深底上会明显偏暗——
+   例如 danger-600 #d92d20 落在深红胶囊底上只有 3.5:1，primary-600 在卡片上只有 2.6:1。
+   这里统一提亮文字色，保证对比度 ≥ 4.5:1（图标 ≥ 3:1）。
+   实心背景（bg-danger-500 / bg-primary-500 等）不动，仍是原来的品牌色。 */
+.dark .text-primary-500,
+.dark .text-primary-600,
+.dark .text-primary-700 {
+  color: #9cb9ff;
+}
+.dark .text-danger-500,
+.dark .text-danger-600,
+.dark .text-danger-700 {
+  color: #fb9a92;
+}
+.dark .text-warning-500,
+.dark .text-warning-600 {
+  color: #fdb022;
+}
+.dark .text-success-500,
+.dark .text-success-600,
+.dark .text-success-700 {
+  color: #47cd89;
+}
+.dark .text-orange-500,
+.dark .text-orange-600,
+.dark .text-orange-700 {
+  color: #fdba74;
+}
+.dark .text-blue-600,
+.dark .text-blue-700 {
+  color: #84caff;
+}
+/* 原生色板（red / amber / emerald / indigo / violet / green）作为文字时同样提亮。
+   这些颜色主要用在预警等级徽标上，例如 red-700 的"红色预警"、amber-700 的"黄色预警"。 */
+.dark .text-red-500,
+.dark .text-red-600,
+.dark .text-red-700 {
+  color: #ff9c94;
+}
+.dark .text-amber-500,
+.dark .text-amber-600,
+.dark .text-amber-700,
+.dark .text-amber-800 {
+  color: #fbbf24;
+}
+.dark .text-emerald-500,
+.dark .text-emerald-600,
+.dark .text-emerald-700,
+.dark .text-green-600,
+.dark .text-green-700 {
+  color: #4ade80;
+}
+.dark .text-indigo-500,
+.dark .text-indigo-600,
+.dark .text-indigo-700,
+.dark .text-indigo-900 {
+  color: #a5b4fc;
+}
+.dark .text-violet-500,
+.dark .text-violet-600 {
+  color: #c4b5fd;
+}
+
+.dark .ui-table tbody tr:hover {
+  background: #1b233366;
+}
+
+.dark .app-grid::before {
+  background-image:
+    linear-gradient(#7592ff0b 1px, transparent 1px),
+    linear-gradient(90deg, #7592ff0b 1px, transparent 1px);
+}
+
+/* 导航激活项在深底上需要更亮的前景色 */
+.dark .sidebar-link[aria-current="page"] {
+  color: var(--color-primary-300);
+}
+
+/* 图表：网格颜色在 Dashboard / AdminDashboard 中是写死的十六进制，
+   这里统一用 CSS 覆盖，避免改动这两个组件。坐标轴文字见文件末尾的"灰度字统一"。 */
+.dark .recharts-cartesian-grid line {
+  stroke: var(--color-slate-200);
+}
+.dark .recharts-default-tooltip {
+  background-color: var(--color-white) !important;
+  border-color: var(--color-slate-200) !important;
+  color: var(--color-slate-700);
+}
+
+/* ==========================================================================
+   灰度字统一：全站的次级灰字（原来的 slate-300 / 400 / 500 三档混用）
+   统一到同一档 --color-slate-500。
+   - 浅色：#667085，白底对比度 4.9:1，达到 WCAG AA 的 4.5:1
+   - 深色：自动跟随主题变量变成 #9aa7b8，在深底上约 6.4:1
+   正文与标题仍用 slate-600 / 700 / 800，保留层级。
+   规则写在 @layer 之外，才能覆盖 Tailwind 生成的同色工具类。
+   ========================================================================== */
+.text-slate-300,
+.text-slate-400,
+.text-slate-500 {
+  color: var(--color-slate-500);
+}
+
+/* 图表坐标轴文字在组件里写死为 #98a2b3，一并统一 */
+.recharts-cartesian-axis-tick-value {
+  fill: var(--color-slate-500);
+}
+
+/* ==========================================================================
+   侧栏折叠态：分组标题（"工作空间 / 智能分析 / 健康管理"）整体收起，
+   不再占高度，让下面的图标列整体上移、间距更紧凑。
+   必须写在 @layer 之外 —— 元素上有 Tailwind 的 flex 工具类，
+   层级低于 utilities 的规则压不过它。
+   ========================================================================== */
+.app-shell[data-collapsed="true"] .sidebar-group-title {
+  display: none;
+}
+
+/* 收起后不再悬浮"展开"把手（那个方向交给顶栏的 ☰ 按钮），
+   避免在全屏/高窗口下浮在中缝上显得别扭 */
+.app-shell[data-collapsed="true"] .sidebar-handle {
+  display: none;
+}
+
+/* 收起后三组图标连成一列等距：组间距与组内 space-y-1.5(6px) 一致 */
+.app-shell[data-collapsed="true"] .sidebar-group {
+  margin-bottom: 0.375rem;
+}
+
+/* 移动端侧栏是抽屉形态，分组标题照常显示 */
+@media (max-width: 1023px) {
+  .app-shell[data-collapsed="true"] .sidebar-group-title {
+    display: flex;
+  }
+  /* 抽屉形态下不需要"收起侧栏"按钮（抽屉自带关闭按钮） */
+  .sidebar-action-collapse {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   标题（黑体字）统一小幅上调一档：只放大加粗的标题，正文一律不动，
+   层级比例保持协调。同样写在 @layer 之外才能压过 Tailwind 的 text-* 工具类。
+   页面主标题 24 → 26px；卡片/分区标题 16 → 17px；其余按比例 +1~2px。
+   ========================================================================== */
+h1 {
+  font-size: 1.625rem; /* 26px ← text-2xl */
+}
+
+/* 标题字距统一：工作台原来用 tracking-tight（26px 下约 -0.65px），
+   与落地页/登录页的 0.25px 方向相反。这里在全局层统一，
+   未分层规则优先于 Tailwind 的 tracking-* 工具类，一处生效全站。 */
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: 0.25px;
+}
+h1.text-3xl {
+  font-size: 2rem; /* 32px ← 30px（登录页/系统选择页） */
+}
+
+/* 个人首页首屏主标题：「你最近的状态，都在这里」。
+   必须写在无层级里 —— 上面那条全局 h1 { font-size } 会压过 Tailwind 的 text-*，
+   用 sm:/lg: 工具类调字号是无效的。
+   另外原来是内联 style={{ fontSize: tune.title }}，tune.title 是调参面板留下的
+   常量 54（as const，没有任何响应式逻辑），内联优先级最高所以桌面一直是对的，
+   但在 390px 手机上同样是 54px，标题撑成两行巨字、占掉近半屏。
+   这里按断点给：手机 32 / 平板 44 / 桌面 54（桌面与调参定稿一致）。 */
+.dash-hero-title {
+  font-size: 2rem; /* 32px */
+}
+@media (min-width: 640px) {
+  .dash-hero-title { font-size: 2.75rem; } /* 44px */
+}
+/* 1024–1439：内容区被 290px 侧栏吃掉后只剩 ~670–1090px，
+   54px 的 11 字标题要 ~600px，会和右侧「今日行动计划」叠在一起。
+   这一档先给 44px；1440 以上空间够了再放到 54px。 */
+@media (min-width: 1024px) {
+  .dash-hero-title { font-size: 2.75rem; } /* 44px */
+}
+@media (min-width: 1440px) {
+  .dash-hero-title { font-size: 3.375rem; } /* 54px */
+}
+h2,
+h3,
+h4 {
+  font-size: 1.0625rem; /* 17px ← 16px */
+}
+h2.text-sm,
+h3.text-sm,
+h4.text-sm {
+  font-size: 0.9375rem; /* 15px ← 14px（弱化的小标题） */
+}
+h2.text-lg,
+h3.text-lg,
+h4.text-lg {
+  font-size: 1.1875rem; /* 19px ← 18px */
+}
+h2.text-xl,
+h3.text-xl,
+h4.text-xl {
+  font-size: 1.3125rem; /* 21px ← 20px */
+}
+h2.text-2xl,
+h3.text-2xl {
+  font-size: 1.625rem; /* 26px ← 24px */
+}
+
+/* ==========================================================================
+   登录页整屏翻页
+   —— 由 AuthPage 挂载时给 <html> 加 .auth-snap，离开时移除，
+      所以只作用于登录页，不影响其他页面。
+   —— 桌面端的"落屏"由 JS 做缓动（这样才能控制换页时长），
+      因此这里关掉原生吸附、避免两边同时抢滚动；
+      触屏没有滚轮、也不便接管，保留 proximity 原生吸附。
+   ========================================================================== */
+.auth-snap {
+  scroll-padding-top: 4rem;
+}
+/* 触屏**不再做原生吸附**。
+   这里原来写的是 @media (hover: none) { scroll-snap-type: y proximity } ——
+   触屏上每滑一下都会被"吸"到最近的 .auth-screen 边界，手感就是"拖动一下就回弹"。
+   桌面端本来就靠 JS 做落屏缓动（上面那段注释写了"关掉原生吸附、避免两边抢滚动"），
+   触屏则完全没有接管滚动，纯靠原生吸附 —— 于是只有手机上会弹。
+   用户对比了另一个系统（纯普通滚动）后明确要求：
+   "不要学搞那种拖动一下就回弹的机制了"。
+   去掉之后触屏就是普通滚动，与那个参考系统一致。
+   scroll-snap-align 一并删掉：没有吸附容器时它本来也不起作用。 */
+
+/* 视口较矮（常见笔记本）时收紧章节上下留白，尽量保证一屏装得下。
+   2rem 而非 3rem：文案加了要点列表后，"核心技术"屏在 1280×800 下差 8px 装不下，
+   而 8px 之差就会触发兜底、把整屏翻页整个关掉——收紧留白比删内容更划算。 */
+@media (max-height: 900px) {
+  .auth-snap .auth-screen > div {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+  }
+}
+
+/* 更矮（约 700px 视口，13 寸全屏常见）：再收一档。
+   菜单/工具栏占掉高度后视口常只有 700 出头，不收这一档就会因"装不下一屏"
+   触发兜底、把整屏翻页整个关掉，用户观感就是"上下滑动没反应"。 */
+@media (max-height: 760px) {
+  .auth-snap .auth-screen > div {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+  .auth-snap .auth-hero-title {
+    font-size: 1.875rem;
+    line-height: 1.25;
+  }
+  .auth-snap .auth-section-title {
+    font-size: 1.75rem;
+    line-height: 1.25;
+  }
+  .auth-snap .auth-screen p {
+    line-height: 1.8;
+  }
+  /* 登录屏靠 flex 居中，不需要这层额外留白，否则矮屏会被顶高一屏 */
+  .auth-snap #login > div {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
+/* 首屏内容最多（左文案 + 右登录卡），留白要比章节更紧，确保一屏装得下 */
+.auth-snap #top {
+  padding-top: 1.5rem;
+  padding-bottom: 1rem;
+}
+.auth-snap #top > div {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+
+
+
+/* --------------------------------------------------------------------------
+   首屏"玻璃"形状层
+   —— 参考腾讯云首屏的视觉语言（左侧偏白、右侧偏蓝 + 大片半透明形状），
+      但形状、配色与动效全部自己生成：一是避免使用别家的美术资产，
+      二是做成矢量+CSS 动画后可以真正"动起来"（参考站那张其实是静态 PNG）。
+   -------------------------------------------------------------------------- */
+.aurora .glass {
+  position: absolute;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.72) 0%,
+      rgba(186, 214, 255, 0.42) 46%,
+      rgba(122, 168, 255, 0.26) 100%
+    );
+  box-shadow:
+    inset 0 -30px 70px -30px rgba(78, 128, 255, 0.28),
+    0 30px 90px -50px rgba(70, 120, 255, 0.4);
+  will-change: transform;
+}
+
+/* 大片有机形状：用八值 border-radius 做出不规则轮廓 */
+.aurora .glass-1 {
+  width: 58vw;
+  height: 42vw;
+  right: -14vw;
+  top: -10vw;
+  border-radius: 62% 38% 46% 54% / 55% 52% 48% 45%;
+  transform: rotate(-12deg);
+  animation: glass-drift-1 48s ease-in-out infinite;
+}
+
+.aurora .glass-2 {
+  width: 40vw;
+  height: 30vw;
+  right: 6vw;
+  top: 16vw;
+  border-radius: 44% 56% 62% 38% / 40% 58% 42% 60%;
+  /* 半透明 + 细点阵纹理，模拟参考图里那片带颗粒的曲面 */
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.55) 1px, transparent 1px),
+    linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0.6) 0%,
+      rgba(168, 205, 255, 0.34) 50%,
+      rgba(110, 160, 255, 0.22) 100%
+    );
+  background-size: 9px 9px, 100% 100%;
+  opacity: 0.85;
+  transform: rotate(8deg);
+  animation: glass-drift-2 62s ease-in-out infinite;
+}
+
+.aurora .glass-3 {
+  width: 34vw;
+  height: 26vw;
+  left: -10vw;
+  bottom: -12vw;
+  border-radius: 52% 48% 40% 60% / 58% 42% 58% 42%;
+  background: linear-gradient(
+    140deg,
+    rgba(255, 255, 255, 0.66) 0%,
+    rgba(196, 220, 255, 0.34) 55%,
+    rgba(150, 190, 255, 0.18) 100%
+  );
+  transform: rotate(-6deg);
+  animation: glass-drift-3 56s ease-in-out infinite;
+}
+
+@keyframes glass-drift-1 {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-12deg) scale(1); }
+  50% { transform: translate3d(-3vw, 2vw, 0) rotate(-7deg) scale(1.05); }
+}
+@keyframes glass-drift-2 {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(8deg) scale(1.02); }
+  50% { transform: translate3d(-4vw, -3vw, 0) rotate(13deg) scale(1); }
+}
+@keyframes glass-drift-3 {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-6deg) scale(1); }
+  50% { transform: translate3d(3vw, -2vw, 0) rotate(-2deg) scale(1.06); }
+}
+
+/* 深色模式：玻璃片与顶部渐变层必须整体换成"暗色玻璃"。
+   只降 opacity 是不够的——它们的底色是 rgba(255,255,255,0.72) 的白，
+   在深色页面上就是几大片白雾盖住正文，把文字洗到几乎看不清。 */
+.dark .aurora .glass {
+  opacity: 0.5;
+  border-color: rgba(146, 178, 255, 0.14);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(120, 160, 255, 0.18) 0%,
+      rgba(74, 112, 210, 0.13) 48%,
+      rgba(38, 66, 140, 0.1) 100%
+    );
+  box-shadow:
+    inset 0 -30px 70px -30px rgba(24, 48, 110, 0.45),
+    0 30px 90px -50px rgba(10, 22, 60, 0.6);
+}
+
+/* 带点阵纹理那一片，纹理与底色同步转暗 */
+.dark .aurora .glass-2 {
+  background-image:
+    radial-gradient(rgba(146, 178, 255, 0.16) 1px, transparent 1px),
+    linear-gradient(
+      120deg,
+      rgba(120, 160, 255, 0.16) 0%,
+      rgba(70, 106, 200, 0.12) 50%,
+      rgba(34, 60, 130, 0.1) 100%
+    );
+  background-size: 9px 9px, 100% 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora .glass {
+    animation: none;
+  }
+}
+
+/* 顶部到底部的柔和过渡：左侧偏白、右侧偏蓝（参考站基调 rgb(224,239,255)） */
+.aurora::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(247, 250, 255, 0.72) 26%,
+    rgba(228, 240, 255, 0.45) 55%,
+    rgba(205, 228, 255, 0.36) 100%
+  );
+  pointer-events: none;
+}
+
+/* 深色模式同层换成暗色渐变（否则这一层会把整屏提亮成灰白） */
+.dark .aurora::after {
+  background: linear-gradient(
+    100deg,
+    rgba(11, 17, 32, 0.94) 0%,
+    rgba(15, 23, 42, 0.82) 26%,
+    rgba(22, 34, 62, 0.6) 55%,
+    rgba(30, 46, 82, 0.44) 100%
+  );
+}
+
+
+/* --------------------------------------------------------------------------
+   滚动进入视口的渐入渐出（对齐腾讯/腾讯云：文字逐级上浮淡入、图标缩放淡入）
+   —— 观察参考站得出：它的"动态"主要来自元素进入视口时的渐显，
+      而非背景（背景那张其实是静态 PNG）。我们整屏翻页时正好一屏一触发。
+
+   实现要点：
+   1) 容器本身不再整体位移，改由"每个直接子元素"依次渐入：
+      眉标 → 标题 → 正文 → 要点 → 徽章，形成先后节奏；
+   2) 图标（lucide）单独缩放淡入，只作用于 svg.lucide——
+      不会碰到 Recharts 绘制的图表 SVG；
+   3) 隐藏态只挂在 html.reveal-ready 之下（JS 就绪后才加），
+      脚本没跑 / 观察器失效 / 提前截图时内容依然可见。
+   -------------------------------------------------------------------------- */
+/* 过渡属性常驻（不挂在 html.reveal-ready 之下）：
+   切屏时该门控类会被移除再加回，若过渡属性随之消失，
+   元素会瞬间跳到终态——动画就"从来没跑起来"。 */
+.auth-screen [data-reveal] > * {
+  transition:
+    opacity 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* 这里**不能**常驻 will-change。
+     will-change: transform 会把元素永久提升为合成层，而合成层用不了次像素
+     抗锯齿（subpixel AA）—— 大标题会因此发虚。上面 body 那段"刻意不设
+     -webkit-font-smoothing: antialiased 以保留系统次像素抗锯齿"的意图，
+     会被这一行整个抵消掉（用户反馈"文字锐度"）。
+     正确做法：只在进场动画期间挂上（见下面 html.reveal-ready 那条），
+     动画结束（.is-inview）立刻释放回 auto。 */
+}
+
+/* 文字列**从左向右**渐入，不是上浮。
+   用户要求对齐腾讯那套观感：文字横向推进、图示缩放落定，两种运动分开。
+   [data-visual]（右侧卡片列）排除在外 —— 它跟着下面的缩放规则走。 */
+html.reveal-ready .auth-screen [data-reveal]:not([data-visual]) > * {
+  opacity: 0;
+  transform: translateX(-22px);
+  /* 动画期间才提升合成层：既有 GPU 加速，又不牺牲落地后的文字锐度 */
+  will-change: opacity, transform;
+}
+
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *,
+html.reveal-ready .auth-screen.is-inview [data-reveal]:not([data-visual]) > * {
+  opacity: 1;
+  transform: none;
+  /* 动画结束，释放合成层 → 次像素抗锯齿恢复 → 文字重新变锐 */
+  will-change: auto;
+}
+
+/* 逐级延迟：同屏内相邻居块依次登场（每级 90ms） */
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(1) { transition-delay: 0ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(2) { transition-delay: 130ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(3) { transition-delay: 261ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(4) { transition-delay: 391ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(5) { transition-delay: 522ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > *:nth-child(6) { transition-delay: 652ms; }
+
+/* 视觉列（右侧卡片）的"框"延后到与内容同一时刻起，
+   否则框会先落地、内容再填进去，像"空盒子先出现"。 */
+html.reveal-ready .auth-screen.is-inview [data-reveal][data-visual] > * {
+  transition-delay: 240ms;
+}
+
+/* 第二层：面板内部的图示元素（链路步骤、指标卡、图表、信息卡、要点条目、徽章）
+   也逐个浮现——腾讯系的观感是"文字先来、图示跟上"，而不是整块面板一起出现。
+   :not(strong):not(em) 是为了避开正文里的加粗词，否则会出现"句子里某个词后到"的怪相。 */
+html.reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em) {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 820ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 820ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:not(strong):not(em) {
+  opacity: 1;
+  transform: none;
+  /* 与第一层同理：落地后释放合成层，否则这些文字也一直是灰度抗锯齿 */
+  will-change: auto;
+}
+
+/* 第二层整体比第一层晚 260ms 起，内部再逐项 +70ms */
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(1) { transition-delay: 260ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(2) { transition-delay: 330ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(3) { transition-delay: 400ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(4) { transition-delay: 470ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(5) { transition-delay: 540ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > *:nth-child(6) { transition-delay: 610ms; }
+
+/* 第三层：更细的组成件（要点条目、指标卡、链路步骤）也各自浮现，
+   形成"文字 → 面板 → 组成件"三级节奏，接近腾讯系站点逐个卡片跳出来的观感。 */
+html.reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em) {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:not(strong):not(em) {
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(1) { transition-delay: 380ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(2) { transition-delay: 430ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(3) { transition-delay: 480ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(4) { transition-delay: 530ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(5) { transition-delay: 580ms; }
+html.reveal-ready .auth-screen.is-inview [data-reveal] > * > * > *:nth-child(6) { transition-delay: 630ms; }
+
+/* ==========================================================================
+   手机 / 平板（lg 以下）：就是一张**普通网页**
+   --------------------------------------------------------------------------
+   用户的原话："手机端就不用搞那种上下滑动的动画了，就像我滑动页面那样就行了，
+   普通的页面……也不用那种有弹性用的。"
+
+   所以这里不是"把动画调轻"，而是**一条都不跑**：
+     1) 进场编排整体的终态直接生效（opacity:1 / transform:none / transition:none），
+        滚动时内容不会淡入、不会位移、不会缩放 —— 内容就在那儿；
+     2) 图标那条回弹曲线单独处理：它的 transform 用的是
+        cubic-bezier(0.34, 1.4, 0.64, 1)，第二个参数 1.4 > 1 会产生**过冲**
+        （先冲过头再弹回来），这就是用户说的"弹性"；
+     3) 关掉滚到边界时的橡皮筋（overscroll-behavior），页面拉到头就停住。
+
+   注意用 !important 是必需的：原规则大量使用 :nth-child(n) 与多层后代选择器，
+   特异度普遍高于这里的基础选择器。
+   断点 1023px ＝ 单列堆叠版式；桌面 ≥1024 完整保留那套编排，不受影响。
+   ========================================================================== */
+@media (max-width: 1023px) {
+  /* 1) 进场动画整体不跑：直接落终态 */
+  html.reveal-ready .auth-screen [data-reveal] > *,
+  html.reveal-ready .auth-screen [data-reveal]:not([data-visual]) > *,
+  html.reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em),
+  html.reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em) {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    transition-delay: 0ms !important;
+    will-change: auto !important;
+  }
+
+  /* 2) 图标：连过冲曲线一起去掉。
+        选择器覆盖**整个 .auth-screen**，不能只写 [data-reveal] svg.lucide ——
+        实测还剩 44 处过冲，就是因为有一部分 lucide 图标不在 [data-reveal] 里
+        （手机端胶囊导航、返回顶部按钮、卡片外的小图标等），
+        只写后代链会漏掉它们。!important 足以压过原来那条
+        .auth-screen [data-reveal] svg.lucide，不必再拼特异度。 */
+  html.reveal-ready .auth-screen svg,
+  html.reveal-ready .auth-screen img,
+  .auth-screen svg,
+  .auth-screen img {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+  }
+
+  /* 3) 关掉边界橡皮筋（同一条也顺便关掉下拉刷新，演示时不会误触） */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+}
+
+/* 图标：轻微缩放 + 淡入，带一点回弹（腾讯系站点常见的图标入场） */
+.auth-screen [data-reveal] svg.lucide {
+  transition:
+    opacity 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 520ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+html.reveal-ready .auth-screen [data-reveal] svg.lucide {
+  opacity: 0;
+  transform: scale(0.55);
+}
+
+html.reveal-ready .auth-screen.is-inview [data-reveal] svg.lucide {
+  opacity: 1;
+  transform: none;
+}
+
+/* --------------------------------------------------------------------------
+   图示本体：**缩放落定**，不复用文字的"上浮"
+   —— 腾讯系页面里两种运动是分开的：文字向上浮入，图片/图示从略大处缩回落定。
+      全都用位移会显得整块一起平移，很呆。
+      这里只加 transform，**不动 opacity** —— 显隐已经由上面三层错峰负责，
+      重复声明会与那套 nth-child 延迟打架。
+      :not(.lucide) 是为了避开小图标（图标放大 4% 只会糊，没有"图片感"）。
+   -------------------------------------------------------------------------- */
+.auth-screen [data-reveal] svg:not(.lucide),
+.auth-screen [data-reveal] canvas,
+.auth-screen [data-reveal] img {
+  transform-origin: 50% 62%;
+  transition: transform 1200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html.reveal-ready .auth-screen [data-reveal] svg:not(.lucide),
+html.reveal-ready .auth-screen [data-reveal] canvas,
+html.reveal-ready .auth-screen [data-reveal] img {
+  transform: scale(1.035);
+}
+
+html.reveal-ready .auth-screen.is-inview [data-reveal] svg:not(.lucide),
+html.reveal-ready .auth-screen.is-inview [data-reveal] canvas,
+html.reveal-ready .auth-screen.is-inview [data-reveal] img {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.reveal-ready .auth-screen [data-reveal] > *,
+  html.reveal-ready .auth-screen [data-reveal] > * > *:not(strong):not(em),
+  html.reveal-ready .auth-screen [data-reveal] > * > * > *:not(strong):not(em),
+  html.reveal-ready .auth-screen [data-reveal] svg.lucide {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   页面转场（View Transitions API，Chrome 111+）
+   —— 之前的 .page-enter 只有新页面淡入，旧页面是"啪"一下消失，所以切换感很硬。
+      这里用原生转场：旧页面向左滑出、新页面从右滑入，同时交叉淡化；
+      顶栏单独命名（app-nav），转场时保持静止，只有内容在动。
+   -------------------------------------------------------------------------- */
+::view-transition-old(root) {
+  animation: vt-page-out 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+::view-transition-new(root) {
+  animation: vt-page-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes vt-page-out {
+  to {
+    opacity: 0;
+    transform: translateX(-2.5%);
+  }
+}
+
+@keyframes vt-page-in {
+  from {
+    opacity: 0;
+    transform: translateX(3.5%);
+  }
+}
+
+/* 顶栏在转场里**不参与淡入淡出**，直接换成新内容。
+   历史：这里先是写了 view-transition-name: app-nav —— 浏览器于是把顶栏从 root
+   快照里抠出来单独做交叉淡入，转场期间"登录页的「登录」"和"落地页的
+   「平台简介/核心技术…」"两套导航叠在一起互相 ghost，左上角看着一直在抖，
+   当时把命名去掉解决了 ghost。
+   但去掉命名之后，顶栏就跟着 root 一起交叉淡入；用户连续点按钮切换时，
+   顶栏一遍遍淡进淡出，反馈"渐入动画过于频繁，看起来像抽搐"。
+   正解是**命名 + 显式取消两端的动画**：老快照直接隐藏、新快照直接显示，
+   于是顶栏在转场中是一块稳定的、瞬间切换的导航条 —— 既没有 ghost，
+   也没有反复淡入。 */
+/* ==========================================================================
+   安全区（状态栏 / 刘海 / 底部手势条）
+   --------------------------------------------------------------------------
+   问题：APK 里 WebView 默认铺满整屏（含状态栏区域），而项目里此前**一处
+   env(safe-area-inset-*) 都没用过** —— 于是顶栏的「品牌 / 登录 / 主题」被手机的
+   时间、信号、电量盖住（用户真机截图确认）。
+   逐机型适配不现实，正确做法是让系统把"该让开多少"报给 CSS：
+     · frontend/index.html 的 viewport 必须带 viewport-fit=cover，
+       否则 env(safe-area-inset-*) 恒为 0、这条规则等于没写；
+     · 5 个页面的顶栏都带 .nav-blur，一条规则全覆盖；
+     · 只有真机（带刘海/状态栏覆盖）才会给出非零值，桌面浏览器一律 0，
+       不会平白多出留白。
+   ========================================================================== */
+.nav-blur {
+  /* 只下移，**不要动 height**。
+     上一版我在外层加了 height: calc(4rem + 安全区)，把顶栏压出了"胶囊和正文叠在一起"
+     的破版（用户真机截图）。原因是搞错了层级：
+         <header class="nav-blur">        ← 外层，装的是**两行**
+             <div class="… h-16 …">       ← 品牌栏 64px（h-16 在这一层）
+             <div class="nav-chips …">    ← 手机端胶囊栏，约 40px
+         </header>
+     外层自然高度约 104px。写死 64px 等于把两行压成一行高，第二行的胶囊只能溢出，
+     压到下面正文上。这里只保留 padding-top（安全区为 0 时完全不影响布局），
+     高度交回给内容自然撑开。 */
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* 右下角浮动按钮（返回顶部）：避开底部手势条 / Home 指示条 */
+.fixed.bottom-6.right-6 {
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  right: calc(1.5rem + env(safe-area-inset-right, 0px));
+}
+
+/* 整屏分屏（登录页 / 落地页 / 首次引导，共 5 处 min-h-screen 的页面里都用了
+   .auth-screen）：在竖屏手机上把底部安全区算进去，
+   否则最后一行内容会压在手势条底下。 */
+.auth-screen {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.nav-blur {
+  view-transition-name: app-nav;
+}
+::view-transition-old(app-nav) {
+  animation: none;
+  opacity: 0;
+}
+::view-transition-new(app-nav) {
+  animation: none;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   路由切换的进场动画（主页 ↔ 登录页）
+   —— 之前是 React Router 直接换组件，视觉上是"啪"一下就切了，没有过渡。
+      这里给页面根节点一个 260ms 的淡入 + 轻微上浮；只动 opacity/transform，
+      走合成层；尊重系统"减弱动态效果"设置。
+   ========================================================================== */
+/* 只在**首次加载**播一次，之后的客户端路由切换一律不播。
+   原因：这个类挂在各页面的根节点上，而根节点包含顶栏 —— 每次切页都会重新挂载、
+   于是整页（含顶栏）从 opacity:0 再淡入一遍。高频采样实测：连续切 3 次页，
+   页面根透明度出现 25 次「<1」的采样（0 → 0.598 → 0.927 → 1）。
+   连点按钮时就是一遍遍重播，用户原话："上方的导航栏渐入动画过于频繁，
+   看起来像抽搐"。
+   而且路由切换本来就有 View Transition 在做交叉淡入（.vt-page-in/out），
+   这个 page-enter 是**叠加的第二层动画**，去掉它不会让切换变生硬。
+   main.tsx 在挂载 400ms 后给 <html> 加 app-booted，之后新挂载的页面不再命中。 */
+html:not(.app-booted) .page-enter {
+  animation: page-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   动态背景「极光」+ 顶栏毛玻璃
+   —— 灵感来自腾讯云首页的动态渐变，但做了两处克制：
+      1) 只动 transform（合成层，不触发重排/重绘），三个光斑 42~60s 缓慢漂移；
+      2) 低不透明度叠在浅底上，颜色全部取自项目品牌色（蓝 / 青 / 淡紫），
+         避免出现"彩色塑料感"。
+   登录页与主页共用这一层，配色与动态效果保持一致。
+   ========================================================================== */
+.aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.aurora span {
+  position: absolute;
+  display: block;
+  border-radius: 9999px;
+  will-change: transform;
+}
+
+.aurora span:nth-child(1) {
+  width: 52vw;
+  height: 52vw;
+  left: -14vw;
+  top: -20vw;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(117, 146, 255, 0.44) 0%,
+    rgba(117, 146, 255, 0.15) 45%,
+    transparent 70%
+  );
+  animation: aurora-drift-1 42s ease-in-out infinite;
+}
+
+.aurora span:nth-child(2) {
+  width: 44vw;
+  height: 44vw;
+  right: -12vw;
+  top: -14vw;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(127, 215, 255, 0.38) 0%,
+    rgba(127, 215, 255, 0.13) 45%,
+    transparent 70%
+  );
+  animation: aurora-drift-2 52s ease-in-out infinite;
+}
+
+.aurora span:nth-child(3) {
+  width: 46vw;
+  height: 46vw;
+  left: 24vw;
+  bottom: -22vw;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(194, 181, 255, 0.38) 0%,
+    rgba(194, 181, 255, 0.13) 45%,
+    transparent 70%
+  );
+  animation: aurora-drift-3 60s ease-in-out infinite;
+}
+
+@keyframes aurora-drift-1 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(6vw, 4vw, 0) scale(1.12); }
+}
+@keyframes aurora-drift-2 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.08); }
+  50% { transform: translate3d(-5vw, 5vw, 0) scale(1); }
+}
+@keyframes aurora-drift-3 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-6vw, -4vw, 0) scale(1.14); }
+}
+
+/* 深色下光斑压暗，避免在深底上"发光过强" */
+.dark .aurora span {
+  opacity: 0.5;
+}
+
+/* 尊重系统"减弱动态效果"设置：保留光斑但不漂移 */
+@media (prefers-reduced-motion: reduce) {
+  .aurora span {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   公共入口背景的三个变体
+   —— 主页首屏、登录、首次筛查共用同一套蓝白 / 蓝紫语言，只调整"装饰的量"：
+      rich    内容屏 / 工作台：三团光 + 三片玻璃（原样）
+      calm    登录、首次选择：一片大曲面 + 两团淡光，去掉青色光团
+      minimal 主页首屏：人物插画已经承担弧面，背景只留一层淡雾
+      still   正式答题：形状与颜色不变，只停漂移，阅读区保持稳定
+   —— 视觉方向统一为"左白右蓝紫"，与首屏人物插画的弧面方向一致。
+   -------------------------------------------------------------------------- */
+.aurora--calm .glass-1,
+.aurora--calm .glass-3,
+.aurora--minimal .glass {
+  display: none;
+}
+
+.aurora--calm span:nth-child(2),
+.aurora--minimal span:nth-child(2) {
+  display: none;
+}
+
+/* calm：左上一团淡蓝、右下一团淡紫；右上一片大曲面承接登录卡 */
+.aurora--calm span:nth-child(1) {
+  width: 56vw;
+  height: 56vw;
+  left: -20vw;
+  top: -24vw;
+  opacity: 0.55;
+}
+
+.aurora--calm span:nth-child(3) {
+  width: 48vw;
+  height: 48vw;
+  right: -16vw;
+  bottom: -22vw;
+  left: auto;
+  opacity: 0.5;
+}
+
+.aurora--calm .glass-2 {
+  width: 64vw;
+  height: 54vw;
+  right: -16vw;
+  top: -14vw;
+  border-radius: 46% 54% 58% 42% / 52% 48% 52% 48%;
+  background: linear-gradient(
+    140deg,
+    rgba(255, 255, 255, 0.48) 0%,
+    rgba(176, 205, 255, 0.26) 52%,
+    rgba(160, 170, 255, 0.14) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow:
+    inset 0 -30px 70px -30px rgba(110, 150, 255, 0.18),
+    0 30px 90px -60px rgba(70, 95, 255, 0.35);
+  opacity: 0.9;
+  transform: rotate(0deg);
+  animation-duration: 70s;
+}
+
+/* minimal：首屏只保留很淡的蓝雾，把装饰让给人物插画 */
+.aurora--minimal span:nth-child(1) {
+  width: 62vw;
+  height: 62vw;
+  left: -24vw;
+  top: -30vw;
+  opacity: 0.4;
+}
+
+.aurora--minimal span:nth-child(3) {
+  width: 42vw;
+  height: 42vw;
+  right: -14vw;
+  bottom: -24vw;
+  left: auto;
+  opacity: 0.32;
+}
+
+.aurora--calm::after,
+.aurora--minimal::after {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(247, 250, 255, 0.72) 30%,
+    rgba(228, 240, 255, 0.42) 62%,
+    rgba(208, 222, 255, 0.28) 100%
+  );
+}
+
+/* 深色：保持同一构图，明暗层次重新安排；不出现白雾 */
+.dark .aurora--calm span:nth-child(1),
+.dark .aurora--calm span:nth-child(3),
+.dark .aurora--minimal span:nth-child(1),
+.dark .aurora--minimal span:nth-child(3) {
+  opacity: 0.26;
+}
+
+.dark .aurora--calm .glass-2 {
+  background: linear-gradient(
+    140deg,
+    rgba(104, 134, 240, 0.16) 0%,
+    rgba(70, 92, 186, 0.1) 52%,
+    rgba(44, 56, 116, 0.06) 100%
+  );
+  border-color: rgba(146, 178, 255, 0.12);
+  box-shadow:
+    inset 0 -30px 70px -30px rgba(18, 32, 74, 0.5),
+    0 30px 90px -60px rgba(4, 10, 28, 0.8);
+  opacity: 0.55;
+}
+
+.dark .aurora--calm::after,
+.dark .aurora--minimal::after {
+  background: linear-gradient(
+    100deg,
+    rgba(8, 13, 26, 0.96) 0%,
+    rgba(12, 19, 36, 0.86) 34%,
+    rgba(20, 31, 58, 0.58) 68%,
+    rgba(30, 42, 82, 0.34) 100%
+  );
+}
+
+/* 深色下左栏文字落在整片暗底上，空白会显得比浅色更"空"。
+   这里在左侧补一层非常淡的蓝紫柔光：不改变"右下大曲面"的构图，
+   也不跨到正文上形成第二块形状，只把文字背后的明度垫起来。
+   浅色模式不需要（白色与蓝白渐变本身已经有层次）。 */
+.dark .aurora--calm::before {
+  content: "";
+  position: absolute;
+  left: 3%;
+  top: 26%;
+  width: 46vw;
+  height: 42vw;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(70, 95, 255, 0.26) 0%,
+    rgba(70, 95, 255, 0.11) 44%,
+    transparent 72%
+  );
+  filter: blur(12px);
+  pointer-events: none;
+}
+
+/* 正式答题：形状保留、动画全停（只停漂移，不改变深浅色下的样子） */
+.aurora--still,
+.aurora--still span,
+.aurora--still .glass {
+  animation: none !important;
+}
+
+.aurora--still span,
+.aurora--still .glass {
+  will-change: auto !important;
+}
+
+
+/* 顶栏：不再有自己的底色。
+   之前给顶栏一块淡紫蓝（--color-header），与页面底色（--color-page）不是同一个色，
+   视觉上就成了横在顶部的一条"色带"，和下方背景割裂。
+   现在与页面共用同一个背景——顶栏只做模糊，像腾讯云那样"同一张背景、模糊度不同"。 */
+/* 毛玻璃与底边渐隐必须画在 ::before 这一层，不能直接写在 .nav-blur 上。
+   mask-image 的作用范围是元素**及其整棵子树**，而顶栏只有 64px 高：
+   渐隐从 62%（约 40px）开始、100%（64px）处全透明。顶栏里的两个下拉
+   ——搜索「快速前往」与用户菜单——都是 top-full mt-3，从 76px 才开始，
+   于是整个面板落在遮罩之外被裁成完全透明：DOM 里在、
+   getBoundingClientRect 正常、checkVisibility() 也返回 true，
+   但既不绘制也无法点击（elementsFromPoint 里根本查不到它）。
+   2026-10-14 反馈："顶部那个导航栏，之前按下它有一个列表的，现在没了。"
+   挪到没有子元素的 ::before 上，渐隐观感完全不变，下拉不再被裁。 */
+.nav-blur::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* -1 让这一层待在顶栏内容之下。顶栏自身是 sticky + z-index，已成层叠上下文，
+     负 z-index 不会掉到页面内容后面去。 */
+  z-index: -1;
+  pointer-events: none;
+  /* 底色必须常驻，不能只靠 backdrop-filter。
+     真机（Android Chrome 打开 file:// 打包版）上毛玻璃整个不渲染，
+     顶栏就变成全透明：滚动时正文的大标题直接和顶栏文字叠在一起，看着像"撞版"
+     （2026-10-14 真机录屏复现；headless 手机模拟同样复现）。
+     取与页面同一个 --color-page，所以不会出现原来那种"色带"；
+     底边由下面的 mask 一起渐隐，接缝仍然没有。 */
+  background: var(--color-page);
+  /* saturate 从 180% 收到 130%：深色模式下 180% 会把背后的深蓝再"提纯"一档，
+     顶栏那块因此比下方更实，边界就成了硬边。 */
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  /* 底部渐隐（关键）：
+     backdrop-filter 默认到元素底边"一刀切"，毛玻璃与页面之间会留下一条
+     可见的横向接缝 —— 深色下尤其明显（用户反馈"交接好突兀"）。
+     用 mask-image 让模糊本身在底边前渐隐到透明，接缝就没了。
+     注意 mask 同时作用于 background 和 backdrop-filter，所以一层就够。
+
+     这里必须用**像素**而不是百分比。原先写的是 `#000 62%, transparent 100%`，
+     那是按 64px 顶栏调的（64×62% ≈ 40px 处开始渐隐）。手机端顶栏下面多了一条
+     章节胶囊行、总高约 110px，62% 就变成 68px 才开始渐隐 —— 正好把胶囊那一行
+     罩进渐隐区，底色在那里已经半透明，正文直接透上来和胶囊叠在一起
+     （2026-10-14 真机录屏：胶囊背后能看到"…再由RAG结合…"字样）。
+     改成 `calc(100% - 24px)`：无论顶栏多高，都只在最后 24px 过渡；
+     对 64px 顶栏来说起点是 40px，与原值几乎完全一致，桌面观感不变。 */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent 100%);
+}
+
+/* 手机/平板：顶栏里多了一条章节胶囊行（.nav-chips，lg 以下显示），
+   整条顶栏实测 106px（主栏 64 + 胶囊行 42）。只要还挂着底边渐隐，
+   渐隐区就会落进胶囊行，胶囊背后透出正文 —— 真机录屏里能直接看到
+   "…再由RAG结合…"和胶囊叠在一起。
+   所以这里**整条去掉渐隐**，让顶栏是一块完整的不透明底色。
+   代价是底边从"渐隐"变成"硬边"，但底色就是 --color-page（与页面同色），
+   硬边在视觉上等于看不见；原来那条"突兀的接缝"是毛玻璃造成的，
+   而 Android Chrome 打开 file:// 时 backdrop-filter 本就不渲染，
+   这里只剩同色实底，不存在接缝。 */
+@media (max-width: 1023px) {
+  .nav-blur::before {
+    mask-image: none;
+    -webkit-mask-image: none;
+    /* 顶栏是 sticky 的，毛玻璃意味着滚动时**每一帧**都要重新采样背后的内容 ——
+       这是移动端滚动掉帧最经典的原因。而且实测 Android Chrome 打开 file://
+       时它根本不渲染（.nav-blur::before 的底色才是真正在起作用的那个），
+       等于白付了每帧重采样这笔账。这里直接关掉，观感不变（底色是不透明的）。 */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  /* 背景里那两个"永远在动"的层也停掉：
+       · .aurora .glass-1/2/3 —— 42~62s 的无限漂移，且基类上挂着常驻
+         will-change: transform（等于永久占着合成层）；
+       · .aurora span ×3 —— 同样 42~62s 无限漂移。
+     它们是大面积渐变/模糊形状，持续动画就是持续合成，滚动时和内容抢 GPU。
+     手机端改为静止：形状、颜色、位置都不变，只是不再漂移 ——
+     静态背景本来就看不出来"少了动画"，但滚动会明显跟手。
+     用户反馈"手机端上滑时候的卡顿"（2026-10-14 第二次反馈移动端性能）。 */
+  .aurora .glass,
+  .aurora span {
+    animation: none !important;
+  }
+  .aurora .glass {
+    will-change: auto !important;
+  }
+}
+
+/* 移动端章节胶囊条：横向可滑但不显示滚动条（手机原生滚动条又粗又碍眼），
+   并去掉移动端点击时的灰色高亮块 —— 胶囊本身已经有选中态，再叠一层很脏。 */
+.nav-chips {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: transparent;
+}
+.nav-chips::-webkit-scrollbar {
+  display: none;
+}
+
+/* 浏览器不支持 backdrop-filter 时，给一层极淡的底色兜住可读性
+   （仍然取自页面底色，不引入第二种颜色） */
+@supports not (backdrop-filter: blur(1px)) {
+  .nav-blur::before {
+    background: color-mix(in srgb, var(--color-page) 88%, transparent);
+  }
+  /* 侧栏同样兜底：不支持毛玻璃时回到接近不透明的表面色，
+     否则半透明却没有模糊，文字会跟背后的极光糊在一起。 */
+  .app-sidebar {
+    background: color-mix(in srgb, var(--color-white) 96%, transparent);
+  }
+}
+
+/* ==========================================================================
+   登录页标题层级
+   —— 上面针对 h1~h4 的全局规则写在 @layer 之外，会压过 Tailwind 的 text-*
+      工具类（无层级样式优先于分层样式），所以这里必须同样用无层级规则覆盖，
+      否则落地页标题会被锁在 h1=26px / h2=17px。
+   ========================================================================== */
+/* 字重与字距对齐腾讯官网实测值：主力 600、字距 normal~微正。
+   本项目取方案 B——大标题 500 + 极轻正字距（+0.01em）：不挤压字面，
+   笔画留白更多，观感更"清新"。原先的 700 + tracking-tight（−0.025em）
+   是"又粗又挤"，与清新相反。 */
+.auth-snap .auth-hero-title {
+  font-size: 2.125rem; /* 34px */
+  line-height: 1.2;
+  /* 500（Medium）：在 400 的轻盈与 600 的厚重之间取中。
+     密度标定（归一化到同字高后与目标图比对）：
+       400 0.129 / 500 0.159 / 600 0.177，目标图 0.125；
+     400 最贴近截图，但实际观感偏细，按"两者中和"取 500。
+     抗锯齿保持系统默认（auto），不退回灰度抗锯齿。 */
+  font-weight: 500;
+  letter-spacing: 0.25px;
+}
+.auth-snap .auth-section-title {
+  font-size: 2.375rem; /* 38px */
+  line-height: 1.2;
+  /* 字号/字重照抄腾讯官网实测值（2026-10-14 用 headless 打开
+     tencent.com/zh-cn/who-we-are/ 读 computedStyle 得到，非目测）：
+       「我们一直秉承科技向善的宗旨…」这句 h3
+       46px / 600 / line-height 55.2px(=1.20) / letter-spacing 0.25px / 容器 888px
+     行高与字距本项目原本就与之一致，差的只有字号和字重，所以只动这两项。
+     桌面档 46px 就取腾讯的绝对值；字号占容器比因此从 9.8% 收到约 7.5%，
+     接近腾讯那 5.2% 的克制感。
+     为什么字重反而从 400 提到 600：腾讯的大标题实测就是 600，
+     它看着不粗是因为**字号更小**（46 而非 60）—— 绝对尺寸直接决定观感重量。
+     之前 60px + 500 显得"又粗又挤"、60px + 400 又"太细"，
+     症结在字号偏大，不在字重本身。 */
+  font-weight: 600;
+  letter-spacing: 0.25px;
+}
+@media (min-width: 640px) {
+  .auth-snap .auth-hero-title {
+    font-size: 3.125rem; /* 50px */
+  }
+  .auth-snap .auth-section-title {
+    /* 腾讯实测是 46px，用户反馈"可以调大点，但不要太过"，取 52px：
+       仍在腾讯那一档的量级（占容器约 8.5%，介于腾讯 5.2% 与原 9.8% 之间），
+       比 46px 有分量，又不像 60px 那样压人。 */
+    font-size: 3.25rem; /* 52px */
+  }
+}
+
+/* 首次引导（FirstRunShell）的标题自带手工 <br>，行是**作者排好的**，
+   度量不能收紧到会把作者的分行再拆一次。
+   实测："最后一题，／请按真实感受回答。" 第二段正好 9 个字，
+   而上面统一给的度量是 9em（= 9 字）—— 卡在临界点，加上中文标点禁则，
+   末尾的"答。"被挤成第三行，孤零零一个字（用户反馈"这里的排版不好"）。
+   这里给一档更宽的度量，保证作者写的每一行都放得下。 */
+.first-run .auth-section-title {
+  max-width: min(100%, 12em);
+}
+
+/* 窄屏（手机）适配。
+   位置很关键：媒体查询**不增加权重**，同优先级下靠源码顺序决胜负。
+   所以这段必须排在上面那几条基础字号规则之后，否则会被基础值盖掉
+   —— 上面两组 max-height 字号规则（给矮屏笔记本写的）就是因为排在基础规则
+   前面，一直没生效过。
+   1) 修标题层级倒挂：分屏标题原本 38px，比首屏主标题 34px 还大，
+      手机上"二级比一级还大"很别扭，还把本就不够的一屏推得更长。
+   2) 手机是纵向长滚动，不再需要"尽量压进一屏"那套收紧留白；
+      左右也收窄一点，否则 390px 宽下正文每行只剩十来个字。 */
+@media (max-width: 639px) {
+  .auth-snap .auth-hero-title {
+    font-size: 1.875rem; /* 30px（原 34px） */
+    line-height: 1.22;
+  }
+  .auth-snap .auth-section-title {
+    font-size: 1.625rem; /* 26px（原 38px）—— 必须小于首屏主标题 */
+    line-height: 1.25;
+  }
+  .auth-snap .auth-screen > div {
+    padding-top: 1.5rem;
+    padding-bottom: 1.25rem;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+  .auth-snap #top {
+    padding-top: 1.25rem;
+    padding-bottom: 0.75rem;
+  }
+}
+
+/* 标题防溢出：中文长标题不可断行时会顶出栅格、被右侧卡片盖住。
+   这里统一允许在字符间断行，并留一个兜底防止超长英文串撑破容器。
+
+   max-width 不能再写 100%：本文件开头那段说明过"无层级样式优先于分层工具类"，
+   而 100% 会把标题元素上 Tailwind 的 `max-w-[720px]` 整个盖掉 —— 度量控制形同
+   虚设，行宽只剩栅格列宽。栅格列宽随断点变（1440 下 609px、2xl 下 720px），
+   于是同一个标题在不同屏幕上时折时不折：
+     "三模态线索与多维评估指标" 单行要 630px —— 1440 下折两行，2xl 下挤成一行。
+   用户反馈就是"这种标题太长了，要换行"。
+   改成显式度量：52px 字号下约 10~11 字/行，11 字以上的标题稳定折两行，
+   且不会折成三行（最长的 772px / 560 ≈ 1.4 行）。 */
+.auth-snap .auth-hero-title,
+.auth-snap .auth-section-title {
+  /* auto-phrase：让浏览器按**词组**边界断行，而不是逐字断。
+     中文没有空格，默认 normal 会得到"动态跨模态哈希检 / 索与 RAG 生成"
+     这种把"检索"劈开的断法（用户反馈"检字之前就要换行"）。
+     auto-phrase 会利用语言模型分出词组，断点落在"哈希 / 检索"之间。
+     浏览器不支持时自动退回 normal，只是断行位置差一些，不会破版。
+     需要页面声明 lang（index.html 里是 zh-CN）才生效。 */
+  word-break: auto-phrase;
+  overflow-wrap: break-word;
+  /* 度量用 em，**必须跟着字号走**。
+     这里踩过一个坑：原本写死 460px，但字号是分档的（≥640 是 52px、
+     ≥1536 是 60px），于是"每行几个字"随屏幕变 —— 1440 下 8 字/行、
+     1920 下只有 7.6 字/行，同一个标题在两台电脑上断行结果完全不同，
+     1920 上甚至断成三行、末尾孤儿一个"成"字（用户要求"注意不同电脑
+     显示尺寸的兼容"）。换成 em 后，任何字号下都是固定的 9 字/行，
+     断行结果在所有尺寸上一致。
+     560px 时两行都铺满，整块看着像个"方块"；收到 9em 后右边缘有参差，
+     接近腾讯那种自然断行的观感。 */
+  max-width: min(100%, 9em);
+  /* 关掉 text-balance：它会把两行**拉成等长**（12 字 → 6+6），
+     正是"这一块太齐整"的来源。腾讯的标题右边缘是参差的，
+     所以这里改回自然断行 —— 注意必须写在无层级里才能压过
+     JSX 上的 Tailwind `text-balance` 工具类。 */
+  text-wrap: wrap;
+}
+
+/* 超宽屏（全屏 2K/4K）适配：内容上浮一档，避免"小内容飘在大屏中央" */
+@media (min-width: 1536px) {
+  .auth-snap .auth-hero-title {
+    font-size: 3.75rem; /* 56 → 60px */
+  }
+  .auth-snap .auth-section-title {
+    /* 跟着 52px 那档同比例放大一档（原 68px） */
+    font-size: 3.75rem; /* 60px */
+  }
+}
+
+/* ==========================================================================
+   工作台标题层级（个人端 / 管理端）
+   —— 与登录页卡片完全同一套结构：眉标（13px / 字距 .16em / 主色）+
+      标题 + 说明文字。只是工作台一屏要放数据，标题取 30px，
+      而不是主页那档 38~68px 的展示型大标题。
+   和 .auth-snap 一样必须写在 @layer 之外：上面的 h1 { 26px } 未分层，
+   否则这里的字号会被它压掉。
+   ========================================================================== */
+.app-page-eyebrow {
+  font-size: 0.8125rem; /* 13px，同登录页卡片眉标 */
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--color-primary-500);
+}
+
+.app-page-title {
+  font-size: 1.875rem; /* 30px */
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: 0.25px;
+  overflow-wrap: break-word;
+}
+
+/* 超宽屏（2K/4K）与主页一样上浮一档 */
+@media (min-width: 1536px) {
+  .app-page-title {
+    font-size: 2rem; /* 32px */
+  }
+}
+
+/* ==========================================================================
+   首次引导欢迎页（/personal/welcome）的入场动效
+   —— 文案逐条上浮、四张量表卡随后依次落位、卡片整体再慢半拍，
+      同心圆轨道与柔光最先淡入并轻微放大，形成"背景先亮、文字后到"的顺序。
+   —— 只动 opacity / transform / scale（都是合成层属性，不触发重排重绘），
+      并且全部尊重系统"减弱动态效果"。
+   ========================================================================== */
+.welcome-in [data-fade] > * {
+  opacity: 0;
+  animation: welcome-rise 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* 左侧文案：眉标 → 标题 → 正文 → 要点，80ms 一档 */
+.welcome-in [data-fade] > *:nth-child(1) { animation-delay: 40ms; }
+.welcome-in [data-fade] > *:nth-child(2) { animation-delay: 100ms; }
+.welcome-in [data-fade] > *:nth-child(3) { animation-delay: 160ms; }
+.welcome-in [data-fade] > *:nth-child(4) { animation-delay: 220ms; }
+.welcome-in [data-fade] > *:nth-child(5) { animation-delay: 280ms; }
+.welcome-in [data-fade] > *:nth-child(6) { animation-delay: 340ms; }
+
+@keyframes welcome-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 卡片整块：比左侧文案晚、幅度大一点，像是"落位" */
+.welcome-in [data-fade="card"] > * {
+  animation-duration: 520ms;
+}
+
+/* 卡内四张量表卡：等卡片标题落位后依次出现 */
+.welcome-in [data-fade-tiles] > * {
+  opacity: 0;
+  animation: welcome-tile 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.welcome-in [data-fade-tiles] > *:nth-child(1) { animation-delay: 320ms; }
+.welcome-in [data-fade-tiles] > *:nth-child(2) { animation-delay: 380ms; }
+.welcome-in [data-fade-tiles] > *:nth-child(3) { animation-delay: 440ms; }
+.welcome-in [data-fade-tiles] > *:nth-child(4) { animation-delay: 500ms; }
+
+@keyframes welcome-tile {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 图形层：同心圆先淡入再轻微放大。
+   注意这里动的是独立的 scale 属性，不是 transform——登录页用 Tailwind 的
+   scale-[1.35] / scale-[1.7] 画另外两圈，那条工具类写的是 transform，
+   两者会相乘，因此不会把圆的尺寸顶掉。 */
+.welcome-orbit {
+  /* 圆默认落在 .auth-art 的左上角（绝对定位 + auto 偏移），
+     欢迎页希望它们围着右侧的选择卡，所以这里显式居中并右移一档 */
+  left: 62%;
+  top: 48%;
+  margin: -280px 0 0 -280px;
+}
+.welcome-in .welcome-orbit {
+  opacity: 0;
+  animation: welcome-orbit 760ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.welcome-in .welcome-orbit:nth-of-type(2) { animation-delay: 80ms; }
+.welcome-in .welcome-orbit:nth-of-type(3) { animation-delay: 160ms; }
+.welcome-in .welcome-glow {
+  opacity: 0;
+  animation: welcome-glow 900ms ease-out forwards;
+}
+
+@keyframes welcome-orbit {
+  from {
+    opacity: 0;
+    scale: 0.94;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes welcome-glow {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 轨道上的那枚点：最后出现，作为视觉落点。
+   它刻意不带 .welcome-orbit —— 那套规则会改写 left/top/margin（类选择器权重更高），
+   把这个点甩到圆心上去。 */
+.welcome-dot {
+  position: absolute;
+  left: 62%;
+  top: 48%;
+  width: 10px;
+  height: 10px;
+  margin: -285px 0 0 5px;
+  border-radius: 999px;
+  background: var(--color-primary-500);
+  box-shadow: 0 0 0 6px #465fff1f;
+  pointer-events: none;
+}
+.welcome-in .welcome-dot {
+  opacity: 0;
+  animation: welcome-glow 520ms ease-out 280ms forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-in [data-fade] > *,
+  .welcome-in [data-fade-tiles] > *,
+  .welcome-in .welcome-orbit,
+  .welcome-in .welcome-glow,
+  .welcome-in .welcome-dot {
+    opacity: 1;
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   首次引导 · 答题页
+   ========================================================================== */
+
+/* 题干折行：必须用自然折行（greedy），不能用 text-balance / text-pretty。
+   平衡折行为了让两行长度接近，会在句子中间提前断开——效果图上第 9 题那句
+   「有不如死掉或用某种方式 / 伤害自己的念头」就是这么被折断的。
+   自然折行会先把第一行填满再换行，读起来才是一个完整的短语。
+   写在未分层区域，确保压得过任何 text-* 工具类。 */
+/* 02–04 的左侧主标题。
+   必须用类选择器显式给字号：全局 h1 { font-size: 1.625rem } 在无层级区域，
+   会压过 Tailwind 的 text-[52px]（和题干 h3 是同一类问题）。
+   52px 与入口页的 60px 拉开一档，但明显高于原来的 26px。 */
+.first-run-title {
+  font-size: 2.375rem; /* 38px */
+  line-height: 1.25;
+}
+
+@media (min-width: 640px) {
+  .first-run-title {
+    font-size: 2.75rem; /* 44px */
+  }
+}
+
+@media (min-width: 1024px) {
+  .first-run-title {
+    font-size: 3.25rem; /* 52px */
+  }
+}
+
+.first-run-question {
+  text-wrap: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+  /* 题干字号沿用原来的视觉（全局 h3 的 17px）。 */
+}
+
+/* 换题时的题目淡入：只动 opacity/transform，避免整卡重排 */
+.question-enter {
+  animation: question-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes question-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 量表介绍弹窗：进出场都要有，并且互相对称。
+   之前只有进场，关闭时组件直接卸载，观感是"啪"地消失。 */
+.scale-intro-dialog {
+  animation: dialog-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.scale-intro-dialog-out {
+  animation: dialog-exit 170ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.dialog-backdrop-in {
+  animation: backdrop-in 200ms ease-out both;
+}
+
+.dialog-backdrop-out {
+  animation: backdrop-out 170ms ease-in both;
+}
+
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes dialog-exit {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question-enter,
+  .scale-intro-dialog,
+  .scale-intro-dialog-out,
+  .dialog-backdrop-in,
+  .dialog-backdrop-out {
+    animation: none;
+  }
+}
+
+/* 首次引导 03 的「本次筛查报告卡」：桌面端长宽固定。
+   切换 结果摘要 / 分析依据 / 后续建议 时卡片尺寸必须不变（内容多就在卡内滚动），
+   否则短标签下卡片会"向上飘"。写在未分层区域，确保压得过任何工具类。 */
+@media (min-width: 1024px) {
+  .report-card {
+    width: 600px;
+    /* 高度按视口自适应（上限 720px）：切换三个标签时尺寸仍然不变，
+       但展开「本次作答与补充」这类内容时不会被截断，也不用在小框里滚动。 */
+    height: min(78vh, 720px) !important;
+    flex: none;
+    /* 整块略微上移：贴顶栏下沿一点，视觉重心不再偏下（用 translate 不占布局，
+       也就不会和其它 transform 工具类打架） */
+    translate: 0 -46px;
+  }
+}
+
+/* 登录页左侧宣传区：细网格底纹 + 同心圆轨道（沿用旧版视觉） */
+/* 折线图的网格线与辅助线：用变量而非硬编码，深色下自动变暗 */
+.chart-grid {
+  stroke: var(--color-slate-100);
+}
+.chart-guide {
+  stroke: var(--color-slate-200);
+}
+
+.auth-art {
+  position: relative;
+  overflow: hidden;
+}
+.auth-art::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(#465fff0a 1px, transparent 1px),
+    linear-gradient(90deg, #465fff0a 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: radial-gradient(ellipse at center, black 25%, transparent 75%);
+  mask-image: radial-gradient(ellipse at center, black 25%, transparent 75%);
+}
+.auth-orbit {
+  position: absolute;
+  width: 560px;
+  height: 560px;
+  border: 1px solid #465fff12;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+
+/* --------------------------------------------------------------------------
+   个人端首页首屏：眉标 / 大标题 / 说明三行**从左向右依次登场**
+   （用户要求："图文都可以做一下渐进……就可以做从左向右的渐进"）
+   每级 110ms，第一行 60ms 起手 —— 比落地页快一档，
+   因为首页是每天要看的工作台，动效不该拖时间。
+   -------------------------------------------------------------------------- */
+@keyframes hero-line-in {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hero-stagger > * {
+  animation: hero-line-in 820ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hero-stagger > *:nth-child(1) { animation-delay: 80ms; }
+.hero-stagger > *:nth-child(2) { animation-delay: 240ms; }
+.hero-stagger > *:nth-child(3) { animation-delay: 400ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-stagger > * { animation: none; }
+}
+
+/* ==========================================================================
+   下拉提醒（ScrollHint）—— 仅手机端
+   --------------------------------------------------------------------------
+   手机屏幕短，登录页 / 首次引导 / 量表填写这类页面一屏装不下，
+   而用户看不出"下面还有内容"，容易以为页面就这些。
+   这个胶囊在底部提示，滚到底自动消失。
+   ========================================================================== */
+.scroll-hint-pill {
+  /* 轻微的上下浮动：1.6s 一次、幅度 3px —— 是"提示"不是"闪烁" */
+  animation: scroll-hint-bob 1.6s ease-in-out infinite;
+}
+
+@keyframes scroll-hint-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(3px); }
+}
+
+/* 箭头稍微快半拍，和胶囊错开，看起来像"往下带一下" */
+.scroll-hint-arrow {
+  animation: scroll-hint-arrow 1.6s ease-in-out infinite;
+}
+
+@keyframes scroll-hint-arrow {
+  0%, 100% { transform: translateY(-1px); opacity: 0.75; }
+  50%      { transform: translateY(1px);  opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-hint-pill,
+  .scroll-hint-arrow {
+    animation: none !important;
+  }
+}
+
+/* ============================================================================
+   主页首屏在「矮屏」上的收紧（2026-11-07）
+   背景：13–16 寸笔记本加上浏览器工具栏后，可视高度常常只有 700–820px；
+   首屏原本按 900+ 设计，矮屏时「立即体验」下面的两个立项标签会被推到
+   首屏之外，看起来像"页面没做完/被切掉"。这里只收紧首屏 (#top)，
+   其它章节的节奏不动：标题小一档、正文行高与字号收一档、纵向留白压一压，
+   目标是 700px 高度内也能完整看到 CTA 与标签。
+   ========================================================================== */
+@media (max-height: 820px) {
+  #top {
+    padding-top: 1.25rem;
+    padding-bottom: 1.5rem;
+  }
+  #top .auth-section-title {
+    font-size: 2.5rem; /* 40px，原 52px */
+    line-height: 1.15;
+    margin-top: 1rem;
+  }
+  #top .hero-body {
+    margin-top: 1.25rem;
+    font-size: 1rem;
+    line-height: 1.75;
+  }
+  #top .hero-badges {
+    margin-top: 0.85rem;
+  }
+}
+
+/* 更矮（约 700px，13 寸全屏 + 工具栏）：再收一档字号 */
+@media (max-height: 740px) {
+  #top .auth-section-title {
+    font-size: 2.15rem;
+    line-height: 1.15;
+  }
+  #top .hero-body {
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+  #top .hero-badges {
+    margin-top: 0.65rem;
+  }
+}
+
+/* ============================================================================
+   管理端案例详情抽屉 / 筛查小结弹窗的进出场（2026-11-07）
+   抽屉从右侧滑入、遮罩淡入；关闭时反向滑出（组件在 200ms 后卸载）。
+   时长与曲线沿用项目里其它动效（220–280ms、cubic-bezier(.22,1,.36,1)）。
+   ========================================================================== */
+@keyframes case-drawer-in {
+  from { transform: translateX(100%); opacity: 0.85; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes case-drawer-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0.85; }
+}
+@keyframes case-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes case-scrim-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes case-modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.case-drawer-in { animation: case-drawer-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.case-drawer-out { animation: case-drawer-out 200ms cubic-bezier(0.4, 0, 1, 1) both; }
+.case-scrim-in { animation: case-scrim-in 240ms ease-out both; }
+.case-scrim-out { animation: case-scrim-out 200ms ease-in both; }
+.case-modal-in { animation: case-modal-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .case-drawer-in,
+  .case-drawer-out,
+  .case-scrim-in,
+  .case-scrim-out,
+  .case-modal-in {
+    animation: none !important;
+  }
+}
+
+
+/* ==========================================================================
+   AI 陪伴对话页的机器人（AiCompanionBot.tsx）
+   动作克制：缓慢呼吸浮动 + 偶尔眨眼 + 嘴巴慢慢开合 —— 心理陪伴场景要的是
+   安定感，不用弹跳/闪烁这类易引发焦虑的动效。prefers-reduced-motion 下完全静止。
+
+   ⚠️ 一个容易踩的坑：SVG 子元素上的 CSS transform 长度是**用户坐标系单位**，
+   不是屏幕像素。本轮 viewBox 从 152 高变成 432 高，同一段 translateY 的
+   视觉位移因此缩到 1/3 —— 老数值照搬过来会"看不出来在动"。
+   下面所有位移值都是按新 viewBox 等比换算过的（保持占整体高度的比例不变）。
+   ========================================================================== */
+
+/* ── 旋转支点：一律走 transform-box: fill-box ────────────────────────────────
+   不能用 transform-origin: 340px 346px 这种写法。本组件 viewBox 的原点不是
+   0,0（是 "210 8 …"），而 transform-box 默认的 view-box 参考框把长度类
+   origin 解释为**相对 viewBox 原点**的偏移 —— 那样写会落到 210+340=550 上，
+   旋转整个跑飞。fill-box + 百分比则始终跟着元素自己的包围盒走，与 viewBox
+   原点无关，换成任何坐标系都不会错。 */
+.bot-pivot-bottom { transform-box: fill-box; transform-origin: center bottom; }
+.bot-pivot-top    { transform-box: fill-box; transform-origin: center top; }
+
+/* ── 歪头 ─────────────────────────────────────────────────────────────────
+   闲站时的"小反应"。要点三个：
+
+   · 支点在**脖子**。本组（头 + 天线 + 侧凸块）的包围盒下缘恰好落在头壳
+     底边 y=229 —— 天线在上、侧凸块在两侧，都不会把下缘拉低。配合
+     .bot-pivot-bottom 的 center bottom，转出来才是"歪头"而不是"原地打转"。
+   · 周期 13s，但**大部分时间角度是 0**：只在 26%–38% 之间轻轻歪一下（7°），
+     其余时间是 0。这样它看起来是"偶尔有个小动作"，
+     而不是一颗一直在摇的头。用 ease-in-out 让起落不生硬。
+   · 幅度 7°。再大就不像发呆，像在撒娇；再小则看不出来。
+
+   走路（.bot-tilt 不挂）和探看（改用固定内联 3°）时都不走这个动画 ——
+   一边迈腿一边歪头会显得抽搐，见 AiCompanionBot 里的类名条件。 */
+@keyframes bot-tilt {
+  0%,  24%  { transform: rotate(0deg); }
+  30%       { transform: rotate(7deg); }
+  36%       { transform: rotate(-6deg); }
+  42%, 100% { transform: rotate(0deg); }
+}
+
+.bot-tilt {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: bot-tilt 13s ease-in-out infinite;
+}
+
+/* 呼吸：幅度约为整体高度的 2.3%（与改造前比例一致） */
+@keyframes bot-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+
+/* 眨眼：大部分时间睁着，短暂闭合一下，像真人而不是机械闪烁 */
+@keyframes bot-blink {
+  0%, 91%, 100% { transform: scaleY(1); }
+  94%           { transform: scaleY(0.08); }
+}
+
+.bot-float {
+  animation: bot-float 4.2s ease-in-out infinite;
+}
+
+.bot-blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bot-blink 5.4s ease-in-out infinite;
+}
+
+/* 机器人"陪着等回复"：在落脚点上极轻地左右摇，像在耐心等你。 */
+@keyframes bot-perch {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(9px); }
+}
+
+.bot-perch {
+  animation: bot-perch 2.8s ease-in-out infinite;
+}
+
+/* ── 嘴巴：微笑弧线 ↔ 正圆张口 ─────────────────────────────────────────────
+   两个形状**各自独立、用交叉淡化切换**，不做形状插值。原因：弧线变形到圆形
+   的中间态是一个奇怪的曲边图形，看着像卡顿；交叉淡化虽然有一瞬叠影，
+   但读起来是干净的"嘴开了"。静默 4.4s → 张 1.4s → 合，周期 7.2s。
+   两个口型的中心同高（y≈191），所以切换时嘴巴不会上下跳。 */
+.bot-mouth-smile { animation: bot-mouth-smile 7.2s ease-in-out infinite; }
+.bot-mouth-open  { transform-box: fill-box; transform-origin: center; animation: bot-mouth-open 7.2s ease-in-out infinite; }
+
+@keyframes bot-mouth-smile {
+  0%, 61%, 100% { opacity: 1; }
+  68%, 86%      { opacity: 0; }
+}
+@keyframes bot-mouth-open {
+  0%, 61%, 100% { opacity: 0; transform: scale(0.6); }
+  68%, 86%      { opacity: 1; transform: scale(1); }
+}
+
+/* ── 走路 ─────────────────────────────────────────────────────────────────
+   五组动画必须**同周期（1.15s）同缓动**，否则起伏和迈腿会错拍，
+   看起来像在原地抽搐而不是走路。
+   周期从 0.8s 放宽到 1.15s：行走速度降到 40px/s（约常速步行的一半），
+   步频不跟着降就成了"原地小碎步划过屏幕"，一慢下来就露馅。
+   · bot-walk —— 身体起伏：一步一沉，幅度约整体高度的 1.6%。
+   · bot-leg-near / bot-leg-far —— 两条腿绕髋关节反向摆 20°。
+     正交摆（一条前一条后）才是走路；同相摆看起来像踢腿。
+   · bot-arm-near / bot-arm-far —— 双臂反相摆（与同侧腿相反），幅度收一半：
+     手臂短、又在身体侧后方，同幅度会显得像在甩手。 */
+@keyframes bot-walk {
+  0%, 100% { transform: translateY(0); }
+  25%      { transform: translateY(-7px); }
+  75%      { transform: translateY(-7px); }
+}
+@keyframes bot-leg-near {
+  0%, 100% { transform: rotate(20deg); }
+  50%      { transform: rotate(-20deg); }
+}
+@keyframes bot-leg-far {
+  0%, 100% { transform: rotate(-20deg); }
+  50%      { transform: rotate(20deg); }
+}
+@keyframes bot-arm-near {
+  0%, 100% { transform: rotate(-11deg); }
+  50%      { transform: rotate(11deg); }
+}
+@keyframes bot-arm-far {
+  0%, 100% { transform: rotate(11deg); }
+  50%      { transform: rotate(-11deg); }
+}
+
+.bot-walk      { animation: bot-walk 1.15s ease-in-out infinite; }
+.bot-leg-near  { animation: bot-leg-near 1.15s ease-in-out infinite; }
+.bot-leg-far   { animation: bot-leg-far 1.15s ease-in-out infinite; }
+/* 摆臂的支点在**肩关节**，不在手臂包围盒的几何中心：肩在各自包围盒的
+   内侧偏上（约 22% / 78%, 14%）。用 center top 摆会变成"以手腕为轴甩手"。 */
+.bot-arm-near  { transform-origin: 22% 14%; animation: bot-arm-near 1.15s ease-in-out infinite; }
+.bot-arm-far   { transform-origin: 78% 14%; animation: bot-arm-far 1.15s ease-in-out infinite; }
+
+/* ── 深浅色的可见性微调 ─────────────────────────────────────────────────────
+   机体是一套"深色金属材质"，浅底上是靠近黑描边立住的剪影；换到深色主题，
+   机体和背景同为深色，必须把轮廓高光提亮、背景光晕加强，才不会糊成一团。 */
+.bot-halo { opacity: 0.55; }
+.bot-rim  { opacity: 0.28; }
+
+.dark .bot-halo { opacity: 0.95; }
+.dark .bot-rim  { opacity: 0.55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bot-float,
+  .bot-blink,
+  .bot-perch,
+  .bot-tilt,
+  .bot-walk,
+  .bot-leg-near,
+  .bot-leg-far,
+  .bot-arm-near,
+  .bot-arm-far,
+  .bot-mouth-smile,
+  .bot-mouth-open { animation: none; }
+  /* 关掉动画后 .bot-mouth-open 会停在"完全不透明"的初始态，张开与微笑两个
+     形状叠在一起。这里显式把它藏掉，让静止画面保持"微笑"这一个状态。 */
+  .bot-mouth-open { opacity: 0; }
+}
+
+/* ═══════════════════ 知识图谱 · 3D 星空（2026-11-08 第四轮） ═══════════════════
+   图谱改成"深空球体"后，需要两条纯装饰性动画：
+     · kg-twinkle      —— 近景星点缓慢闪烁；
+     · kg-halo-pulse   —— 点击某节点时，同类型节点的光晕同步呼吸。
+   两条都只动 opacity / transform（合成层），不触发布局重排；
+   代价低的另一面是它们可以被 prefers-reduced-motion 整体关停 —— 见文件末尾。
+   ─────────────────────────────────────────────────────────────────────────── */
+
+@keyframes kg-twinkle {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+
+/* 闪烁周期刻意拉开到 4.4s：星空的呼吸要慢，快了就变成"屏幕在抖"。
+   各星点的差异靠 animation-delay（内联 style，按索引算）而不是改周期，
+   周期一致、相位错开，读起来才是同一片夜空。 */
+.kg-twinkle {
+  animation: kg-twinkle 4.4s ease-in-out infinite;
+}
+
+@keyframes kg-halo-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50%      { opacity: 0.9;  transform: scale(1.22); }
+}
+
+/* 同类发光的光晕：支点必须在节点自身中心（节点内是 translate 后的原点 0,0，
+   所以 fill-box + 50% 50% 正好是圆心）。用 50% 而非中心偏移，
+   是为了让光晕"从节点长出来"而不是"围着节点公转"。 */
+.kg-halo-pulse {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: kg-halo-pulse 2.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kg-twinkle,
+  .kg-halo-pulse { animation: none; }
+  /* 关掉动画后光晕定格在起始帧（淡），所以给一个够看的静态值兜底，
+     "同类发光"这个功能语义不能因为关了动画就消失。 */
+  .kg-halo-pulse { opacity: 0.75; }
+}
+
