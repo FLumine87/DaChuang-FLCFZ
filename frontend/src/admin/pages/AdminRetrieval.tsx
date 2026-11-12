@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Sparkles, Loader2, Camera, Mic, Image as ImageIcon, X } from 'lucide-react';
+import { Search, Sparkles, Loader2, Camera, ChevronDown, FolderOpen, Mic, Image as ImageIcon, X } from 'lucide-react';
 import { adminSearch, fetchRetrievalMedia } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import CameraCapture from '../../components/CameraCapture';
@@ -35,6 +35,8 @@ export default function AdminRetrieval() {
   const [mediaError, setMediaError] = useState('');
   /** 现场拍照（摄像头）：拍完与文件选择走同一条 pickMedia 链路 */
   const [cameraOpen, setCameraOpen] = useState(false);
+  /** 图像查询下拉：从文件选择 / 现场拍照 */
+  const [imgMenuOpen, setImgMenuOpen] = useState(false);
   const [reading, setReading] = useState(false);
   const [searchError, setSearchError] = useState('');
   const busy = useRef(false);
@@ -188,30 +190,62 @@ export default function AdminRetrieval() {
             className="hidden"
             onChange={(e) => { void pickMedia('audio', e.target.files?.[0] ?? null); e.target.value = ''; }}
           />
-          <button
-            type="button"
-            onClick={() => document.getElementById('admin-media-image')?.click()}
-            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-sm transition-colors ${
-              modality === 'image'
-                ? 'border-primary-500 bg-primary-50 text-primary-600'
-                : 'border-slate-200 text-slate-600 hover:border-primary-300'
-            }`}
-          >
-            图像查询
-          </button>
-          <button
-            type="button"
-            onClick={() => setCameraOpen(true)}
-            title="现场拍照作为图像查询线索"
-            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-sm transition-colors inline-flex items-center gap-1.5 ${
-              modality === 'image'
-                ? 'border-primary-500 bg-primary-50 text-primary-600'
-                : 'border-slate-200 text-slate-600 hover:border-primary-300'
-            }`}
-          >
-            <Camera className="h-4 w-4" />
-            拍照查询
-          </button>
+          {/* 图像查询：一个按钮 + 两个动作（从文件选择 / 现场拍照）。
+              以前两个并列按钮的选中态都看 modality === 'image'，
+              选完图后两个同时高亮，像是两套功能都开着；合并成一个带下拉的入口。 */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setImgMenuOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={imgMenuOpen}
+              title="上传图像或现场拍照，作为图像查询线索"
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                modality === 'image'
+                  ? 'border-primary-500 bg-primary-50 text-primary-600'
+                  : 'border-slate-200 text-slate-600 hover:border-primary-300'
+              }`}
+            >
+              <ImageIcon className="h-4 w-4" />
+              图像查询
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${imgMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {imgMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setImgMenuOpen(false)} />
+                <div
+                  role="menu"
+                  aria-label="图像查询方式"
+                  className="absolute left-0 top-full z-20 mt-1 w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setImgMenuOpen(false);
+                      document.getElementById('admin-media-image')?.click();
+                    }}
+                    className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    从文件选择
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setImgMenuOpen(false);
+                      setCameraOpen(true);
+                    }}
+                    className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    现场拍照
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => document.getElementById('admin-media-audio')?.click()}

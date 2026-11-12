@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BellRing, MessageCircleHeart, X } from 'lucide-react';
 import { api, type DailyCheckinItem } from '../services/api';
 import { getCurrentSession } from '../auth/session';
+import { isCheckinMutedToday, markCheckinDeclined, markCheckinLater } from '../services/dailyCheckinFlags';
 import AiCompanionBot from './AiCompanionBot';
 
 /* ── 今日问询：进入「AI 陪伴对话」页当天首次自动弹窗（2026-11-07） ───────────────
@@ -35,30 +36,12 @@ import AiCompanionBot from './AiCompanionBot';
  *   · 不想回复  → 服务端置 declined，今天不再弹也不在待回复列表出现
  */
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
-
-/** 用户今天主动说"待会再说"（稍后回复 / 关闭）——今天不再弹，但问询仍是 pending */
-const dismissedKey = (user: string) => `psych_checkin_dismissed::${user}`;
-/** 用户今天明确"不想回复"——今天不再弹，服务端也已置 declined */
-const declinedKey = (user: string) => `psych_checkin_declined::${user}`;
-
-function readFlag(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null; /* 隐私模式下读不到，退化为"每次都会弹"，不影响正确性 */
-  }
-}
-
-function writeFlag(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* 写不进去也不影响正确性：服务端状态才是准的 */
-  }
-}
-
 interface DailyCheckinDialogProps {
+  /**
+   * 只做"拉取 + 状态判断"，不渲染弹窗：由调用方把问询渲染成对话流卡片。
+   * 聊天页现在用这种方式（2026-11-12），其他页面仍可用默认的弹窗形态。
+   */
+  inline?: boolean;
   /**
    * 用户点「回复」时的回调：由聊天页接管（原地进入回答态）。
    * 不传则退化为跳转（保留旧的 /me/chat 跳转行为，便于在别处复用）。
@@ -74,7 +57,7 @@ interface DailyCheckinDialogProps {
   root?: string;
 }
 
-export default function DailyCheckinDialog({ onReply, onEnsure, root = '/personal' }: DailyCheckinDialogProps) {
+export default function DailyCheckinDialog({ inline = false, onReply, onEnsure, root = '/personal' }: DailyCheckinDialogProps) {
   const userId = getCurrentSession()?.username ?? null;
   const [item, setItem] = useState<DailyCheckinItem | null>(null);
   const [busy, setBusy] = useState(false);
@@ -85,14 +68,12 @@ export default function DailyCheckinDialog({ onReply, onEnsure, root = '/persona
     if (!userId || startedRef.current) return;
     startedRef.current = true;
 
-    const today = todayStr();
     /* 用户今天已经明确表达过"待会说"或"不想回复" → 不再打扰。
        注意这里**没有**"今天已触发过就不弹"的闸门：只要问询还没被处理，
        重开页面就该继续弹，否则会出现"清了记录也弹不出来"的假故障。 */
-    if (readFlag(dismissedKey(userId)) === today || readFlag(declinedKey(userId)) === today) {
+    if (isCheckinMutedToday(userId)) {
       return;
     }
-
     void (async () => {
       try {
         /* ensure 幂等：今天已有记录直接复用（不重复生成、不重复调大模型），
@@ -104,7 +85,8 @@ export default function DailyCheckinDialog({ onReply, onEnsure, root = '/persona
         onEnsure?.(r.checkin);
         /* 只有 pending 才弹：已回复 / 已过期 / 已「不想回复」都不该再打扰 */
         if (r.checkin.status !== 'pending') return;
-        setItem(r.checkin);
+        /* inline：问询由调用方渲染成对话流卡片，本组件不弹窗 */
+        if (!inline) setItem(r.checkin);
       } catch {
         /* 问询是可选增强（后端未起 / 8001 未连都属正常），静默跳过，不打断对话 */
       }
@@ -115,7 +97,7 @@ export default function DailyCheckinDialog({ onReply, onEnsure, root = '/persona
 
   /** 稍后回复：今天不再弹，但保留 pending（还能在待回复区回复） */
   const handleLater = () => {
-    writeFlag(dismissedKey(userId ?? ''), todayStr());
+    markCheckinLater(userId ?? '');
     setItem(null);
   };
 
@@ -126,8 +108,7 @@ export default function DailyCheckinDialog({ onReply, onEnsure, root = '/persona
     /* 先关窗再请求：用户已经表达了"不想回复"，不该因为网络慢就把他卡在弹窗里。
        失败也不重弹（本机标记兜住），服务端下次 ensure 仍会给出 pending，
        但用户当天已明确拒绝过，不该再被追着问。 */
-    writeFlag(dismissedKey(userId ?? ''), todayStr());
-    writeFlag(declinedKey(userId ?? ''), todayStr());
+    markCheckinDeclined(userId ?? '');
     setItem(null);
     try {
       await api.declineCheckin(item.id, userId ?? '');

@@ -8,6 +8,7 @@ import {
   Lock,
   Phone,
   ShieldCheck,
+  Sparkles,
   UserRound,
 } from 'lucide-react';
 import {
@@ -42,6 +43,76 @@ function earliestDate(dates: (string | undefined)[]): string {
     .map((d) => d.slice(0, 10))
     .sort();
   return clean[0] ?? '';
+}
+
+const LEVEL_TEXT: Record<string, string> = {
+  green: '稳定',
+  yellow: '关注',
+  orange: '警告',
+  red: '高危',
+};
+
+const SCALE_TEXT: Record<string, string> = {
+  'PHQ-9': '情绪筛查',
+  'GAD-7': '焦虑筛查',
+  ISI: '睡眠评估',
+  'PSS-10': '压力评估',
+};
+
+/**
+ * 档案摘要：只根据当前账号的记录生成，没有完成记录时返回 null。
+ * 取最近一次完成的量表 → 与同名量表上一次对比 → 未处理预警 → 分级建议。
+ */
+function buildSummary(
+  records: PersonalScreeningRecord[],
+  warnings: WarningEvent[],
+): string[] | null {
+  const completed = records
+    .filter((item) => item.status === 'completed')
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const latest = completed[0];
+  if (!latest) return null;
+
+  const lines: string[] = [];
+  const scaleName = SCALE_TEXT[latest.questionnaire] ?? latest.questionnaire;
+  lines.push(
+    `最近一次${scaleName}（${latest.date}）得分 ${latest.score}/${latest.maxScore}，处于「${LEVEL_TEXT[latest.level] ?? latest.level}」区间。`,
+  );
+
+  const previous = completed.find(
+    (item) => item.id !== latest.id && item.questionnaire === latest.questionnaire,
+  );
+  if (previous) {
+    const delta = latest.score - previous.score;
+    lines.push(
+      delta === 0
+        ? `与上一次同名量表（${previous.date}）相比持平。`
+        : `与上一次同名量表（${previous.date}）相比${delta > 0 ? '上升' : '下降'} ${Math.abs(delta)} 分。`,
+    );
+  } else {
+    lines.push('这是该量表在当前档案里的第一条完整记录，后续可以做同量表复测来观察变化。');
+  }
+
+  const openWarnings = warnings.filter((item) => item.status !== 'resolved');
+  if (openWarnings.length > 0) {
+    const latestWarning = openWarnings[0];
+    const suggestion = (latestWarning.suggestion || '建议按预警页的提示跟进').replace(/[。！？!?；;]+$/, '');
+    lines.push(
+      `目前还有 ${openWarnings.length} 条未处理预警；最近一条是「${latestWarning.title}」（${latestWarning.createdAt}），${suggestion}。`,
+    );
+  } else {
+    lines.push('目前没有未处理的预警记录。');
+  }
+
+  if (latest.level === 'red' || latest.level === 'orange') {
+    lines.push('建议优先联系学校心理中心、咨询师或医疗专业人员，先安排一次面对面的支持。');
+  } else if (latest.level === 'yellow') {
+    lines.push('建议保持规律记录，并在 1–2 周内用同一份量表复测一次；若持续加重，及时联系专业人员。');
+  } else {
+    lines.push('当前结果较平稳，保持现有节奏即可；下次想了解变化时再做一次同量表复测。');
+  }
+
+  return lines;
 }
 
 /** 表格里统一的小字号 */
@@ -152,6 +223,9 @@ export default function Cases() {
     ...screeningRecords.map((r) => r.date),
     ...personalTimeline.map((t) => t.date),
   ]);
+
+  /* 档案摘要：照着远端那套口径，从当前账号的筛查/预警记录里自动生成 */
+  const summary = buildSummary(screeningRecords, warningEvents);
 
   // 当前等级：取最近一次筛查（没有就看最近预警）
   const latest = screeningRecords[0];
@@ -447,6 +521,27 @@ export default function Cases() {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      {/* ==================== 档案摘要 ==================== */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <SectionTitle icon={Sparkles} title="档案摘要" />
+        {summary ? (
+          <div className="space-y-2.5 px-5 py-4 text-[13px] leading-6 text-slate-600">
+            {summary.map((line, index) => (
+              <p key={index} className="flex gap-2">
+                <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-slate-300" />
+                <span>{line}</span>
+              </p>
+            ))}
+          </div>
+        ) : (
+          <p className="px-5 py-10 text-center text-[12.5px] leading-6 text-slate-400">
+            还没有完成的筛查记录。
+            <br />
+            完成一次筛查后，这里会根据你的最近记录生成摘要。
+          </p>
         )}
       </div>
 

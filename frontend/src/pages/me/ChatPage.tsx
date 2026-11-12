@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Send, Sparkles, RefreshCw, AlertTriangle, MessageCircleHeart, HardDrive, BellRing, Trash2 } from 'lucide-react';
-import { api, type ChatTurn, type InferenceRunResult, type CheckinMessage, type DailyCheckinItem } from '../../services/api';
+import { api, type ChatTurn, type InferenceRunResult, type DailyCheckinItem } from '../../services/api';
 import { getCurrentSession } from '../../auth/session';
 import { briefErrorMessage } from '../../services/http';
 import {
@@ -20,6 +20,7 @@ import {
 } from '../../services/chatHistory';
 import { withTimeDividers } from '../../services/chatTime';
 import DailyCheckinDialog from '../../components/DailyCheckinDialog';
+import { markCheckinDeclined, markCheckinLater } from '../../services/dailyCheckinFlags';
 import RoamingBot from '../../components/RoamingBot';
 
 /** 消息结构与本机存储层一致（StoredChatMessage），避免两边各定义一份走样 */
@@ -71,6 +72,20 @@ export default function ChatPage() {
   const [mockServer, setMockServer] = useState<boolean | null>(null);
   /** 登录触发落库的「待回复」每日问询：此前只写日志，用户端拿不到，这里是闭环入口 */
   const [pending, setPending] = useState<DailyCheckinItem[]>([]);
+  /**
+   * 对话流里的「今日关怀问询」卡片。
+   *
+   * 以前是居中弹窗：问询和对话是两套交互，用户关掉弹窗后还要回顶栏横幅找它。
+   * 现在把问询直接作为一条卡片挂进消息流（2026-11-12），回复/稍后/不想回复
+   * 三个动作仍在卡片上，状态机仍由本页接管。
+   * 服务端不可用时用本机问询兜底（id 为负数，不回写服务端）。
+   */
+  const [flowCheckin, setFlowCheckin] = useState<{
+    item: DailyCheckinItem;
+    message: string;
+    note?: string;
+    err?: string;
+  } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   /* ── 机器人（2026-11-08 第三轮：改为全屏游走） ──────────────────────────
@@ -173,6 +188,31 @@ export default function ChatPage() {
     void api.declineCheckin(item.id, userId).catch(() => {
       /* 静默：拒绝是"减负"操作，失败不打扰用户 */
     });
+  };
+
+  /* ── 对话流卡片上的三个动作（与原来的弹窗一一对应） ─────────────────── */
+
+  /** 卡片里正在展示的问询：页内横幅不再重复展示同一条 */
+  const visiblePending = pending.filter((p) => p.id !== flowCheckin?.item.id);
+
+  const replyFlowCheckin = () => {
+    const target = flowCheckin?.item;
+    setFlowCheckin(null);
+    if (target) startAnswer(target);
+  };
+
+  /** 稍后回复：今天不再自动出现，但问询仍是 pending，横幅里还能回 */
+  const laterFlowCheckin = () => {
+    markCheckinLater(userId);
+    setFlowCheckin(null);
+  };
+
+  /** 不想回复：服务端置 declined，本机标记今天不再打扰 */
+  const declineFlowCheckin = () => {
+    const target = flowCheckin?.item;
+    if (target) declineCheckin(target);
+    markCheckinDeclined(userId);
+    setFlowCheckin(null);
   };
 
   /**
@@ -328,7 +368,10 @@ export default function ChatPage() {
                 <Trash2 className="w-4 h-4 shrink-0" /> 清空记录
               </button>
             )}
-            <DailyCheckinButton userId={userId} />
+            <DailyCheckinButton
+              userId={userId}
+              onMessage={(payload) => setFlowCheckin(payload)}
+            />
             <RunInferenceButton userId={userId} />
           </div>
         </div>
@@ -359,13 +402,13 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* 待回复问询：进对话页时由弹窗触发生成；弹窗关了以后仍能在这里看到并回复 */}
-      {pending.length > 0 && (
+      {/* 待回复问询：进对话页时由 ensure 触发生成；对话流卡片关闭后仍能在这里看到并回复 */}
+      {visiblePending.length > 0 && (
         <div className="mt-3 rounded-xl border border-primary-100 bg-primary-50/60 px-4 py-3 space-y-2">
           <p className="text-xs font-medium text-primary-700 flex items-center gap-1.5">
-            <BellRing className="w-3.5 h-3.5" /> 有 {pending.length} 条来自助手的关怀问询待回复
+            <BellRing className="w-3.5 h-3.5" /> 有 {visiblePending.length} 条来自助手的关怀问询待回复
           </p>
-          {pending.map((item) => (
+          {visiblePending.map((item) => (
             <div key={item.id} className="flex items-start gap-3 bg-white rounded-lg px-3 py-2">
               <p className="flex-1 text-sm text-slate-700 leading-relaxed">{item.message}</p>
               <div className="flex shrink-0 items-center gap-1.5 self-center">
@@ -484,6 +527,48 @@ export default function ChatPage() {
             </div>
           </div>
         ))}
+
+        {/* 今日关怀问询：作为对话流里的一条 assistant 卡片，不再用居中弹窗。
+            三个动作与原来的弹窗一致：回复（原地进入回答态）/ 稍后回复 / 不想回复。 */}
+        {flowCheckin && (
+          <div className="flex justify-start">
+            <div className="w-full max-w-[80%] rounded-2xl rounded-bl-sm border border-primary-100 bg-white px-4 py-3 text-sm leading-relaxed text-slate-700 shadow-sm">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-primary-600">
+                <MessageCircleHeart className="h-3.5 w-3.5" /> 今日关怀问询
+                <span className="font-normal text-slate-400">· {flowCheckin.item.checkin_date}</span>
+              </p>
+              <p className="mt-2 whitespace-pre-wrap break-words">{flowCheckin.message}</p>
+              {flowCheckin.note && (
+                <p className="mt-2 text-[11px] leading-5 text-slate-400">{flowCheckin.note}</p>
+              )}
+              {flowCheckin.err && (
+                <p className="mt-1 text-[11px] leading-5 text-slate-400">
+                  服务端问询暂时取不到（{flowCheckin.err}），已改用本机问询。
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={replyFlowCheckin}
+                  className="cursor-pointer rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary-600"
+                >
+                  回复
+                </button>
+                <button
+                  onClick={laterFlowCheckin}
+                  className="cursor-pointer rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  稍后回复
+                </button>
+                <button
+                  onClick={declineFlowCheckin}
+                  className="cursor-pointer rounded-lg px-2.5 py-1.5 text-xs text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
+                >
+                  不想回复
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
@@ -526,15 +611,21 @@ export default function ChatPage() {
         busy={busy}
       />
 
-      {/* 今日问询：进入本页当天首次自动弹出（不需要用户先点「回复」）。
-          三个选项：回复 / 稍后回复 / 不想回复。点「回复」原地进入回答态。
-          onEnsure 把生成的这条同步进页内横幅：用户点「稍后回复」关掉弹窗后，
+      {/* 今日问询：进入本页当天首次自动拉取，但不再弹窗 ——
+          问询作为对话流卡片展示（见上方 flowCheckin），三个动作在卡片上处理。
+          onEnsure 把生成的这条同步进「待回复」横幅：用户点「稍后回复」关掉卡片后，
           横幅里还留着它，随时可以回来回复。 */}
       <DailyCheckinDialog
+        inline
         onReply={startAnswer}
         onEnsure={(item) => {
           if (item.status !== 'pending') return;
           setPending((prev) => (prev.some((p) => p.id === item.id) ? prev : [item, ...prev]));
+          setFlowCheckin({
+            item,
+            message: item.message,
+            note: '每天只问一次；回复后内容会自动整理进你的个人图谱',
+          });
         }}
       />
 
@@ -581,77 +672,84 @@ export default function ChatPage() {
   );
 }
 
-function DailyCheckinButton({ userId }: { userId: string }) {
+function DailyCheckinButton({
+  userId,
+  onMessage,
+}: {
+  userId: string;
+  /** 把问询交给聊天页，渲染成对话流卡片（不再在按钮里弹窗） */
+  onMessage: (payload: {
+    item: DailyCheckinItem;
+    message: string;
+    note?: string;
+    err?: string;
+  }) => void;
+}) {
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState<CheckinMessage | null>(null);
-  /** 本地兜底问询（服务端拿不到时）：文案取自后端同一套问询模板，见 localKg.buildLocalCheckin */
-  const [local, setLocal] = useState<string | null>(null);
-  const [err, setErr] = useState('');
-  const [show, setShow] = useState(false);
 
   const fetchCheckin = async () => {
     setLoading(true);
-    setErr('');
-    setLocal(null);
     try {
       /* 走 ensure（幂等）而不是 getDailyCheckin（每次重新生成）：
-         拿到的就是「今天那一条」，与登录触发的弹窗是同一份内容。
+         拿到的就是「今天那一条」，与自动问询是同一份内容。
          这样点按钮不会跑出第二条问询，也不会多消耗一次大模型调用。 */
       const r = await api.ensureDailyCheckin(userId);
-      if (r.checkin) {
-        setMsg({ user_id: userId, message: r.checkin.message, neo4j_connected: r.neo4j_connected });
-      } else {
-        setMsg({ user_id: userId, message: r.message, neo4j_connected: r.neo4j_connected });
-      }
-      setShow(true);
+      /* 服务端没落库（演示模式等）时合成一条本机问询，保证卡片动作可用 */
+      const now = new Date().toISOString();
+      const item: DailyCheckinItem = r.checkin ?? {
+        id: -Date.now(),
+        user_id: userId,
+        message: r.message,
+        status: 'pending',
+        reply: '',
+        source: 'local',
+        checkin_date: now.slice(0, 10),
+        created_at: now,
+        replied_at: '',
+      };
+      onMessage({
+        item,
+        message: item.message,
+        note: '每天只问一次；回复后内容会自动整理进你的个人图谱',
+        err: r.checkin && !r.neo4j_connected ? '服务端知识图谱未连接：本次抽取结果会存在本机。' : undefined,
+      });
     } catch (e) {
-      /* 服务端拿不到也照样给一句：用本机已有数据（兴趣/记录）挑一条问询，并注明来源 */
-      setErr(briefErrorMessage(e, '未连接到服务端'));
-      setMsg(null);
+      /* 服务端拿不到也照样给一句：用本机已有数据（兴趣/记录）挑一条问询，并注明来源。
+         同时合成一条本机问询记录，让卡片上的回复 / 稍后 / 不想回复仍然可用
+         （id 为负数，服务端回写必然失败，但本机标记与对话流程不受影响）。 */
+      const err = briefErrorMessage(e, '未连接到服务端');
       const signals = await collectLocalSignals(userId);
-      setLocal(buildLocalCheckin(signals));
-      setShow(true);
+      const message = buildLocalCheckin(signals);
+      const now = new Date().toISOString();
+      onMessage({
+        item: {
+          id: -Date.now(),
+          user_id: userId,
+          message,
+          status: 'pending',
+          reply: '',
+          source: 'local',
+          checkin_date: now.slice(0, 10),
+          created_at: now,
+          replied_at: '',
+        },
+        message,
+        note: '本机问询（服务端未连接）：回复后内容会存进本机记录',
+        err,
+      });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <>
-      <button
-        onClick={fetchCheckin}
-        disabled={loading}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-50 text-primary-600 text-sm font-medium hover:bg-primary-100 disabled:opacity-50 whitespace-nowrap cursor-pointer"
-      >
-        <MessageCircleHeart className={`w-4 h-4 shrink-0 ${loading ? 'animate-pulse' : ''}`} /> 今日问询
-      </button>
-
-      {show && (msg || local) && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={() => setShow(false)}>
-          <div
-            className="ui-card max-w-md w-full p-6 shadow-[0_24px_70px_-36px_rgba(16,24,40,0.45)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-                <MessageCircleHeart className="w-4 h-4 text-primary-600" /> 今日关怀问询
-              </h3>
-              <button onClick={() => setShow(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">✕</button>
-            </div>
-            <div className="bg-primary-50 rounded-xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
-              {msg ? msg.message : local}
-            </div>
-            <p className="text-xs text-slate-400 mt-3">
-              {msg ? '每天只问一次；回复后内容会自动整理进你的个人图谱' : '本机问询（服务端未连接）：回复后内容会存进本机记录'}
-            </p>
-            {msg && !msg.neo4j_connected && (
-              <p className="text-xs text-slate-400 mt-1">服务端知识图谱未连接：本次抽取结果会存在本机。</p>
-            )}
-            {err && <p className="text-xs text-slate-400 mt-2">服务端问询暂时取不到（{err}），已改用本机问询。</p>}
-          </div>
-        </div>
-      )}
-    </>
+    <button
+      onClick={fetchCheckin}
+      disabled={loading}
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-50 text-primary-600 text-sm font-medium hover:bg-primary-100 disabled:opacity-50 whitespace-nowrap cursor-pointer"
+    >
+      <MessageCircleHeart className={`w-4 h-4 shrink-0 ${loading ? 'animate-pulse' : ''}`} /> 今日问询
+    </button>
   );
 }
 

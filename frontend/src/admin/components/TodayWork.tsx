@@ -41,7 +41,7 @@ export default function TodayWork() {
       {!tasks.length ? <p className="text-sm text-slate-500">当前范围没有待办任务。</p> :
         <ul className="divide-y divide-slate-100">{tasks.map((task) => <li key={task.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
           <div><p className="font-medium text-slate-800">{task.title}</p><p className="text-xs text-slate-500">{states[task.state] || task.state} · {task.assignee || '待分配'} · 计划 {task.due_at}</p></div>
-          {task.caseId ? <Link className="text-primary-600 hover:underline" to={`/admin/cases?case=${encodeURIComponent(task.caseId)}`}>查看案例 →</Link> :
+          {task.caseId ? <Link className="text-primary-600 hover:underline" to="/admin/cases">查看案例 →</Link> :
             <Link className="text-primary-600" to="/admin/agent-workbench?scope=live&tab=tasks">查看任务 →</Link>}
         </li>)}</ul>}
     </>}
