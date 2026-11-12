@@ -43,8 +43,8 @@
  * 这一条是本设计成立的前提：没有负 z-index，它就会压在被读的文字上。
  *
  * ── 坐标系：画布坐标 vs 机体坐标 ──────────────────────────────────────────
- * 宿主 div 覆盖整个 `.page-body`（由面板的实时 rect 反推四个方向的负偏移）。
- * 于是宿主坐标系 = 页面内容区，横向 0 点是内容区左缘。
+ * 宿主 div 固定在视口内：横向对齐 `.page-body`，纵向从顶栏下方到视口底部。
+ * 游走坐标以固定宿主为原点，页面滚动不会改变桌宠的屏幕位置。
  *
  * 这里有个必须分清的两套坐标：AiCompanionBot 的 svg 四周留了一圈透明余量
  * （给歪头/前倾的旋转用，见该文件头），所以
@@ -54,10 +54,12 @@
  * 永远离容器边缘差一截（那截是透明余量）。测量时把 padX / padTop / padBottom
  * 一并算出来，`toSpot()` 负责把机体坐标折回画布坐标。
  *
- * 用 absolute 而非 fixed：页面滚动/布局变化时它跟着面板走，不必监听 scroll。
+ * 宿主使用 fixed：滚动时保持屏幕位置，与固定背景一致。
  */
  
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import AiCompanionBot, {
   BOT_ASPECT,
   BOT_CANVAS_RATIO,
@@ -89,6 +91,9 @@ interface Spot {
 
 /** 量出来的几何 */
 interface Bounds {
+  /** 固定活动区在视口中的位置 */
+  hostLeft: number;
+  hostTop: number;
   /** 机器人 svg 的宽 / 高（画布口径） */
   w: number;
   h: number;
@@ -118,15 +123,11 @@ interface Bounds {
 const PAD = 8;
 /** 探看 / 陪等时离面板边缘的空隙 */
 const GAP = 6;
-/** 机体视觉宽度的上下限（px）。数值与改造前完全一致 —— 旧版这两个常量
- *  56 / 128 是**旧画布**口径，机体在旧画布里占 236/260，折过来就是 51 / 116。
- *  机器人屏幕上多大没变，变的只是"画布口径"这个说法。 */
-const MIN_BODY_W = 51;
-const MAX_BODY_W = 116;
-/** 机体视觉尺寸跟随内容区的比例，同样由旧值折算：
- *  0.085 × 236/260 = 0.0772，0.2 × 236/260 = 0.1815 */
-const BODY_W_RATIO = 0.0772;
-const BODY_H_RATIO = 0.1815;
+/** 在原有尺寸上放大约 30%，仍随内容区宽高自适应。 */
+const MIN_BODY_W = 66;
+const MAX_BODY_W = 151;
+const BODY_W_RATIO = 0.1004;
+const BODY_H_RATIO = 0.236;
 /** 行走速度（宿主坐标 px / 秒）：要"散步"的慢，45 约是常速步行的六成
  *  （改造前是 78）。 */
 const SPEED = 45;
@@ -149,7 +150,7 @@ const STEP_MIN_PX = 130;
 const WALK_MIN_MS = 1200;
 const WALK_MAX_MS = 9000;
 /** 位移缓动：两端带加减速，像走路不像弹射 */
-const WALK_EASE = 'cubic-bezier(0.4, 0, 0.55, 1)';
+const WALK_EASE = 'linear';
 /** 走完一段后**至少**站这么久（ms）。 */
 const STAND_MIN_MS = 14000;
 /** 站立时长 = 走动时长 × 这个系数，再与 STAND_MIN_MS 取大。
@@ -205,6 +206,12 @@ export default function RoamingBot({
   const [ready, setReady] = useState(false);
   /** 正在位移 → 摆腿摆臂；站着时腿不能空转 */
   const [walking, setWalking] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [resting, setResting] = useState(false);
+  const positionElement = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ id: number; dx: number; dy: number } | null>(null);
+  const releaseTimer = useRef(0);
+  const [strideFrameMs, setStrideFrameMs] = useState(140);
   /** 本次位移的时长（ms）：按距离算，缓动与计时都跟着它走 */
   const [walkMs, setWalkMs] = useState(WALK_MAX_MS);
   /** 行进朝向：位置左移就朝左、右移就朝右。用 state 而不是 ref ——
@@ -237,9 +244,8 @@ export default function RoamingBot({
     stateRef.current = { peeking, busy };
   }, [peeking, busy]);
 
-  /* ── 量几何 ───────────────────────────────────────────────────────────
-     面板的父元素（.page-body）就是"页面内容区"。四个方向的偏移都由实时 rect
-     反推 —— 不写死像素，换屏宽 / 折叠侧栏 / 改内边距都自适应。 */
+  /* 横向跟随内容区，纵向按视口测量，避免聊天内容变长后活动区随文档延伸。
+     换屏宽 / 折叠侧栏时仍按实时布局重新测量。 */
   const measure = useCallback((): Bounds | null => {
     const panel = panelRef.current;
     const holder = panel?.parentElement;
@@ -249,10 +255,13 @@ export default function RoamingBot({
     /* 布局未完成时量到 0 —— 先不量，等 ResizeObserver 再叫一次 */
     if (pr.width < 200 || pr.height < 160 || hr.width < 200) return null;
 
-    const hostW = Math.round(hr.width);
-    const hostH = Math.round(hr.height);
-    const panelLeft = Math.max(0, Math.round(pr.left - hr.left));
-    const panelTop = Math.max(0, Math.round(pr.top - hr.top));
+    const hostLeft = Math.max(0, Math.round(hr.left));
+    const topbar = panel.closest('.app-frame')?.querySelector('header');
+    const hostTop = Math.round(topbar?.getBoundingClientRect().height ?? 64);
+    const hostW = Math.max(0, Math.min(Math.round(hr.width), window.innerWidth - hostLeft));
+    const hostH = Math.max(0, window.innerHeight - hostTop - 24);
+    const panelLeft = Math.max(0, Math.round(pr.left - hostLeft));
+    const panelTop = Math.round(pr.top - hostTop);
     const panelW = Math.round(pr.width);
     const panelH = Math.round(pr.height);
 
@@ -279,6 +288,8 @@ export default function RoamingBot({
       to - from >= bodyW ? [from, to - bodyW] : null;
 
     return {
+      hostLeft,
+      hostTop,
       w,
       h,
       bodyW,
@@ -334,10 +345,11 @@ export default function RoamingBot({
    */
   const moveTo = useCallback(
     (body: { x: number; y: number } | null): number => {
-      if (!body) return 0;
+      if (!body || drag.current) return 0;
       const cur = spotRef.current;
 
       window.clearTimeout(walkTimer.current);
+      window.clearTimeout(releaseTimer.current);
 
       /* 首帧还没就位时直接落过去，别从坐标原点飞出来 */
       if (cur.x < -900) {
@@ -347,15 +359,22 @@ export default function RoamingBot({
 
       const next = toSpot(body.x, body.y);
       const dist = Math.hypot(next.x - cur.x, next.y - cur.y);
+      if (dist < 1) {
+        setWalking(false);
+        return 0;
+      }
       const ms = Math.round(
         Math.min(WALK_MAX_MS, Math.max(WALK_MIN_MS, (dist / SPEED) * 1000)),
       );
 
       setWalkMs(ms);
+      // The approved short-legged design takes small steps (35% of body width per cycle).
+      // Use the actual travel speed, including short steps with a minimum duration.
+      setStrideFrameMs(Math.max(100, Math.min(500, (boundsRef.current?.bodyW ?? MAX_BODY_W) * 0.35 * ms / dist / 4)));
       commitSpot(body.x, body.y, true);
       setWalking(true);
-      /* 比过渡略早收腿：落地那瞬腿还在摆会显得"刹不住"。 */
-      walkTimer.current = window.setTimeout(() => setWalking(false), Math.max(200, ms - 260));
+      // Keep stepping for the entire translation, then return to the standing pose.
+      walkTimer.current = window.setTimeout(() => setWalking(false), ms);
       return ms;
     },
     [commitSpot, toSpot],
@@ -547,9 +566,8 @@ export default function RoamingBot({
     const g = nearestGutter();
     if (!b || !composer || !panel || !g) return perchSpot();
     const cr = composer.getBoundingClientRect();
-    const pr = panel.getBoundingClientRect();
     /* 纵向对齐输入框中心：视觉上就是"贴着那一行在看你打字" */
-    const targetY = cr.top + cr.height / 2 - pr.top - b.bodyH / 2;
+    const targetY = cr.top + cr.height / 2 - b.hostTop - b.bodyH / 2;
     const gap = GAP + b.leanExt;
     return {
       /* 机体内侧边缘与面板边缘隔开 gap：静止在面板外，前倾后也仍在面板外 */
@@ -584,6 +602,8 @@ export default function RoamingBot({
           prev.h === next.h &&
           prev.hostW === next.hostW &&
           prev.hostH === next.hostH &&
+          prev.hostLeft === next.hostLeft &&
+          prev.hostTop === next.hostTop &&
           prev.panelLeft === next.panelLeft &&
           prev.panelW === next.panelW;
         return same ? prev : next;
@@ -634,6 +654,7 @@ export default function RoamingBot({
   useEffect(
     () => () => {
       window.clearTimeout(walkTimer.current);
+      window.clearTimeout(releaseTimer.current);
       for (const id of rafIds.current) cancelAnimationFrame(id);
     },
     [],
@@ -644,7 +665,7 @@ export default function RoamingBot({
        · 状态切换本身已经触发一次渲染，再在 body 里同步 setState 会造成级联渲染；
        · 0ms 定时器把"决定去哪"和"开始走"拆成两拍，也让首帧的布局量取更稳。 */
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || dragging || resting) return;
 
     let timer = 0;
     /* 延后一拍再落位 —— 见上方注释。注意这里**不加 peeking/busy 守卫**：
@@ -688,7 +709,41 @@ export default function RoamingBot({
     };
     timer = window.setTimeout(step, 0);
     return () => window.clearTimeout(timer);
-  }, [ready, peeking, busy, moveTo, pickSpot, peekSpot, perchSpot]);
+  }, [ready, dragging, resting, peeking, busy, moveTo, pickSpot, peekSpot, perchSpot]);
+
+  const placeDragged = (x: number, y: number) => {
+    const b = boundsRef.current;
+    if (!b) return;
+    commitSpot(
+      Math.max(PAD, Math.min(b.hostW - b.bodyW - PAD, x)),
+      Math.max(PAD, Math.min(b.hostH - b.bodyH - PAD, y)),
+    );
+  };
+  const finishDrag = () => {
+    if (!drag.current) return;
+    drag.current = null;
+    setDragging(false);
+    setResting(true);
+    window.clearTimeout(releaseTimer.current);
+    releaseTimer.current = window.setTimeout(() => setResting(false), 3500);
+  };
+  const startDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!event.isPrimary || event.button !== 0 || !bounds) return;
+    const rect = positionElement.current?.getBoundingClientRect();
+    if (!rect) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    window.clearTimeout(walkTimer.current);
+    window.clearTimeout(releaseTimer.current);
+    setWalkMs(0);
+    setWalking(false);
+    setResting(false);
+    setDragging(true);
+    const x = rect.left - bounds.hostLeft + bounds.padX;
+    const y = rect.top - bounds.hostTop + bounds.padTop;
+    drag.current = { id: event.pointerId, dx: event.clientX - bounds.hostLeft - x, dy: event.clientY - bounds.hostTop - y };
+    placeDragged(x, y);
+  };
 
   /* 探看时永远面向面板中心（朝里看）；游走时用行进朝向。
      比中点用的是**机体**中心：画布左右各留了一圈透明余量，拿画布中心去比
@@ -703,28 +758,30 @@ export default function RoamingBot({
 
   const pose: BotPose = peeking ? 'peek' : 'idle';
 
-  return (
+  return (<>
     <div
       aria-hidden="true"
-      className={`pointer-events-none absolute ${className}`}
+      data-roaming-bot
+      className={`pointer-events-none fixed ${className}`}
       style={{
-        /* 宿主覆盖整个页面内容区：由面板的实时 rect 向四个方向反推负偏移 */
-        left: -(bounds?.panelLeft ?? 0),
-        right: -(bounds ? bounds.hostW - bounds.panelLeft - bounds.panelW : 0),
-        top: -(bounds?.panelTop ?? 0),
-        bottom: -(bounds ? bounds.hostH - bounds.panelTop - bounds.panelH : 0),
+        /* 活动区固定在视口内，滚动页面不改变桌宠的屏幕坐标。 */
+        left: bounds?.hostLeft ?? 0,
+        top: bounds?.hostTop ?? 64,
+        width: bounds?.hostW ?? 0,
+        height: bounds?.hostH ?? 0,
         /* 图层在对话之下：卡片/气泡/输入框都会自然盖住它 */
-        zIndex: -1,
+        zIndex: dragging || resting ? 20 : -1,
         opacity: boundsOk ? 1 : 0,
         transition: 'opacity 400ms ease',
       }}
     >
       <div
+        ref={positionElement}
         className="absolute left-0 top-0 will-change-transform"
         style={{
           transform: `translate3d(${spot.x}px, ${spot.y}px, 0)`,
           transitionProperty: 'transform',
-          transitionDuration: ready ? `${walkMs}ms` : '0ms',
+          transitionDuration: ready && !dragging && !resting ? `${walkMs}ms` : '0ms',
           transitionTimingFunction: WALK_EASE,
         }}
       >
@@ -735,10 +792,57 @@ export default function RoamingBot({
             size={bounds?.w ?? Math.round(MAX_BODY_W * BOT_CANVAS_RATIO)}
             pose={pose}
             walking={walking}
+            walkFrameMs={strideFrameMs}
+            busy={busy}
+            reaction={dragging ? 'drag' : resting ? 'drop' : undefined}
             facing={facing}
           />
         </div>
       </div>
     </div>
-  );
+    {boundsOk && bounds && createPortal(
+      <button
+        type="button"
+        aria-label="拖动大肥鱼，也可以用方向键移动"
+        title="拖动我试试，也可以用方向键移动"
+        className="fixed z-30 rounded-full border-0 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-primary-400"
+        style={{
+          left: bounds.hostLeft + bounds.padX,
+          top: bounds.hostTop + bounds.padTop,
+          width: bounds.bodyW,
+          height: bounds.bodyH,
+          transform: `translate3d(${spot.x}px, ${spot.y}px, 0)`,
+          transition: dragging || resting ? 'none' : `transform ${walkMs}ms ${WALK_EASE}`,
+          cursor: dragging ? 'grabbing' : 'grab',
+          touchAction: 'none',
+          userSelect: 'none',
+        }}
+        onPointerDown={startDrag}
+        onPointerMove={(event) => {
+          const current = drag.current;
+          if (!current || current.id !== event.pointerId) return;
+          placeDragged(event.clientX - bounds.hostLeft - current.dx, event.clientY - bounds.hostTop - current.dy);
+        }}
+        onPointerUp={(event) => {
+          finishDrag();
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onPointerCancel={finishDrag}
+        onLostPointerCapture={finishDrag}
+        onKeyDown={(event) => {
+          const delta = { ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20] }[event.key];
+          if (!delta) return;
+          event.preventDefault();
+          window.clearTimeout(walkTimer.current);
+          window.clearTimeout(releaseTimer.current);
+          setWalking(false);
+          setWalkMs(0);
+          setResting(true);
+          const rect = positionElement.current?.getBoundingClientRect();
+          if (rect) placeDragged(rect.left - bounds.hostLeft + bounds.padX + delta[0], rect.top - bounds.hostTop + bounds.padTop + delta[1]);
+          releaseTimer.current = window.setTimeout(() => setResting(false), 3500);
+        }}
+      />, document.body,
+    )}
+    </>);
 }

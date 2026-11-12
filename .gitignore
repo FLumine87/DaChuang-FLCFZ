@@ -53,6 +53,8 @@ uploads/
 *.jpg
 *.jpeg
 *.png
+!frontend/src/assets/bigfish-poses-short.png
+!frontend/src/assets/bigfish-walk-proportions.png
 *.gif
 *.webp
 # 首屏插画是源码资产，需要入库（其余截图/生成图仍忽略）
