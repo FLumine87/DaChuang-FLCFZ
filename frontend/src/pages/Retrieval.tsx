@@ -55,6 +55,7 @@ import { toCorpusWavFile } from '../utils/audioRecorder';
 import { assessRetrieval, type RetrievalAnalysisReport as RagReport, type RetrievalAssessment } from '../services/screeningAssessment';
 import RetrievalAssessmentCard from '../components/RetrievalAssessmentCard';
 import type { CollectionAnalysis } from '../services/mockApi';
+import { readIncludeOriginalInput, readSaveToSystem } from '../services/retrievalPreferences';
 
 const modalityIcons = {
   text: FileText,
@@ -134,8 +135,8 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
     };
   }, [collectionReport]);
   const [report, setReport] = useState<RagReport | null>(null);
-  const [includeOriginalInput, setIncludeOriginalInput] = useState(() => localStorage.getItem('psych_retrieval_include_original') !== 'false');
-  const includeOriginalInputRef = useRef(includeOriginalInput);
+  // 两项偏好在「账号设置」页调整，这里只读取（见 services/retrievalPreferences）
+  const includeOriginalInputRef = useRef(readIncludeOriginalInput());
   /** 结论先展示，RAG 分析异步补充到同一张结论卡中。 */
   const [reportPhase, setReportPhase] = useState<'idle' | 'thinking' | 'done'>('idle');
   /** 当前报告请求的序号：思考期间再次检索时，旧请求回来直接丢弃 */
@@ -240,8 +241,8 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
   /* ── 送入检索数据 ─────────────────────────────────────────────────────────
      默认开启：检索页的每一次查询，都和「心理筛查」页的采集一样算一条数据记录，
      存下来之后首页「最近一次输入」、我的档案和管理端都能看到。
-     有些查询只是想看一眼、不想留痕，可以在这里取消。 */
-  const [saveToSystem, setSaveToSystem] = useState(true);
+     开关已移到「账号设置 → 检索与分析偏好」，这里只读本机设置。 */
+  const saveToSystemRef = useRef(readSaveToSystem());
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveMessage, setSaveMessage] = useState('');
   /** 同一次输入点「检索范围」会反复触发检索（点范围即检索），但入库只该有一次：
@@ -350,15 +351,6 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
     });
   };
 
-  const changeOriginalInput = (enabled: boolean) => {
-    setIncludeOriginalInput(enabled);
-    includeOriginalInputRef.current = enabled;
-    localStorage.setItem('psych_retrieval_include_original', String(enabled));
-    // Regenerate only the report; search results and saved records stay the same.
-    ++reportSeqRef.current;
-    if (assessment && results) updateReport(assessmentQueryRef.current, results, assessment);
-  };
-
   const refreshAssessment = async () => {
     const sequence = searchSeqRef.current;
     setAssessmentLoading(true); setAssessmentError(null);
@@ -420,7 +412,6 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
       if (sequence !== searchSeqRef.current) return;
       setAssessment(current);
       savedContextRef.current = { id: supplementId, query: assessmentQueryRef.current };
-      setSaveToSystem(true);
       updateReport(assessmentQueryRef.current, results ?? [], current);
     } catch (e) {
       if (sequence === searchSeqRef.current) setAssessmentError(e instanceof Error ? e.message : '保存本次输入失败');
@@ -487,7 +478,7 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
       setLoading(false);
       /* 送入系统放在结果渲染之后：即使这一步失败，也不影响这一屏的检索结果。 */
       try {
-        const saved = !returnSupplementId && (persistOverride ?? saveToSystem)
+        const saved = !returnSupplementId && (persistOverride ?? saveToSystemRef.current)
           ? await pushToSystem({ query: effQuery, modality: queryModality, file: mediaFile, sequence })
           : null;
         if (sequence !== searchSeqRef.current) return;
@@ -587,10 +578,6 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
 
   return (
     <div className="space-y-6">
-      {collectionReport && <div className="ui-card p-4">
-        <label className="inline-flex cursor-pointer items-center gap-2.5"><input type="checkbox" aria-label="结合本次原始输入分析" checked={includeOriginalInput} onChange={(event) => changeOriginalInput(event.target.checked)} className="h-4 w-4" /><span className="text-sm font-medium text-slate-700">结合本次原始输入分析</span></label>
-        <p className="mt-1 text-xs leading-5 text-slate-500">默认结合原始文字与本次检索证据；关闭后只依据检索结果。当前大模型不直接解读原始图片或语音。</p>
-      </div>}
       {!collectionReport && <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
           <Hash className="w-5 h-5 text-primary-600" />
@@ -853,33 +840,9 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
           </span>
         </div>
 
-
-        <div className="mt-3 border-t border-slate-100 pt-3">
-          <label className="inline-flex cursor-pointer items-center gap-2.5">
-            <input type="checkbox" aria-label="结合本次原始输入分析" checked={includeOriginalInput} onChange={(event) => changeOriginalInput(event.target.checked)} className="h-4 w-4 cursor-pointer" />
-            <span className="text-sm font-medium text-slate-700">结合本次原始输入分析</span>
-          </label>
-          <p className="mt-1 pl-6 text-xs leading-5 text-slate-400">默认开启，报告结合原始文字与检索筛查结果；关闭后只依据检索结果。当前大模型不直接解读原始图片或语音。调整后会自动重新生成报告。</p>
-        </div>
-
-        {/* 送入检索数据：默认勾上。检索和采集一样会留下一条记录，
-            用户不想留痕时可以取消；取消后检索照常，只是不写库。 */}
-        <label className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-slate-100 pt-3 cursor-pointer">
-          <input
-            type="checkbox"
-            aria-label="送入检索数据"
-            checked={saveToSystem}
-            onChange={(e) => setSaveToSystem(e.target.checked)}
-            className="h-4 w-4 cursor-pointer"
-          />
-          <span className="text-sm font-medium text-slate-700">送入检索数据</span>
-          <span className="text-xs leading-5 text-slate-400">
-            默认开启。本次检索会作为一条记录存入系统，首页「最近一次输入」、我的档案与管理端都能看到；不想留痕就取消勾选。
-          </span>
-        </label>
         {saveState !== 'idle' && (
           <p
-            className={`mt-1.5 flex items-start gap-1.5 pl-6 text-xs ${
+            className={`mt-3 flex items-start gap-1.5 border-t border-slate-100 pt-3 text-xs ${
               saveState === 'error'
                 ? 'text-danger-600'
                 : saveState === 'saved'

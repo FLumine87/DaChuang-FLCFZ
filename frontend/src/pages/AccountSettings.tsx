@@ -10,6 +10,7 @@ import {
   Phone,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   UserRound,
 } from 'lucide-react';
 import {
@@ -18,6 +19,12 @@ import {
   updateMyAccount,
   type MyAccount,
 } from '../services/mockApi';
+import {
+  readIncludeOriginalInput,
+  readSaveToSystem,
+  writeIncludeOriginalInput,
+  writeSaveToSystem,
+} from '../services/retrievalPreferences';
 
 /*
  * 账号设置（独立页面，不是弹窗）
@@ -59,6 +66,20 @@ export default function AccountSettings() {
   const [showPwd, setShowPwd] = useState(false);
   const [savingPwd, setSavingPwd] = useState(false);
   const [pwdMsg, setPwdMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  // 检索与分析偏好（只存本机，改动即时生效）
+  const [includeOriginalInput, setIncludeOriginalInput] = useState(readIncludeOriginalInput);
+  const [saveToSystem, setSaveToSystem] = useState(readSaveToSystem);
+
+  const toggleIncludeOriginalInput = (enabled: boolean) => {
+    setIncludeOriginalInput(enabled);
+    writeIncludeOriginalInput(enabled);
+  };
+
+  const toggleSaveToSystem = (enabled: boolean) => {
+    setSaveToSystem(enabled);
+    writeSaveToSystem(enabled);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -252,6 +273,51 @@ export default function AccountSettings() {
               {savingProfile ? '保存中…' : '保存个人信息'}
             </button>
           </div>
+        </div>
+      </section>
+
+      {/* 检索与分析偏好：原在「心理筛查 · 检索与分析」页，统一收到设置页 */}
+      <section className="ui-card p-5 sm:p-6">
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-800">
+          <SlidersHorizontal className="h-4 w-4 text-primary-600" />
+          检索与分析偏好
+        </h2>
+        <p className="mt-1 text-[12.5px] text-slate-400">
+          只影响个人端「心理筛查 · 检索与分析」页面的行为，设置保存在当前浏览器。
+        </p>
+
+        <div className="mt-4 space-y-4">
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={includeOriginalInput}
+              onChange={(e) => toggleIncludeOriginalInput(e.target.checked)}
+              className="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500"
+            />
+            <span>
+              <span className="block text-[13.5px] font-medium text-slate-700">结合本次原始输入分析</span>
+              <span className="mt-1 block text-[12px] leading-5 text-slate-400">
+                默认开启，报告结合原始文字与检索筛查结果；关闭后只依据检索结果。当前大模型不直接解读原始图片或语音。
+                修改后对之后发起的检索分析生效。
+              </span>
+            </span>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-3 border-t border-slate-100 pt-4">
+            <input
+              type="checkbox"
+              checked={saveToSystem}
+              onChange={(e) => toggleSaveToSystem(e.target.checked)}
+              className="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500"
+            />
+            <span>
+              <span className="block text-[13.5px] font-medium text-slate-700">送入检索数据</span>
+              <span className="mt-1 block text-[12px] leading-5 text-slate-400">
+                默认开启。本次检索会作为一条记录存入系统，首页「最近一次输入」、我的档案与管理端都能看到；
+                不想留痕就取消勾选。
+              </span>
+            </span>
+          </label>
         </div>
       </section>
 
