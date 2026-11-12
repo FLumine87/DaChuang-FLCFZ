@@ -1403,6 +1403,45 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         )
         return hits
 
+    def dataset_hits(self, dataset: str, feature_by_modality: Dict[str, List[float]],
+                     query_modality: str, result_modality: str, top_k: int = 3,
+                     query: str = "", min_sim: float = 0.30) -> List[Dict]:
+        """用全局模型给指定数据集的单元重新打分。
+
+        新数据集（如 AVDD-TCMI）是后加的，没有参与各时间窗模型训练；
+        直接用窗口模型会给它们偏低的排序。这里用全局 W 重新编码查询与单元，
+        作为主检索结果的补充来源，保证“数据变多”后能在现有结果页看到。
+        只扫描该数据集的单元，数量很小，开销可忽略。
+        """
+        if not getattr(self.model, "trained", False):
+            return []
+        if result_modality not in ("text", "image", "audio"):
+            return []
+        W = (self.model.W or {}).get(result_modality)
+        if not W:
+            return []
+        qvec = self.model.encode_continuous(feature_by_modality)
+        if not qvec:
+            return []
+        q_themes = F.extract_themes(query) if isinstance(query, str) else []
+        scored = []
+        for uid, meta in self.units.items():
+            if (meta.get("dataset") or "") != dataset:
+                continue
+            if (meta.get("modality") or "") != result_modality:
+                continue
+            feature = meta.get("feature")
+            if not feature or len(feature) != len(W[0]):
+                continue
+            code = self.model.encode({result_modality: list(feature)})
+            sim = max(0.0, min(1.0, (self.index.asym_score(qvec, code) + 1.0) / 2.0))
+            if sim < min_sim:
+                continue
+            scored.append((sim, uid, code))
+        scored.sort(key=lambda x: -x[0])
+        return [self._to_hit(uid, sim, code, q_themes, query_modality, qvec)
+                for sim, uid, code in scored[:max(1, int(top_k))]]
+
     def _interleave_by_modality(self, ids: List[str], sims: List[float],
                                 top_k: int) -> Tuple[List[str], List[float]]:
         """混合视图按模态轮转交错取结果（各模态内部仍按相似度降序）。

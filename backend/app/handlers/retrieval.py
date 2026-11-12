@@ -122,6 +122,39 @@ def _merged_score(main_score, bridge_score, weight):
     return weight * main_score + (1. - weight) * bridge_score
 
 
+def _merge_dataset_hits(engine, hits, query, modality, result_modality,
+                        tmp_path, top_k):
+    """把后加入的数据集（AVDD-TCMI）按全局模型补进现有结果。
+
+    AVDD 没有参与主引擎的时间窗训练，直接走窗口排序会排到很后面；
+    这里用全局 W 重新打分，并只补 1~2 条，保证现有页面能看到新数据，
+    同时不改变主结果的顺序与前端页面。
+    """
+    if result_modality not in ("image", "audio"):
+        return hits
+    try:
+        feat = engine._extract_query_features(query, modality, tmp_path)
+        extra = engine.dataset_hits(
+            "AVDD-TCMI", feat, modality, result_modality,
+            top_k=2, query=query, min_sim=0.30,
+        )
+    except Exception:
+        return hits
+    if not isinstance(extra, list) or not extra:
+        return hits
+    seen = {h.get("id") for h in hits}
+    extra = [h for h in extra if h.get("id") not in seen]
+    if not extra:
+        return hits
+    quota = min(2, max(1, int(top_k) // 5))
+    extra = extra[:quota]
+    for hit in extra:
+        hit.setdefault("explain", {})["dataset_merge"] = "AVDD-TCMI"
+    if len(hits) >= top_k:
+        return hits[:max(0, int(top_k) - len(extra))] + extra
+    return list(hits) + extra
+
+
 async def _merged_search(data, modality, result_modality, top_k, tmp_path, viewer):
     bridged = _bridge_search(data, modality, result_modality, max(top_k * 6,60), tmp_path, viewer)
     if bridged is None:
@@ -256,6 +289,15 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
                 tmp_path = decode_media_query(raw, data.get("media_name") or "", modality)
             except MediaQueryError as exc:
                 raise HttpError(400, str(exc)) from exc
+        # AVDD 等后加入的数据集：在现有结果末尾补 1~2 条，不改页面与主排序。
+        def finalize(results, info, mod, filter_):
+            result_mod = filter_ or ("audio" if mod == "image" else "image")
+            results = _merge_dataset_hits(
+                engine, results, data.get("query", ""), mod,
+                result_mod, tmp_path, top_k,
+            )
+            return results, info, mod, filter_
+
         # 桥接分支：
         #   结果模态明确指定且与查询模态构成桥接对 → 走对应桥接
         #   文→图 且结果模态是「图像」          → 主引擎 + 桥接分数合并
@@ -273,26 +315,27 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
                                               top_k, tmp_path, viewer)
                 if merged is not None:
                     results, info = merged
-                    return results, info, modality, modality_filter
+                    return finalize(results, info, modality, modality_filter)
             bridged = None if (modality, modality_filter) == ("audio", "image") else _bridge_search(data, modality, modality_filter,
                                      top_k, tmp_path, viewer)
             if bridged is not None:
                 results, info = bridged
-                return results, info, modality, modality_filter
+                return finalize(results, info, modality, modality_filter)
         elif bridge_capable and not modality_filter and modality == "image":
             merged = await _bridge_search_all(data, modality, top_k,
                                          tmp_path, viewer)
             if merged is not None:
                 results, info = merged
-                return results, info, modality, modality_filter
+                return finalize(results, info, modality, modality_filter)
         results, info = await engine.search_with_info(
             query=data.get("query", ""), modality=modality,
             top_k=top_k, modality_filter=modality_filter, media_path=tmp_path,
             viewer=viewer,
         )
+        result = finalize(results, info, modality, modality_filter)
     finally:
         remove_media_query(tmp_path)
-    return results, info, modality, modality_filter
+    return result
 
 
 def to_frontend_hit(hit: dict) -> dict:

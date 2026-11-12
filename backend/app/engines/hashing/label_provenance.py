@@ -32,6 +32,7 @@ def reference_labels(meta: dict) -> dict:
     is_fer = "FER" in dataset.upper() or rid.startswith("FER-")
     is_cse = "CSEM" in dataset.upper() or rid.startswith("CSEM-")
     is_eatd = "EATD" in dataset.upper() or rid.startswith("EATD-")
+    is_avdd = "AVDD" in dataset.upper() or rid.startswith("AVDD-")
     weak_image = bool(is_fer and modality == "image" and not rid.startswith("FER-"))
     emotion = details.get("emotion_label")
     if not emotion:
@@ -64,6 +65,27 @@ def reference_labels(meta: dict) -> dict:
                 "image_only" if is_fer else "same_source_text_audio"),
             "label_description": "仅有情绪或表情标签，心理筛查状态未知",
             "tags": [t for t in tags if not str(t).startswith("SDS-")],
+        })
+        return result
+
+    if is_avdd:
+        explicit = details.get("screening_label")
+        if explicit in ("positive", "negative"):
+            screening = explicit
+        elif "抑郁-阳性" in tags:
+            screening = "positive"
+        elif "抑郁-阴性" in tags:
+            screening = "negative"
+        else:
+            screening = "unknown"
+        result.update({
+            "screening_label": screening,
+            "label_source": details.get("label_source") or "AVDD-TCMI/HDS 临床诊断",
+            "label_validity": details.get("label_validity") or "clinical_diagnosis",
+            "pairing_type": details.get("pairing_type") or "same_subject_same_session",
+            "screening_usable": screening != "unknown",
+            "alert_level": {"positive": "orange", "negative": "green"}.get(screening, "unknown"),
+            "label_description": "AVDD-TCMI 同受试者音-图强配对；临床标签仅作研究参考，不是本次用户结论",
         })
         return result
 
