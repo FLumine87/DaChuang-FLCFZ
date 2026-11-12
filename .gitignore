@@ -53,6 +53,8 @@ uploads/
 *.jpg
 *.jpeg
 *.png
+!frontend/src/assets/bigfish-poses-short.png
+!frontend/src/assets/bigfish-walk-proportions.png
 *.gif
 *.webp
 

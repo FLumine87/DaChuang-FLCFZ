@@ -263,7 +263,30 @@ if (-not $SkipAgent -and $agentPython) {
 
 # --- 3. Skip any component already listening (avoids port conflicts) --------
 $backBusy  = Get-NetTCPConnection -LocalPort $portBack  -State Listen -ErrorAction SilentlyContinue
-$frontBusy = Get-NetTCPConnection -LocalPort $portFront -State Listen -ErrorAction SilentlyContinue
+function Select-FrontendEndpoint {
+    param([string]$Directory, [int]$PreferredPort = 5173)
+    for ($candidate = $PreferredPort; $candidate -lt $PreferredPort + 20; $candidate++) {
+        $listeners = @(Get-NetTCPConnection -LocalPort $candidate -State Listen -ErrorAction SilentlyContinue)
+        if ($listeners.Count -eq 0) {
+            return [pscustomobject]@{ Port = $candidate; Busy = $false }
+        }
+        # Only reuse a Vite process whose command line identifies this checkout.
+        # Another checkout on :5173 must not make this launcher open stale code.
+        foreach ($listener in $listeners) {
+            $owner = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)" -ErrorAction SilentlyContinue
+            if ($owner.CommandLine -and $owner.CommandLine.IndexOf($Directory, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and $owner.CommandLine -match 'vite') {
+                return [pscustomobject]@{ Port = $candidate; Busy = $true }
+            }
+        }
+    }
+    throw "No available frontend port in $PreferredPort..$($PreferredPort + 19)"
+}
+$frontEndpoint = Select-FrontendEndpoint -Directory $frontendDir -PreferredPort $portFront
+if ($frontEndpoint.Port -ne $portFront) {
+    Write-Host "[port ] :$portFront belongs to another server; this project will use :$($frontEndpoint.Port)"
+}
+$portFront = $frontEndpoint.Port
+$frontBusy = $frontEndpoint.Busy
 $agentBusy = $null
 if (-not $SkipAgent -and $agentPython) {
     $agentBusy = Get-NetTCPConnection -LocalPort $portAgent -State Listen -ErrorAction SilentlyContinue
@@ -417,7 +440,7 @@ if ($frontBusy) {
     Write-Host "[skip ] frontend already listening on :$portFront"
 } else {
     Write-Host "[boot ] starting frontend on :$portFront ..."
-    $frontProc = Start-Process -FilePath "npm.cmd" -ArgumentList @("run", "dev") `
+    $frontProc = Start-Process -FilePath "npm.cmd" -ArgumentList @("run", "dev", "--", "--port", "$portFront", "--strictPort") `
         -WorkingDirectory $frontendDir -WindowStyle Minimized -PassThru
 }
 
