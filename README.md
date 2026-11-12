@@ -1,467 +1,370 @@
-# 心理筛查预警系统 · 前端改版（FLCFZ-frontend）
+# 基于动态跨模态哈希检索和 RAG 的心理筛查预警系统
 
-> 本仓库是大创项目「基于动态跨模态哈希检索和 RAG 的心理筛查预警系统」的**前端改版部分**，
-> 由龚家轩（`gongjiaxuan885`）在 2026-10-09 ~ 10-11 完成：重做信息架构、统一设计语言、
-> 补齐双角色（学生端 / 管理端）共 13 个页面，并交付一套 16 页高保真静态原型。
+面向高校心理健康的筛查与预警平台。学生端用文字、语音、照片、量表四种方式记录近况，
+系统把它们编码到同一套哈希空间里做**跨模态相似检索**，再结合规则与大模型给出分析结论；
+管理端负责复核、预警处置、案例跟进与智能研判。
 
-## 🖥 在线预览（无需安装，点开即看）
+- 前端：React 19 + TypeScript + Vite + TailwindCSS 4
+- 主后端：Python 3.11 标准库 HTTP 服务（本地 SQLite / 线上 Cloudflare Workers + D1）
+- 个人端：FastAPI + Neo4j + OpenAI 兼容大模型接口
+- 检索引擎：CMFH + 「时间窗 × 位带」多哈希表 + 跨模态桥接
 
-**https://soaringdragont.github.io/FLCFZ-frontend/**
+## 在线访问
 
-单文件成果展示页：成果概览 + 10 张界面截图 + 可交互原型（内嵌，可直接点按操作）。
-默认浅色主题，右上角可切换深色。
+| 端 | 地址 |
+|---|---|
+| 前端（GitHub Pages） | https://flumine87.github.io/DaChuang-FLCFZ/ |
+| 后端（Cloudflare Worker） | https://mental-screening-api.787249795.workers.dev |
 
-## 本轮前端改版内容
+> 2026-11-12 起，仓库移除了 `.github/workflows` 里的自动部署（frontend / backend 两个 workflow），
+> push 到 main 不再触发发布，也不会再收到部署邮件。线上目前是最后一次发布的版本，
+> 需要更新时按 [DEVELOP.md](./DEVELOP.md) 的部署章节手动发布。
 
-- **13 个页面**：学生端 6 页 + 管理端 7 页，对齐真实路由
-- **19/19 项交互检查通过**，0 控制台报错 / 0 未捕获异常 / 0 失败请求
-- **3 种分辨率适配**（含 390px 移动端）
-- **默认浅色主题** + 侧边栏折叠、深浅色切换
-- **16 页高保真静态原型**（`prototype/`），含单文件版（双击即看，离线可用）
-- 46 个前端相关提交，最新在 `feature/frontend-redesign` 分支（`6d8b592`）
+## 功能一览
 
-## 本机运行
+### 学生端
 
-### 连真实后端（完整功能，推荐）
+- **首次引导与仪表盘**：新用户完成引导后进入工作台；仪表盘汇总近期筛查、预警与待办
+- **心理筛查**（`/personal/screening`）：五个标签页
+  - 文字记录 / 语音上传 / 照片上传 / 量表填写 / 检索与分析
+  - 每次提交后立即返回哈希检索报告：风险档位色条、相似度条、命中模态与依据
+- **筛查记录**（`/personal/records`）：按时间回看提交过的内容与当时的结论
+- **预警与案例**：查看自己的预警记录、案例档案与关键时间线
+- **复核任务**：需要本人确认的筛查复核
+- **AI 陪伴对话**：拼接人设、个人知识图谱与最近对话后调用大模型；未配置 Key 时回退本机文案并如实标注
+- **个人知识图谱 / 内容推荐**：对话内容抽取三元组写入 Neo4j，图谱随记录生长
+- **账号设置**（`/personal/settings`）：改资料、改密码
 
-macOS 双击根目录的 **「启动本地环境-连后端.command」** 即可：脚本会依次确保主后端
-`:8000`、侧车后端 `:8001`、前端 `:5173` 就绪，然后打开浏览器。前端以
-`--mode backend` 启动（`VITE_STRICT_BACKEND=1`）：**所有数据走真实后端，接口失败会
-直接报错，不会静默回退演示数据**。
+### 管理端
 
-手动启动等价于：
+- **仪表盘**：筛查总量、预警分布、趋势与最新预警
+- **筛查管理与数据采集**：问卷模板、筛查记录、多模态数据查看
+- **复核**：处理学生提交的复核请求
+- **检索与分析**：文字 / 语音 / 图像 / 现场拍照四种查询；命中结果可加载单元媒体并放大查看
+- **预警处置**：筛选、确认、分配、跟进、关闭
+- **案例档案**：表格列表 + 右侧抽屉（筛查记录 / 跟进记录两个页签）
+- **智能研判台**：待处置队列、结论先行、相似历史案例与群体共现主题
+- **Agent 工作台**：个人端 Agent 的调试与验收入口
+- **账号设置**：与管理端共用同一套账号接口
 
-```bash
-# 1. 主后端（登录 / 筛查 / 检索 / 预警 / 案例 / 管理端）
-cd backend && ./venv/bin/python -m app.main
+## 动态跨模态哈希检索
 
-# 2. 侧车后端（AI 对话 / 知识图谱 / 推理 / 推送）
-cd personal-backend && ./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001
+检索模块把文本 / 图像 / 语音映射到同一套 64 位二值码空间，用「时间窗 × 位带」多哈希表做快速匹配，
+支持任意模态查询、任意模态结果，并返回可解释信息（命中主题、查询码、候选数、探测桶数）。
 
-# 3. 前端（连后端模式）
-cd frontend
-npm install
-npm run dev -- --mode backend    # http://127.0.0.1:5173/
+### 引擎要点
+
+| 机制 | 说明 |
+|---|---|
+| CMFH | 协同矩阵分解哈希，共享二值码 + 各模态投影矩阵，目标中含记录级主题/情绪相似度 `λS` |
+| 时间窗模型池 | 每个窗口独立训练一套 CMFH，`WindowModelBank` 按窗口保存；当前 `HASHING_WINDOW_DAYS=122` |
+| 多哈希表 | 64 位码切 8 张位带表（每带 8 位），位带内探测 2 比特，汉明半径 16 内不漏召回 |
+| 非对称距离 | 库端存二值码、查询端用连续向量，得分 `u·s/(‖u‖√K)` 后归一化，避免查询端量化损失 |
+| 多窗口融合 | 相似度 × 表权重 × 查询自适应因子；表权重由 ρ、σ、冗余度、时效衰减、标签覆盖率组成 |
+| 弱表淘汰 | 每窗独立评估 σ（编码信息量）与 ρ（语义一致性），低于阈值的表不参与探测 |
+| 跨模态桥 | 文-图（λ=20）、音-图（λ=50）各一条独立 CMFH 桥；图像侧用细调 MobileNetV2 CNN 特征 |
+| 模态轮转 | 未指定结果模态时各模态各取 top-k 再交错，避免结果页被查询模态占满 |
+| 动态增量 | 新记录写入后立即可检索，无需全量重训 |
+
+### 当前语料规模
+
+`backend/data/hashing/real_corpus.db`（本地生成，不入库）现有 **4928 条记录 / 14502 个单元**：
+
+| 数据集 | 文本 | 语音 | 图像 |
+|---|---:|---:|---:|
+| EATD-Corpus | 486 | 486 | — |
+| CSEMOTIONS | 4160 | 4160 | — |
+| FER2013 | — | — | 4646 |
+| AVDD-TCMI | — | 282 | 282 |
+| **合计** | **4646** | **4928** | **4928** |
+
+### AVDD-TCMI 音-图强配对
+
+AVDD-TCMI 的同一受试者同时提供 1024 维帧级音频特征与中医面诊区域图，属于**真实同源强配对**。
+接入方式不新增页面和接口，只是往现有主索引追加 282 条音-图记录：
+
+```powershell
+# 1) 把 zip 里的特征与面诊图整理成 avdd_corpus.db
+backend\venv\Scripts\python.exe backend\scripts\build_avdd_corpus.py
+
+# 2) 停掉后端后，把 AVDD 单元用现有 W_audio / W_image 编码并入索引，并写回 real_corpus.db
+backend\venv\Scripts\python.exe backend\scripts\integrate_avdd_into_engine.py
 ```
 
-账号：普通用户 `xiaoyu / 123456`；管理端 `adminer / admin` 或 `admin / admin123`。
-知识图谱需要 Neo4j（未启动时显示本机记录）；AI 对话要真实大模型需在
-`personal-backend/.env` 填真实 `LLM_API_KEY` 并把 `ENABLE_MOCK_ENGINES` 改为 `False`。
+音频 1024 维池化后 PCA 到 64 维，面诊图用与 FER2013 相同的强度 + HOG（192 维）提取器，
+因此不需要重训主模型；重启后端后在原检索页即可查到 AVDD 结果。
 
-### 纯前端演示（不需要后端）
+## 数据集与配对关系
 
-```bash
-cd frontend
-npm install
-npm run dev:demo     # http://127.0.0.1:5174/，内置演示数据
-```
+三个公开数据集 + AVDD-TCMI 均**不随仓库分发**，需自行放到仓库外（默认 `D:\DaChuang\`），
+目录结构与下载说明见 [offline/datasets/README.md](./offline/datasets/README.md)。
 
-## 原型直开
+| 数据集 | 模态 | 标签 | 在本项目中的角色 |
+|---|---|---|---|
+| EATD-Corpus（ICASSP 2022，中文） | 语音 + 中文转写 | SDS（≥53 判抑郁，30:132 不平衡） | 真实抑郁主轴 |
+| CSEMOTIONS（Apache-2.0，中文） | 语音 + 中文文本 | 7 类情绪 | 语音/文本情绪 |
+| FER2013 | 48×48 灰度人脸 | 7 类表情 | 图像模态 |
+| AVDD-TCMI | 音频特征 + 中医面诊图 | 受试者级 | 音-图**强配对** |
 
-- 单文件版：`prototype/原型-单文件.html`（双击即可，全部内联，离线可用）
-- 多文件版入口：`prototype/index.html`
+**配对关系（论文/答辩必须如实说明）**
 
----
+- 文本 ↔ 语音：EATD 的 `.wav` 与同名 `.txt`、CSEMOTIONS 每条音频与其文本，都是**真实同源配对**
+- 图像 ↔ 文本/语音：FER2013 是纯图像集，按情绪语义挂接到记录上，属**弱配对**
+  （`meta.fer.attach_mode` 已标注）
+- 音频 ↔ 图像：只有 AVDD-TCMI 是同一受试者的**真实强配对**
 
-以下是原项目 README：
+引擎的配对训练要求同组记录模态集合一致，纯图像记录与「文本+语音」记录混在一起会让模态交集为空，
+因此 FER2013 图像以弱配对方式挂接，这一点无法用实现绕过。
 
-# 基于动态跨模态哈希检索和RAG的心理筛查预警系统
+### 三档体验
 
-## 项目简介
+| 档位 | 数据源 | 适用场景 |
+|---|---|---|
+| 开箱即用 | `backend/data/hashing/corpus.db`（随仓库发布，900 单元合成语料） | clone 即跑通链路、演示前端交互 |
+| 真实语料 | `backend/data/hashing/real_corpus.db`（离线构建，不入库） | 真实中文语音 / 文本 / 人脸 / 面诊图的跨模态检索 |
+| 指标复现 | 同上，跑评测脚本 | 复现 mAP / 跨模态类别一致率 / 效率 |
 
-本系统是一个结合**动态跨模态哈希检索**与**RAG（检索增强生成）**技术的心理健康筛查预警平台。通过多模态数据采集（文本、语音、图像），实现高效的心理健康筛查、智能分析与预警，帮助实现心理问题的早发现、早干预。
+引擎启动时优先读 `real_corpus.db`，缺失则自动回退到 `corpus.db`。
 
-## 核心功能
+## 技术栈
 
-### 仪表盘
-- 筛查统计总览（总筛查人数、本月筛查数、预警人数等）
-- 预警等级分布可视化
-- 近期筛查趋势图表
-- 最新预警列表
-- 快捷操作入口
+### 前端
 
-### 筛查管理
-- 问卷模板管理（支持 PHQ-9、GAD-7、SCL-90 等量表）
-- 筛查任务创建与管理
-- 筛查记录列表与详情查看
-- 筛查结果分析
+| 技术 | 版本 |
+|---|---|
+| React / React DOM | 19.2 |
+| TypeScript | 5.9 |
+| Vite | 7.3 |
+| TailwindCSS | 4.2 |
+| React Router | 7.13 |
+| Recharts | 3.8 |
+| Lucide React | 0.577 |
+| Playwright（测试） | 1.64 |
 
-### 多模态数据采集
-- 文本采集（结构化问卷 + 开放式文本日记）
-- 语音采集（录音上传，用于情感分析）
-- 图像采集（绘画测试图片上传）
-- 采集后即时出检索报告，达到预警线自动挂载到相应页面
-- 数据预览与确认
+### 后端
 
-### AI 陪伴对话与个人知识图谱
-- 陪伴对话由大模型生成：拼接人设、个人知识图谱上下文与最近对话历史后调用 OpenAI 兼容接口
-- 对话内容抽取为知识图谱三元组，写入个人图谱（Neo4j），图谱随记录生长
-- 未配置 Key 或后端不可达时自动回退本地文案，界面如实标注「本机文案 · 未走大模型」
-- 配套能力：今日关怀问询、心理状况推理报告、个性化内容推送
+**主后端 `backend/`**：基于标准库 `ThreadingHTTPServer` 的轻量 HTTP 服务（不再使用 FastAPI + uvicorn）。
+本地用 SQLite，线上跑 Cloudflare Workers + D1，同一套代码通过双模式数据访问层切换；
+表结构变更由启动时的迁移守卫自动补齐，不使用 Alembic 迁移链。
 
-### 跨模态哈希检索与RAG分析
-- 跨模态相似案例检索（基于哈希编码的快速匹配）：文本 / 图像 / 语音三种查询都可以发起
-- 检索结果展示（相似度、模态来源、跨模态标识、内联媒体缩略图、哈希过程信息）
-- 检索结论：按命中的风险分布用规则生成，实测 0.4 ~ 0.7 秒返回
-- 大模型深度研判报告（RAG）：独立接口按需生成，结构化展示
+**个人端 Agent `personal-backend/`**：FastAPI + Uvicorn，知识图谱存 Neo4j，
+大模型走 OpenAI 兼容接口，无 Key 时降级为内置 Mock。
 
-> **检索与大模型是分开的两条路，别混为一谈**：
-> 检索页要的是快，结论由规则模板按命中分布生成（相似度门槛、按记录去重、危机线索兜底），
-> 不调用大模型，所以配不配 Key 都一样快；需要大模型深度研判时走
-> `GET /api/retrieval/report/{screening_id}` 显式触发，单次 20 ~ 30 秒。
-> 界面上会如实标注结论来源，不会把规则输出说成模型输出。
-
-## 动态跨模态哈希检索（真实数据集）
-
-检索模块把文本 / 图像 / 语音映射到同一套二进制哈希码空间，用「时间窗 × 位带」多哈希表
-做快速匹配，支持**任意模态查询、任意模态结果**（跨模态检索），并保留可解释信息
-（命中主题、查询码、候选数、探测桶数）。
-
-### 数据来源与三档体验
-
-| 档位 | 数据源 | 适用场景 | 如何获得 |
-|------|--------|----------|----------|
-| 档 0 · 开箱即用 | 合成语料 `backend/data/hashing/corpus.db`（随仓库发布） | clone 即跑通链路、演示前端交互 | 无需操作，真实语料缺失时自动回退到它 |
-| 档 1 · 真实语料 | `backend/data/hashing/real_corpus.db`（离线构建，不入库） | 真实中文语音 / 文本 / 人脸图像的跨模态检索 | 见下方「构建真实语料」 |
-| 档 2 · 指标复现 | 同上，跑评测脚本 | 复现检索质量指标（mAP / 跨模态类别一致率） | 见下方「复现指标」 |
-
-> **没有数据集也能完整跑通演示**：引擎启动时优先读 `real_corpus.db`，缺失则自动回退到
-> 随仓库发布的合成语料 `corpus.db`（900 单元、三模态齐全）。三个真实数据集体积大且各带
-> 使用条款，**不随仓库分发**，需自行下载到仓库外（`offline/datasets/`）。
-
-### 三个真实数据集（均可免费下载、无需申请）
-
-| 数据集 | 模态 | 本项目取样 | 标签 | 作用 |
-|--------|------|-----------|------|------|
-| **EATD-Corpus**（ICASSP 2022，中文） | 语音 + 中文转写 | 162 名受试者 × 3 语气 = 486 条 | SDS 自评量表（≥53 判抑郁 → 30:132 真实类不平衡） | 真实抑郁主轴 |
-| **CSEMOTIONS**（Apache-2.0，中文） | 语音 + 中文文本 | 1200 条 | 7 类情绪 | 语音情绪 |
-| **FER2013** | 48×48 灰度人脸图像 | 1686 张 | 7 类表情 | 图像模态 |
-
-目录结构与下载说明见 [`offline/datasets/README.md`](offline/datasets/README.md)。
-
-### 构建真实语料
-
-```bash
-cd backend
-python scripts/build_real_corpus.py                  # 默认：三模态（EATD + CSEMOTIONS + FER2013）
-python scripts/build_real_corpus.py --dataset eatd   # 只用 EATD（文本 + 语音）
-# 其他取值：--dataset csemotions | fer | all
-# 数据不在 D:\DaChuang 时用环境变量指定根目录：
-#   set DACHUANG_ASSETS_ROOT=D:\path\to\datasets
-```
-
-> CSEMOTIONS 是 HuggingFace parquet 格式，构建前需 `pip install pyarrow pandas`；
-> EATD-Corpus 与 FER2013 只需 numpy + pillow。
-
-**配对关系（重要，写论文/答辩必须如实说明）**
-
-- **文本 ↔ 语音是真实的同源配对**：EATD 的 `.wav` 与同名 `.txt` 转写、CSEMOTIONS 每条音频与其文本；
-- **图像是「情绪对齐」的弱配对**：FER2013 是纯图像集，没有与之同源的文本/语音，
-  因此按情绪语义挂接到记录上（`meta.fer.attach_mode` 已标注）。跨数据集不存在真实的
-  图像同源配对，这是数据层面的客观限制，不是实现问题。
-
-产物为 `backend/data/hashing/real_corpus.db`（1686 记录 / 5058 单元，文本·语音·图像各 1686），
-包含记录级 / 单元级 / 评测查询三类数据，并**离线预抽取**图像（192 维：强度 + HOG）
-与语音（64 维：MFCC + 韵律）特征，避免检索时重复解码。
-
-### 复现指标
-
-```bash
-cd backend
-python scripts/demo_hashing.py     # 一键演示：索引概览 + 三模态查询 + 动态增量
-python scripts/eval_retrieval.py   # 评测：mAP / 跨模态类别一致率 / 效率，写入 data/hashing/eval_report.json
-```
-
-三模态真实语料上的实测结果（`data/hashing/eval_report.json`）：
-
-| 指标 | 数值 | 说明 |
-|------|------|------|
-| T2 主题相似 mAP@10 | **0.364** | 随机基线 0.187 → **相对提升 1.95×** |
-| T3 跨模态类别一致率 | **0.608** | 随机基线 0.524 → 1.16×；六种模态对均有值 |
-| T1 同源跨模态召回 | 0.032 | 同一记录的另一模态单元命中率 |
-| 效率 | 平均 264 ms | 候选占比 0.70，无全量回退 |
-
-评测口径：T2 = 主题相近记录的 mAP@10（与随机基线比）；T3 = 跨模态命中的风险类别一致率
-（与类别先验比）；T1 = 同源跨模态召回（因图像为弱配对，该值反映弱配对可学性上限）。
-
-### 索引与检索行为
-
-- **多哈希表索引**：64 位码切 8 张位带表，位带内探测 2 比特 → 汉明半径 16（相似度 ≥ 0.75）内不漏召回。
-- **时间窗表质量淘汰**：每个时间窗独立评估 σ（编码信息量）与 ρ（语义一致性），弱表不再参与探测。
-- **混合视图模态轮转**：未指定结果模态时，各模态各取 top-k 再轮转交错，保证跨模态命中进入结果页
-  （真实语料下同模态码天然更相近，纯全局排序会让结果页被查询模态占满）。
-- **动态增量**：新记录写入后立即可检索，无需全量重训。
-
-### 预警管理
-- 预警规则配置（阈值和等级设定）
-- 预警记录列表与筛选
-- 预警详情查看
-- 预警处理流程（确认、分配、跟进、关闭）
-
-### 案例管理
-- 案例列表与搜索
-- 案例详情综合视图
-- 案例时间线展示
-- 案例标签分类
-
-### 智能研判台（管理端）
-- 待处置预警队列，选中一条进入研判
-- 结论先行：当前研判对象、风险等级、建议动作与时间要求
-- 研判依据：相似历史案例（跨模态哈希检索，可点开看原文）、群体共现主题分布
-- 处置与留痕：处置动作、协作记录全程可追溯
-
-## 技术架构
-
-### 前端技术栈
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| React | 19.x | 前端框架 |
-| TypeScript | 5.x | 类型安全 |
-| Vite | 7.x | 构建工具 |
-| TailwindCSS | 4.x | CSS框架 |
-| React Router | 7.x | 路由管理 |
-| Recharts | 3.x | 图表库 |
-| Lucide React | - | 图标库 |
-
-### 后端技术栈
-
-项目有两个后端服务，职责不同：
-
-**主后端 `backend/`**：筛查、检索、预警、案例、上传。Python 标准库 HTTP 服务，不依赖 Web 框架；
-本地用 SQLite，线上跑 Cloudflare Workers + D1（同一套代码，双模式数据访问层）。
-表结构变更由启动时自动补齐 + `backend/worker/seed/*.sql` 完成，不使用 Alembic。
-
-**个人端 Agent 服务 `personal-backend/`**：陪伴对话、个人知识图谱、推理报告。
-FastAPI + Uvicorn，图谱存 Neo4j，大模型走 OpenAI 兼容接口。
-
-两个服务共同依赖 Python 3.11+、Pydantic 数据校验、numpy + Pillow 多模态特征。
-
-### 核心引擎
-- **动态跨模态哈希检索引擎**: CMFH（协同矩阵分解哈希）+ 「时间窗 × 位带」多哈希表，已落地
-- **多模态特征**: 图像（强度 + HOG，192 维）/ 语音（MFCC + 韵律，64 维）手工特征，仅依赖 numpy + Pillow
-- **RAG分析引擎**: DeepSeek / 智谱 API，无密钥时自动降级 Mock 报告
+两个服务共同依赖 Python 3.11+、numpy + Pillow 多模态特征。
 
 ## 项目结构
 
 ```
 DaChuang-FLCFZ/
-├── backend/                    # 后端代码
+├── backend/
 │   ├── app/
-│   │   ├── api/v1/            # API路由
-│   │   ├── core/              # 核心模块（异常、响应、安全）
-│   │   ├── db/                # 数据库模型
-│   │   ├── engines/           # 核心引擎
-│   │   │   ├── hashing/       # 哈希检索引擎
-│   │   │   ├── multimodal/    # 多模态处理引擎
-│   │   │   └── rag/           # RAG分析引擎
-│   │   ├── schemas/           # Pydantic模型
-│   │   ├── services/          # 业务服务
-│   │   ├── config.py          # 配置文件
-│   │   └── main.py            # 应用入口
-│   ├── uploads/               # 上传文件存储
-│   ├── scripts/               # 语料构建、检索演示、评测脚本
-│   ├── worker/                # Cloudflare Worker 部署代码与 seed 迁移
-│   ├── requirements.txt       # Python依赖
-│   ├── Dockerfile             # 后端Docker配置
-│   └── .env.example           # 环境变量示例
-├── personal-backend/           # 个人端 Agent 服务（FastAPI + Neo4j + LLM）
-│   ├── app/api/v1/           # 对话 / 图谱 / 推理 / 问询 / 预警
-│   ├── app/services/         # LLM 客户端、知识图谱、推理与推荐 Agent
-│   └── scripts/              # 知识图谱初始化与领域种子导入
-├── frontend/                   # 前端代码
+│   │   ├── core/                 # 请求上下文、响应、鉴权
+│   │   ├── db/                   # SQLite 访问层与迁移守卫
+│   │   ├── engines/
+│   │   │   ├── hashing/          # CMFH、窗口模型池、多哈希表、跨模态桥
+│   │   │   ├── multimodal/       # 文本 / 语音 / 图像特征
+│   │   │   ├── rag/              # RAG 报告
+│   │   │   └── agent/            # 研判与 Agent 能力
+│   │   ├── handlers/             # auth / screening / retrieval / alerts / cases ...
+│   │   ├── services/
+│   │   ├── config.py
+│   │   ├── main.py / server.py / router.py
+│   ├── data/
+│   │   ├── hashing/              # corpus.db 随仓库；real_corpus.db、索引、桥接权重本地生成
+│   │   └── avdd_media/           # AVDD 面诊图（本地生成）
+│   ├── scripts/                  # 语料构建、AVDD 并入、桥接训练、评测
+│   ├── tests/                    # 冒烟与验收脚本
+│   ├── worker/                   # Cloudflare Worker 部署代码与 D1 seed
+│   ├── start.bat / start.sh
+│   ├── requirements.txt
+│   └── Dockerfile
+├── personal-backend/             # FastAPI + Neo4j + LLM（对话 / 图谱 / 推理 / 推荐）
+│   ├── app/api/v1/  app/services/  app/schemas/
+│   └── start.bat
+├── frontend/
 │   ├── src/
-│   │   ├── components/        # 公共组件
-│   │   ├── pages/             # 页面组件
-│   │   ├── services/          # API服务
-│   │   ├── data/              # Mock数据
-│   │   ├── App.tsx            # 应用入口
-│   │   └── main.tsx           # 渲染入口
-│   ├── public/                # 静态资源
-│   ├── package.json           # Node依赖
-│   ├── Dockerfile             # 前端Docker配置
-│   └── vite.config.ts         # Vite配置
-├── docs/                       # 文档
-│   ├── PRD.md                 # 产品需求文档
-│   └── API.md                 # API接口文档
-├── 启动项目.bat                # 一键启动三个服务（Windows 双击）
-├── 配置大模型API.bat           # 一键配置大模型 API（Windows 双击）
-├── start_project.ps1           # 一键启动脚本本体
-├── stop_project.ps1            # 停止服务
-├── configure_api.ps1           # API 配置脚本本体
-├── docker-compose.yml          # Docker Compose配置
-└── README.md                   # 项目说明
+│   │   ├── pages/                # 学生端页面
+│   │   ├── admin/pages/          # 管理端页面
+│   │   ├── components/           # 公共组件（含 AI 陪伴形象）
+│   │   ├── services/             # API 封装
+│   │   └── assets/
+│   ├── scripts/                  # 单文件演示打包
+│   ├── package.json
+│   └── Dockerfile
+├── docs/                         # PRD / API / 部署 / 开发记录
+├── offline/datasets/             # 数据集存放说明（内容不入库）
+├── 启动项目.bat / start_project.ps1 / stop_project.ps1
+├── 配置大模型API.bat / configure_api.ps1
+├── 启动本地环境.command / 启动本地环境-连后端.command   # macOS
+├── docker-compose.yml
+└── README.md
 ```
 
 ## 快速开始
 
 ### 环境要求
+
 - Python 3.11+
-- Node.js 18+
-- npm 或 yarn
+- Node.js 18+（推荐 20 LTS）
+- npm 9+
+- 可选：Docker（Neo4j、容器化部署）
 
-### 本地开发
+### 一键启动（Windows，推荐）
 
-#### 一键启动（推荐）
-
-Windows 下双击根目录的 `启动项目.bat`，或运行：
+双击 `启动项目.bat`，或：
 
 ```powershell
-.\start_project.ps1            # 起全部服务并打开浏览器
-.\start_project.ps1 -NoBrowser # 只起服务
-.\start_project.ps1 -SkipAgent # 只起主后端 + 前端
+.\start_project.ps1             # 启动全部服务并打开浏览器
+.\start_project.ps1 -NoBrowser  # 只起服务
+.\start_project.ps1 -SkipAgent  # 只起主后端 + 前端
+.\stop_project.ps1              # 停止
 ```
 
-脚本会依次：补齐 Python 环境与 numpy/pillow、创建 personal-backend 的 venv 与 `.env`、
-判断 Neo4j 来源（本机已在跑就用本机的，否则尝试 Docker）、首次灌知识图谱种子、
-启动三个服务并逐端口等待就绪、最后打开浏览器。已占用的端口会跳过，不会重复启动。
-
-启动后：
+脚本会依次：补齐 Python 依赖、创建 personal-backend 的 venv 与 `.env`、判断 Neo4j 走本机还是 Docker、
+首次灌入知识图谱种子、按端口等待服务就绪。已占用的端口会跳过；`:5173` 被占用时前端自动换端口。
 
 | 服务 | 地址 |
-|------|------|
+|---|---|
 | 前端 | http://localhost:5173 |
 | 主后端 | http://localhost:8000 |
-| 个人端 Agent | http://localhost:8001 |
-| Neo4j 浏览器 | http://localhost:7474 |
+| 个人端 Agent | http://localhost:8001（自带 `/docs`） |
+| Neo4j Browser | http://localhost:7474 |
 
-停止：`.\stop_project.ps1`，或直接关掉对应的最小化控制台窗口。
+前端默认连真实后端（`VITE_USE_MOCK=false`），接口失败会直接报错，不会静默回退演示数据。
 
-#### 手动启动
+### macOS
+
+双击 `启动本地环境-连后端.command`（连真实后端）或 `启动本地环境.command`。
+
+### 手动启动
 
 ```bash
 # 主后端
 cd backend
 start.bat            # Windows
-./start.sh           # Linux/macOS，先 chmod +x
+./start.sh           # Linux/macOS
 
-# 个人端 Agent（可选，陪伴对话与知识图谱需要）
+# 个人端 Agent（可选）
 cd personal-backend
-uvicorn app.main:app --port 8001
+uvicorn app.main:app --host 0.0.0.0 --port 8001
 
 # 前端
 cd frontend
 npm install
-npm run dev
+npm run dev          # http://127.0.0.1:5173/
 ```
 
-### 配置大模型 API（可选，一步搞定）
+### 纯前端演示（不需要后端）
 
-项目里所有需要大模型的功能（RAG 报告生成、AI 陪伴对话、推荐语、日常问询等）共用**同一个 OpenAI 兼容接口**。
-下载项目后双击 `配置大模型API.bat`（或运行 `.\configure_api.ps1`），按提示粘贴一个 Key 即可；
-内置 DeepSeek / 通义千问 / 智谱 GLM / OpenAI 预设，也支持任意 OpenAI 兼容接口：
-
-- Key 只会写入 `backend/.env` 与 `personal-backend/.env`，两个文件均已被 `.gitignore` 忽略，
-  **不会上传到 GitHub**（脚本写入前会自动校验这一点）
-- 不配置也能完整跑通：相关功能自动降级为内置 Mock（离线演示模式）
-- 换 Key / 换服务商：重跑脚本即可；一键还原离线模式：`.\configure_api.ps1 -RestoreOffline`
-
-### Docker部署
 ```bash
-docker-compose up -d
+cd frontend
+npm run dev:demo     # 内置演示数据
 ```
 
-详细部署说明请参考 [DEPLOYMENT.md](./docs/DEPLOYMENT.md)
+单文件演示版：`npm run build:single`。
 
-## API文档
+### 演示账号
 
-接口说明见 [API.md](./docs/API.md)。主后端是标准库 HTTP 服务，不带 Swagger 页面，
-健康检查可直接访问 `http://localhost:8000/health`；个人端 Agent 服务自带
-FastAPI 交互式文档：http://localhost:8001/docs 。
+| 角色 | 账号 |
+|---|---|
+| 学生端 | `xiaoyu / 123456` |
+| 管理端 | `adminer / admin`、`admin / admin123` |
 
-## 配置说明
+## 配置
 
-### 后端环境变量
+### 大模型 API（可选）
 
-在 `backend/` 目录下创建 `.env` 文件：
+RAG 报告、AI 陪伴、推荐语、日常问询共用同一个 OpenAI 兼容接口。双击 `配置大模型API.bat`
+（或 `.\configure_api.ps1`），按提示粘贴 Key 即可，内置 DeepSeek / 通义千问 / 智谱 GLM / OpenAI 预设。
 
-```env
-DATABASE_URL=sqlite:///./mental_screening.db
-SECRET_KEY=your-secret-key-change-in-production
-DEBUG=True
-ENABLE_MOCK_ENGINES=True
-```
+- Key 只写入 `backend/.env` 与 `personal-backend/.env`，两个文件均已被 `.gitignore` 忽略
+- 不配置也能跑通：相关功能自动降级为内置 Mock
+- 还原离线模式：`.\configure_api.ps1 -RestoreOffline`
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| DATABASE_URL | 数据库连接字符串 | sqlite:///./mental_screening.db |
-| SECRET_KEY | JWT密钥 | - |
-| DEBUG | 调试模式 | True |
-| ENABLE_MOCK_ENGINES | 启用Mock引擎 | True |
-| HASHING_USE_MOCK | 哈希引擎走 Mock（False = 真实 CMFH + 多哈希表） | False |
-| HASHING_USE_CORPUS | 使用预构建语料库作为检索数据源 | True |
-| HASHING_CORPUS_DB | 真实语料库路径（缺失时自动回退合成语料） | backend/data/hashing/real_corpus.db |
-| HASHING_FALLBACK_CORPUS_DB | 合成语料库路径（随仓库发布，兜底） | backend/data/hashing/corpus.db |
-| HASHING_BALANCE_MODALITIES | 混合视图按模态轮转交错，保证跨模态命中可见 | True |
+### 哈希引擎参数（`backend/.env`）
 
-> 完整哈希参数（码长、位带、时间窗、质量阈值等）见 [backend/.env.example](./backend/.env.example)。
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `HASHING_USE_MOCK` | False | False = 真实 CMFH + 多哈希表 |
+| `HASHING_USE_CORPUS` | True | 使用预构建语料库作为检索数据源 |
+| `HASHING_CODE_LENGTH` | 64 | 哈希码长度 |
+| `HASHING_BAND_BITS` | 8 | 每条位带的比特数 |
+| `HASHING_PROBE_BITS` | 2 | 位带内探测翻转的比特数 |
+| `HASHING_LAMBDA_S` | 0.6 | CMFH 中记录级相似度权重 |
+| `HASHING_WINDOW_DAYS` | 122 | 时间窗跨度（天） |
+| `HASHING_EPOCH` | 2025-08-01 | 时间窗起点 |
+| `HASHING_TABLE_RHO_MIN` | 0.10 | 表的语义一致性下限 |
+| `HASHING_TABLE_SIGMA_MIN` | 0.02 | 表的编码信息量下限 |
+| `HASHING_BALANCE_MODALITIES` | True | 混合视图按模态轮转交错 |
 
-### 前端配置
+完整参数见 [backend/.env.example](./backend/.env.example)。
 
-前端通过 Vite 代理连接后端API，默认配置：
-```typescript
-proxy: {
-  '/api': {
-    target: 'http://localhost:8000',
-    changeOrigin: true,
-  }
-}
-```
+## 语料构建与评测
 
-## 开发指南
-
-### 后端开发
 ```bash
 cd backend
 
-# 创建虚拟环境
-python -m venv venv
+# 三模态真实语料（EATD + CSEMOTIONS + FER2013）
+python scripts/build_real_corpus.py
+python scripts/build_real_corpus.py --dataset eatd   # 其他取值：csemotions | fer | all
 
-# 激活虚拟环境
-# Windows
-venv\Scripts\activate
-# Linux/macOS
-source venv/bin/activate
+# AVDD-TCMI 音-图强配对（先构建特征库，再并入索引；并入前先停后端）
+python scripts/build_avdd_corpus.py
+python scripts/integrate_avdd_into_engine.py
 
-# 安装依赖
-pip install -r requirements.txt
+# 跨模态桥（文-图 / 音-图）
+python scripts/build_bridges.py --pair text  --lambda-s 20
+python scripts/build_bridges.py --pair audio --lambda-s 50
 
-# 启动开发服务器
-uvicorn app.main:app --reload
+# 演示与评测
+python scripts/demo_hashing.py        # 索引概览 + 三模态查询 + 动态增量
+python scripts/eval_retrieval.py      # mAP / 跨模态类别一致率 / 效率 → data/hashing/eval_report.json
+python scripts/eval_dynamic.py        # 动态增量与窗口融合
+python scripts/eval_bridge_audio.py   # 音-图桥接
 ```
 
-### 前端开发
-```bash
-cd frontend
+最近一次写入 `eval_report.json` 的评测基于 1686 条双模态语料（当时的语料规模）：
 
-# 安装依赖
-npm install
+| 指标 | 数值 | 说明 |
+|---|---|---|
+| T2 主题相似 mAP@10 | 0.364 | 随机基线 0.187，相对提升 1.95× |
+| T3 跨模态类别一致率 | 0.608 | 随机基线 0.524，提升 1.16×；六种模态对均有值 |
+| T1 同源跨模态召回 | 0.032 | 同一记录另一模态单元的命中率（图像为弱配对，反映可学性上限） |
+| 平均延迟 | 264 ms | 候选占比 0.70，无全量回退 |
 
-# 启动开发服务器
-npm run dev
+语料已扩到 4928 条记录并加入 AVDD 强配对，需要最新指标时重跑 `eval_retrieval.py` 覆盖该文件。
 
-# 构建生产版本
-npm run build
+## 部署
 
-# 预览生产构建
-npm run preview
-```
-
-### 数据库结构变更
-
-本地 SQLite 库在启动时自动补齐缺失的表与列（`backend/app/db/database.py` 的迁移守卫），
-改表结构通常不需要手工操作。
-
-线上 D1 需要在 `backend/worker/` 下新增 `seed/` 里的迁移 SQL 并执行：
+### 本地 / Docker
 
 ```bash
-cd backend/worker
-npx wrangler d1 execute mental-screening-db --remote --file=seed/00X_xxx.sql
+docker compose up -d
 ```
+
+容器名固定为 `psych-screening-*`（见 `docker-compose.yml` 的 `name`），避免中文目录下 project name 为空。
+
+### 线上
+
+- 前端：构建后发布到 GitHub Pages（`npm run build`，产物在 `frontend/dist`）
+- 后端：Cloudflare Workers + D1，使用 `uv build --wheel` 与 `pywrangler deploy`
+
+自动部署工作流已移除，需手动执行；步骤与前置配置见 [DEVELOP.md](./DEVELOP.md) 与
+[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)。
+
+## 文档
+
+| 文档 | 内容 |
+|---|---|
+| [docs/PRD.md](./docs/PRD.md) | 产品需求 |
+| [docs/API.md](./docs/API.md) | 接口说明 |
+| [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | 本地 / Docker / 生产部署 |
+| [DEVELOP.md](./DEVELOP.md) | 长期开发记录、决策与部署迁移 |
+| [README-个人端部署指南.md](./README-个人端部署指南.md) | 个人端 Agent 部署 |
+| [演示用户README.md](./演示用户README.md) | 演示账号与数据 |
+| [offline/datasets/README.md](./offline/datasets/README.md) | 数据集目录与构建说明 |
+| [docs/答辩演示方案.md](./docs/答辩演示方案.md) | 答辩演示流程 |
 
 ## 许可证
 
 本项目仅供学习和研究使用。
-
-## 贡献指南
-
-欢迎提交 Issue 和 Pull Request。
