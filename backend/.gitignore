@@ -12,6 +12,9 @@ env/
 # 后端 wheel 构建产物（由 uv build --wheel 生成，不入库）
 dist/
 
+# Python Worker 的依赖副本（pywrangler / uv 在部署与本地开发时现场生成，不入库）
+worker/python_modules/
+
 # 数据库文件 - 默认全部忽略（工作库含真实生成数据，不上传）
 # 但下面三个放行，都只含**演示/合成数据**，不含真实用户隐私：
 #   data/retrieval_seed.db      检索语料种子（合成）

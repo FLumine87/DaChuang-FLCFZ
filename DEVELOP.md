@@ -1,4 +1,4 @@
-# 项目开发记录（DEV LOG）
+﻿# 项目开发记录（DEV LOG）
 
 > 本文档是「心理筛查预警系统」的**长期开发记录**，不只是当前部署迁移的任务记录：
 > 它持续承载项目的调研结论、决策记录、实施计划、代码改动，以及过程想法与预留改进方向。
@@ -201,9 +201,9 @@ DaChuang-FLCFZ/
 | 2026-09-30 | **评测脚本适配真实语料**：`eval_retrieval.py` 新增 T3（跨模态类别一致率 vs 先验）与查询模态分析，区分 T1（同一被试，数据集不可辨识）/ T2（主题相似）/ T3（跨模态类别一致性）三类指标。实测（300 记录 / 120 查询）：T2 mAP@10 0.945（随机基线 0.782，提升 1.21×）；T3 跨模态类别一致率 0.70 vs 先验 0.498（提升 1.40×）；平均检索 13.3ms、p95 65.4ms | backend/scripts/eval_retrieval.py、backend/data/hashing/eval_report.json | 结论只用于链路验证与相对比较（相关性由主题重叠定义），非论文绝对指标 |
 | 2026-09-30 | **文档与配置更新**：README 新增「动态跨模态哈希检索（真实数据集）」章节（三档体验、语料构建、指标复现、索引行为）；`.env.example` 补充 `HASHING_BALANCE_MODALITIES` / `HASHING_CORPUS_DB` / `HASHING_FALLBACK_CORPUS_DB` 说明 | README.md、DEVELOP.md、backend/.env.example | 三档：档0 合成语料开箱即用 / 档1 真实语料跨模态 / 档2 指标复现；真实数据不入库，引擎缺失时自动回退 |
 | 2026-10-07 | **管理端仪表盘、预警、案例闭环**：统计由数据库聚合；预警支持筛选、分页、详情、分配、顺序处置与审计；案例按账号关联筛查/预警并生成时间线，可更新状态和记录跟进；个人自助作答由服务端复算；修复公开注册提权、跨用户数据可见与异步漏 await；前端补加载、空态、错误、演示数据标识及重复提交防护 | backend/app/{db,handlers,services}、backend/worker/seed、frontend/src/{admin,components,pages,services}、backend/scripts/test_admin_workflow.py、docs/ADMIN_CONSOLE_GUIDE.md | 仅本地隔离分支与临时数据库验证，尚未推送/部署；既有 D1 须先执行一次 003 迁移，旧记录 user_id 为空时不按姓名强行关联 |
-| 2026-11-07 | **检索用于筛查的闭环与统一评估**：检索页置顶本人结论、采用依据、追问、量表和复核入口；保存同一记录并支持历史恢复；症状查询替代姓名查询；拆分情绪与SDS标签；本人多日负面情绪触发可解释关注规则；统一量表版本与服务端计分；区分真实哈希和个人图谱，修复保存/同步/推理时序，RAG解释复用后端结论 | backend/app/{handlers,services,engines}、backend/scripts/datasets、frontend/src/{pages,components,services,data}、personal-backend/app、相关隔离测试 | 范围为用户选定1/2/6/8/11/12及截图闭环；详见 docs/改动-检索筛查闭环-2026-11-07.md。未部署、未重训真实模型；重复情绪阈值为项目关注规则，非临床诊断标准 |
+| 2026-11-07 | **检索用于筛查的闭环与统一评估**：检索页置顶本人结论、采用依据、追问、量表和复核入口；保存同一记录并支持历史恢复；症状查询替代姓名查询；拆分情绪与SDS标签；本人多日负面情绪触发可解释关注规则；统一量表版本与服务端计分；区分真实哈希和个人图谱，修复保存/同步/推理时序，RAG解释复用后端结论 | backend/app/{handlers,services,engines}、backend/scripts/datasets、frontend/src/{pages,components,services,data}、personal-backend/app、相关隔离测试 | 范围为用户选定1/2/6/8/11/12及截图闭环；未部署、未重训真实模型；重复情绪阈值为项目关注规则，非临床诊断标准 |
 | 2026-11-07 | 按用户反馈取消检索页量表前置：本人输入与可选近况补充可独立输出初步分析、关注或复核建议；不再以needs_scale阻塞流程；量表绑定和自测入口默认折叠为可选扩展 | screening_assessment.py、Retrieval.tsx、RetrievalAssessmentCard.tsx及回归测试 | 保留多模态检索主功能，不把未填量表视为不能生成分析结论；仍区分初步线索和疾病诊断 |
-| 2026-11-07 | 按最终澄清将检索页改为“同次跨模态命中→情绪/主题证据汇总→置顶初筛结论”：移除页面所有量表和追问入口，不读取量表；增加来源去重、实际采用标记、签名快照、无文字的媒体分析及独立保存路径，RAG解释相同结论 | services/retrieval_screening.py、handlers/personal.py、检索页/结论卡及专门回归 | 见 docs/改动-检索结果直接初筛-2026-11-07.md；属于未验证临床效度的参考模式初筛，不将支持占比当作患病概率 |
+| 2026-11-07 | 按最终澄清将检索页改为“同次跨模态命中→情绪/主题证据汇总→置顶初筛结论”：移除页面所有量表和追问入口，不读取量表；增加来源去重、实际采用标记、签名快照、无文字的媒体分析及独立保存路径，RAG解释相同结论 | services/retrieval_screening.py、handlers/personal.py、检索页/结论卡及专门回归 | 属于未验证临床效度的参考模式初筛，不将支持占比当作患病概率 |
 | 2026-11-07 | 将底部RAG报告并入顶部“多模态心理筛查结论”：结论先出，生成期间显示“大模型思考中”，完成后同卡补充说明与建议并去重；兜底明确标注来源 | Retrieval.tsx、RetrievalAssessmentCard.tsx、screeningAssessment.ts及检索浏览器回归 | 保持检索页独立于量表；覆盖等待、完成、规则兜底和旧报告不覆盖新检索 |
 | 2026-11-07 | 报告统一为“得出结论/简短参考依据/心理建议”；新增默认开启且可关闭的原始文字分析，切换只重生成报告并保留偏好；大模型可细化综合结论和建议，后端风险不变 | personal.py、screening_assessment.py、DeepSeek/Zhipu提示词、检索页/结论卡/请求契约及回归 | 关闭时原文及含原文的签名令牌不进入模型提示；当前文字模型不直接解读图片/语音，页面如实说明 |
 | 2026-11-07 | 修复报告前后相同的实际运行问题：旧后端未重载导致模型正文仍被旧规则覆盖，已重新启动本机服务；心理建议移除nextAction导航兜底，失败明确提示并支持只重试报告 | screening_assessment.py、Retrieval.tsx、RetrievalAssessmentCard.tsx及回归 | 80项后端、8项页面测试通过；虚构输入实测真实模型返回不同正文与具体建议；本机服务健康，未部署线上 |
