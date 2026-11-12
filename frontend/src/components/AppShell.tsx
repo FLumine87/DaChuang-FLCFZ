@@ -243,28 +243,21 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
     ...(isAdmin
       ? [
           {
-            path: `${root}/judgement`,
-            label: "智能研判台",
-            description: "以案为中心：结论、依据、处置与留痕在一页里走完。",
-            icon: BrainCircuit,
-            group: "智能分析",
-          },
-          {
             path: `${root}/agent-workbench`,
-            label: "预警处置工作台",
-            description: "汇总筛查证据与规则，辅助人工研判和处置。",
+            label: "预警研判与处置",
+            description: "查看预警和群体筛查，核对个案证据，分配并跟进随访。",
             icon: BrainCircuit,
             group: "智能分析",
           },
         ]
       : []),
-    {
+    ...(!isAdmin ? [{
       path: `${root}/alerts`,
-      label: isAdmin ? "预警管理" : "预警中心",
+      label: "预警中心",
       description: "查看风险变化，跟进每一条需要关注的提醒。",
       icon: TriangleAlert,
       group: "健康管理",
-    },
+    }] : []),
     /* 管理端的「案例管理」放**工作空间**分组。
        它原先只在右上角下拉里，藏在二级菜单里不好找；用户要求挪回侧栏。
        用户端的「我的档案」留在「健康管理」不动 —— 两者的定位不同：

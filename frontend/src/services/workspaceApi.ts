@@ -17,10 +17,15 @@ export interface Run {
   summary: string; limits: string[]; subjects: Subject[];
   trace: { agent: string; tool: string; status: string; at: string; summary: string; count: number }[];
 }
-export interface Workspace { scope: Scope; latest_run: Run | null; tasks: Task[]; available_subjects: number; departments: string[] }
+export interface Workspace { scope: Scope; latest_run: Run | null; tasks: Task[]; available_subjects: number; departments: string[]; model_available?: boolean }
 export interface CaseDetail extends Subject {
   assessmentState?: { status: 'none' | 'unknown' | 'current' | 'outdated'; newRecords: number; changedRecords: number; removedRecords?: number };
-  assessment?: { id: string; created_at: string; summary: string; recommendation: string; evidence_ids: string[]; limits: string[]; trace: { tool: string; summary: string }[] } | null;
+  assessment?: {
+    id: string; created_at: string; summary: string; recommendation: string; evidence_ids: string[];
+    limits: string[]; trace: { tool: string; summary: string }[];
+    model_status?: 'generated' | 'disabled' | 'unavailable' | 'live_rules';
+    model_draft?: { summary: string; review_points: string[]; evidence_refs: string[]; model: string };
+  } | null;
   history: { id: string; date: string; score: number; max_score: number; questionnaire: string }[];
   tasks: Task[];
   materials: { kind: string; title: string; source: string; text?: string; url?: string }[];
@@ -31,6 +36,6 @@ export const startRun = (scope: Scope, days: number, department: string) =>
 export const loadCase = (scope: Scope, subject: string) =>
   request.get<CaseDetail>(`/api/agent-workspace/cases/${encodeURIComponent(subject)}`, { params: { scope } });
 export const analyseCase = (scope: Scope, subject: string) =>
-  request.post<CaseDetail>(`/api/agent-workspace/cases/${encodeURIComponent(subject)}/runs`, { scope });
+  request.post<CaseDetail>(`/api/agent-workspace/cases/${encodeURIComponent(subject)}/runs`, { scope }, { timeout: 35000 });
 export const saveTask = (task: Task, action: string, fields: { assignee: string; title: string; due_at: string; note: string }) =>
   request.put<Task>(`/api/agent-workspace/tasks/${encodeURIComponent(task.id)}`, { ...fields, version: task.version, action });

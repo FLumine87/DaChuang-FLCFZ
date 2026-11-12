@@ -480,6 +480,16 @@
 .aw-individual p { font-size: 13px; line-height: 1.8; margin: 10px 0; }
 .aw-individual small { color: var(--muted); }
 .aw-individual code { display: block; font-size: 11px; color: var(--color-slate-600); }
+.aw-model-draft {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-primary-200);
+  border-radius: 12px;
+  background: var(--color-primary-50);
+  overflow-wrap: anywhere;
+}
+.aw-individual .aw-model-draft h3 { display: flex; align-items: center; gap: 8px; margin-top: 0; }
+.aw-model-draft ul { list-style: disc; margin: 8px 0 8px 20px; font-size: 13px; line-height: 1.8; }
 
 @media (max-width: 1100px) {
   .aw-heading { align-items: flex-start; flex-direction: column; gap: 14px; }

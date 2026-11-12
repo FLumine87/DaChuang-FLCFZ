@@ -31,7 +31,7 @@ $nonInteractive = [bool]$ApiKey
 
 # ---- Provider 预设（均为 OpenAI 兼容接口）-----------------------------------
 $presets = [ordered]@{
-    deepseek = @{ Name = "DeepSeek";  Base = "https://api.deepseek.com/v1";                       Model = "deepseek-chat" }
+    deepseek = @{ Name = "DeepSeek";  Base = "https://api.deepseek.com/v1";                       Model = "deepseek-flash" }
     qwen     = @{ Name = "通义千问";   Base = "https://dashscope.aliyuncs.com/compatible-mode/v1"; Model = "qwen-plus" }
     zhipu    = @{ Name = "智谱 GLM";  Base = "https://open.bigmodel.cn/api/paas/v4";              Model = "glm-4-plus" }
     openai   = @{ Name = "OpenAI";    Base = "https://api.openai.com/v1";                         Model = "gpt-4o-mini" }
@@ -82,14 +82,27 @@ function Write-EnvFile([string]$Path, [System.Collections.Generic.List[string]]$
 }
 
 function Test-Ignored([string]$RelPath) {
-    # 先问 git；没有 git 时退化为检查 .gitignore 是否含 ".env" 规则
-    $git = Get-Command git -ErrorAction SilentlyContinue
+    $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($git) {
-        Push-Location $root
-        try {
-            & git check-ignore -q -- $RelPath 2>$null
+        # Windows PowerShell 5.1 会把 Git 的 stderr 变成 NativeCommandError；
+        # 只在这个探测块内禁用终止行为，按 Git 退出码判断。
+        $decision = & {
+            $ErrorActionPreference = "Continue"
+            $PSNativeCommandUseErrorActionPreference = $false
+            $inside = & $git.Source -C $root rev-parse --is-inside-work-tree 2>$null
+            if ($LASTEXITCODE -ne 0) { return }
+            if ($inside -ne "true") { return $false }
+            & $git.Source -C $root check-ignore -q -- $RelPath 2>$null
             return ($LASTEXITCODE -eq 0)
-        } finally { Pop-Location }
+        }
+        if ($null -ne $decision) { return $decision }
+    }
+
+    # 只有普通解压目录才用 .gitignore 文本兜底。实际工作树须由 Git 确认，
+    # 避免 Git 不可用或探测失败时把已跟踪的 .env 当成安全文件。
+    if ($env:GIT_DIR -or $env:GIT_WORK_TREE) { return $false }
+    for ($dir = Get-Item -LiteralPath $root; $dir; $dir = $dir.Parent) {
+        if (Test-Path -LiteralPath (Join-Path $dir.FullName ".git")) { return $false }
     }
     $gi = Join-Path $root ".gitignore"
     if (Test-Path $gi) { return [bool](Select-String -Path $gi -Pattern '^\.env$' -Quiet) }
@@ -234,7 +247,7 @@ if ($BaseUrl -notmatch "^https?://") { Write-Host "[error] BaseUrl 必须是 htt
 if (-not $Model) {
     if ($Provider -eq "custom") {
         if ($nonInteractive) { Write-Host "[error] 自定义服务商需同时指定 -Model"; exit 1 }
-        $Model = Read-Host "模型名（如 deepseek-chat）"
+        $Model = Read-Host "模型名（如 deepseek-flash）"
     } elseif ($nonInteractive) {
         $Model = $presetModel
         Write-Host "[info ] 未指定 -Model，使用默认：$Model"

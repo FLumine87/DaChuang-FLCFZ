@@ -72,7 +72,7 @@ async def records_for(scope):
                    "ELSE (SELECT MIN(c.id) FROM cases c WHERE c.user_id=s.user_id HAVING COUNT(*)=1) "
                    "END AS case_id") if "case_id" in columns else "NULL AS case_id"
     rows = await db.query_a(
-        f"SELECT s.id, s.user_id, {case_column}, s.department, s.questionnaire_id, q.name AS questionnaire, "
+        f"SELECT s.id, s.screening_id AS screening_code, s.user_id, {case_column}, s.department, s.questionnaire_id, q.name AS questionnaire, "
         "s.score, s.max_score, s.alert_level, s.status, "
         "COALESCE(s.screening_date,s.created_at) AS date "
         "FROM screenings s LEFT JOIN questionnaires q ON q.id=s.questionnaire_id "
@@ -145,6 +145,8 @@ async def tasks_for(scope):
 
 
 async def overview(scope):
+    from app.services import agent_model
+
     await ensure_schema()
     records = await records_for(scope)
     latest = await db.query_one_a(
@@ -152,6 +154,7 @@ async def overview(scope):
         (scope,))
     return {
         "scope": scope, "mode": "workflow-preview", "model_connected": False,
+        "model_available": scope == "demo" and agent_model.configured(),
         "latest_run": json.loads(latest["payload"]) if latest else None,
         "tasks": await tasks_for(scope),
         "available_subjects": len(compile_subjects(records)),
@@ -194,7 +197,7 @@ async def run(scope, days, department, actor):
         "total": len(subjects), "records": len(filtered), "distribution": distribution,
         "priority_count": len(priority), "unlinked_count": missing,
         "summary": f"本次分析覆盖 {len(subjects)} 个对象，{distribution.get('red', 0) + distribution.get('orange', 0)} 个对象已有橙红预警，需要优先人工复核。",
-        "limits": ["当前为可追踪的规则工作流，未接入大模型。",
+        "limits": ["群体统计和随访草案均由规则生成。",
                    "预警等级来自已完成筛查；不从图片、声音或检索相似度推断心理状况。",
                    "时间窗口变化会影响样本组成，不自动解释为群体状况改善或恶化。"],
         "subjects": [{k: v for k, v in s.items() if k != "history"} for s in subjects],
@@ -230,6 +233,9 @@ async def case_detail(scope, subject):
     await ensure_schema()
     subjects = compile_subjects(await records_for(scope))
     row = next((s for s in subjects if s["subject"] == subject), None)
+    if row is None and scope == "live" and subject.startswith("screening-code:"):
+        code = subject.removeprefix("screening-code:")
+        row = next((s for s in subjects if any(r["screening_code"] == code for r in s["history"])), None)
     # Accept existing case code only when it resolves to an internal case id.
     if row is None and scope == "live":
         found = await db.query_one_a("SELECT id FROM cases WHERE case_id=?", (subject,))

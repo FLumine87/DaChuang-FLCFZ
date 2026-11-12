@@ -28,7 +28,7 @@ function pageList(current: number, total: number): number[] {
   return Array.from({ length: 5 }, (_, i) => start + i);
 }
 
-export default function AdminAlerts() {
+export default function AdminAlerts({ onOpenCase }: { onOpenCase?: (screeningId: string) => void }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [keyword, setKeyword] = useState('');
   const [level, setLevel] = useState('');
@@ -51,6 +51,7 @@ export default function AdminAlerts() {
   const [saveError, setSaveError] = useState('');
   const [notice, setNotice] = useState('');
   const savingRef = useRef(false);
+  const keepDeepLink = useRef(Boolean(searchParams.get('alert')));
   /** 用户主动关掉详情后不再自动选第一条，直到他换了筛选条件 */
   const userClosed = useRef(false);
   const [pendingLeave, setPendingLeave] = useState<
@@ -95,7 +96,7 @@ export default function AdminAlerts() {
   useEffect(() => {
     const first = result?.items[0];
     if (!first || userClosed.current) return;
-    if (!selectedId || !result?.items.some((item) => item.id === selectedId)) choose(first.id);
+    if (!selectedId || (!keepDeepLink.current && !result?.items.some((item) => item.id === selectedId))) choose(first.id);
     // choose 是稳定的一次性动作，这里只跟随列表结果变化
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
@@ -106,7 +107,16 @@ export default function AdminAlerts() {
       setPendingLeave({ type: 'switch', id });
       return;
     }
-    setSelectedId(id); setSearchParams({ alert: id }); setDetail(null); setDetailLoading(true); setNotice(''); setSaveError('');
+    setSelectedId(id); setAlertParam(id); setDetail(null); setDetailLoading(true); setNotice(''); setSaveError('');
+  }
+
+  function setAlertParam(id?: string) {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (id) next.set('alert', id);
+      else next.delete('alert');
+      return next;
+    }, { replace: true });
   }
 
   /** 真正关闭详情：只在没有未保存修改，或用户已确认放弃后调用。 */
@@ -117,13 +127,14 @@ export default function AdminAlerts() {
     }
     userClosed.current = true;
     setSelectedId(null);
-    setSearchParams({});
+    setAlertParam();
     setDetail(null);
   }
 
   /** 筛选/翻页视为“重新开始看列表”，关掉详情的意图不再顺延 */
   function resetAutoSelect() {
     userClosed.current = false;
+    keepDeepLink.current = false;
     setListLoading(true);
   }
 
@@ -163,12 +174,12 @@ export default function AdminAlerts() {
     if (target.type === 'close') {
       userClosed.current = true;
       setSelectedId(null);
-      setSearchParams({});
+      setAlertParam();
       setDetail(null);
     } else {
       userClosed.current = false;
       setSelectedId(target.id);
-      setSearchParams({ alert: target.id });
+      setAlertParam(target.id);
       setDetail(null);
       setDetailLoading(true);
       setNotice('');
@@ -294,6 +305,9 @@ export default function AdminAlerts() {
               <p><span className="text-slate-500">量表：</span>{detail.questionnaire || '无关联量表'}</p>
               <p><span className="text-slate-500">得分：</span>{detail.score == null ? '暂无' : detail.score + ' / ' + (detail.maxScore ?? '—')}</p>
               <p><span className="text-slate-500">创建时间：</span>{detail.createdAt}</p>
+              {onOpenCase && !USE_MOCK && detail.screeningId &&
+                <button type="button" className="font-medium text-primary-700 hover:underline"
+                  onClick={() => onOpenCase(detail.screeningId)}>查看个案研判 →</button>}
             </div>
             <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
               <h4 className="font-medium text-slate-900">处置记录</h4>

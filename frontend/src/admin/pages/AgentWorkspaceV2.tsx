@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Activity, ArrowRight, Check, ChevronRight, ClipboardCheck, FileText, Image,
-  Loader2, Mic, Play, Search, ShieldCheck, Users, X } from 'lucide-react';
+import { Activity, ArrowRight, Bell, Check, ChevronRight, ClipboardCheck, FileText, Image,
+  Loader2, Mic, Play, Search, ShieldCheck, Sparkles, Users, X } from 'lucide-react';
 import { analyseCase, loadCase, loadWorkspace, saveTask, startRun, type CaseDetail, type Scope,
   type Subject, type Task, type Workspace } from '../../services/workspaceApi';
 import { USE_MOCK } from '../../services/http';
 import OfflineBackendNotice from '../components/OfflineBackendNotice';
+import AdminAlerts from './AdminAlerts';
 import './agent-workspace.css';
 
 const levels: Record<string, string> = { red: '优先复核', orange: '需要复核', yellow: '持续关注', green: '常规关注' };
@@ -24,9 +25,22 @@ function dialogKeys(event: KeyboardEvent<HTMLElement>, close: () => void) {
 }
 
 export default function AgentWorkspaceV2() {
-  const [searchParams] = useSearchParams();
-  const [scope, setScope] = useState<Scope>(searchParams.get('caseId') || searchParams.get('scope') === 'live' ? 'live' : 'demo');
-  const [tab, setTab] = useState(searchParams.get('tab') === 'tasks' ? 'tasks' : 'overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepCase = searchParams.get('caseId');
+  const scope: Scope = deepCase || searchParams.get('scope') === 'live' ? 'live' : 'demo';
+  const requestedTab = searchParams.get('tab');
+  const tab = requestedTab && ['overview', 'alerts', 'tasks', 'trace'].includes(requestedTab) ? requestedTab : 'overview';
+  const detailScope: Scope = tab === 'alerts' ? 'live' : scope;
+  function changeView(values: { tab?: string; scope?: Scope; clearCase?: boolean }) {
+    const next = new URLSearchParams(searchParams);
+    if (values.tab) next.set('tab', values.tab);
+    if (values.scope) next.set('scope', values.scope);
+    if (values.clearCase) {
+      next.delete('caseId');
+      next.set('scope', values.scope ?? scope);
+    }
+    setSearchParams(next, { replace: true });
+  }
   const [days, setDays] = useState(30);
   const [department, setDepartment] = useState('all');
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -38,6 +52,7 @@ export default function AgentWorkspaceV2() {
   const [detailError, setDetailError] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
   const [caseBusy, setCaseBusy] = useState(false);
+  const [caseRunError, setCaseRunError] = useState('');
   const [editing, setEditing] = useState<{ task: Task; action: string } | null>(null);
   const [notice, setNotice] = useState('');
   const generation = useRef(0);
@@ -78,41 +93,43 @@ export default function AgentWorkspaceV2() {
 
   useEffect(() => {
     if (USE_MOCK) return;
-    const subject = searchParams.get('caseId');
+    const subject = deepCase;
     if (!subject) return;
     let disposed = false;
-    setDetailOpen(true); setDetailError(''); setDetail(null);
+    setDetailOpen(true); setDetailError(''); setCaseRunError(''); setDetail(null);
     loadCase('live', subject).then(data => { if (!disposed) setDetail(data); })
       .catch(e => { if (!disposed) setDetailError(message(e)); });
     return () => { disposed = true; };
-  }, [searchParams]);
+  }, [deepCase]);
 
   const analyse = async () => {
     const id = generation.current;
     setBusy(true); setError(''); setNotice('');
     try {
       const result = await startRun(scope, days, department);
-      if (id === generation.current) { setWorkspace(result); setTab('overview'); setNotice('本次研判已保存，任务草案等待人工审核。'); }
+      if (id === generation.current) { setWorkspace(result); changeView({ tab: 'overview' }); setNotice('本次研判已保存，任务草案等待人工审核。'); }
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
   };
   const openCase = async (subject: string) => {
     dialogOrigin.current = document.activeElement as HTMLElement;
     const id = ++detailGeneration.current;
-    setDetailOpen(true); setDetail(null); setDetailError('');
-    try { const data = await loadCase(scope, subject); if (id === detailGeneration.current) setDetail(data); }
+    setDetailOpen(true); setDetail(null); setDetailError(''); setCaseRunError('');
+    try { const data = await loadCase(detailScope, subject); if (id === detailGeneration.current) setDetail(data); }
     catch (e) { if (id === detailGeneration.current) setDetailError(message(e)); }
   };
   const closeCase = () => { ++detailGeneration.current; setDetailOpen(false); dialogOrigin.current?.focus(); };
   const runIndividual = async () => {
     if (!detail) return;
     const id = detailGeneration.current;
-    setCaseBusy(true); setDetailError('');
+    setCaseBusy(true); setCaseRunError('');
     try {
-      const result = await analyseCase(scope, detail.subject);
+      const result = await analyseCase(detailScope, detail.subject);
       if (id === detailGeneration.current) setDetail(result);
-      const refreshed = await loadWorkspace(scope);
-      if (id === detailGeneration.current) setWorkspace(refreshed);
-    } catch (e) { if (id === detailGeneration.current) setDetailError(message(e)); }
+      if (scope === detailScope) {
+        const refreshed = await loadWorkspace(scope);
+        if (id === detailGeneration.current) setWorkspace(refreshed);
+      }
+    } catch (e) { if (id === detailGeneration.current) setCaseRunError(message(e)); }
     finally { setCaseBusy(false); }
   };
   const saved = (task: Task) => {
@@ -124,37 +141,30 @@ export default function AgentWorkspaceV2() {
   const pending = workspace?.tasks.filter(t => t.state === 'proposed').length || 0;
   const active = workspace?.tasks.filter(t => ['confirmed', 'modified'].includes(t.state)).length || 0;
 
-  if (USE_MOCK) {
-    return (
-      <OfflineBackendNotice
-        feature="预警处置工作台"
-        detail="工作台会读取业务数据、写入研判与随访任务；离线演示没有对应的后端队列，因此不在这里展示假的操作结果。"
-      />
-    );
-  }
+  const showWorkflow = tab !== 'alerts' && !USE_MOCK;
 
   return <div className="aw">
-    {/* 页头不再重复渲染标题与面包屑：AppShell 已经为这条路由输出
-        眉标（管理端 · 智能分析）、页面标题「预警处置工作台」、说明与面包屑。
-        这一行只保留页面自己的状态指示——它必须留着，因为它是"当前并非真实 AI 接入"
-        的唯一提示。 */}
-    <div className="aw-heading"><span className="aw-mode"><span />工作流预览 · AI 未接入</span></div>
+    {showWorkflow && <>
+    <div className="aw-heading"><span className="aw-mode"><span />{scope === 'live' ? '业务数据 · 规则研判' : workspace?.model_available ? '合成演示 · DeepSeek 可生成个案复核草案' : '合成演示 · 规则研判'}</span></div>
     <div className="aw-toolbar">
-      <label>数据来源<select disabled={busy} value={scope} onChange={e => { setScope(e.target.value as Scope); setDepartment('all'); }}><option value="demo">合成演示数据</option><option value="live">本地业务数据</option></select></label>
+      <label>数据来源<select disabled={busy} value={scope} onChange={e => { changeView({ scope: e.target.value as Scope, clearCase: true }); setDepartment('all'); }}><option value="demo">合成演示数据</option><option value="live">业务数据</option></select></label>
       <label>观察窗口<select disabled={busy} value={days} onChange={e => setDays(Number(e.target.value))}><option value={7}>最近 7 天</option><option value={30}>最近 30 天</option><option value={90}>最近 90 天</option></select></label>
       <label>院系范围<select disabled={busy} value={department} onChange={e => setDepartment(e.target.value)}><option value="all">全部院系</option>{(workspace?.departments || []).map(d => <option key={d}>{d}</option>)}</select></label>
       <button className="aw-primary" disabled={busy || loading} onClick={analyse}>{busy ? <Loader2 className="aw-spin" size={16} /> : <Play size={16} />} {busy ? '正在运行工具与生成任务…' : '启动群体研判'}</button>
     </div>
     <p className="aw-source">{scope === 'demo' ? '演示空间：24 个虚构案例，观察基准日 2026-10-13；与业务数据完全分开。' : '业务空间：仅分析已完成筛查。缺少案例关联的记录按独立筛查计数，不自动匹配姓名。'}</p>
     {error && <div className="aw-error" role="alert">{error}<button onClick={() => window.location.reload()}>重新加载</button></div>}
+    </>}
     {notice && <div className="aw-notice" role="status"><Check size={15} />{notice}</div>}
     <div className="aw-tabs" role="group" aria-label="工作台视图">
-      {[['overview', '群体研判', Users], ['trace', '协作记录', Activity], ['tasks', `随访处置 · ${pending + active}`, ClipboardCheck]].map(([id, label, Icon]) => {
+      {[['overview', '群体研判', Users], ['alerts', '预警队列', Bell], ['tasks', `随访处置 · ${pending + active}`, ClipboardCheck], ['trace', '协作记录', Activity]].map(([id, label, Icon]) => {
         const I = Icon as typeof Users;
-        return <button key={String(id)} aria-pressed={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(String(id))}><I size={16} />{String(label)}</button>;
-      })}<span className="aw-save">{run ? `上次运行 ${date(run.created_at)}` : '尚未生成研判'}</span>
+        return <button key={String(id)} aria-pressed={tab === id} disabled={busy} className={tab === id ? 'active' : ''} onClick={() => { closeCase(); changeView({ tab: String(id), scope: id === 'alerts' ? 'live' : undefined, clearCase: Boolean(deepCase) }); }}><I size={16} />{String(label)}</button>;
+      })}{showWorkflow && <span className="aw-save">{run ? `上次运行 ${date(run.created_at)}` : '尚未生成研判'}</span>}
     </div>
-    {loading ? <div className="aw-empty"><Loader2 className="aw-spin" />正在读取工作台…</div> : <>
+    {tab === 'alerts' && <section aria-label="预警队列"><p className="aw-source">按单条业务预警分配处理人、记录进展和查看处置历史。</p><AdminAlerts onOpenCase={code => void openCase(`screening-code:${code}`)} /></section>}
+    {tab !== 'alerts' && USE_MOCK && <OfflineBackendNotice feature="预警研判与处置" detail="群体研判、个案档案和随访任务需要连接主后端。" />}
+    {showWorkflow && (loading ? <div className="aw-empty"><Loader2 className="aw-spin" />正在读取工作台…</div> : <>
       {tab === 'overview' && (run ? <>
         <div className="aw-summary-grid">
           <section className="aw-report"><div className="aw-section-title"><span className="aw-icon"><Activity size={18} /></span><h3>本次群体观察</h3><span className="aw-tag">已保存</span></div>
@@ -174,7 +184,7 @@ export default function AgentWorkspaceV2() {
           </tr>)}</tbody></table></div>{!subjects.length && <div className="aw-empty">没有符合条件的案例。调整范围后重新分析。</div>}
         </section>
       </> : <div className="aw-start"><span className="aw-icon"><Users /></span><h3>从一批筛查，开始一次有依据的研判</h3><p>选择数据与观察窗口，工作流将依次整理证据、统计群体特征、筛选复核对象并生成任务草案。</p><button className="aw-primary" onClick={analyse} disabled={busy}><Play size={16} />启动群体研判</button><small>当前数据源可用对象：{workspace?.available_subjects ?? 0}</small></div>)}
-      {tab === 'trace' && <section className="aw-trace"><h3>每一步处理，都可以回看</h3><p>以下为后端实际完成的工具调用记录。当前未运行大模型自主规划。</p>
+      {tab === 'trace' && <section className="aw-trace"><h3>群体研判执行记录</h3><p>以下步骤由规则执行。个案的 DeepSeek 草案及引用可在个案档案查看。</p>
         {run?.trace.map((step, i) => <article key={step.tool}><span className="aw-step">{i + 1}</span><div><h4>{step.agent}<span className="aw-tag">已完成</span></h4><p>{step.summary}</p><code>{step.tool}</code><small>{date(step.at)}</small></div><Check size={18} /></article>)}
         {!run && <div className="aw-empty">启动一次研判后，这里将显示执行记录。</div>}
         {run && <details><summary>数据边界与不足</summary>{run.limits.map(l => <p key={l}>{l}</p>)}</details>}
@@ -183,7 +193,7 @@ export default function AgentWorkspaceV2() {
         {workspace?.tasks.map(task => <TaskCard key={task.id} task={task} onAction={action => setEditing({ task, action })} onCase={() => openCase(task.subject)} />)}
         {!workspace?.tasks.length && <div className="aw-empty">暂无任务。完成一次研判后，在此审核任务草案。</div>}
       </section>}
-    </>}
+    </>)}
     {detailOpen && <div className="aw-overlay" onClick={closeCase}><section className="aw-drawer" role="dialog" aria-modal="true" aria-label="个人研判档案" onKeyDown={e => dialogKeys(e, closeCase)} onClick={e => e.stopPropagation()}><button autoFocus className="aw-close" aria-label="关闭档案" onClick={closeCase}><X /></button>
       {detailError ? <div role="alert" className="aw-error">{detailError}</div> : !detail ? <div className="aw-empty"><Loader2 className="aw-spin" />正在读取档案…</div> : <>
         <p className="aw-breadcrumb">个人档案 / 证据与处置</p><h2>{detail.ref}</h2><div className="aw-case-meta"><Level value={detail.alert_level} /><span>{detail.department}</span><span>{detail.questionnaire}</span></div>
@@ -192,7 +202,16 @@ export default function AgentWorkspaceV2() {
         {detail.assessmentState?.status === 'unknown' && <p className="aw-footnote">旧研判没有材料快照，请重新运行后确认资料范围。</p>}
         <h3>筛查时间线</h3><div className="aw-history">{detail.history.map(h => <div key={h.id}><span className="aw-history-dot" /><div><strong>{h.score} <small>/ {h.max_score}</small></strong><p>{h.questionnaire}</p><small>{date(h.date)}</small></div></div>)}</div>
         <section className="aw-individual"><button className="aw-primary" disabled={caseBusy} onClick={runIndividual}>{caseBusy ? <Loader2 className="aw-spin" size={16} /> : <Play size={16} />}{caseBusy ? '正在研判…' : '运行个案研判'}</button>
-          {detail.assessment && <div><h3>个案研判记录</h3><p>{detail.assessment.summary}</p><p>{detail.assessment.recommendation}</p><small>保存于 {date(detail.assessment.created_at)} · AI 未接入</small><details><summary>工具执行与证据边界</summary>{detail.assessment.trace.map(step => <p key={step.tool}>{step.summary} <code>{step.tool}</code></p>)}{detail.assessment.limits.map(limit => <p key={limit}>{limit}</p>)}</details></div>}
+          {caseRunError && <p role="alert" className="aw-error">{caseRunError}</p>}
+          {detail.assessment && <div><h3>个案研判记录</h3><p>{detail.assessment.summary}</p><p>{detail.assessment.recommendation}</p><small>规则依据 · 保存于 {date(detail.assessment.created_at)}</small><details><summary>工具执行与证据边界</summary>{detail.assessment.trace.map(step => <p key={step.tool}>{step.summary} <code>{step.tool}</code></p>)}{detail.assessment.limits.map(limit => <p key={limit}>{limit}</p>)}</details></div>}
+          {detail.assessment?.model_draft && <div className="aw-model-draft">
+            <h3><Sparkles size={16} /> DeepSeek 复核草案</h3>
+            <p>{detail.assessment.model_draft.summary}</p>
+            <ul>{detail.assessment.model_draft.review_points.map((point, index) => <li key={index}>{point}</li>)}</ul>
+            <small>引用筛查：{detail.assessment.model_draft.evidence_refs.join('、')} · {detail.assessment.model_draft.model} · 合成案例，供人工审核</small>
+          </div>}
+          {detail.assessment?.model_status === 'unavailable' && <p className="aw-footnote" role="status">DeepSeek 暂未返回可用草案，本次已保存规则研判。</p>}
+          {detailScope === 'demo' && detail.assessment?.model_status === 'disabled' && <p className="aw-footnote">DeepSeek 尚未启用，本次已保存规则研判。</p>}
         </section>
         <h3>多模态资料</h3><p className="aw-muted">用于展示材料与核查来源，不从表情或声音直接推断心理状态。</p>
         <div className="aw-materials">{detail.materials.map((m, index) => <article key={m.title + index}><h4>{m.kind === 'text' ? <FileText size={16} /> : m.kind === 'audio' ? <Mic size={16} /> : <Image size={16} />}{m.title}</h4>

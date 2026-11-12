@@ -8,7 +8,7 @@ test('group assessment, individual evidence and persisted follow-up', async ({ p
   await page.getByPlaceholder('请输入密码', { exact: true }).fill(process.env.AGENT_TEST_PASSWORD || 'admin123');
   await page.getByRole('button', { name: '登录', exact: true }).last().click();
   await expect(page).toHaveURL(/\/admin\/dashboard/);
-  await page.getByRole('link', { name: 'Agent Workbench', exact: true }).click();
+  await page.getByRole('link', { name: '预警研判与处置', exact: true }).click();
   await page.getByRole('button', { name: '启动群体研判', exact: true }).first().click();
   await expect(page.getByText('本次研判已保存，任务草案等待人工审核。')).toBeVisible();
   await expect(page.locator('.aw-metrics strong').first()).toHaveText('24');

@@ -53,6 +53,7 @@ class Settings:
 
     # Agent safety: an external model needs this switch and per-screening consent.
     AGENT_ALLOW_EXTERNAL_LLM: bool = False
+    AGENT_DEMO_DEEPSEEK_ENABLED: bool = False
     AGENT_PSEUDONYM_KEY: str = ""
     AGENT_RULESET_VERSION: str = "1.0"
 
@@ -148,9 +149,9 @@ class Settings:
     # RAG 引擎提供方：deepseek(默认) | zhipu（ENABLE_MOCK_ENGINES=True 时强制 Mock）
     RAG_PROVIDER: str = "deepseek"
 
-    # DeepSeek（仅用于"生成报告"；密钥仅从环境变量读取，未设置时自动降级 Mock）
+    # DeepSeek（报告及可选的合成个案复核草案；密钥从后端环境读取）
     DEEPSEEK_API_KEY: str = ""
-    DEEPSEEK_MODEL: str = "deepseek-chat"
+    DEEPSEEK_MODEL: str = "deepseek-flash"
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
     DEEPSEEK_MAX_TOKENS: int = 4096
     DEEPSEEK_TEMPERATURE: float = 0.7
@@ -190,9 +191,11 @@ class Settings:
         vars/secrets 在 Worker env 上以同名字段暴露（纯字符串）；
         D1/R2 等非字符串绑定不经此处理（见 app.core.runtime）。
         """
-        bool_keys = {"DEBUG", "ENABLE_MOCK_ENGINES", "ZHIPUAI_ENABLE_THINKING", "AGENT_ALLOW_EXTERNAL_LLM"}
+        bool_keys = {"DEBUG", "ENABLE_MOCK_ENGINES", "ZHIPUAI_ENABLE_THINKING",
+                     "AGENT_ALLOW_EXTERNAL_LLM", "AGENT_DEMO_DEEPSEEK_ENABLED"}
         for key in (
             "SECRET_KEY", "DEBUG", "ENABLE_MOCK_ENGINES", "AGENT_ALLOW_EXTERNAL_LLM",
+            "AGENT_DEMO_DEEPSEEK_ENABLED",
             "AGENT_PSEUDONYM_KEY", "AGENT_RULESET_VERSION",
             "DEEPSEEK_API_KEY", "DEEPSEEK_MODEL", "DEEPSEEK_BASE_URL",
             "DEEPSEEK_MAX_TOKENS", "DEEPSEEK_TEMPERATURE",

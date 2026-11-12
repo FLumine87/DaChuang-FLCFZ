@@ -19,12 +19,8 @@ import AdminScreening from './admin/pages/AdminScreening';
 import AdminDataCollection from './admin/pages/AdminDataCollection';
 import AdminReview from './admin/pages/AdminReview';
 import AdminRetrieval from './admin/pages/AdminRetrieval';
-import AdminAlerts from './admin/pages/AdminAlerts';
 import AdminCases from './admin/pages/AdminCases';
-/* 管理端「预警处置工作台」：团队 main 用 AgentWorkspaceV2 取代了旧的
-   AdminAgentWorkbench（旧文件已随本合并删除），这里指向 V2，路由地址不变。 */
 import AdminAgentWorkspace from './admin/pages/AgentWorkspaceV2';
-import AdminJudgement from './admin/pages/AdminJudgement';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import WelcomePage from './pages/WelcomePage';
@@ -78,6 +74,14 @@ function LegacyRetrievalRedirect() {
   const next = new URLSearchParams(params);
   next.set('tab', 'retrieval');
   return <Navigate to={`/personal/screening?${next.toString()}`} replace />;
+}
+
+function LegacyAdminAlertRedirect() {
+  const [params] = useSearchParams();
+  const next = new URLSearchParams(params);
+  next.set('tab', 'alerts');
+  next.set('scope', 'live');
+  return <Navigate to={`/admin/agent-workbench?${next.toString()}`} replace />;
 }
 
 export default function App() {
@@ -172,9 +176,9 @@ export default function App() {
         <Route path="data-collection" element={<AdminDataCollection />} />
         <Route path="review" element={<AdminReview />} />
         <Route path="retrieval" element={<AdminRetrieval />} />
-        <Route path="alerts" element={<AdminAlerts />} />
+        <Route path="alerts" element={<LegacyAdminAlertRedirect />} />
         <Route path="cases" element={<AdminCases />} />
-        <Route path="judgement" element={<AdminJudgement />} />
+        <Route path="judgement" element={<LegacyAdminAlertRedirect />} />
         <Route path="agent-workbench" element={<AdminAgentWorkspace />} />
         {/* 管理端同样有整页的账号设置 */}
         <Route path="settings" element={<AccountSettings />} />

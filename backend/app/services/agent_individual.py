@@ -4,7 +4,7 @@ import uuid
 
 from app.db import database as db
 from app.services import agent_workspace as workspace
-from app.services import case_context
+from app.services import agent_model, case_context
 
 
 async def ensure_schema():
@@ -28,8 +28,8 @@ async def detail(scope, subject):
 
 async def run(scope, subject, actor):
     await ensure_schema()
-    evidence = await case_context.snapshot(subject) if scope == "live" else None
     case = await workspace.case_detail(scope, subject)
+    evidence = await case_context.snapshot(case["subject"]) if scope == "live" else None
     priority = case["alert_level"] in ("red", "orange", "yellow")
     created = await workspace.propose_tasks(scope, [case] if priority else [], actor)
     assessment = {
@@ -39,7 +39,7 @@ async def run(scope, subject, actor):
         "summary": "；".join(case["reasons"]),
         "recommendation": "请授权人员复核原始量表及实际情况，审核后分配任务。"
                           if priority else "保留常规关注；如实际情况与筛查不符，请人工复核。",
-        "limits": case["missing"] + ["筛查线索不构成心理诊断；当前未接入大模型。"],
+        "limits": case["missing"] + ["筛查线索不构成心理诊断；复核和处置由工作人员决定。"],
         "trace": [
             {"tool": "read_case_history", "summary": f"读取 {len(case['history'])} 次已完成筛查"},
             {"tool": "compare_same_scale", "summary": "仅比较同量表、同满分的历史记录"},
@@ -47,6 +47,11 @@ async def run(scope, subject, actor):
             {"tool": "propose_tasks", "summary": f"新增 {created} 条待审核草案；已有任务不被覆盖"},
         ],
     }
+    model_result = await agent_model.case_draft(scope, case)
+    assessment["model_status"] = model_result["status"]
+    if model_result["status"] == "generated":
+        assessment["model_connected"] = True
+        assessment["model_draft"] = model_result["draft"]
     if scope == "live":
         assessment["evidence_snapshot"] = evidence
     await db.execute_a(

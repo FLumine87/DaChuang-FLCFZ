@@ -5,12 +5,13 @@ import tempfile
 import unittest
 from contextlib import closing
 from urllib.parse import quote
+from unittest.mock import AsyncMock, patch
 
 from app.core.exceptions import HttpError
 from app.core.security import create_access_token
 from app.db import database as db
 from app.services import agent_workspace as service
-from app.services import agent_individual
+from app.services import agent_individual, agent_model
 from app.router import dispatch
 
 
@@ -139,13 +140,64 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_individual_assessment_preserves_group_run(self):
         group = await service.run("demo", 30, "all", "tester")
-        individual = await agent_individual.run("demo", "demo:001", "tester")
+        with patch.object(agent_model, "configured", return_value=False):
+            individual = await agent_individual.run("demo", "demo:001", "tester")
         self.assertIsNotNone(individual["assessment"])
         self.assertEqual(len(individual["assessment"]["trace"]), 4)
         refreshed = await agent_individual.detail("demo", "demo:001")
         self.assertEqual(individual["assessment"]["id"], refreshed["assessment"]["id"])
         self.assertEqual((await service.overview("demo"))["latest_run"]["id"], group["latest_run"]["id"])
         self.assertEqual(len((await service.overview("demo"))["tasks"]), 12)
+
+    async def test_deepseek_draft_is_validated_and_persisted_separately(self):
+        response = {"model": "test-model", "choices": [{"finish_reason": "stop", "message": {
+            "content": json.dumps({"summary": "同量表分数有变化", "review_points": ["请核对原始作答"],
+                                   "evidence_refs": ["E1", "E2"]})
+        }}]}
+        with patch.multiple(agent_model.settings, AGENT_DEMO_DEEPSEEK_ENABLED=True,
+                            ENABLE_MOCK_ENGINES=False, DEEPSEEK_API_KEY="test-key",
+                            DEEPSEEK_BASE_URL="https://zhenze-huhehaote.cmecloud.cn/v1"), \
+                patch.object(agent_model, "_complete", AsyncMock(return_value=response)) as complete:
+            case = await agent_individual.run("demo", "demo:001", "tester")
+            assessment = case["assessment"]
+            self.assertEqual(assessment["model_status"], "generated")
+            self.assertEqual(set(assessment["model_draft"]["evidence_refs"]), set(case["evidence_ids"]))
+            self.assertEqual(case["alert_level"], "red")
+            self.assertEqual(case["tasks"][0]["state"], "proposed")
+            self.assertNotIn("请核对原始作答", case["tasks"][0]["title"])
+            self.assertEqual((await agent_individual.detail("demo", "demo:001"))["assessment"], assessment)
+            request = complete.call_args.args[0]
+            self.assertEqual(request["thinking"], {"type": "disabled"})
+            self.assertEqual(request["max_tokens"], 2048)
+            prompt = json.loads(request["messages"][1]["content"])
+            self.assertEqual(set(prompt), {"scale", "recorded_level", "same_scale_delta", "screenings_oldest_first"})
+            self.assertEqual({row["ref"] for row in prompt["screenings_oldest_first"]}, {"E1", "E2"})
+            self.assertNotIn("演示案例 001", json.dumps(prompt, ensure_ascii=False))
+
+    async def test_invalid_deepseek_citation_falls_back_to_rules(self):
+        response = {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({
+            "summary": "摘要", "review_points": ["待核实"], "evidence_refs": ["invented"]
+        })}}]}
+        with patch.object(agent_model, "configured", return_value=True), \
+                patch.object(agent_model, "_complete", AsyncMock(return_value=response)):
+            case = await agent_individual.run("demo", "demo:001", "tester")
+        self.assertEqual(case["assessment"]["model_status"], "unavailable")
+        self.assertNotIn("model_draft", case["assessment"])
+        self.assertEqual(case["tasks"][0]["state"], "proposed")
+
+    async def test_business_alert_screening_opens_its_case_without_external_call(self):
+        db.execute("INSERT INTO questionnaires (id,code,name,max_score) VALUES(1,'test','test',27)")
+        db.execute("INSERT INTO cases(id,case_id,name) VALUES(1,'CASE-TEST','test-person')")
+        db.execute(
+            "INSERT INTO screenings(screening_id,name,case_id,questionnaire_id,score,max_score,status,screening_date) "
+            "VALUES('SCR-TEST','test-person',1,1,10,27,'completed','2026-10-01')")
+        with patch.object(agent_model, "configured", return_value=True), \
+                patch.object(agent_model, "_complete", AsyncMock()) as complete:
+            case = await agent_individual.run("live", "screening-code:SCR-TEST", "tester")
+        complete.assert_not_awaited()
+        self.assertEqual(case["subject"], "case:1")
+        self.assertEqual(case["assessment"]["model_status"], "live_rules")
+        self.assertEqual(case["assessmentState"]["status"], "current")
 
     async def test_followup_changes_next_date_and_preserves_audit(self):
         task = (await service.run("demo", 30, "all", "tester"))["tasks"][0]
