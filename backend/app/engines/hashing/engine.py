@@ -572,10 +572,18 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         for r in recs:
             sig = frozenset(m for m in r["views"] if m in train_mods)
             groups.setdefault(sig, []).append(r)
+        # ★ 通道化之后不再丢弃「模态集合不同」的记录组。
+        # 原来的做法是取最大的一组训练、其余整组丢掉 —— 那正是 AVDD-TCMI
+        # 进不来的原因：主语料是 {text,audio,image}，AVDD 是 {audio,image}，
+        # 后者整组被丢（实测通道里根本没有 audio@2048，AVDD 的音单元
+        # 找不到通道 → 特征字典为空 → 编码返回全零 → 符号化后码全是 1，
+        # 1230 个单元的码全相同，污染索引）。
+        # 通道化 + gram_masked 的缺失视图机制正是为此准备的：
+        # AVDD 的记录在 text@531 通道上是「缺失视图」（贡献 0），
+        # 它的音走独立的 audio@2048 通道，音↔图同源约束由 S 表达。
         best_sig = max(groups, key=lambda s: (len(s), len(groups[s])))
         if len(best_sig) >= 2:
-            recs = groups[best_sig]
-            mods = [m for m in train_mods if m in best_sig]
+            mods = [m for m in train_mods]
         else:
             mods = ["text"]
             recs = [{"record_id": r["record_id"],
@@ -926,7 +934,10 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             vec = self._feature_of(modality, content,
                                    meta.get("media_path")).get(modality)
             if not vec:
-                vec = None
+                # 特征抽取失败：feat 必须仍有定义，否则下面 encoder.encode(feat)
+                # 会抛 UnboundLocalError → 播种中断 → 引擎静默退回演示语料
+                # （症状：只训了 24 条、码长 24、索引插入时 IndexError）
+                feat = {}
             else:
                 # 关键：特征字典的键必须是**通道名**，不是模态名。
                 # 通道化后 W 的键是 modality@dim，用模态名去 encode 会

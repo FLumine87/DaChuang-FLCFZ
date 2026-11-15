@@ -44,7 +44,7 @@ sys.path.insert(0, BACKEND)
 from app.engines.hashing import features as F            # noqa: E402
 from app.engines.hashing import real_features as RF      # noqa: E402
 from scripts.datasets import base as B                   # noqa: E402
-from scripts.datasets import eatd, csemotions, fer2013   # noqa: E402
+from scripts.datasets import eatd, csemotions, fer2013, avdd_tcmi   # noqa: E402
 
 DEFAULT_OUT = os.path.join(BACKEND, "data", "hashing", "real_corpus.db")
 
@@ -53,6 +53,9 @@ DATASET_DIRS = {
     "eatd": ("EATD", "EATD-Corpus"),
     "csemotions": ("CSEMOTIONS",),
     "fer": ("FER2013", "archive"),   # Kaggle FER2013 解压包根目录（内含 train/ 与 test/）
+    # AVDD-TCMI：华西医院面诊（音+图，医生诊断标签）。根目录下是
+    #   <root>/AVDD-TCMI-dataset/{HDS,SDS}/...，用 DACHUANG_ASSETS_ROOT 指向解压后的外层目录
+    "avdd": ("AVDD-TCMI", "AVDD-TCMI/extracted"),
 }
 
 # Emotion and SDS labels deliberately retain separate namespaces.
@@ -252,8 +255,11 @@ def _normalize_merged(records, sources_key):
 
 def main():
     ap = argparse.ArgumentParser(description="从真实数据集构建跨模态检索语料")
-    ap.add_argument("--dataset", choices=("eatd", "csemotions", "fer", "all"), default="all",
+    ap.add_argument("--dataset", choices=("eatd", "csemotions", "fer", "avdd", "all"),
+                    default="all",
                     help="构建哪个数据集（默认 all=合并 EATD+CSEMOTIONS+FER2013）")
+    ap.add_argument("--with-avdd", dest="with_avdd", action="store_true",
+                    help="all 模式下额外接入 AVDD-TCMI（音↔图真同源）")
     ap.add_argument("--out", default=DEFAULT_OUT)
     ap.add_argument("--queries", type=int, default=120)
     ap.add_argument("--sample-max", type=int, default=0,
@@ -269,6 +275,10 @@ def main():
     # 使每条记录都具备 text + audio + image 三视图，供引擎做联合配对训练。
     attach_fer = (args.dataset == "all")
     keys = ["eatd", "csemotions"] if attach_fer else [args.dataset]
+    # AVDD-TCMI：音↔图真同源（同一受试者的面诊语音与望诊图），
+    # 是本项目唯一「图像↔音频」的真同源数据，单独成组接入。
+    if args.dataset == "all" and args.with_avdd:
+        keys.append("avdd")
 
     all_records, all_units, all_queries = [], [], []
     build_meta = {"extra": {}}
@@ -280,6 +290,9 @@ def main():
         if key == "eatd":
             res = eatd.build(root, rng, sample_max=args.sample_max,
                              num_queries=args.queries)
+        elif key == "avdd":
+            res = avdd_tcmi.build(root, rng, sample_max=args.sample_max,
+                                   num_queries=0)
         elif key == "csemotions":
             res = csemotions.build(
                 root, rng, sample_max=args.sample_max, num_queries=args.queries,

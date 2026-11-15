@@ -50,7 +50,10 @@ DATASET_NAME = "AVDD-TCMI"
 SUBSETS = ("HDS", "SDS")
 
 # 中医面诊区域（队长的 build_avdd_corpus.py 用同一顺序）
-TCM_REGIONS = ("que", "mingtang", "ting")
+# 中医面诊区域（实测：每个受试者的 *_tcm/ 下有 0/1/2 三个子目录，
+# 每个子目录含 7 个区域的 jpg：que/mingtang/ting/fan/ji/bi1/bi2）
+TCM_SUBDIRS = ("0", "1", "2")
+TCM_REGIONS = ("que", "mingtang", "ting", "fan", "ji", "bi1", "bi2")
 
 # 临床确诊（医院）vs 筛查（学校）—— 标签性质不同，不能混为一谈
 SUBSET_THEME = {
@@ -106,14 +109,21 @@ def _pool_acoustic(path):
 
 
 def _find_tcm_image(inner, subset, sid):
-    """在 {sid}_tcm/ 下找一张面诊区域图（按 TCM_REGIONS 顺序取第一张存在的）。"""
-    for region in TCM_REGIONS:
-        for cand in (
-            os.path.join(inner, subset, sid, f"{sid}_tcm", "0", f"{region}.jpg"),
-            os.path.join(inner, subset, sid, f"{sid}_tcm", f"{region}.jpg"),
-        ):
-            if os.path.exists(cand):
-                return cand, region
+    """在 {sid}_tcm/ 下找一张面诊区域图。
+
+    实测结构：{sid}_tcm/{0,1,2}/{que,mingtang,ting,fan,ji,bi1,bi2}.jpg
+    每个受试者 3 个子目录 × 7 个区域 = 21 张图；这里取第一张存在的。
+    """
+    for sub in TCM_SUBDIRS:
+        for region in TCM_REGIONS:
+            for cand in (
+                os.path.join(inner, subset, sid, f"{sid}_tcm", sub,
+                             f"{region}.jpg"),
+                os.path.join(inner, subset, sid, f"{sid}_tcm",
+                             f"{region}.jpg"),
+            ):
+                if os.path.exists(cand):
+                    return cand, f"{sub}/{region}"
     # 兜底：递归找第一张 jpg
     tcm_dir = os.path.join(inner, subset, sid, f"{sid}_tcm")
     if os.path.isdir(tcm_dir):
@@ -216,7 +226,10 @@ def build(root, rng, records_per_class=None, sample_max=None, **kw):
                 "context": f"subset={subset} gender={gender}",
                 "label": f"AVDD-TCMI/{subset}",
                 "dataset": DATASET_NAME,
-                # ★ 同源声明：同一人的面诊音与面诊图是真同源
+                # ★ 同源声明：同一人的面诊音与面诊图是真同源。
+                # pairing_type 用队长的 schema 字段名，build_real_corpus 会
+                # 把它写进 unit.meta，引擎据此建立强监督。
+                "pairing_type": "same_source_audio_image",
                 "same_source_pairs": [("audio", "image")],
             })
             units.append(audio_unit)

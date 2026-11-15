@@ -31,6 +31,7 @@ URL = f"{MIRROR}/datasets/{REPO}/resolve/main/{FILENAME}"
 DEST = r"D:\DaChuang\dataset\dataset\AVDD-TCMI"
 CACHE = os.path.join(DEST, ".cache", "huggingface", "download")
 CHUNK = 4 * 1024 * 1024
+DEFAULT_CHUNK = 50 * 1024 * 1024   # 单次连接最多读 50 MB 就断开重连
 
 
 def log(msg):
@@ -64,7 +65,15 @@ def largest_incomplete():
     return best, best_sz
 
 
-def resume(offset):
+def resume(offset, chunk_bytes=None):
+    """续传一段。chunk_bytes 限制单次连接最多读多少字节。
+
+    ★ 为什么要有 chunk_bytes：hf-mirror 的 CDN 是「建连后快速传一段，
+      然后限流 stall」的行为。实测单次连接能突发传 500+ MB，之后几乎不动
+      （2 分钟只走 10 MB）。而每次重连都会有一段高速窗口。
+      所以策略是：**每次只读一小段（默认 50 MB）就断开重连**，
+      把高速窗口反复利用起来；配合 --rounds 循环直到下完。
+    """
     total, etag = head_info()
     log(f"目标大小 {total / 1e9:.2f} GB   etag {etag[:16]}")
     if total and offset >= total:
@@ -92,16 +101,19 @@ def resume(offset):
         else:
             offset = 0
 
+    limit = chunk_bytes or DEFAULT_CHUNK
+    end = min(offset + limit, total - 1) if total else offset + limit - 1
     headers = {"User-Agent": "Mozilla/5.0"}
     if offset:
-        headers["Range"] = f"bytes={offset}-"
+        headers["Range"] = f"bytes={offset}-{end}"
     req = urllib.request.Request(URL, headers=headers)
     t0 = time.time()
     got = offset
     with urllib.request.urlopen(req, timeout=120) as resp:
         mode = "ab" if offset else "wb"
         code = resp.getcode()
-        log(f"HTTP {code}，{'追加' if offset else '新建'}写入 {out}")
+        log(f"HTTP {code}，{'追加' if offset else '新建'}写入 {os.path.basename(out)}"
+            f"（本轮 {offset / 1e9:.2f} → {end / 1e9:.2f} GB）")
         if offset and code != 206:
             log(f"服务器不支持 Range（HTTP {code}），从头重下")
             got = 0
@@ -113,11 +125,8 @@ def resume(offset):
                     break
                 f.write(b)
                 got += len(b)
-                if got % (256 * 1024 * 1024) < CHUNK:
-                    sp = (got - offset) / max(time.time() - t0, 1)
-                    pct = got * 100 / total if total else 0
-                    log(f"  {got / 1e9:.2f} GB ({pct:.1f}%)  {sp / 1e6:.2f} MB/s")
-    log(f"完成：{got / 1e9:.2f} GB，用时 {time.time() - t0:.0f}s")
+    sp = (got - offset) / max(time.time() - t0, 1)
+    log(f"本轮 {got / 1e9:.2f} GB，用时 {time.time() - t0:.0f}s，{sp / 1e6:.2f} MB/s")
     return True
 
 
@@ -136,6 +145,9 @@ def verify(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--offset", type=int, default=0)
+    ap.add_argument("--chunk-mb", type=int, default=50,
+                    help="单次连接最多读多少 MB（默认 50；CDN 会限流 stall，"
+                         "小分段反复重连能利用每次建连的高速窗口）")
     ap.add_argument("--rounds", type=int, default=40,
                     help="最多续传多少轮（每轮读满 4GB 或遇到错误即止）")
     args = ap.parse_args()
@@ -152,7 +164,7 @@ def main():
             offset = sz
     for rnd in range(args.rounds):
         try:
-            resume(offset)
+            resume(offset, chunk_bytes=args.chunk_mb * 1024 * 1024)
         except Exception as exc:
             log(f"第 {rnd + 1} 轮失败：{type(exc).__name__} {exc}")
             time.sleep(5)
