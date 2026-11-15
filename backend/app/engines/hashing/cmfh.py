@@ -36,7 +36,15 @@ class OnlineSupervisedCMFH:
 
     def fit(self, features, similarity):
         """
-        features   : dict[modality] -> list[vector]   (n 个样本)
+        features   : dict[channel] -> list[vector]   (n 个样本)
+                     channel 名为「模态@数据集」或直接模态名；不同 channel
+                     可以有不同特征维度（各自的 d_c），但样本位置必须对齐。
+                     **允许缺失视图**：某个 channel 若只覆盖部分样本，
+                     传 None 或长度不足的列表即可 —— 该样本在这个 channel
+                     上的 Gram 贡献记为 0（它只是没有这个模态的视图）。
+                     这是「统一引擎」能同时容纳不同规模数据集的关键：
+                     EATD 3393 条、AVDD 1230 条、FER2013 若干条可以共存
+                     于同一个 n×n 的监督矩阵与码空间里。
         similarity : n×n 监督相似度矩阵（对称，元素∈[0,1] 或含负）
         返回训练样本二值码 B (n×K)
         """
@@ -44,19 +52,33 @@ class OnlineSupervisedCMFH:
         self.modalities = mods
         n = len(similarity)
 
-        # 行 L2 归一化
-        X = {m: [linalg.normalize_row(r) for r in features[m]] for m in mods}
+        # 行 L2 归一化；缺失视图保留为 None
+        X = {}
+        for m in mods:
+            rows = features[m]
+            if rows is None:
+                X[m] = None
+                continue
+            X[m] = [linalg.normalize_row(r) if r is not None else None
+                    for r in rows]
+            if len(X[m]) != n:
+                raise ValueError(
+                    f"channel {m!r} 的样本数 {len(X[m])} 与监督矩阵 {n} 不一致")
 
-        # 构造 G = Σ_m Gram(X_m) + λ·S，并平衡两部分的尺度
-        # 逐模态先按各自的平均幅值归一化，避免"高能量"模态（如图像 HOG 全正强度块）
-        # 在求和后主导共享码空间，把文本/语音的语义结构挤掉。
+        # 构造 G = Σ_c Gram(X_c) + λ·S，并平衡两部分的尺度
+        # 逐通道先按各自的平均幅值归一化，避免"高能量"通道（如图像 HOG 全正
+        # 强度块）在求和后主导共享码空间，把文本/语音的语义结构挤掉。
+        # 缺失视图的行在 Gram 里记 0（该模态上看不到这条样本）。
         G = [[0.0] * n for _ in range(n)]
         for m in mods:
-            Gm = linalg.gram(X[m])
+            if X[m] is None:
+                continue
+            Gm = linalg.gram_masked(X[m])
             gm = linalg.mean_abs(Gm) or 1.0
             for i in range(n):
+                Gi = Gm[i]
                 for j in range(n):
-                    G[i][j] += Gm[i][j] / gm
+                    G[i][j] += Gi[j] / gm
         g_mean = linalg.mean_abs(G) or 1.0
         s_mean = linalg.mean_abs(similarity) or 1.0
         for i in range(n):
@@ -72,20 +94,20 @@ class OnlineSupervisedCMFH:
              for i in range(n)]
         self.continuous = Uraw     # 训练样本的连续码（诊断/非对称检索可复用）
 
-        # 闭式求各模态投影 W_m（**编码器**：岭回归 特征 → 共享码）
+        # 闭式求各通道投影 W_c（**编码器**：岭回归 特征 → 共享码）
         # 原实现用重构式 W_m=(BᵀB)^{-1}BᵀX_m，即把解码器的转置当编码器用；
         # 在真实稠密特征（多样文本 / HOG 图像）上它退化成"训练样本码的相似度加权混
         # 合"，样本自身三个模态的码都对不上（实测同源与异源汉明距离无差异、
         # T1≈0）。这里改为直接对共享码 B 做岭回归，编码方向正确、条件数可控：
-        #     W_m = (X_mᵀX_m + εI)^{-1} X_mᵀ B          （d_m × K）
+        #     W_c = (X_cᵀX_c + εI)^{-1} X_cᵀ B          （K×d_c）
+        # 缺失视图的行不参与拟合。
         for m in mods:
-            Xm = X[m]
-            XtX = linalg.matmul(linalg.transpose(Xm), Xm)   # d×d
-            for k in range(len(XtX)):
-                XtX[k][k] += 0.1
-            XtB = linalg.matmul(linalg.transpose(Xm), B)    # d×K
-            self.W[m] = linalg.transpose(
-                linalg.matmul(linalg.inverse(XtX), XtB))    # K×d（matvec 得 K 维）
+            if X[m] is None:
+                continue
+            W = linalg.ridge_fit(X[m], B, ridge=0.1)
+            if W is None:
+                continue
+            self.W[m] = W
 
         self.B = B
         self.trained = True

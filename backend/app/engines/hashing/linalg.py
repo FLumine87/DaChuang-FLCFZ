@@ -66,6 +66,68 @@ def gram(A):
             for i in range(n)]
 
 
+def gram_masked(A):
+    """带缺失行的 Gram：A 每行可能是 None（该样本没有这个模态的视图）。
+
+    缺失行的 Gram 贡献记为 0 —— 它只是「这个模态上看不到这条样本」，
+    而不是「这条样本在此模态上与所有东西都不相关」。
+
+    这是统一引擎能同时容纳不同规模数据集的关键：AVDD 只有 282 条
+    音-图记录，与 EATD 的 3393 条文-音记录、FER2013 的表情图
+    共存于同一个 n×n 的监督矩阵里，各自只覆盖自己的那部分行。
+    """
+    n = len(A)
+    out = [[0.0] * n for _ in range(n)]
+    if _NP:
+        rows = [i for i, r in enumerate(A) if r is not None]
+        if not rows:
+            return out
+        X = np.asarray([A[i] for i in rows], dtype=np.float64)
+        G = X @ X.T
+        for a, i in enumerate(rows):
+            for b, j in enumerate(rows):
+                out[i][j] = float(G[a][b])
+        return out
+    for i, ri in enumerate(A):
+        if ri is None:
+            continue
+        for j, rj in enumerate(A):
+            if rj is None:
+                continue
+            out[i][j] = sum(ri[p] * rj[p] for p in range(len(ri)))
+    return out
+
+
+def ridge_fit(X, B, mask=None, ridge=0.1):
+    """岭回归：W = (XᵀX + εI)^{-1} XᵀB，形状 K×d（matvec 得 K 维）。
+
+    mask : 长度 n 的布尔列表，False 表示该样本在此模态上缺失（不参与拟合）。
+           缺失样本仍会得到一个 W（用剩余样本拟合的矩阵编码），
+           但语料构建阶段不会为它生成单元。
+    """
+    rows = [i for i, r in enumerate(X) if r is not None
+            and (mask is None or mask[i])]
+    if not rows:
+        return None
+    if _NP:
+        Xm = np.asarray([X[i] for i in rows], dtype=np.float64)
+        Bm = np.asarray([B[i] for i in rows], dtype=np.float64)
+        XtX = Xm.T @ Xm
+        XtX[np.diag_indices_from(XtX)] += ridge
+        XtB = Xm.T @ Bm
+        return (np.linalg.solve(XtX, XtB)).T.tolist()   # K×d
+    d = len(X[rows[0]])
+    XtX = [[sum(X[i][p] * X[i][q] for i in rows) for q in range(d)]
+           for p in range(d)]
+    for p in range(d):
+        XtX[p][p] += ridge
+    XtB = [[sum(X[i][p] * B[i][k] for i in rows) for k in range(len(B[0]))]
+           for p in range(d)]
+    inv = inverse(XtX)
+    return transpose(matmul(inv, XtB))
+
+
+
 def mean_abs(M):
     """矩阵绝对值均值（用于平衡多模态 Gram 与监督矩阵的尺度）。"""
     if not M or not M[0]:
