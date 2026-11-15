@@ -143,6 +143,19 @@ def write_db(out_path, root, records, units, queries, build_meta):
               *[r.get(key) for key in PROVENANCE_FIELDS])
              for r in records],
         )
+        # 把记录级的 pairing_type / dataset 写进单元 meta：
+        # 引擎的通道化需要知道「这个视图来自哪个数据集」（通道名 modality@dataset），
+        # 以及「哪些视图彼此同源」（pairing_type，如 EATD 的 same_source_text_audio）。
+        # 写进 meta 而不是给 units 表加列 —— meta 本来就是 JSON，改动最小。
+        _ptype = {r["record_id"]: r.get("pairing_type") for r in records}
+        for u in units:
+            m = dict(u.get("meta") or {})
+            pt = _ptype.get(u["record_id"])
+            if pt:
+                m["pairing_type"] = pt
+            if u.get("dataset"):
+                m.setdefault("dataset", u["dataset"])
+            u["meta"] = m or None
         conn.executemany(
             "INSERT INTO units VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [(u["unit_id"], u["record_id"], u["modality"], u["content"],

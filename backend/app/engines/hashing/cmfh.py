@@ -74,10 +74,18 @@ class OnlineSupervisedCMFH:
             if X[m] is None:
                 continue
             Gm = linalg.gram_masked(X[m])
-            gm = linalg.mean_abs(Gm) or 1.0
-            for i in range(n):
+            # 尺度归一化必须只用**有效行**的子矩阵：
+            # gram_masked 的缺失行全是 0，若用全矩阵的 mean_abs 当分母，
+            # 缺失比例越大的通道被放大得越多 → 各通道尺度失衡 → G 被某个通道主导
+            # → 码空间歪掉（实测九格 0.3656 → 0.2532，文搜文几乎归零）。
+            _valid = [i for i in range(n) if X[m][i] is not None]
+            if not _valid:
+                continue
+            _sub = [[Gm[i][j] for j in _valid] for i in _valid]
+            gm = linalg.mean_abs(_sub) or 1.0
+            for i in _valid:
                 Gi = Gm[i]
-                for j in range(n):
+                for j in _valid:
                     G[i][j] += Gi[j] / gm
         g_mean = linalg.mean_abs(G) or 1.0
         s_mean = linalg.mean_abs(similarity) or 1.0
@@ -131,14 +139,31 @@ class OnlineSupervisedCMFH:
             return [0.0] * self.K
         acc = [0.0] * self.K
         cnt = 0
+        missed = []
         for m, vec in feature_by_modality.items():
             Wm = self.W.get(m)
             if Wm is None or len(vec) != len(Wm[0]):
+                missed.append(m)
                 continue
             s = linalg.matvec(Wm, linalg.normalize_row(vec))   # 长度 K
             for k in range(self.K):
                 acc[k] += s[k]
             cnt += 1
         if cnt == 0:
+            # 全部通道都没命中投影矩阵 → 返回全 0 → 符号化后码全是 1，
+            # 会让所有命中看起来一样（同分、随机序）。这类失败**必须可见**，
+            # 否则症状是「某模态的检索指标莫名接近 0」，极难定位。
+            # （真实踩过：text 单元不存 feature → 特征字典键用了模态名而非
+            #   通道名 → W[text] 不存在 → 4646 个 text 单元的码全是 1）
+            import logging
+            logging.getLogger(__name__).warning(
+                "编码未命中任何投影矩阵（channels=%s, 已有 W 的键=%s）——"
+                "返回全零码，检索结果将退化为随机序",
+                list(feature_by_modality.keys()), sorted(self.W.keys()))
             return [0.0] * self.K
+        if missed:
+            import logging
+            logging.getLogger(__name__).warning(
+                "编码时部分通道未命中投影矩阵：%s（已用其余 %d 个通道）",
+                missed, cnt)
         return acc

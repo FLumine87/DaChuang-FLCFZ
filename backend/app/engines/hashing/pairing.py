@@ -35,7 +35,31 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 # 同源关系的强度档位
 LAMBDA_STRONG = 1.0    # 同源：视图来自同一次采集/同一个人/同一句话
-LAMBDA_WEAK = 0.6      # 异源：只靠主题标签的弱约束（沿用主引擎原值）
+# 异源对：不要额外缩放 —— CMFH 内部已经有一个 lambda_s 乘在 S 上，
+# 这里再乘一次会让监督整体弱 40%（实测文搜文 0.6145 → 0.2974）。
+LAMBDA_WEAK = 1.0
+
+# 语料 records.pairing_type → 同源模态对。
+# 队长的语料 schema 已有这个字段（EATD/CSEMOTIONS = same_source_text_audio，
+# FER2013 = weak_cross_dataset / image_only），直接复用，不必新增列。
+PAIRING_TYPE_PAIRS = {
+    "same_source_text_audio": ("text", "audio"),
+    "same_source_audio_text": ("audio", "text"),
+    "same_source_audio_image": ("audio", "image"),
+    "same_source_image_audio": ("image", "audio"),
+    "same_source_text_image": ("text", "image"),
+    "same_source_image_text": ("image", "text"),
+    "same_source_text_audio_image": ("text", "audio"),
+}
+
+
+def pairs_from_pairing_type(pairing_type: str) -> List[Tuple[str, str]]:
+    """从 pairing_type 推出同源模态对；不是同源类型则返回空。"""
+    if not pairing_type:
+        return []
+    key = str(pairing_type).strip().lower()
+    pair = PAIRING_TYPE_PAIRS.get(key)
+    return [pair] if pair else []
 
 
 class PairingRegistry:
@@ -149,7 +173,8 @@ def build_supervision(
         S[i][i] = 1.0
 
     # 1) 基础弱监督：主题相似
-    tags = [r.get("themes") or [] for r in records]
+    #    字段名兼容：训练记录里是 tags，语料记录里是 themes
+    tags = [(r.get("themes") or r.get("tags") or []) for r in records]
     for i in range(n):
         ti = tags[i]
         row = S[i]

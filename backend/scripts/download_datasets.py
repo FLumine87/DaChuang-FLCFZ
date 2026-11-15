@@ -81,25 +81,29 @@ def list_remote(repo_id):
     return out
 
 
-def download(repo_id, local_dir, limit=0, workers=4):
+def download(repo_id, local_dir, limit=0, workers=4, fast=False):
     """下载数据集（支持断点续传）。
 
-    优先用 hf_transfer（Rust 多线程分片下载器）—— 14.5 GB 的 AVDD 用
-    单连接只有 ~0.5 MB/s，实测 hf_transfer 能快数倍。装不上则退回原生实现。
+    fast=True 时用 hf_transfer（Rust 多线程分片）。但实测在 hf-mirror 上
+    hf_transfer **反而更慢**（0.39 MB/s vs 原生 0.49 MB/s），而且它用不同的
+    URL 哈希建自己的分片文件，**不复用**原生已下的部分 —— 换过去等于重下。
+    所以默认关闭，需要时显式开启。
     """
     from huggingface_hub import snapshot_download
 
     os.makedirs(local_dir, exist_ok=True)
     _log(f"仓库 {repo_id} → {local_dir}")
     _log(f"镜像 {MIRROR}")
-    fast = False
-    try:
-        import hf_transfer  # noqa: F401
-        os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
-        fast = True
-        _log("使用 hf_transfer 多线程分片下载")
-    except ImportError:
-        _log("未装 hf_transfer，用原生下载（单连接，慢）")
+    if fast:
+        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+        try:
+            import hf_transfer  # noqa: F401
+            _log("使用 hf_transfer 多线程分片下载")
+        except ImportError:
+            _log("未装 hf_transfer，改用原生下载")
+    else:
+        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+        _log("使用原生下载（可续传已下部分）")
     t0 = time.time()
     path = snapshot_download(
         repo_id=repo_id,
@@ -108,7 +112,7 @@ def download(repo_id, local_dir, limit=0, workers=4):
         endpoint=MIRROR,
         max_workers=workers,
     )
-    _log(f"完成，用时 {time.time() - t0:.0f}s（{'加速' if fast else '普通'}）→ {path}")
+    _log(f"完成，用时 {time.time() - t0:.0f}s → {path}")
     return path
 
 
@@ -120,6 +124,9 @@ def main():
     ap.add_argument("--limit", type=int, default=0,
                     help="配合 --list：只看前 N 个文件")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--fast", action="store_true",
+                    help="用 hf_transfer 多线程分片（实测在 hf-mirror 上更慢，"
+                         "且不复用已下部分，默认不用）")
     args = ap.parse_args()
 
     names = list(DATASETS) if args.dataset == "all" else [args.dataset]
@@ -148,7 +155,8 @@ def main():
                 _log(f"    ... 还有 {len(files) - 20} 个")
             continue
         try:
-            download(cfg["repo_id"], cfg["local_dir"], args.limit, args.workers)
+            download(cfg["repo_id"], cfg["local_dir"], args.limit,
+                    args.workers, fast=args.fast)
         except Exception as exc:
             _log(f"下载失败：{type(exc).__name__} {exc}")
 

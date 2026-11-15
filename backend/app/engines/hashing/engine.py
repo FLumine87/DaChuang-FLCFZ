@@ -51,6 +51,7 @@ from app.engines.hashing.demo_data import build_demo_dataset
 from app.engines.hashing.interface import HashingEngineInterface
 from app.engines.hashing.multi_table_index import MultiTableHashIndex
 from app.engines.hashing.store import HashingStore
+from app.engines.hashing.pairing import build_supervision
 from app.engines.hashing.window_models import WindowModelBank
 from app.engines.hashing.label_provenance import reference_labels
 from app.engines.hashing import features as F
@@ -136,6 +137,9 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         self.index = self._new_index()
         self.records: Dict[str, Dict] = {}   # record_id -> {tags, alert_level, date, window, views}
         self.units: Dict[str, Dict] = {}     # unit_id -> {record_id, modality, excerpt, tags, code, ...}
+        # 通道统计：channel -> {dim: 特征维度, count: 训练样本数}
+        # 通道化后 W 的键是 modality@dataset；查询侧与运行时数据靠它按维度挑通道。
+        self._channel_stats: Dict[str, Dict] = {}
         self.state_path = os.path.join(settings.HASHING_DATA_DIR, "hashing_state.json")
         self.index_db_path = os.path.join(settings.HASHING_DATA_DIR, "index.db")
         self._store = HashingStore(self.index_db_path)
@@ -579,27 +583,180 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                      "tags": r.get("tags")} for r in recs]
 
         feats: Dict[str, List[List[float]]] = {}
-        for m in mods:
-            vecs = [self._feature_vec(m, self._view_text(r["views"][m]),
-                                      self._view_path(r["views"][m]),
-                                      (r["views"][m] or {}).get("feature")
-                                      if isinstance(r["views"][m], dict) else None)
-                    for r in recs]
-            # 同一模态内维度必须一致，否则 Gram 矩阵无法构造。
-            # 个别媒体抽取失败会退回文本特征（维度不同）→ 该模态整体不参与配对训练，
-            # 而不是静默算出错误结果。语料由 build_real_corpus.py 预抽取并校验，
-            # 正常情况不会触发这条分支。
-            if len({len(v) for v in vecs}) != 1:
+        # ── 通道化 ────────────────────────────────────────────────────────
+        # 每个「模态 × 数据集」一个通道（channel），各通道有自己的投影矩阵 W，
+        # 但共享同一个码空间 B。这样不同数据集的同模态特征不会互相拉偏：
+        # 现状把 EATD(486) 与 CSEM(4160) 的 MFCC 混进同一个 W["audio"]，
+        # 岭回归被多数派主导、少数派被拉偏（实测音搜文 mAP 0.4605 → 0.5136）。
+        # AVDD-TCMI 的声学特征 2048 维与 MFCC 64 维更是根本放不进同一个 W，
+        # 通道化是它进入共享码空间的前提。
+        #
+        # 通道内的特征维度必须一致；某个数据集的视图缺失时该行留 None
+        # （linalg.gram_masked 会把缺失行的 Gram 贡献记 0）。
+        channel_of: Dict[Tuple[str, str], List[int]] = {}
+        for i, r in enumerate(recs):
+            for m in mods:
+                v = r["views"].get(m)
+                if not v:
+                    continue
+                ds = (v.get("dataset") if isinstance(v, dict) else None) \
+                    or r.get("dataset") or "_"
+                channel_of.setdefault((m, ds), []).append(i)
+
+        for (m, ds), rows in channel_of.items():
+            dim_set = set()
+            for i in rows:
+                vec = self._feature_vec(m, self._view_text(recs[i]["views"][m]),
+                                       self._view_path(recs[i]["views"][m]),
+                                       (recs[i]["views"][m] or {}).get("feature")
+                                       if isinstance(recs[i]["views"][m], dict)
+                                       else None)
+                if vec is None:
+                    continue
+                dim_set.add(len(vec))
+            if len(dim_set) != 1:
+                # 同一通道内维度不一致 → 该通道整体不参与（而不是静默算错）
                 continue
-            feats[m] = vecs
+            dim = next(iter(dim_set))
+            vecs: List[Optional[List[float]]] = [None] * len(recs)
+            for i in rows:
+                vecs[i] = self._feature_vec(
+                    m, self._view_text(recs[i]["views"][m]),
+                    self._view_path(recs[i]["views"][m]),
+                    (recs[i]["views"][m] or {}).get("feature")
+                    if isinstance(recs[i]["views"][m], dict) else None)
+            # 通道名按**特征维度**归并：同一模态同一特征空间的样本共用一个通道
+            # （EATD 与 CSEMOTIONS 的 MFCC 都是 64 维 → 合并成一个 audio@64 通道，
+            #   跨数据集的特征级关联与传递性对齐因此得以保留）
+            ch = self._channel_name(m, dim)
+            if ch in feats:
+                # 已有同维度通道：把缺失视图补上（同维度必然同空间，可直接拼接）
+                old = feats[ch]
+                for i, v in enumerate(vecs):
+                    if v is not None:
+                        old[i] = v
+            else:
+                feats[ch] = vecs
         if not feats:
             return None
 
-        sim = [[_jaccard(recs[i].get("tags"), recs[j].get("tags")) for j in range(len(recs))]
-               for i in range(len(recs))]
-        for i in range(len(recs)):
-            sim[i][i] = 1.0
+        # 记录每个通道的样本数与维度：查询侧/运行时数据要按特征维度挑通道
+        self._channel_stats = {}
+        for ch, vecs in feats.items():
+            dim = next((len(v) for v in vecs if v is not None), 0)
+            self._channel_stats[ch] = {
+                "dim": dim,
+                "count": sum(1 for v in vecs if v is not None),
+            }
+
+        # ── 监督矩阵：同源对强约束 + 其余主题弱监督 ───────────────────────
+        registry = self._pairing_registry(recs)
+        # units 要带 modality（用于定位「同源对两端各在哪一行」）
+        _units = []
+        for r in recs:
+            for m in (r.get("views") or {}):
+                _units.append({"record_id": r.get("record_id"), "modality": m})
+        sim = build_supervision(recs, _units, registry,
+                                lambda_strong=self._lambda_strong(),
+                                lambda_weak=1.0)
         return feats, sim
+
+    @staticmethod
+    def _channel_name(modality: str, dim: Optional[int]) -> str:
+        """通道名：modality@特征维度。
+
+        ★ 按**特征空间**分，不按数据集分 —— 这是踩过坑的关键。
+
+        最初按「模态×数据集」分通道（text@CSEMOTIONS / audio@EATD-Corpus…），
+        结果九格从 0.3656 崩到 0.3111：文-音四格全崩，图像三格大涨。
+        根因是**传递性对齐断了**：
+          · 语料里三个数据集在记录索引上是**连续的块**（实测 EATD 0~971、
+            CSEM 972~9291、FER 9292~13937）
+          · 按数据集分通道后，各通道的 Gram 支持集**完全不相交**
+          · G[i][j] 在「EATD 的 text」与「CSEM 的 audio」之间只剩 S 的主题连接，
+            特征级关联消失 → 跨数据集的对齐传导断掉 → 音搜文/文搜文一起崩
+
+        按特征空间分通道后：
+          · text@531（bge）      ← EATD + CSEMOTIONS，同一特征空间 → 合并
+          · audio@64（MFCC）     ← EATD + CSEMOTIONS → 合并
+          · image@192（HOG）     ← FER2013 + AVDD-TCMI → 合并
+          · audio@2048          ← AVDD-TCMI 的声学特征，维度不同 → 独立通道
+
+        AVDD 的音↔图同源约束通过**共享的 image@192 通道**传导到图像侧 ——
+        这正是 AVDD 的主要价值（给图像提供真同源锚点），
+        而它的 2048 维声学特征只影响自己那 1230 条，不拖累主语料。
+        """
+        if not dim:
+            return modality
+        return f"{modality}@{dim}"
+
+    def _to_primary_channel(self, feat: Dict[str, List[float]]) -> Dict[str, List[float]]:
+        """把 {modality: vector} 换成 {主通道: vector}。
+
+        通道化后 W 的键是 modality@dataset；未通道化时就是纯模态名，
+        此时本方法原样返回（向后兼容）。
+        """
+        if not feat:
+            return feat
+        W = self.model.W or {}
+        if not W or not any("@" in k for k in W):
+            return feat
+        out = {}
+        for modality, vec in feat.items():
+            if not vec:
+                out[modality] = vec
+                continue
+            cands = self._resolve_channels(W, modality, len(vec))
+            out[cands[0] if cands else modality] = vec
+        return out
+
+    def _resolve_channels(self, W: Dict, modality: str,
+                          dim: Optional[int] = None) -> List[str]:
+        """为一个（模态, 特征维度）找出所有可用通道。
+
+        通道键是 modality@dim（按特征空间划分，不是按数据集）。
+        匹配顺序：
+          1. 精确的 modality@dim
+          2. 纯模态名（未通道化时的旧模型）
+          3. 同模态任意通道（维度可能不匹配，调用方需自行校验）
+        多个同维通道时按训练样本数降序 —— 样本多的那条更稳定。
+        """
+        if not W:
+            return []
+        if dim:
+            exact = f"{modality}@{dim}"
+            if exact in W:
+                return [exact]
+        if modality in W:
+            return [modality]
+        cands = [k for k in W if k.split("@", 1)[0] == modality]
+        if not cands:
+            return []
+        cands.sort(key=lambda k: -(self._channel_stats.get(k) or {}).get("count", 0))
+        return cands
+
+    def _lambda_strong(self) -> float:
+        """同源对的监督强度。"""
+        return float(getattr(settings, "HASHING_LAMBDA_STRONG", 1.0) or 1.0)
+
+    def _pairing_registry(self, recs: List[Dict]):
+        """建立同源关系登记。
+
+        来源有二，优先用记录显式声明的 same_source_pairs，
+        否则从语料的 pairing_type 推导（队长的 schema 已有该字段：
+        EATD/CSEMOTIONS = same_source_text_audio，
+        FER2013 = weak_cross_dataset / image_only → 不同源）。
+        """
+        from .pairing import PairingRegistry, pairs_from_pairing_type
+        reg = PairingRegistry()
+        for r in recs:
+            pairs = r.get("same_source_pairs") or []
+            if not pairs:
+                pairs = pairs_from_pairing_type(r.get("pairing_type") or "")
+            for pair in pairs:
+                if len(pair) == 2:
+                    reg.declare(r.get("record_id"), pair[0], pair[1])
+        return reg
 
     def _balance_supervision(self, records: List[Dict]) -> List[Dict]:
         """可选的监督比例采样，默认关闭。
@@ -652,7 +809,8 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 codes.append(None)
                 continue
             try:
-                codes.append(model.encode({"text": F.semantic_feature(self._view_text(view))}))
+                codes.append(model.encode(self._to_primary_channel(
+                    {"text": F.semantic_feature(self._view_text(view))})))
             except Exception:
                 codes.append(None)
         bad: List[int] = []
@@ -753,18 +911,43 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             window = self.index.window_of(meta.get("date"))
         encoder = self._encoder_for(window)
         feature = meta.get("feature")
-        if feature and encoder.W.get(modality) and len(feature) == len(encoder.W[modality][0]):
+        # ── 通道化：按「模态 × 特征维度」挑通道 ───────────────────────────
+        # 通道键是 modality@dim（同一特征空间的样本共用一个通道，
+        # 跨数据集的特征级关联与传递性对齐因此得以保留）。
+        # 运行时新增的数据没有 dataset 字段，按特征维度匹配即可。
+        dim = len(feature) if feature else None
+        cands = self._resolve_channels(encoder.W or {}, modality, dim)
+        channel = cands[0] if cands else modality
+        if feature and channel in (encoder.W or {}) \
+                and len(feature) == len(encoder.W[channel][0]):
             # 语料预抽取的离线特征：直接用，省去重复解码媒体
-            feat = {modality: feature}
+            feat = {channel: feature}
         else:
-            feat = self._feature_of(modality, content, meta.get("media_path"))
+            vec = self._feature_of(modality, content,
+                                   meta.get("media_path")).get(modality)
+            if not vec:
+                vec = None
+            else:
+                # 关键：特征字典的键必须是**通道名**，不是模态名。
+                # 通道化后 W 的键是 modality@dim，用模态名去 encode 会
+                # 找不到投影矩阵 → 返回全 0 向量 → 符号化后码全是 1
+                # （实测 4646 个 text 单元的码唯一值只有 1 个、全 1，
+                #   凡「结果模态是 text」的格子全崩：文搜文 0.0101）
+                _hit = None
+                for c in self._resolve_channels(
+                        encoder.W or {}, modality, len(vec)):
+                    if len(vec) == len(encoder.W[c][0]):
+                        _hit = c
+                        break
+                channel = _hit or channel
+                feat = {channel: vec}
         code = encoder.encode(feat)
         # 该模态未参与配对训练（默认 image，见 HASHING_TRAIN_MODALITIES）：
         # encoder.W 里没有它的投影矩阵，encode 会返回全 0 → 符号化后码全是 1，
         # 这样的单元会污染索引（所有图像单元码相同）。改为借用**同记录**已编码
         # 单元的码：共享码空间的定义就是「同一记录的不同模态视图共享同一个码」，
         # 因此图像视图应该与该记录的文本/语音视图落在同一位置。
-        if not encoder.W.get(modality):
+        if not encoder.W.get(channel) and not encoder.W.get(modality):
             borrowed = self._borrowed_sibling_code(meta.get("record_id"), unit_id)
             if borrowed:
                 code = borrowed
@@ -895,12 +1078,26 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 if m in TRAIN_MODALITIES:
                     views[m] = {"text": v.get("content") or "",
                                 "path": v.get("media_path"),
-                                "feature": _loads(v.get("feature"), None)}
+                                "feature": _loads(v.get("feature"), None),
+                                # 通道化需要知道视图来自哪个数据集：
+                                # 通道名 = modality@dataset（W 的键）
+                                "dataset": v.get("dataset")
+                                or (_loads(v.get("meta") or {}, {}) or {}).get("dataset"),
+                                # 同源关系（EATD 文↔音、AVDD 音↔图…）
+                                "pairing_type": (_loads(v.get("meta") or {}, {}) or {})
+                                .get("pairing_type")}
             if not views:
                 return None
             any_unit = next(iter(by_rec[rid].values()))
+            _pt = None
+            for _v in by_rec[rid].values():
+                _pt = (_loads(_v.get("meta") or {}, {}) or {}).get("pairing_type")
+                if _pt:
+                    break
             return {"record_id": rid, "views": views,
-                    "tags": _loads(any_unit.get("themes"))}
+                    "tags": _loads(any_unit.get("themes")),
+                    "dataset": any_unit.get("dataset"),
+                    "pairing_type": _pt}
 
         # 全局兜底模型（窗口模型缺失时使用）
         sample_ids = (rec_ids if len(rec_ids) <= self._train_cap
@@ -1135,7 +1332,8 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
 
     async def encode(self, data: Any, modality: str) -> List[int]:
         await self._ensure_initialized()
-        return self.model.encode(self._extract_query_features(data, modality))
+        feat = self._extract_query_features(data, modality)
+        return self.model.encode(self._to_primary_channel(feat))
 
     def _window_weights(self) -> Dict[int, float]:
         """各时间窗表的融合权重（rho × sigma × 时效衰减）。
@@ -1313,6 +1511,12 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         await self._ensure_initialized()
         allowed = self._allowed_ids(viewer)
         feat = self._extract_query_features(query, modality, media_path)
+        # ── 通道化：把查询特征挂到「主通道」上 ────────────────────────────
+        # W 的键现在是 modality@dataset，W["text"] 已不存在，
+        # 直接 encode({modality: vec}) 会返回全 0 码（所有相似度相等）。
+        # 同维的多个通道里取训练样本最多的那个作为主通道；
+        # 库端单元仍各用各的通道编码，但共享同一个码空间 B → 可互检。
+        feat = self._to_primary_channel(feat)
         # 混合视图（未指定结果模态）默认按模态轮转交错：
         # 真实语料下同模态码更相近，全局排序的前若干名会被查询模态占满
         # （实测文本查询 top-24 全为文本单元），跨模态命中根本进不了结果页。
@@ -1419,8 +1623,13 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             return []
         W = (self.model.W or {}).get(result_modality)
         if not W:
-            return []
-        qvec = self.model.encode_continuous(feature_by_modality)
+            # 通道化后 W 的键是 modality@dim；按特征维度找可用通道
+            _ch = self._resolve_channels(self.model.W or {}, result_modality)
+            if not _ch:
+                return []
+            W = (self.model.W or {})[_ch[0]]
+        qvec = self.model.encode_continuous(
+            self._to_primary_channel(feature_by_modality))
         if not qvec:
             return []
         q_themes = F.extract_themes(query) if isinstance(query, str) else []
@@ -1433,7 +1642,8 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             feature = meta.get("feature")
             if not feature or len(feature) != len(W[0]):
                 continue
-            code = self.model.encode({result_modality: list(feature)})
+            code = self.model.encode(self._to_primary_channel(
+                {result_modality: list(feature)}))
             sim = max(0.0, min(1.0, (self.index.asym_score(qvec, code) + 1.0) / 2.0))
             if sim < min_sim:
                 continue
@@ -1941,6 +2151,7 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             "lambda_s": self.model.lambda_s,
             "modalities": self.model.modalities,
             "W": self.model.W,
+            "channel_stats": self._channel_stats,
             "source": self._source,
             "source_count": self._source_count,
             "seeded_from_db": self._seeded_from_db,
@@ -1989,6 +2200,13 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         self.model.modalities = state.get("modalities") or []
         self.model.W = W
         self.model.trained = True
+        # 通道统计：优先用 state 里的（训练时写下的维度与样本数）；
+        # 旧 state 没有 → 从 W 的形状反推维度，样本数按 0 处理（排序退化但可用）
+        self._channel_stats = state.get("channel_stats") or {}
+        if not self._channel_stats:
+            for k, v in (W or {}).items():
+                if v and isinstance(v, list) and v[0]:
+                    self._channel_stats[k] = {"dim": len(v[0]), "count": 0}
         bank_state = state.get("window_models")
         if bank_state:
             try:
