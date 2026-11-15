@@ -134,6 +134,37 @@ def _find_tcm_image(inner, subset, sid):
     return None, None
 
 
+def _pool_visual(path):
+    """visual.csv（OpenFace 2.0）→ 98 维人脸行为特征（AU + 头姿 + 眼动）。
+
+    为什么用 visual 而不是 TCM 区域图的 HOG：
+    AVDD 的 TCM 望诊区域图是**面诊局部区域**（que/mingtang/ting…），
+    与 FER2013 的**正面表情照**虽然都能提 192 维 HOG，但图像内容域完全不同 ——
+    实测两者混在同一个 image@192 通道时，图像五格从 0.5332 掉到 0.4606
+    （图搜文 0.7629 → 0.6252）。
+    visual.csv 是人脸**行为**特征（AU 激活强度 / 头姿 / 眼动），
+    语义上与表情照接近得多，且维度 98 ≠ 192 → 会自动独立成一个通道，
+    不再稀释 FER 那一侧的判别力。
+    """
+    import numpy as np
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            header = [c.strip() for c in f.readline().strip().split(",")]
+        arr = np.atleast_2d(np.loadtxt(path, delimiter=",", skiprows=1))
+    except Exception:
+        return None
+    if arr.size == 0:
+        return None
+    idx = [i for i, c in enumerate(header)
+           if c.startswith("AU") or c.startswith("pose")
+           or c.startswith("gaze")]
+    if not idx:
+        return None
+    arr = np.nan_to_num(arr[:, idx].astype(np.float32),
+                        nan=0.0, posinf=0.0, neginf=0.0)
+    return np.concatenate([arr.mean(axis=0), arr.std(axis=0)]).astype(np.float32)
+
+
 def _themes(subset, label, gender):
     pos = "抑郁-阳性" if label == 1 else "抑郁-阴性"
     clinic = SUBSET_THEME.get(subset, ("阳性", "阴性"))[
@@ -203,17 +234,25 @@ def build(root, rng, records_per_class=None, sample_max=None, **kw):
                 "meta": {"subset": subset, "subject": sid,
                          "region": region, "n_frames_dim": int(len(afeat) // 2)},
             }
-            # 图像单元：TCM 面诊区域图
-            image_unit = base.make_image_unit(
-                rid, img_path, themes, alert, created, window,
-                DATASET_NAME, media_kind="tcm_region_image")
-            if image_unit is None:
-                skipped.append((sid, "图像特征抽取失败"))
+            # 图像单元：用 visual.csv 的 OpenFace 人脸行为特征（98 维），
+            # TCM 望诊区域图作为 media_path（展示与抽查用）。
+            vfeat = _pool_visual(os.path.join(inner, subset, sid,
+                                              f"{sid}_visual.csv"))
+            if vfeat is None:
+                skipped.append((sid, "visual 解析失败"))
                 continue
-            image_unit["unit_id"] = f"{rid}-img"
-            image_unit["content"] = f"中医面诊区域图 {region}（{subset}/{sid}）"
-            image_unit["meta"] = {"subset": subset, "subject": sid,
-                                  "region": region}
+            image_unit = {
+                "unit_id": f"{rid}-img",
+                "record_id": rid, "modality": "image",
+                "content": f"面诊人脸行为特征（{subset}/{sid}，望诊区 {region}）",
+                "themes": list(themes), "alert_level": alert,
+                "created_at": created, "window": window,
+                "media_path": img_path, "media_kind": "tcm_region_image",
+                "feature": [float(x) for x in vfeat],
+                "dataset": DATASET_NAME,
+                "meta": {"subset": subset, "subject": sid, "region": region,
+                         "feature_src": "visual.csv OpenFace"},
+            }
 
             records.append({
                 "record_id": rid,
