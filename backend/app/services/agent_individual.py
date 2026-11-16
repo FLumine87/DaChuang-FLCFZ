@@ -4,7 +4,7 @@ import uuid
 
 from app.db import database as db
 from app.services import agent_workspace as workspace
-from app.services import agent_model, case_context
+from app.services import agent_ai, case_context
 
 
 async def ensure_schema():
@@ -47,11 +47,24 @@ async def run(scope, subject, actor):
             {"tool": "propose_tasks", "summary": f"新增 {created} 条待审核草案；已有任务不被覆盖"},
         ],
     }
-    model_result = await agent_model.case_draft(scope, case)
+    model_result = await agent_ai.individual_analysis(scope, case)
     assessment["model_status"] = model_result["status"]
+    assessment["ai_model"] = model_result["model"]
+    assessment["ai_latency_ms"] = model_result["latency_ms"]
     if model_result["status"] == "generated":
         assessment["model_connected"] = True
         assessment["model_draft"] = model_result["draft"]
+    evidence_items, coverage = agent_ai.build_multimodal_evidence(case.get("materials"))
+    assessment["multimodal_evidence"] = evidence_items
+    assessment["multimodal_coverage"] = coverage
+    assessment["trace"].append({
+        "tool": "llm_individual_analysis",
+        "summary": {
+            "generated": "AI 已生成个案草案",
+            "disabled": "模型未开启，本次仅规则研判",
+            "not_configured": "未配置模型密钥，本次仅规则研判",
+        }.get(model_result["status"], "AI 暂不可用，本次仅规则研判"),
+    })
     if scope == "live":
         assessment["evidence_snapshot"] = evidence
     await db.execute_a(

@@ -458,7 +458,9 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           </button>
         </div>
         <nav className="sidebar-nav app-scrollbar px-5 pb-5">
-          {["工作空间", "智能分析", "智能心理助手", "健康管理"].map((group) => (
+          {["工作空间", "智能分析", "智能心理助手", "健康管理"]
+            .filter((group) => items.some((item) => item.group === group))
+            .map((group) => (
             <div className="sidebar-group mb-7" key={group}>
               <div className="sidebar-group-title mb-3 flex h-5 items-center px-3 text-[12px] font-medium tracking-widest text-slate-400">
                 <span className="sidebar-label">{group}</span>

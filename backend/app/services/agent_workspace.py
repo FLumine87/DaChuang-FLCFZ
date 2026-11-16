@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.exceptions import HttpError
 from app.db import database as db
+from app.services import agent_ai
 
 SCHEMA = (
     """CREATE TABLE IF NOT EXISTS agent_workspace_runs (
@@ -109,6 +110,29 @@ def parse_date(value):
         return None
 
 
+def _analysis_summary(value):
+    """只保留检索结论摘要；不向前端或 AI 暴露命中记录编号。"""
+    if not value:
+        return None
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            return None
+    if not isinstance(value, dict):
+        return None
+    hits = value.get("hits")
+    summary = {
+        "level": value.get("level") or "",
+        "levelLabel": value.get("levelLabel") or "",
+        "conclusion": str(value.get("conclusion") or "")[:300],
+        "reason": str(value.get("reason") or "")[:300],
+        "hit_count": value.get("hit_count") if isinstance(value.get("hit_count"), int)
+                     else (len(hits) if isinstance(hits, list) else 0),
+    }
+    return summary if any(summary[key] for key in ("level", "conclusion", "reason")) else None
+
+
 def compile_subjects(records):
     groups = defaultdict(list)
     for record in records:
@@ -154,11 +178,12 @@ async def overview(scope):
         (scope,))
     return {
         "scope": scope, "mode": "workflow-preview", "model_connected": False,
-        "model_available": scope == "demo" and agent_model.configured(),
+        "model_available": (await agent_model.availability())["available"],
         "latest_run": json.loads(latest["payload"]) if latest else None,
         "tasks": await tasks_for(scope),
         "available_subjects": len(compile_subjects(records)),
         "departments": sorted({r["department"] for r in records}),
+        "latest_screening_date": max((r["date"] for r in records if r.get("date")), default=None),
     }
 
 
@@ -203,6 +228,24 @@ async def run(scope, days, department, actor):
         "subjects": [{k: v for k, v in s.items() if k != "history"} for s in subjects],
         "trace": trace,
     }
+    if subjects:
+        payload["ai_summary"] = await agent_ai.group_analysis(scope, payload)
+    else:
+        # 空窗口不调用模型：否则模型只能猜测“采集失败”，既误导又浪费额度。
+        payload["ai_summary"] = {"status": "no_data", "model": None,
+                                 "latency_ms": 0, "generated_at": None, "summary": None}
+    ai_status = payload["ai_summary"].get("status")
+    trace.append({
+        "agent": "AI 群体总结", "tool": "llm_group_summary", "status": "completed",
+        "at": now(),
+        "summary": {
+            "generated": "AI 已生成群体总结",
+            "disabled": "模型未开启，仅规则统计",
+            "not_configured": "未配置模型密钥，仅规则统计",
+            "no_data": "当前窗口无数据，未调用 AI",
+        }.get(ai_status, "AI 暂不可用，仅规则统计"),
+        "count": payload["total"],
+    })
     await db.execute_a("INSERT INTO agent_workspace_runs VALUES (?,?,?,?,?)",
                        (payload["id"], scope, actor, payload["created_at"], json.dumps(payload, ensure_ascii=False)))
     return await overview(scope)
@@ -248,9 +291,19 @@ async def case_detail(scope, subject):
         from app.services import case_context
         case = await db.query_one_a("SELECT * FROM cases WHERE id=?", (row["subject"][5:],))
         context = await case_context.load(case)
-        live_materials = [{"kind": item["kind"], "title": item.get("filename") or f"采集 {item['id']}",
-                           "source": "个人端已保存采集", "text": item.get("text") or item.get("description") or "已登记文件；原文件未在此展示"}
-                          for item in context["supplements"]]
+        counters = {"text": 0, "audio": 0, "image": 0}
+        for item in context["supplements"]:
+            kind = str(item.get("kind") or "")
+            label = {"text": "文本补充", "audio": "语音片段", "image": "图片"}.get(kind, "采集")
+            counters[kind] = counters.get(kind, 0) + 1
+            live_materials.append({
+                "kind": kind,
+                "title": f"{label} {counters[kind]}",
+                "source": "个人端已保存采集",
+                "text": item.get("text") or item.get("description") or "已登记文件；原文件未在此展示",
+                "url": item.get("url") or None,
+                "analysis": _analysis_summary(item.get("analysis")),
+            })
     return {**row, "tasks": [t for t in await tasks_for(scope) if t["subject"] == row["subject"]],
             "materials": [
                 {"kind": "text", "title": "虚构学习日记", "source": "项目原创合成素材",

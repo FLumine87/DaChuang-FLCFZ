@@ -23,6 +23,10 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
         db._local_conn = sqlite3.connect(self.path, check_same_thread=False)
         db._local_conn.row_factory = sqlite3.Row
         db.init_db_sync()
+        # 测试默认不触碰真实模型：需要模型结果的用例在自己的 with 块里覆盖。
+        self._configured = patch.object(agent_model, "configured", return_value=False)
+        self._configured.start()
+        self.addCleanup(self._configured.stop)
 
     def tearDown(self):
         db._local_conn.close()
@@ -38,6 +42,7 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
             ("GET", "/api/agent-workspace"), ("POST", "/api/agent-workspace/runs"),
             ("GET", "/api/agent-workspace/cases/demo%3A001"),
             ("PUT", "/api/agent-workspace/tasks/test"),
+            ("GET", "/api/agent-workspace/model"), ("PUT", "/api/agent-workspace/model"),
         ]:
             self.assertEqual((await dispatch(method, path))[0], 401)
             self.assertEqual((await dispatch(method, path, headers=self.headers("user")))[0], 403)
@@ -51,8 +56,27 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(first["tasks"]), 12)
         second = await service.run("demo", 30, "all", "tester")
         self.assertEqual(len(second["tasks"]), 12)
-        self.assertEqual(second["latest_run"]["trace"][-1]["count"], 0)
+        propose = next(step for step in second["latest_run"]["trace"]
+                       if step["tool"] == "propose_tasks")
+        self.assertEqual(propose["count"], 0)
         self.assertEqual((await service.overview("live"))["tasks"], [])
+
+    async def test_group_run_attaches_ai_summary(self):
+        generated = {
+            "status": "generated", "model": "deepseek-flash", "latency_ms": 12,
+            "generated_at": "2026-10-01T00:00:00+00:00",
+            "summary": {"overview": "总体平稳", "key_findings": ["红色预警 1 个"],
+                        "anomalies": [], "department_focus": [],
+                        "suggested_actions": ["安排复核"], "limits": ["样本量较小"]},
+        }
+        with patch("app.services.agent_ai.group_analysis",
+                   AsyncMock(return_value=generated)):
+            result = await service.run("demo", 30, "all", "tester")
+        latest = result["latest_run"]
+        self.assertEqual(latest["ai_summary"]["status"], "generated")
+        self.assertEqual(latest["ai_summary"]["summary"]["overview"], "总体平稳")
+        self.assertEqual(latest["trace"][-1]["tool"], "llm_group_summary")
+        self.assertEqual(latest["trace"][-1]["summary"], "AI 已生成群体总结")
 
     async def test_filters_and_latest_run(self):
         await service.run("demo", 30, "all", "tester")
@@ -143,25 +167,32 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(agent_model, "configured", return_value=False):
             individual = await agent_individual.run("demo", "demo:001", "tester")
         self.assertIsNotNone(individual["assessment"])
-        self.assertEqual(len(individual["assessment"]["trace"]), 4)
+        self.assertEqual(len(individual["assessment"]["trace"]), 5)
         refreshed = await agent_individual.detail("demo", "demo:001")
         self.assertEqual(individual["assessment"]["id"], refreshed["assessment"]["id"])
         self.assertEqual((await service.overview("demo"))["latest_run"]["id"], group["latest_run"]["id"])
         self.assertEqual(len((await service.overview("demo"))["tasks"]), 12)
 
-    async def test_deepseek_draft_is_validated_and_persisted_separately(self):
+    async def test_ai_draft_is_validated_and_persisted_separately(self):
+        draft = {
+            "summary": "同量表分数有变化，需优先复核。",
+            "basis": "3 次量表筛查、1 条文本补充",
+            "findings": ["最近一次为红色预警", "同量表较上次上升"],
+            "recommendations": ["安排授权人员复核"],
+            "evidence_refs": ["S1", "M1"],
+        }
         response = {"model": "test-model", "choices": [{"finish_reason": "stop", "message": {
-            "content": json.dumps({"summary": "同量表分数有变化", "review_points": ["请核对原始作答"],
-                                   "evidence_refs": ["E1", "E2"]})
+            "content": json.dumps(draft, ensure_ascii=False)
         }}]}
         with patch.multiple(agent_model.settings, AGENT_DEMO_DEEPSEEK_ENABLED=True,
                             ENABLE_MOCK_ENGINES=False, DEEPSEEK_API_KEY="test-key",
                             DEEPSEEK_BASE_URL="https://zhenze-huhehaote.cmecloud.cn/v1"), \
+                patch.object(agent_model, "configured", return_value=True), \
                 patch.object(agent_model, "_complete", AsyncMock(return_value=response)) as complete:
             case = await agent_individual.run("demo", "demo:001", "tester")
             assessment = case["assessment"]
             self.assertEqual(assessment["model_status"], "generated")
-            self.assertEqual(set(assessment["model_draft"]["evidence_refs"]), set(case["evidence_ids"]))
+            self.assertEqual(assessment["model_draft"]["evidence_refs"], ["S1", "M1"])
             self.assertEqual(case["alert_level"], "red")
             self.assertEqual(case["tasks"][0]["state"], "proposed")
             self.assertNotIn("请核对原始作答", case["tasks"][0]["title"])
@@ -170,8 +201,8 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(request["thinking"], {"type": "disabled"})
             self.assertEqual(request["max_tokens"], 2048)
             prompt = json.loads(request["messages"][1]["content"])
-            self.assertEqual(set(prompt), {"scale", "recorded_level", "same_scale_delta", "screenings_oldest_first"})
-            self.assertEqual({row["ref"] for row in prompt["screenings_oldest_first"]}, {"E1", "E2"})
+            self.assertIn("multimodal", prompt)
+            self.assertIn("screenings", prompt)
             self.assertNotIn("演示案例 001", json.dumps(prompt, ensure_ascii=False))
 
     async def test_invalid_deepseek_citation_falls_back_to_rules(self):
@@ -185,19 +216,56 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("model_draft", case["assessment"])
         self.assertEqual(case["tasks"][0]["state"], "proposed")
 
-    async def test_business_alert_screening_opens_its_case_without_external_call(self):
+    async def test_business_case_opens_and_calls_model_without_identifiers(self):
         db.execute("INSERT INTO questionnaires (id,code,name,max_score) VALUES(1,'test','test',27)")
         db.execute("INSERT INTO cases(id,case_id,name) VALUES(1,'CASE-TEST','test-person')")
         db.execute(
             "INSERT INTO screenings(screening_id,name,case_id,questionnaire_id,score,max_score,status,screening_date) "
             "VALUES('SCR-TEST','test-person',1,1,10,27,'completed','2026-10-01')")
+        response = {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({
+            "summary": "最近一次筛查为黄色预警，需安排复核。",
+            "basis": "1 次量表筛查",
+            "findings": ["得分 10/27"],
+            "recommendations": ["安排复核"],
+            "evidence_refs": ["S1"],
+        }, ensure_ascii=False)}}]}
+        with patch.object(agent_model, "configured", return_value=True), \
+                patch.object(agent_model, "_complete", AsyncMock(return_value=response)) as complete:
+            case = await agent_individual.run("live", "screening-code:SCR-TEST", "tester")
+        complete.assert_awaited_once()
+        self.assertEqual(case["subject"], "case:1")
+        self.assertEqual(case["assessment"]["model_status"], "generated")
+        self.assertEqual(case["assessmentState"]["status"], "current")
+        prompt = json.dumps(complete.call_args.args[0]["messages"], ensure_ascii=False)
+        self.assertNotIn("test-person", prompt)
+        self.assertNotIn("SCR-TEST", prompt)
+
+    async def test_model_switch_defaults_on_and_persists(self):
+        self.assertTrue((await agent_model.availability())["enabled"])
+        await agent_model.set_enabled(False, "tester")
+        self.assertFalse((await agent_model.availability())["enabled"])
         with patch.object(agent_model, "configured", return_value=True), \
                 patch.object(agent_model, "_complete", AsyncMock()) as complete:
-            case = await agent_individual.run("live", "screening-code:SCR-TEST", "tester")
+            case = await agent_individual.run("demo", "demo:001", "tester")
         complete.assert_not_awaited()
-        self.assertEqual(case["subject"], "case:1")
-        self.assertEqual(case["assessment"]["model_status"], "live_rules")
-        self.assertEqual(case["assessmentState"]["status"], "current")
+        self.assertEqual(case["assessment"]["model_status"], "disabled")
+        await agent_model.set_enabled(True, "tester")
+        self.assertTrue((await agent_model.availability())["enabled"])
+
+    async def test_model_switch_endpoint(self):
+        status, payload = await dispatch(
+            "GET", "/api/agent-workspace/model", headers=self.headers())
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["data"]["enabled"])
+        status, payload = await dispatch(
+            "PUT", "/api/agent-workspace/model", body=json.dumps({"enabled": False}).encode(),
+            headers=self.headers())
+        self.assertEqual(status, 200)
+        self.assertFalse(payload["data"]["enabled"])
+        status, _ = await dispatch(
+            "PUT", "/api/agent-workspace/model", body=json.dumps({"enabled": "false"}).encode(),
+            headers=self.headers())
+        self.assertEqual(status, 400)
 
     async def test_followup_changes_next_date_and_preserves_audit(self):
         task = (await service.run("demo", 30, "all", "tester"))["tasks"][0]

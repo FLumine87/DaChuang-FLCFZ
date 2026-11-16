@@ -592,7 +592,7 @@ export default function AdminDataCollection() {
         data.text.length + data.audio.length + data.image.length === 0 && (
           <div className="ui-card flex items-center gap-2 px-4 py-3 text-sm text-slate-500">
             <span className="flex-1">
-              暂无采集数据：后端采集接口当前返回空列表，待文件上传与审阅链路启用后，这里的条目与件数会自动跟随真实数据变化。
+              暂无采集数据：完成一次文本、语音或图像采集后，这里的条目与件数会自动跟随真实数据变化。
             </span>
             <button
               type="button"
@@ -643,8 +643,7 @@ export default function AdminDataCollection() {
         })}
       </div>
 
-      {/* 注：三个页签的条目目前来自前端样例数据（adminMockData）；
-          后端采集审阅接口现在只返回空列表，等上传与审阅链路启用后再切服务层。 */}
+      {/* 三个页签的条目来自 /api/admin/data-collection（个人端补充材料 + 上传文件）。 */}
 
       {activeTab === 'text'  && <TextTab rows={data?.text ?? []} />}
       {activeTab === 'audio' && <AudioTab rows={data?.audio ?? []} />}

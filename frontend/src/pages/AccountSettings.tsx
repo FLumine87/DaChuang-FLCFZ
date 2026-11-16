@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   AtSign,
+  BrainCircuit,
   Building2,
   Check,
   Eye,
@@ -19,6 +20,11 @@ import {
   updateMyAccount,
   type MyAccount,
 } from '../services/mockApi';
+import { USE_MOCK } from '../services/http';
+import {
+  loadModelSettings,
+  saveModelSettings,
+} from '../services/workspaceApi';
 import {
   readIncludeOriginalInput,
   readSaveToSystem,
@@ -70,6 +76,49 @@ export default function AccountSettings() {
   // 检索与分析偏好（只存本机，改动即时生效）
   const [includeOriginalInput, setIncludeOriginalInput] = useState(readIncludeOriginalInput);
   const [saveToSystem, setSaveToSystem] = useState(readSaveToSystem);
+
+  // 智能研判模型（仅管理端；开关存后端，默认开启）
+  const [modelOn, setModelOn] = useState(true);
+  const [modelConfigured, setModelConfigured] = useState(true);
+  const [modelSaving, setModelSaving] = useState(false);
+  const [modelMsg, setModelMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const isAdmin = account?.role === 'admin';
+
+  useEffect(() => {
+    if (!isAdmin || USE_MOCK) return;
+    let alive = true;
+    loadModelSettings()
+      .then((state) => {
+        if (!alive) return;
+        setModelOn(state.enabled);
+        setModelConfigured(state.configured);
+      })
+      .catch(() => {
+        if (alive) setModelMsg({ kind: 'err', text: '模型开关读取失败，当前显示默认值' });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin]);
+
+  const toggleModel = async (next: boolean) => {
+    setModelSaving(true);
+    setModelMsg(null);
+    try {
+      const state = await saveModelSettings(next);
+      setModelOn(state.enabled);
+      setModelConfigured(state.configured);
+      setModelMsg({
+        kind: 'ok',
+        text: state.enabled ? '模型已开启' : '模型已关闭，个案与群体研判只走规则',
+      });
+    } catch (e) {
+      setModelMsg({ kind: 'err', text: e instanceof Error ? e.message : '保存失败' });
+    } finally {
+      setModelSaving(false);
+    }
+  };
 
   const toggleIncludeOriginalInput = (enabled: boolean) => {
     setIncludeOriginalInput(enabled);
@@ -188,6 +237,61 @@ export default function AccountSettings() {
           用户名与角色由系统维护。它们是登录凭据与权限依据，不在这里开放修改。
         </p>
       </section>
+
+      {/* 智能研判模型：仅管理端可见，开关存后端（默认开启） */}
+      {isAdmin && (
+        <section className="ui-card p-5 sm:p-6">
+          <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-800">
+            <BrainCircuit className="h-4 w-4 text-primary-600" />
+            智能研判模型
+          </h2>
+          <p className="mt-1 text-[12.5px] text-slate-400">
+            控制管理端「预警研判与处置」的 AI 辅助分析（个案 + 群体）。启用后会把问卷历史与
+            多模态材料摘要发送给 DeepSeek；发送前去除姓名、电话、学号与案例编号。
+          </p>
+
+          <div className="mt-4 flex items-start justify-between gap-4 border-t border-slate-100 pt-4">
+            <div>
+              <span className="block text-[13.5px] font-medium text-slate-700">
+                启用管理端 AI 辅助研判
+              </span>
+              <span className="mt-1 block text-[12px] leading-5 text-slate-400">
+                默认开启。关闭后个案与群体研判只用规则生成，页面不再显示 AI 分析。
+                {!modelConfigured &&
+                  ' 后端未配置 DEEPSEEK_API_KEY，开启也会降级为规则研判。'}
+                {USE_MOCK && ' 当前为演示模式，开关需连接后端后生效。'}
+              </span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={modelOn}
+              aria-label="启用管理端 AI 辅助研判"
+              disabled={modelSaving || USE_MOCK}
+              onClick={() => void toggleModel(!modelOn)}
+              className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                modelOn ? 'bg-primary-500' : 'bg-slate-300'
+              }`}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                  modelOn ? 'translate-x-5' : ''
+                }`}
+              />
+            </button>
+          </div>
+
+          {modelMsg && (
+            <p
+              className={`mt-2 text-[12px] ${
+                modelMsg.kind === 'ok' ? 'text-success-600' : 'text-danger-600'
+              }`}
+            >
+              {modelMsg.text}
+            </p>
+          )}
+        </section>
+      )}
 
       {/* 个人信息 */}
       <section className="ui-card p-5 sm:p-6">

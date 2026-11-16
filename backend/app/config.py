@@ -51,11 +51,19 @@ class Settings:
 
     ENABLE_MOCK_ENGINES: bool = True
 
-    # Agent safety: an external model needs this switch and per-screening consent.
+    # 用户端 RAG 报告是否允许外部模型；管理端「预警研判与处置」不看这个开关，
+    # 以账号设置页里存库的模型开关（agent_model_settings）为准。
     AGENT_ALLOW_EXTERNAL_LLM: bool = False
-    AGENT_DEMO_DEEPSEEK_ENABLED: bool = False
+    # 管理端 AI 研判开关的首次运行默认值，之后以账号设置页里的开关（存库）为准。
+    AGENT_DEMO_DEEPSEEK_ENABLED: bool = True
     AGENT_PSEUDONYM_KEY: str = ""
     AGENT_RULESET_VERSION: str = "1.0"
+
+    # 管理端 AI 研判（个案 + 群体）调用参数
+    AGENT_AI_TIMEOUT_SECONDS: int = 35      # 单次模型调用上限
+    AGENT_AI_MAX_SUBJECTS: int = 60         # 群体输入里最多带多少个匿名主体
+    AGENT_AI_MIN_DEPT_SIZE: int = 3         # 小于该人数的院系折叠为“其他”
+    AGENT_AI_MAX_MATERIALS: int = 6         # 个案输入里最多带多少条多模态材料
 
     # 动态跨模态哈希引擎配置
     HASHING_USE_MOCK: bool = False
@@ -199,6 +207,8 @@ class Settings:
             "AGENT_PSEUDONYM_KEY", "AGENT_RULESET_VERSION",
             "DEEPSEEK_API_KEY", "DEEPSEEK_MODEL", "DEEPSEEK_BASE_URL",
             "DEEPSEEK_MAX_TOKENS", "DEEPSEEK_TEMPERATURE",
+            "AGENT_AI_TIMEOUT_SECONDS", "AGENT_AI_MAX_SUBJECTS",
+            "AGENT_AI_MIN_DEPT_SIZE", "AGENT_AI_MAX_MATERIALS",
             "ZHIPUAI_API_KEY", "ZHIPUAI_MODEL", "ZHIPUAI_ENABLE_THINKING",
             "RAG_PROVIDER", "R2_BUCKET_NAME", "R2_PUBLIC_BASE_URL",
             "ACCESS_TOKEN_EXPIRE_MINUTES",

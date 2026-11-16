@@ -130,6 +130,66 @@
 
 .aw-source { font-size: 12px; color: var(--muted); margin: 10px 0 20px !important; }
 
+/* ---- 管理端 AI 研判卡片（群体 / 个案）---- */
+.aw-ai {
+  margin: 0 0 24px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+.aw-ai-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.aw-ai-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink);
+}
+.aw-ai-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.aw-ai-badge.generated { color: var(--color-success-600); background: var(--color-success-50); }
+.aw-ai-badge.unavailable { color: var(--color-warning-600); background: var(--color-warning-50); }
+.aw-ai-overview { margin: 0 0 14px; font-size: 13.5px; line-height: 1.9; color: var(--ink); }
+.aw-ai-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; }
+.aw-ai-list h4 { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.aw-ai-list ul { margin: 0; padding-left: 18px; }
+.aw-ai-list li { font-size: 13px; line-height: 1.8; color: var(--ink); }
+.aw-ai-empty { margin: 0; font-size: 13px; color: var(--muted); }
+.aw-ai-note { margin: 12px 0 0; font-size: 12.5px; line-height: 1.8; color: var(--muted); }
+.aw-ai-meta { margin: 8px 0 0; font-size: 11.5px; color: var(--muted); }
+.aw-refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.aw-ref-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 11px;
+}
+.aw-ai-basis { margin: 0 0 14px; font-size: 12.5px; line-height: 1.8; color: var(--muted); }
+.aw-analysis { display: block; margin-top: 6px; color: var(--muted); }
+@media (max-width: 700px) {
+  .aw-ai-grid { grid-template-columns: 1fr; }
+}
+
 .aw-error,
 .aw-notice {
   display: flex;
@@ -467,6 +527,15 @@
 .aw-no-data { color: var(--muted); }
 
 .aw-toolbar select { width: 100%; min-width: 0; }
+/* 管理端数据来源固定为业务数据（真实数据），不再提供演示数据切换，用静态值占位保持工具栏对齐 */
+.aw-toolbar .aw-static {
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--surface-3);
+  padding: 9px 12px;
+  color: var(--ink);
+  font-size: 13px;
+}
 .aw-search { max-width: 100%; }
 .aw-search input { min-width: 0; width: 100%; }
 .aw-individual {

@@ -555,7 +555,7 @@ function TextTab({ onReport, onInputChange }: CollectionInputProps) {
           setError('');
         }}
         placeholder="今天感觉……最近睡眠……人际上……"
-        className="mt-4 w-full h-40 p-3 border border-slate-200 rounded-lg text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        className="mt-4 w-full h-32 p-3 border border-slate-200 rounded-lg text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
       />
       <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
         <p className="text-xs leading-5 text-slate-500">

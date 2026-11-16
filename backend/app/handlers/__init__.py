@@ -19,6 +19,8 @@ ROUTES = [
 
     ("POST", "/api/agent-workspace/cases/{case_id}/runs", agent_workspace.run_case, "admin"),
     ("GET", "/api/agent-workspace", agent_workspace.overview, "admin"),
+    ("GET", "/api/agent-workspace/model", agent_workspace.model_settings, "admin"),
+    ("PUT", "/api/agent-workspace/model", agent_workspace.update_model_settings, "admin"),
     ("POST", "/api/agent-workspace/runs", agent_workspace.run, "admin"),
     ("GET", "/api/agent-workspace/cases/{case_id}", agent_workspace.case_detail, "admin"),
     ("PUT", "/api/agent-workspace/tasks/{task_id}", agent_workspace.update_task, "admin"),

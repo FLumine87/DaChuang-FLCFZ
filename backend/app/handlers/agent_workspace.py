@@ -1,5 +1,7 @@
 from urllib.parse import unquote
+from app.core.exceptions import HttpError
 from app.core.responses import success_response
+from app.services import agent_model
 from app.services import agent_workspace as service
 from app.services import agent_individual
 
@@ -15,7 +17,7 @@ async def overview(ctx):
 async def run(ctx):
     body = ctx.body
     return success_response(data=await service.run(
-        service.scope_value(body.get("scope", "live")), body.get("days", 30),
+        service.scope_value(body.get("scope", "live")), body.get("days", 90),
         body.get("department", "all"), actor(ctx)))
 
 
@@ -31,3 +33,15 @@ async def run_case(ctx, case_id):
 
 async def update_task(ctx, task_id):
     return success_response(data=await service.update_task(unquote(str(task_id)), ctx.body, actor(ctx)))
+
+
+async def model_settings(ctx):
+    return success_response(data=await agent_model.availability())
+
+
+async def update_model_settings(ctx):
+    value = ctx.body.get("enabled")
+    if not isinstance(value, bool):
+        raise HttpError(400, "enabled 必须为布尔值")
+    await agent_model.set_enabled(value, actor(ctx))
+    return success_response(data=await agent_model.availability())

@@ -1,4 +1,5 @@
 """管理端接口 handler（保留前端响应字段结构，async）。"""
+import json
 from datetime import datetime, timedelta, timezone
 
 from app.core.dates import format_dt
@@ -523,9 +524,157 @@ async def admin_search(ctx: RequestContext):
     })
 
 
+def _collection_json(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except (ValueError, TypeError):
+            return {}
+    return {}
+
+
+def _collection_level(analysis):
+    level = str(analysis.get("level") or "").lower()
+    return level if level in ("green", "yellow", "orange", "red") else "green"
+
+
+def _collection_status(analysis):
+    if not analysis:
+        return "pending"
+    return "flagged" if _collection_level(analysis) in ("orange", "red") else "done"
+
+
+def _collection_emotion(analysis):
+    if not analysis:
+        return "待分析"
+    return {"red": "高风险", "orange": "需关注",
+            "yellow": "轻度关注", "green": "正常"}[_collection_level(analysis)]
+
+
+def _collection_time(value):
+    return str(value or "")[:16]
+
+
+_COLLECTION_KEYWORDS = ("压力", "睡眠", "焦虑", "抑郁", "难过", "孤独",
+                        "疲惫", "人际", "学习", "家庭")
+
+
 async def get_admin_data_collection(ctx: RequestContext):
+    """管理端多模态采集列表：合并个人端补充材料与上传文件，按时间倒序。"""
+    text_rows, audio_rows, image_rows = [], [], []
+
+    supplements = await db.query_a(
+        "SELECT sp.id, sp.kind, sp.text, sp.filename, sp.url, sp.description, "
+        "sp.analysis, sp.created_at, COALESCE(u.name, u.username, '未知用户') AS username "
+        "FROM screening_supplements sp "
+        "LEFT JOIN screenings s ON s.screening_id = sp.screening_id "
+        "LEFT JOIN users u ON u.id = COALESCE(sp.user_id, s.user_id) "
+        "ORDER BY sp.created_at DESC, sp.id DESC LIMIT 500")
+    for row in supplements:
+        kind = str(row["kind"] or "").lower()
+        analysis = _collection_json(row["analysis"])
+        level = _collection_level(analysis)
+        status = _collection_status(analysis)
+        submit_at = _collection_time(row["created_at"])
+        username = row["username"]
+        filename = row["filename"] or ""
+        content = str(row["text"] or row["description"] or "")
+        if kind == "text":
+            text_rows.append({
+                "id": f"SUP-{row['id']}",
+                "username": username,
+                "submitAt": submit_at,
+                "wordCount": len(content),
+                "preview": content[:80] or "（空文本）",
+                "sentiment": _collection_emotion(analysis),
+                "keywords": [word for word in _COLLECTION_KEYWORDS if word in content][:5],
+                "analysisStatus": status,
+                "riskLevel": level,
+            })
+        elif kind == "audio":
+            audio_rows.append({
+                "id": f"SUP-{row['id']}",
+                "username": username,
+                "submitAt": submit_at,
+                "duration": "-",
+                "source": "录制" if "record" in filename.lower() or "录音" in filename else "上传",
+                "filename": filename or "未命名语音",
+                "emotion": _collection_emotion(analysis),
+                "speechRate": "-",
+                "analysisStatus": status,
+                "riskLevel": level,
+            })
+        elif kind == "image":
+            image_rows.append({
+                "id": f"SUP-{row['id']}",
+                "username": username,
+                "submitAt": submit_at,
+                "filename": filename or "未命名图片",
+                "type": "其他",
+                "analysisStatus": status,
+                "annotation": str(row["description"] or analysis.get("conclusion") or "未标注")[:120],
+                "riskLevel": level,
+            })
+
+    media = await db.query_a(
+        "SELECT mf.id, mf.file_type, mf.file_name, mf.description, mf.analysis_result, "
+        "mf.created_at, COALESCE(u.name, u.username, '未知用户') AS username "
+        "FROM media_files mf LEFT JOIN users u ON u.id = mf.uploaded_by "
+        "ORDER BY mf.created_at DESC, mf.id DESC LIMIT 500")
+    for row in media:
+        kind = str(row["file_type"] or "").lower()
+        analysis = _collection_json(row["analysis_result"])
+        level = _collection_level(analysis)
+        status = _collection_status(analysis)
+        submit_at = _collection_time(row["created_at"])
+        username = row["username"]
+        filename = row["file_name"] or ""
+        content = str(row["description"] or "")
+        if kind == "text":
+            text_rows.append({
+                "id": f"MED-{row['id']}",
+                "username": username,
+                "submitAt": submit_at,
+                "wordCount": len(content),
+                "preview": content[:80] or "（空文本）",
+                "sentiment": _collection_emotion(analysis),
+                "keywords": [word for word in _COLLECTION_KEYWORDS if word in content][:5],
+                "analysisStatus": status,
+                "riskLevel": level,
+            })
+        elif kind == "audio":
+            audio_rows.append({
+                "id": f"MED-{row['id']}",
+                "username": username,
+                "submitAt": submit_at,
+                "duration": "-",
+                "source": "录制" if "record" in filename.lower() or "录音" in filename else "上传",
+                "filename": filename or "未命名语音",
+                "emotion": _collection_emotion(analysis),
+                "speechRate": "-",
+                "analysisStatus": status,
+                "riskLevel": level,
+            })
+        elif kind == "image":
+            image_rows.append({
+                "id": f"MED-{row['id']}",
+                "username": username,
+                "submitAt": submit_at,
+                "filename": filename or "未命名图片",
+                "type": "其他",
+                "analysisStatus": status,
+                "annotation": content or str(analysis.get("conclusion") or "未标注")[:120],
+                "riskLevel": level,
+            })
+
+    for rows in (text_rows, audio_rows, image_rows):
+        rows.sort(key=lambda item: item["submitAt"], reverse=True)
+
     return success_response(data={
-        "textSubmissions": [],
-        "audioSubmissions": [],
-        "imageSubmissions": [],
+        "textSubmissions": text_rows,
+        "audioSubmissions": audio_rows,
+        "imageSubmissions": image_rows,
     })

@@ -3,35 +3,108 @@
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from app.config import settings
 from app.core.runtime import is_worker
+from app.db import database as db
 
 logger = logging.getLogger(__name__)
 TIMEOUT = 20
 TEAM_GATEWAY_HOST = "zhenze-huhehaote.cmecloud.cn"
+SCHEMA = (
+    """CREATE TABLE IF NOT EXISTS agent_model_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL,
+        updated_at TEXT NOT NULL,
+        updated_by TEXT NOT NULL DEFAULT '')""",
+)
+
+
+async def ensure_schema():
+    for sql in SCHEMA:
+        await db.execute_a(sql)
 
 
 def configured() -> bool:
+    """后端是否具备调用模型的凭据（与开关无关）。"""
     key = settings.DEEPSEEK_API_KEY.strip()
-    return (settings.AGENT_DEMO_DEEPSEEK_ENABLED and not settings.ENABLE_MOCK_ENGINES
+    return (not settings.ENABLE_MOCK_ENGINES
             and bool(key) and key != "your-deepseek-api-key-here"
             and bool(settings.DEEPSEEK_MODEL.strip()))
 
 
-async def _complete(payload: dict) -> dict:
+async def enabled() -> bool:
+    """管理端模型开关；设置页未改过时回落到 AGENT_DEMO_DEEPSEEK_ENABLED（默认开启）。"""
+    await ensure_schema()
+    row = await db.query_one_a("SELECT enabled FROM agent_model_settings WHERE id = 1")
+    if row is None:
+        return bool(settings.AGENT_DEMO_DEEPSEEK_ENABLED)
+    return bool(row["enabled"])
+
+
+async def set_enabled(value: bool, actor: str) -> None:
+    await ensure_schema()
+    await db.execute_a(
+        "INSERT INTO agent_model_settings (id, enabled, updated_at, updated_by) VALUES (1, ?, ?, ?) "
+        "ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled, "
+        "updated_at=excluded.updated_at, updated_by=excluded.updated_by",
+        (1 if value else 0, datetime.now(timezone.utc).isoformat(timespec="seconds"), actor))
+
+
+async def availability() -> dict:
+    """设置页与工作台共用：开关状态、凭据是否就绪、当前是否真的可调用。"""
+    ready = configured()
+    on = await enabled()
+    return {"enabled": on, "configured": ready, "available": on and ready}
+
+
+async def available() -> bool:
+    """管理端 AI 研判总闸：开关开启且凭据就绪。"""
+    return configured() and await enabled()
+
+
+async def chat_json(messages: list, *, max_tokens: int = 900,
+                    temperature: float = 0.3, timeout: int | None = None) -> dict:
+    """通用 JSON 输出调用；供管理端个案/群体研判复用。"""
+    hostname = urlsplit(settings.DEEPSEEK_BASE_URL).hostname
+    options = {}
+    if hostname in (TEAM_GATEWAY_HOST, "api.longcat.chat"):
+        # 这些网关的模型默认先输出推理过程，会把 max_tokens 吃光导致 JSON 截断。
+        options = {"thinking": {"type": "disabled"}}
+        max_tokens = max(max_tokens, 2048)
+    elif hostname == "api.deepseek.com":
+        options = {"reasoning_effort": "none"}
+    data = await _complete({
+        "model": settings.DEEPSEEK_MODEL,
+        "messages": messages,
+        "response_format": {"type": "json_object"},
+        "stream": False,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        **options,
+    }, timeout=timeout)
+    choice = data["choices"][0]
+    if choice.get("finish_reason") != "stop":
+        raise ValueError("Incomplete completion")
+    content = choice["message"]["content"]
+    return json.loads(content)
+
+
+async def _complete(payload: dict, timeout: int | None = None) -> dict:
     url = f"{settings.DEEPSEEK_BASE_URL.rstrip('/')}/chat/completions"
     headers = {"Authorization": f"Bearer {settings.DEEPSEEK_API_KEY.strip()}",
                "Content-Type": "application/json"}
     body = json.dumps(payload, ensure_ascii=False)
+    limit = timeout or TIMEOUT
     if is_worker():
         from js import AbortSignal, Object, fetch
         from pyodide.ffi import to_js
 
         options = to_js({"method": "POST", "headers": headers, "body": body,
-                         "signal": AbortSignal.timeout(TIMEOUT * 1000)},
+                         "signal": AbortSignal.timeout(limit * 1000)},
                         dict_converter=Object.fromEntries)
         response = await fetch(url, options)
         if not response.ok:
@@ -40,10 +113,10 @@ async def _complete(payload: dict) -> dict:
 
     def post():
         request = Request(url, data=body.encode("utf-8"), headers=headers, method="POST")
-        with urlopen(request, timeout=TIMEOUT) as response:
+        with urlopen(request, timeout=limit) as response:
             return json.load(response)
 
-    return await asyncio.wait_for(asyncio.to_thread(post), timeout=TIMEOUT)
+    return await asyncio.wait_for(asyncio.to_thread(post), timeout=limit)
 
 
 def _draft(data: dict, evidence_ids: list[str]) -> dict:
@@ -72,7 +145,7 @@ def _draft(data: dict, evidence_ids: list[str]) -> dict:
 async def case_draft(scope: str, case: dict) -> dict:
     if scope != "demo" or case.get("source") != "synthetic":
         return {"status": "live_rules"}
-    if not configured():
+    if not configured() or not await enabled():
         return {"status": "disabled"}
 
     # Send only fixed synthetic measurements and request-local evidence labels.
