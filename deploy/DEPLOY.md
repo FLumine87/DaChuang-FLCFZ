@@ -28,26 +28,10 @@ docker --version
 docker compose version
 ```
 
-## 2. 拉取代码（私有仓库用部署密钥）
+## 2. 拉取代码
 
 ```bash
-ssh-keygen -t ed25519 -C "dachuang-deploy" -f ~/.ssh/dachuang_deploy -N ""
-cat ~/.ssh/dachuang_deploy.pub
-```
-
-把公钥添加到 GitHub：仓库 → Settings → Deploy keys → Add deploy key（只读即可）。
-
-```bash
-cat >> ~/.ssh/config <<'EOF'
-Host github.com
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/dachuang_deploy
-  IdentitiesOnly yes
-EOF
-chmod 600 ~/.ssh/config
-
-git clone --depth 1 git@github.com:FLumine87/DaChuang-FLCFZ.git ~/app
+git clone --depth 1 https://github.com/FLumine87/DaChuang-FLCFZ.git ~/app
 cd ~/app
 ```
 
