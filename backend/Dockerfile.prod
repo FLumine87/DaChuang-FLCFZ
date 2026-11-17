@@ -1,0 +1,27 @@
+# 生产镜像：主业务后端（标准库 ThreadingHTTPServer，入口 python -m app.main）
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    TZ=Asia/Shanghai
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --timeout 120 --retries 10 \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    --trusted-host pypi.tuna.tsinghua.edu.cn \
+    -r requirements.txt
+
+COPY . .
+
+RUN mkdir -p data uploads/audio uploads/image uploads/document
+
+EXPOSE 8000
+
+# 首次启动建库（幂等）；随后启动服务，init_db_sync 会补齐增量迁移与演示账号
+CMD ["sh", "-c", "mkdir -p data uploads/audio uploads/image uploads/document && python scripts/init_local_db.py; exec python -m app.main"]

@@ -1,0 +1,30 @@
+# Python 缓存与虚拟环境
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+venv
+.venv
+
+# 密钥与环境：绝不进镜像层
+.env
+.env.*
+!.env.example
+
+# 版本控制与编辑器
+.git
+.gitignore
+.vscode
+.idea
+
+# 运行时数据与本地数据库（运行时由 compose 挂载）
+data
+*.db
+*.db-journal
+*.sqlite3
+uvicorn_*.log
+.uvicorn_*.pid
+.local-run
+
+# 本地验证脚本的产物
+scripts/*.log

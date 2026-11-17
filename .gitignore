@@ -84,16 +84,6 @@ data/
 # 「连接真实后端」的本地环境文件：只有本机代理地址，按环境各写一份，不入库
 frontend/.env.backend
 
-# ---- 生产部署文件：只保留在本机，不上传仓库 ----
-/.env.prod.example
-/docker-compose.prod.yml
-/deploy/
-/backend/Dockerfile.prod
-/frontend/Dockerfile.prod
-/frontend/nginx.conf
-/personal-backend/Dockerfile
-/personal-backend/.dockerignore
-
 # ---- 本地工具 / 对比产物（不入库）----
 # .screenshots/  截图工作目录；.trae/、.trae-html-share-packages/ 为 AI 工具产物
 .screenshots/
