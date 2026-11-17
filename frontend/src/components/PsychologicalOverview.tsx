@@ -13,7 +13,7 @@ export default function PsychologicalOverview() {
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   if (owner.current!==getCurrentSession()?.username) return null;
-  if (!data?.settings.enabled) return <RiskSummaryCard />;
+  if (!data?.settings.enabled) return <RiskSummaryCard summaryOnly />;
   const mbti=data.indicators?.mbti ?? data.snapshot.mbti;
   const portrait=data.snapshot.portrait?.length ? data.snapshot.portrait : data.memories.filter(m=>m.status==='confirmed').slice(0,3).map(m=>({text:m.content,evidence_ids:m.evidence_ids}));
   const observations=(data.snapshot.observations ?? []).filter(x=>!/(?:PHQ|GAD|SCL|ISI|PSS|\d+\s*\/\s*\d+)/i.test(x.text));
@@ -34,7 +34,7 @@ export default function PsychologicalOverview() {
         {data.suggestions.find(s=>s.state==='suggested') && <div className="rounded-2xl border border-primary-100 bg-white/80 p-4"><p className="text-xs font-medium text-primary-600">今天先做一件事</p><h3 className="mt-2 font-semibold text-slate-800">{data.suggestions.find(s=>s.state==='suggested')?.title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{data.suggestions.find(s=>s.state==='suggested')?.detail}</p></div>}
       </div>
       <div className="space-y-4 border-t border-slate-100 p-5 lg:border-l lg:border-t-0">
-        <RiskSummaryCard />
+        <RiskSummaryCard summaryOnly />
         <article className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4" aria-label="MBTI人格倾向"><div className="flex items-center justify-between gap-2"><h3 className="text-xs font-medium text-violet-800">MBTI · 自我理解</h3><button className="text-xs text-violet-700" onClick={()=>setEdit(!edit)}>{mbti ? '更正类型' : '填写我的类型'}</button></div><p className="mt-3 text-3xl font-semibold tracking-wider text-violet-900">{mbti?.type ?? '暂未判断'}</p><p className="mt-2 text-xs font-medium text-violet-700">{mbti ? mbti.status==='self_report' ? '本人提供的类型' : 'AI探索性倾向 · 待确认' : '现有信息不足以判断四字母类型'}</p>{mbti?.reason && <p className="mt-2 text-xs leading-6 text-slate-600">{mbti.reason}</p>}<p className="mt-3 text-[11px] leading-5 text-slate-500">用于了解偏好，不是正式MBTI测评，也不决定心理风险。</p>
           {edit && <div className="mt-3 space-y-2"><select aria-label="我的MBTI类型" value={type} onChange={e=>setType(e.target.value)} className="w-full rounded-lg border border-violet-200 bg-white p-2 text-sm"><option value="">选择你已了解的类型</option>{types.map(t=><option key={t}>{t}</option>)}</select><button disabled={!type||busy} onClick={()=>void save()} className="rounded-lg bg-violet-600 px-3 py-2 text-xs text-white disabled:opacity-50">保存本人类型</button></div>}{error && <p role="alert" className="mt-2 text-xs text-rose-600">{error}</p>}
         </article>

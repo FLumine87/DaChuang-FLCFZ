@@ -10,7 +10,7 @@ export function RiskBadge({level}:{level:RiskLevel}){
   return <span className={`inline-flex rounded-full border px-2 py-1 text-xs ${styles[level] || styles.unknown}`}>{riskLabels[level] || riskLabels.unknown}</span>;
 }
 
-export default function RiskSummaryCard({caseId,compact=false,presentation='card'}:{caseId?:string;compact?:boolean;presentation?:'card'|'column'}) {
+export default function RiskSummaryCard({caseId,compact=false,presentation='card',summaryOnly=false}:{caseId?:string;compact?:boolean;presentation?:'card'|'column';summaryOnly?:boolean}) {
   const column=presentation==='column';
   const {data,error,reload}=useRiskSummary(caseId);
   const [editing,setEditing]=useState<{item:RiskItem;action:string;token:string|null}|null>(null);
@@ -27,7 +27,7 @@ export default function RiskSummaryCard({caseId,compact=false,presentation='card
     <button onClick={()=>edit(item,safety?'followup_safety':'confirm_finding')} className="text-primary-700 underline">{safety?'已复核，仍需跟进':'确认此条线索'}</button>
     <button onClick={()=>edit(item,safety?'resolve_safety':'dismiss_finding')} className="text-slate-600 underline">{safety?'复核后解除本条提示':'不采用此条线索'}</button>
   </div>;
-  if(!data)return <section aria-label="近期综合风险" className={column?'flex h-full min-w-0 flex-col text-slate-700':'rounded-2xl border border-slate-200 bg-slate-50 p-4'}><p className={column?'text-[15px] font-semibold text-slate-700':'text-sm font-medium'}>近期综合风险{!column && '（筛查参考）'}</p><p className={column?'my-auto py-6 text-xs text-slate-500':'mt-2 text-xs text-slate-500'}>{error || '正在汇总近期筛查…'}</p>{error && <button onClick={()=>void reload()} className="mt-2 text-xs text-primary-600">重新读取</button>}</section>;
+  if(!data)return <section aria-label="近期综合风险" className={column?'flex h-full min-w-0 flex-col text-slate-700':'rounded-2xl border border-slate-200 bg-slate-50 p-4'}><p className={column?'text-[15px] font-semibold text-slate-700':'text-sm font-medium'}>近期综合风险{!column && !summaryOnly && '（筛查参考）'}</p><p className={column?'my-auto py-6 text-xs text-slate-500':'mt-2 text-xs text-slate-500'}>{error || '正在汇总近期筛查…'}</p>{error && <button onClick={()=>void reload()} className="mt-2 text-xs text-primary-600">重新读取</button>}</section>;
   return <section aria-label="近期综合风险" className={column?'flex h-full min-w-0 flex-col text-slate-700':`rounded-2xl border p-4 ${styles[data.level] || styles.unknown}`}>
     {column ? <>
       <p className="text-[15px] font-semibold text-slate-700">近期综合风险</p>
@@ -37,11 +37,11 @@ export default function RiskSummaryCard({caseId,compact=false,presentation='card
         <p className="mt-4 text-[13px] leading-6 text-slate-500">{data.reasons[0]?.text || '当前资料不足以形成综合等级，不将缺少记录视为低风险。'}</p>
       </div>
     </> : <>
-      <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-medium">近期综合风险（筛查参考）</p><h3 className={`mt-2 font-semibold ${compact?'text-base':'text-xl'}`}>{riskLabels[data.level]}</h3></div><span className="text-[11px] opacity-65">近30天 · {data.coverage.records}条筛查</span></div>
+      <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-medium">近期综合风险{!summaryOnly && '（筛查参考）'}</p><h3 className={`mt-2 font-semibold ${compact?'text-base':'text-xl'}`}>{riskLabels[data.level]}</h3></div><span className="text-[11px] opacity-65">近30天 · {data.coverage.records}条筛查</span></div>
       <p className="mt-2 text-xs leading-6">{data.reasons[0]?.text || '当前资料不足以形成综合等级，不将缺少记录视为低风险。'}</p>
     </>}
     {data.safety.status==='needs_review' && <div role="status" className={column?'mt-3 text-xs leading-6 text-rose-700':'mt-3 rounded-xl border border-rose-200 bg-white/80 p-3 text-xs leading-6 text-rose-800'}>另有待复核的安全提示。新低分、积极记录、计划完成或自助标记“已缓解”不会解除该提示。{data.safety.flags.every(f=>!f.recent || f.status==='resolved')?'这些提示来自较早记录，不代表当前仍处于紧急状态。':''}</div>}
-    <details className="mt-3 text-xs"><summary className="cursor-pointer font-medium">为什么是这个等级 · 查看维度与依据</summary><div className="mt-3 space-y-3">
+    {!summaryOnly && <details className="mt-3 text-xs"><summary className="cursor-pointer font-medium">为什么是这个等级 · 查看维度与依据</summary><div className="mt-3 space-y-3">
       <p className="leading-5 opacity-70">{data.window_start} 至 {data.window_end} · 量表{data.coverage.scales}条 / 多模态{data.coverage.multimodal}条。覆盖{data.coverage.dimension_count}/4个量表维度；缺少的维度不等同于正常。</p>
       {data.dimensions.map(d=><div key={d.code} className="rounded-lg bg-white/70 p-2"><p className="font-medium">{d.label} · {d.code}</p><p className="mt-1">{d.score===undefined?'资料不足':`${d.score}/${d.max_score} · ${d.severity}`}{d.trend?` · ${d.trend.label} ${Math.abs(d.trend.delta)} 分`:''}</p>{d.code==='PSS-10'&&<p className="mt-1 opacity-65">压力是连续分数，不设置诊断界值，也不单凭总分决定综合等级。</p>}</div>)}
       <ul className="space-y-2">{data.reasons.map((r,i)=><li key={i} className="break-words leading-5">{r.text}<span className="ml-1 opacity-60">依据：{r.source_ids.join('、') || '近期多日记录'}</span></li>)}</ul>
@@ -56,6 +56,6 @@ export default function RiskSummaryCard({caseId,compact=false,presentation='card
       {failure && <p role="alert">{failure}</p>}
       {caseId && !!data.review_history?.length && <details><summary className="cursor-pointer">人工复核记录</summary><ul className="mt-2 max-h-40 space-y-2 overflow-auto">{data.review_history.map((r,i)=><li key={i} className="break-words">{r.created_at.slice(0,16)} · 操作账号 #{r.actor_id} · {({resolve_safety:'解除本条安全提示',followup_safety:'仍需跟进',confirm_finding:'确认线索',dismiss_finding:'不采用线索'} as Record<string,string>)[r.action]}<p className="mt-1">{r.note}</p></li>)}</ul></details>}
       <p className="leading-5 opacity-65">{data.notice}</p><p className="text-[10px] opacity-50">规则 {data.rule_version} · 数据版本 {data.data_version} · 计算于 {new Date(data.computed_at).toLocaleString('zh-CN')}</p>
-    </div></details>
+    </div></details>}
   </section>;
 }
