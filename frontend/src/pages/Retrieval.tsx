@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import StewardPanel from '../components/StewardPanel';
 import { usePageActive } from '../services/pageActivity';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -606,7 +605,6 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
 
   return (
     <div className="space-y-6">
-      <StewardPanel />
       {!collectionReport && <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
           <Hash className="w-5 h-5 text-primary-600" />
