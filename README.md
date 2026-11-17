@@ -9,17 +9,6 @@
 - 个人端：FastAPI + Neo4j + OpenAI 兼容大模型接口
 - 检索引擎：CMFH + 「时间窗 × 位带」多哈希表 + 跨模态桥接
 
-## 在线访问
-
-| 端 | 地址 |
-|---|---|
-| 前端（GitHub Pages） | https://flumine87.github.io/DaChuang-FLCFZ/ |
-| 后端（Cloudflare Worker） | https://mental-screening-api.787249795.workers.dev |
-
-> 2026-11-12 起，仓库移除了 `.github/workflows` 里的自动部署（frontend / backend 两个 workflow），
-> push 到 main 不再触发发布，也不会再收到部署邮件。线上目前是最后一次发布的版本，
-> 需要更新时按 [DEVELOP.md](./DEVELOP.md) 的部署章节手动发布。
-
 ## 功能一览
 
 ### 学生端
@@ -416,18 +405,20 @@ docker compose up -d
 ### 项目贡献者与开发历程
 
 本项目由多人协作完成。以下为仓库中各 Git 作者的提交分布
-（`git shortlog -sn --all --no-merges`），可与完整提交历史对照查看：
+（`git shortlog -sn --all --no-merges`），参赛成员一列标注真实姓名，
+可与完整提交历史对照查看：
 
-| Git 作者 | 提交数 | 主要模块 |
-|---|---:|---|
-| `frontend-dev` | 150 | 前端（学生端 / 管理端 / 组件） |
-| `drinkbeerbest` | 54 | 后端与业务接口 |
-| `gong` | 37 | 后端 / 数据与工具 |
-| `zwz` | 35 | 跨模态哈希检索（特征通道化、AVDD-TCMI 接入） |
-| `FLumine87` | 32 | 项目总体、集成与合并 |
-| 其他贡献者 | 14 | 见 `git shortlog -sn --all` |
+| Git 作者 | 姓名 | 提交数 | 主要模块 |
+|---|---|---:|---|
+| `frontend-dev` | — | 150 | 前端（学生端 / 管理端 / 组件） |
+| `drinkbeerbest` | **范永鑫** | 66 | 后端与业务接口 |
+| `zwz` | **张文震** | 41 | 跨模态哈希检索（特征通道化、AVDD-TCMI 接入） |
+| `gong` | — | 37 | 后端 / 数据与工具 |
+| `FLumine87` | — | 32 | 项目总体、集成与合并 |
+| `epohopes` | **黄婉琳** | 1 | 个人端 Agent（AI 陪伴、3D 星空知识图谱） |
+| 其他 6 位 | — | 15 | 见 `git shortlog -sn --all` |
 
-仓库共 362 次提交，完整历史保留了从「个人端 Agent」到「管理端工作台」再到
+仓库完整历史保留了从「个人端 Agent」到「管理端工作台」再到
 「动态跨模态哈希通道化」的演进过程，各阶段的技术决策与踩坑记录见 [DEVELOP.md](./DEVELOP.md)。
 
 ## 许可证
