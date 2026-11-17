@@ -884,11 +884,10 @@ h1.text-3xl {
 .dash-hero-title {
   font-size: 2rem; /* 32px */
 }
-/* Keep the desktop welcome area spacious even after the last task is completed. */
+/* 首屏高度跟随内容：之前这里用 min-height 强制铺满一屏，
+   计划条目一多，右侧计划卡被撑高后左侧标题被居中下沉、下方内容被推出屏幕。
+   现在右卡列表内部滚动，首屏高度取两栏内容的较大值即可。 */
 @media (min-width: 1180px) {
-  .dashboard-hero {
-    min-height: max(36rem, calc(100svh - var(--topbar-height, 4rem) - 8rem));
-  }
   .dashboard-hero > section {
     display: flex;
     flex-direction: column;

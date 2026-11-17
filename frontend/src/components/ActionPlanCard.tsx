@@ -254,7 +254,7 @@ export default function ActionPlanCard() {
   };
 
   return (
-    <section className="ui-card p-4 sm:p-5">
+    <section className="ui-card self-start p-4 sm:p-5">
       <p className="sr-only" role="status" aria-live="polite">{completionNotice}</p>
       {/* 头部：只有标题与一句说明。
           「计划制定时间」不放这里 —— 它是**每条计划各自的属性**，
@@ -352,7 +352,11 @@ export default function ActionPlanCard() {
       )}
 
       {!loading && sortedPending.length > 0 && (
-        <ul className="grid gap-2.5">
+        /* 桌面端让「待进行」列表占满首屏卡片剩余高度并内部滚动：
+           计划变多时右栏仍保持首屏固定高度，左侧标题不会因居中而下沉，
+           下方「近期的检测结果」也不会被推出屏幕。移动端保持自然高度。 */
+        <div className="min-[1180px]:max-h-[380px] min-[1180px]:min-h-0 min-[1180px]:flex-1 min-[1180px]:overflow-y-auto min-[1180px]:overscroll-contain min-[1180px]:pr-1">
+        <ul className="grid content-start gap-2.5">
           {sortedPending.map((plan) => {
             const d = dueLabel(plan.dueAt);
             const busy = busyId === plan.id;
@@ -424,6 +428,7 @@ export default function ActionPlanCard() {
             );
           })}
         </ul>
+        </div>
       )}
 
       {/* ---------- 归档入口：浅灰色四个字，点开看历史 ---------- */}
