@@ -21,7 +21,7 @@ export interface AdminSupplement {
   filename?: string;
   description?: string;
   createdAt: string;
-  analysis?: { levelLabel?: string; conclusion?: string; reason?: string; alertId?: string; [key: string]: unknown };
+  analysis?: { level?: string; levelLabel?: string; conclusion?: string; reason?: string; alertId?: string; [key: string]: unknown };
 }
 
 export async function listAdminSupplements(filters: {
@@ -92,11 +92,13 @@ export interface AdminCaseDetail extends CaseRecord {
 
 export interface WorkQueue {
   date: string; timezone: string; openAlerts: number; unassignedAlerts: number;
+  todayUnassignedAlerts: number;
   dueToday: number; overdue: number; pendingReview: number;
   tasks: { id: string; subject: string; caseId?: string; title: string; state: string; assignee: string; due_at: string }[];
 }
 export async function getWorkQueue(): Promise<WorkQueue> {
   if (USE_MOCK) return { date: '', timezone: '', openAlerts: 0, unassignedAlerts: 0,
+    todayUnassignedAlerts: 0,
     dueToday: 0, overdue: 0, pendingReview: 0, tasks: [] };
   return request.get<WorkQueue>('/api/admin/work-queue');
 }

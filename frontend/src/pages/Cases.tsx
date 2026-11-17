@@ -17,7 +17,7 @@ import {
   type PersonalTimelineEvent,
   type UserProfile,
 } from '../data/mockData';
-import { getCases, getPersonalSupplements, type PersonalSupplement } from '../services/mockApi';
+import { getCases, getMyAccount, getPersonalSupplements, type PersonalSupplement } from '../services/mockApi';
 import { getCurrentSession, getDisplayName } from '../auth/session';
 import AlertBadge from '../components/AlertBadge';
 
@@ -181,6 +181,7 @@ export default function Cases() {
   const [userProfile, setUserProfile] = useState<UserProfile>({
     name: '—', age: 0, gender: '', campus: '', major: '', stage: '', emergencyContact: '',
   });
+  const [avatar, setAvatar] = useState('');
   const [loading, setLoading] = useState(false);
   /* 检索记录（文字/语音/照片）：与「筛查记录」页同一份数据 */
   const [supplements, setSupplements] = useState<PersonalSupplement[]>([]);
@@ -219,6 +220,21 @@ export default function Cases() {
     })();
   }, []);
 
+  // 头像独立取一次，并跟随设置页的更新事件同步
+  useEffect(() => {
+    let active = true;
+    const apply = (value: string) => { if (active) setAvatar(value); };
+    getMyAccount()
+      .then((account) => apply(account?.avatar || ''))
+      .catch(() => {});
+    const onAvatar = (event: Event) => apply((event as CustomEvent<string>).detail || '');
+    window.addEventListener('account-avatar-updated', onAvatar);
+    return () => {
+      active = false;
+      window.removeEventListener('account-avatar-updated', onAvatar);
+    };
+  }, []);
+
   const openedAt = earliestDate([
     ...screeningRecords.map((r) => r.date),
     ...personalTimeline.map((t) => t.date),
@@ -239,9 +255,13 @@ export default function Cases() {
           <div className="flex min-w-0 items-start gap-4">
             {/* 照片位 */}
             <div className="grid h-16 w-14 shrink-0 place-items-center overflow-hidden rounded-md border border-slate-200 bg-gradient-to-b from-slate-50 to-slate-100">
-              <span className="text-[22px] font-semibold text-slate-400">
-                {(userProfile.name || '—').slice(0, 1)}
-              </span>
+              {avatar ? (
+                <img src={avatar} alt="头像" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-[22px] font-semibold text-slate-400">
+                  {(userProfile.name || '—').slice(0, 1)}
+                </span>
+              )}
             </div>
 
             <div className="min-w-0">

@@ -175,9 +175,10 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_ai_draft_is_validated_and_persisted_separately(self):
         draft = {
-            "summary": "同量表分数有变化，需优先复核。",
-            "basis": "3 次量表筛查、1 条文本补充",
-            "findings": ["最近一次为红色预警", "同量表较上次上升"],
+            "summary": "同量表分数有变化",
+            "observations": ["最近一次为红色预警", "同量表较上次上升"],
+            "multimodal_notes": ["文本补充记录了学习压力"],
+            "risk_points": ["请核对原始作答"],
             "recommendations": ["安排授权人员复核"],
             "evidence_refs": ["S1", "M1"],
         }
@@ -224,8 +225,9 @@ class WorkspaceTests(unittest.IsolatedAsyncioTestCase):
             "VALUES('SCR-TEST','test-person',1,1,10,27,'completed','2026-10-01')")
         response = {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({
             "summary": "最近一次筛查为黄色预警，需安排复核。",
-            "basis": "1 次量表筛查",
-            "findings": ["得分 10/27"],
+            "observations": ["得分 10/27"],
+            "multimodal_notes": [],
+            "risk_points": ["核对原始量表"],
             "recommendations": ["安排复核"],
             "evidence_refs": ["S1"],
         }, ensure_ascii=False)}}]}

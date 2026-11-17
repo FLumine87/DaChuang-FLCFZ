@@ -14,20 +14,43 @@ export default function TodayWork() {
       .catch((reason: unknown) => { if (active) { setData(null); setError(reason instanceof Error ? reason.message : '读取失败'); } });
     return () => { active = false; };
   }, [reload]);
+  useEffect(() => {
+    let last = 0;
+    const refresh = () => {
+      const now = Date.now();
+      if (now - last < 1000) return;
+      last = now;
+      setReload((n) => n + 1);
+    };
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') refresh();
+    }, 60000);
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
   const tasks = data?.tasks.filter((task) => filter === 'all' ||
     (filter === 'overdue' ? task.due_at < data.date :
       filter === 'today' ? task.due_at === data.date : task.state === 'proposed')) || [];
   return <section className="ui-card space-y-4 p-5" aria-label="今日工作">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-lg font-semibold text-slate-800">今日工作</h2>
-        <p className="text-xs text-slate-500">{USE_MOCK ? '演示模式未读取实际待办' : '业务任务 · 期限按北京时间日期统计'} {data?.date}</p></div>
+        <p className="text-xs text-slate-500">{USE_MOCK ? '演示模式未读取实际待办' : '业务任务 · 期限按北京时间日期统计 · 自动刷新'} {data?.date}</p></div>
       <button className="ui-button" onClick={() => setReload((n) => n + 1)}>刷新待办</button>
     </div>
     {error && <p role="alert" className="text-rose-700">待办加载失败：{error}</p>}
     {!data && !error && <p role="status">正在加载待办…</p>}
     {data && <>
       <div className="grid gap-3 sm:grid-cols-4">
-        <Link className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700" to="/admin/alerts">待分配预警 <strong>{data.unassignedAlerts}</strong></Link>
+        <Link className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700" to="/admin/alerts" title="未指派处理人的预警累计数量">
+          待分配预警 <strong>{data.unassignedAlerts}</strong>
+          <span className="block text-xs text-slate-500">累计 · 今日新增 {data.todayUnassignedAlerts}</span>
+        </Link>
         <button className="rounded-xl bg-slate-50 p-3 text-left text-sm" onClick={() => setFilter('review')}>待审核草案 <strong>{data.pendingReview}</strong></button>
         <button className="rounded-xl bg-slate-50 p-3 text-left text-sm" onClick={() => setFilter('today')}>今天到期 <strong>{data.dueToday}</strong></button>
         <button className="rounded-xl bg-amber-50 p-3 text-left text-sm" onClick={() => setFilter('overdue')}>已逾期 <strong>{data.overdue}</strong></button>
@@ -38,7 +61,10 @@ export default function TodayWork() {
         </select></label>
         <Link className="text-primary-600 hover:underline" to="/admin/agent-workbench?scope=live&tab=tasks">进入业务随访处置 →</Link>
       </div>
-      {!tasks.length ? <p className="text-sm text-slate-500">当前范围没有待办任务。</p> :
+      {!tasks.length ? <p className="text-sm text-slate-500">
+        当前范围没有待办任务。
+        {data.unassignedAlerts > 0 && <> 另有 <Link className="text-primary-600 hover:underline" to="/admin/alerts">{data.unassignedAlerts} 条未指派预警</Link> 需要在预警页处理。</>}
+      </p> :
         <ul className="divide-y divide-slate-100">{tasks.map((task) => <li key={task.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
           <div><p className="font-medium text-slate-800">{task.title}</p><p className="text-xs text-slate-500">{states[task.state] || task.state} · {task.assignee || '待分配'} · 计划 {task.due_at}</p></div>
           {task.caseId ? <Link className="text-primary-600 hover:underline" to="/admin/cases">查看案例 →</Link> :

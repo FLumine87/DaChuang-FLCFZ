@@ -56,9 +56,10 @@ def individual_case():
 
 
 VALID_DRAFT = {
-    "summary": "最近一次为橙色预警，同量表较上次上升 3 分，需优先人工复核。",
-    "basis": "2 次 PHQ-9 筛查、1 条文本补充、1 段语音、1 张图片",
-    "findings": ["同量表较上次上升 3 分", "文本补充提到睡眠困扰"],
+    "summary": "最近一次为橙色预警，同量表较上次上升 3 分。",
+    "observations": ["最近一次筛查为橙色", "同量表较上次上升 3 分"],
+    "multimodal_notes": ["文本补充提到睡眠困扰", "语音片段为日记朗读"],
+    "risk_points": ["需要核对睡眠变化持续时间"],
     "recommendations": ["安排授权人员复核", "核对原始量表"],
     "evidence_refs": ["S1", "M1"],
 }

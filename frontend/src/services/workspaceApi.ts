@@ -28,14 +28,11 @@ export interface GroupAiSummary {
 }
 export interface IndividualAiDraft {
   summary: string;
-  basis?: string;
-  findings?: string[];
+  observations: string[];
+  multimodal_notes: string[];
+  risk_points: string[];
   recommendations: string[];
   evidence_refs: string[];
-  /** 旧版草案字段，兼容已保存的历史研判 */
-  observations?: string[];
-  multimodal_notes?: string[];
-  risk_points?: string[];
 }
 export interface MultimodalEvidence {
   ref: string; kind: string; label: string; content: string;

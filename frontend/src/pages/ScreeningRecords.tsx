@@ -11,6 +11,7 @@ import {
   ArrowRight,
   StickyNote,
   Trash2,
+  X,
 } from 'lucide-react';
 import {
   deletePersonalSupplement,
@@ -54,6 +55,14 @@ const MODALITY_ICON = { text: FileText, audio: Mic, image: ImageIcon } as const;
 type Filter = 'all' | 'text' | 'audio' | 'image';
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+/* 媒体地址：后端返回的是 /uploads/... 相对路径，跨域部署时补上 API 前缀 */
+const API_BASE = ((import.meta.env.VITE_API_BASE_URL as string | undefined) || '').replace(/\/$/, '');
+function assetUrl(url?: string): string {
+  if (!url) return '';
+  if (/^(https?:|blob:|data:)/.test(url)) return url;
+  return `${API_BASE}${url}`;
+}
 
 /** 把 `YYYY-MM-DD HH:MM` 解析成 Date；解析失败返回 null */
 function parseTime(raw?: string): Date | null {
@@ -149,6 +158,17 @@ function RecordEntry({
   const [confirmDel, setConfirmDel] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [delMsg, setDelMsg] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  /* 照片预览：Esc 或点背景关闭，避免打开后没有退出口 */
+  useEffect(() => {
+    if (!previewOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPreviewOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [previewOpen]);
 
   const openNoteEditor = () => {
     setDraft(item.note ?? '');
@@ -200,7 +220,7 @@ function RecordEntry({
         aria-hidden="true"
       />
 
-      <article className="group rounded-2xl border border-slate-200 bg-white px-4 py-3.5 transition-colors hover:border-slate-300">
+      <article className="group flex min-h-[176px] flex-col rounded-2xl border border-slate-200 bg-white px-4 py-3.5 transition-colors hover:border-slate-300">
         {/* 顶行：时刻 + 模态 + 等级；右侧操作（悬停显形，保持正文干净） */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -250,20 +270,74 @@ function RecordEntry({
           </div>
         </div>
 
-        {/* 正文：这条记录的主体。保留换行，字号比列表大一号。 */}
-        <p className="mt-2 whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-700">
-          {entryTitle(item)}
-        </p>
-        {entrySub(item) && (
-          <p className="mt-1 truncate font-mono text-[11.5px] text-slate-400">{entrySub(item)}</p>
-        )}
+        {/* 正文与媒体左右并排：媒体只占右侧，不撑高记录卡片 */}
+        <div className="mt-2 flex flex-wrap items-start gap-3">
+          <div className="min-w-[200px] flex-1">
+            <p className="whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-700">
+              {entryTitle(item)}
+            </p>
+            {entrySub(item) && (
+              <p className="mt-1 truncate font-mono text-[11.5px] text-slate-400">{entrySub(item)}</p>
+            )}
+            {analysis?.conclusion && (
+              <p className="mt-1.5 text-[13px] leading-6 text-slate-500">{analysis.conclusion}</p>
+            )}
+          </div>
+          {item.kind === 'image' && item.url && (
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              title="查看照片"
+              aria-label="查看这张照片"
+              className="block h-20 w-28 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-200 transition-colors hover:border-primary-300"
+            >
+              <img
+                src={assetUrl(item.url)}
+                alt={item.filename || '这条记录的照片'}
+                className="h-full w-full object-cover"
+              />
+            </button>
+          )}
+          {item.kind === 'audio' && item.url && (
+            <audio
+              controls
+              preload="metadata"
+              src={assetUrl(item.url)}
+              className="w-56 shrink-0 self-center"
+            >
+              当前浏览器不支持音频播放。
+            </audio>
+          )}
+        </div>
 
-        {analysis?.conclusion && (
-          <p className="mt-1.5 text-[13px] leading-6 text-slate-500">{analysis.conclusion}</p>
+        {/* 照片预览：浮层内查看，点背景、关闭按钮或 Esc 都能退出 */}
+        {previewOpen && item.url && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-label="查看照片"
+            onClick={() => setPreviewOpen(false)}
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(false)}
+              aria-label="关闭预览"
+              className="absolute right-5 top-5 cursor-pointer rounded-full bg-white/90 p-2 text-slate-600 shadow hover:bg-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <img
+              src={assetUrl(item.url)}
+              alt={item.filename || '这条记录的照片'}
+              onClick={(event) => event.stopPropagation()}
+              className="max-h-[70vh] max-w-[min(90vw,720px)] rounded-xl bg-white object-contain shadow-2xl"
+            />
+          </div>
         )}
 
         {/* 每条记录的操作行：拿这条去检索（常驻，是主操作）+ 展开系统依据 */}
-        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-2.5">
           <Link
             to={searchHref}
             title="带上这条记录的内容，去检索页重新比对并查看结论"

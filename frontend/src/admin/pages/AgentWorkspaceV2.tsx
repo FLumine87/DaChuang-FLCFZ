@@ -74,9 +74,6 @@ export default function AgentWorkspaceV2() {
   const dialogOrigin = useRef<HTMLElement | null>(null);
   const run = workspace?.latest_run;
   const caseDraft = detail?.assessment?.model_draft;
-  const caseFindings = caseDraft?.findings?.length
-    ? caseDraft.findings
-    : [...(caseDraft?.observations || []), ...(caseDraft?.risk_points || [])];
   /* 时间线合并量表筛查与多模态采集：只靠 detail.history 会漏掉文本/语音/图片。 */
   const caseTimeline = detail
     ? [
@@ -282,9 +279,10 @@ export default function AgentWorkspaceV2() {
             </div>
             {caseDraft ? <>
               <p>{caseDraft.summary}</p>
-              {caseDraft.basis && <p className="aw-ai-basis">依据：{caseDraft.basis}</p>}
               <div className="aw-ai-grid">
-                <AiList title="发现结论" items={caseFindings} />
+                <AiList title="观察" items={caseDraft.observations} />
+                <AiList title="多模态材料说明" items={caseDraft.multimodal_notes} empty="本次没有可用的多模态材料" />
+                <AiList title="需核对的风险点" items={caseDraft.risk_points} empty="未提出额外风险点" />
                 <AiList title="处置建议" items={caseDraft.recommendations} />
               </div>
               {!!caseDraft.evidence_refs.length && <div className="aw-refs">

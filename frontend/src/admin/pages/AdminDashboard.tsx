@@ -90,8 +90,9 @@ export default function AdminDashboard() {
     pending: alerts.filter((a) => a.status === "pending").length,
     processing: alerts.filter((a) => a.status === "processing").length,
     resolved: alerts.filter((a) => a.status === "resolved").length,
-    // 没有任何处理人的预警：唯一一个「需要立刻认领」的信号
-    unassigned: alerts.filter(isUnassigned).length,
+    // 只统计未结束的预警：已解决/已关闭不再需要认领，与「今日工作」口径保持一致
+    unassigned: alerts.filter((a) =>
+      (a.status === "pending" || a.status === "processing") && isUnassigned(a)).length,
     byAssignee: Object.entries(
       alerts.reduce<Record<string, number>>((acc, a) => {
         if (isUnassigned(a)) return acc;

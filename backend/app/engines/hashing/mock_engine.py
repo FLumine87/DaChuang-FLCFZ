@@ -31,7 +31,7 @@ class MockHashingEngine(HashingEngineInterface):
         },
         {
             "id": "RET-004",
-            "summary": "绘画测试分析：房树人测试显示自我认知偏低，社会支持感薄弱",
+            "summary": "绘画测试分析：画面内容显示自我认知偏低，社会支持感薄弱",
             "tags": ["自我认知", "社会支持"],
         },
         {

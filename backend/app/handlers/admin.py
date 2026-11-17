@@ -444,6 +444,9 @@ async def get_admin_work_queue(ctx: RequestContext):
     counts = await db.query_one_a(
         "SELECT COUNT(*) AS open, SUM(CASE WHEN assignee_id IS NULL THEN 1 ELSE 0 END) AS unassigned "
         "FROM alerts WHERE status IN ('pending','processing')")
+    today_counts = await db.query_one_a(
+        "SELECT COUNT(*) AS n FROM alerts WHERE status IN ('pending','processing') "
+        "AND assignee_id IS NULL AND date(created_at)=?", (today,))
     tasks = await agent_workspace.tasks_for("live")
     active = [t for t in tasks if t["state"] not in ("completed", "rejected")]
     overdue = [t for t in active if t["due_at"] < today]
@@ -452,6 +455,7 @@ async def get_admin_work_queue(ctx: RequestContext):
     return success_response(data={
         "date": today, "timezone": "Asia/Shanghai",
         "openAlerts": counts["open"] or 0, "unassignedAlerts": counts["unassigned"] or 0,
+        "todayUnassignedAlerts": today_counts["n"] or 0,
         "dueToday": len(due), "overdue": len(overdue),
         "pendingReview": sum(t["state"] == "proposed" for t in active),
         "tasks": [{**t, "caseId": case_codes.get(t["subject"])} for t in

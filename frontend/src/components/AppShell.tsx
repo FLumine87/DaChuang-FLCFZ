@@ -181,6 +181,21 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       icon: ClipboardList,
       group: isAdmin ? "工作空间" : "智能分析",
     },
+    /* 管理端的「案例管理」放**工作空间**分组，紧跟「筛查管理」。
+       它原先只在右上角下拉里，藏在二级菜单里不好找；用户要求挪回侧栏。
+       用户端的「我的档案」留在「健康管理」不动 —— 两者的定位不同：
+       管理端是"看所有案例"，用户端是"回看自己的筛查记录"。 */
+    ...(isAdmin
+      ? [
+          {
+            path: `${root}/cases`,
+            label: "案例管理",
+            description: "汇集案例资料，持续跟踪干预与恢复进展。",
+            icon: FolderOpen,
+            group: "工作空间",
+          },
+        ]
+      : []),
     ...(isAdmin
       ? [
           {
@@ -277,21 +292,6 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       icon: TriangleAlert,
       group: "健康管理",
     }] : []),
-    /* 管理端的「案例管理」放**工作空间**分组。
-       它原先只在右上角下拉里，藏在二级菜单里不好找；用户要求挪回侧栏。
-       用户端的「我的档案」留在「健康管理」不动 —— 两者的定位不同：
-       管理端是"看所有案例"，用户端是"回看自己的筛查记录"。 */
-    ...(isAdmin
-      ? [
-          {
-            path: `${root}/cases`,
-            label: "案例管理",
-            description: "汇集案例资料，持续跟踪干预与恢复进展。",
-            icon: FolderOpen,
-            group: "工作空间",
-          },
-        ]
-      : []),
     ...(!isAdmin ? [{
       path: '/personal/reviews', label: '我的复查任务', description: '查看工作人员发来的复查任务与完成状态。',
       icon: ClipboardList, group: '健康管理',

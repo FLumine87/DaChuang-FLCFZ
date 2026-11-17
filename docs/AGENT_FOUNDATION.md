@@ -13,7 +13,7 @@
 - 群体输入：窗口/院系范围、预警分布、趋势计数、院系聚合（人数 < 3 折叠为「其他」）、匿名主体（最多 60 条）。
 - 发送前移除姓名、电话、证件号、邮箱、案例编号、筛查编号与文件名；自由文本做手机号/证件号/邮箱/超长数字掩码。
 - 多模态只发送文本内容、描述与检索结论摘要，不发送原始音频/图片，也不据此推断情绪或心理状态。
-- 模型输出只做依据概述、发现结论与建议；不改变预警等级、不自动创建任务、不自动干预。
+- 模型输出只做摘要、风险点与建议；不改变预警等级、不自动创建任务、不自动干预。
 - 总开关：账号设置 → 智能研判模型（存库 `agent_model_settings`）；调用参数见 `AGENT_AI_TIMEOUT_SECONDS` / `AGENT_AI_MAX_SUBJECTS` / `AGENT_AI_MIN_DEPT_SIZE` / `AGENT_AI_MAX_MATERIALS`。
 - 状态：`generated` / `disabled` / `not_configured` / `unavailable`；任何失败都降级为规则结果，不影响研判主流程。
 - 审计：`agent_model_calls` 只记录 scope、主体引用、用途、状态、模型、耗时与错误类型，不保存 prompt/response 原文。

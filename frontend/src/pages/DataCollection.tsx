@@ -198,7 +198,7 @@ function AudioTab({ onReport, onInputChange }: CollectionInputProps) {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[360px]">
       {/* Recorder */}
       <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-4">实时录音</h3>
@@ -352,6 +352,7 @@ function ImageTab({ onReport, onInputChange }: CollectionInputProps) {
   const { revision, invalidate } = useCollectionRevision(onInputChange);
   const [images, setImages] = useState<ImageEntry[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedCount, setSubmittedCount] = useState(0);
   const [uploadError, setUploadError] = useState('');
   const [dragging, setDragging] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -450,12 +451,12 @@ function ImageTab({ onReport, onInputChange }: CollectionInputProps) {
 
   return (
     <>
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[360px]">
       {/* Drop zone */}
       <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-2">绘画 / 图像上传</h3>
         <p className="text-sm text-slate-500 mb-4">
-          可上传房树人绘画或情绪记录配图。图片仅用于辅助了解情绪表达，不能单独作为诊断依据。
+          可上传情绪记录配图。图片仅用于辅助了解情绪表达，不能单独作为诊断依据。
         </p>
         <input
           ref={fileRef}
@@ -466,109 +467,114 @@ function ImageTab({ onReport, onInputChange }: CollectionInputProps) {
           onChange={(e) => addFiles(e.target.files)}
         />
         <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setCameraOpen(true)}
+            className="flex h-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 px-4 py-8 text-center transition-colors hover:border-primary-400 hover:bg-primary-50/30 cursor-pointer"
+          >
+            <Camera className="w-8 h-8 text-slate-400" />
+            <p className="text-sm font-medium text-slate-700">拍照</p>
+            <p className="text-xs leading-5 text-slate-400">调用摄像头拍摄</p>
+          </button>
           <div
             onClick={() => fileRef.current?.click()}
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
-            className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center cursor-pointer transition-colors
+            className={`flex h-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center cursor-pointer transition-colors
               ${dragging ? 'border-primary-500 bg-primary-50' : 'border-slate-200 hover:border-primary-400 hover:bg-primary-50/30'}`}
           >
             <Upload className="w-8 h-8 text-slate-400" />
             <p className="text-sm font-medium text-slate-700">选择文件</p>
             <p className="text-xs leading-5 text-slate-400">拖拽或点击，支持 JPG、PNG、WEBP，最大 20MB</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setCameraOpen(true)}
-            className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary-300 bg-primary-50/50 px-4 py-8 text-center transition-colors hover:bg-primary-50 cursor-pointer"
-          >
-            <Camera className="w-8 h-8 text-primary-500" />
-            <p className="text-sm font-medium text-primary-700">拍照</p>
-            <p className="text-xs leading-5 text-primary-500/80">调用摄像头拍摄</p>
-          </button>
         </div>
         <div className="mt-3 space-y-1 text-xs leading-5 text-slate-500">
-          <p className="text-[12px]">房树人（HTP）：画一幅包含房子、树和人的图，拍照或扫描后上传；不需要画得好看。</p>
-          <p>情绪记录配图：上传能表达当天心情的照片或画，例如风景或涂鸦。</p>
+          <p>情绪记录配图：上传能表达当天心情的照片或画。</p>
         </div>
       </div>
 
-      {/* Preview */}
+      {/* Preview：送入哈希引擎后清空列表，只保留提交结果 */}
       <div className="ui-card p-5 flex flex-col gap-4">
-        <h3 className="font-semibold text-slate-800">已上传图像（{images.length}）</h3>
-
-        {images.length === 0 ? (
-          <div className="text-center py-12 text-slate-400 text-sm">上传后图像预览显示在这里</div>
+        {submitted ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+            <CheckCircle2 className="w-8 h-8 text-success-600" />
+            <p className="text-sm text-success-700">已提交 {submittedCount} 张图像，图像哈希编码完成</p>
+            <p className="text-xs text-slate-400">如需继续提交，重新拍照或选择文件即可。</p>
+          </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 overflow-y-auto max-h-72">
-            {images.map((img) => (
-              <div key={img.id} className="relative group rounded-lg overflow-hidden border border-slate-200">
-                <img src={img.url} alt={img.name} className="w-full h-28 object-cover" />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                  <button
-                    onClick={() => remove(img.id)}
-                    aria-label="移除这张图片"
-                    className="bg-white rounded-md p-1 cursor-pointer"
-                  >
-                    <X className="w-4 h-4 text-danger-500" />
-                  </button>
-                </div>
-                <p className="text-xs text-slate-500 truncate px-2 py-1 bg-white">{img.name}</p>
-              </div>
-            ))}
-          </div>
-        )}
+          <>
+            <h3 className="font-semibold text-slate-800">已上传图像（{images.length}）</h3>
 
-        {images.length > 0 && !submitted && (
-          <button
-            onClick={async () => {
-              const sequence = revision.current;
-              setUploadError('');
-              const failed: string[] = [];
-              for (const img of images) {
-                if (!img.file) continue;
-                try {
-                  const up = await uploadFile(img.file);
+            {images.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 text-sm">上传后图像预览显示在这里</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 overflow-y-auto max-h-72">
+                {images.map((img) => (
+                  <div key={img.id} className="relative group rounded-lg overflow-hidden border border-slate-200">
+                    <img src={img.url} alt={img.name} className="w-full h-28 object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                      <button
+                        onClick={() => remove(img.id)}
+                        aria-label="移除这张图片"
+                        className="bg-white rounded-md p-1 cursor-pointer"
+                      >
+                        <X className="w-4 h-4 text-danger-500" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500 truncate px-2 py-1 bg-white">{img.name}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {images.length > 0 && (
+              <button
+                onClick={async () => {
+                  const sequence = revision.current;
+                  setUploadError('');
+                  const failed: string[] = [];
+                  for (const img of images) {
+                    if (!img.file) continue;
+                    try {
+                      const up = await uploadFile(img.file);
+                      if (sequence !== revision.current) return;
+                      const res = await persistCollection('image', { filename: up.filename, url: up.url, description: up.analysis });
+                      if (sequence !== revision.current) return;
+                      if (!res.ok) throw new Error('本次采集保存失败，请重试');
+                      if (res.report) onReport(res.report);
+                    } catch (e) {
+                      console.error('上传图像失败', e);
+                      failed.push(img.name);
+                    }
+                  }
+                  // 同上：只有真正全部成功才报成功，避免"哈希编码完成"的误报
                   if (sequence !== revision.current) return;
-                  const res = await persistCollection('image', { filename: up.filename, url: up.url, description: up.analysis });
-                  if (sequence !== revision.current) return;
-                  if (!res.ok) throw new Error('本次采集保存失败，请重试');
-                  if (res.report) onReport(res.report);
-                } catch (e) {
-                  console.error('上传图像失败', e);
-                  failed.push(img.name);
-                }
-              }
-              // 同上：只有真正全部成功才报成功，避免"哈希编码完成"的误报
-              if (sequence !== revision.current) return;
-              if (failed.length) {
-                setUploadError(`${failed.length} 张图像未能上传：${failed.join('、')}`);
-              } else {
-                setSubmitted(true);
-              }
-            }}
-            className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4" /> 送入动态哈希引擎
-          </button>
-        )}
-        {submitted && (
-          <div className="flex items-center gap-2 py-2.5 px-4 bg-success-50 rounded-lg border border-success-500/30">
-            <CheckCircle2 className="w-4 h-4 text-success-600" />
-            <p className="text-sm text-success-700">已提交 {images.length} 张图像，图像哈希编码完成</p>
-          </div>
-        )}
-        {uploadError && (
-          <div className="flex items-start gap-2 py-2.5 px-4 bg-danger-50 rounded-lg border border-danger-500/30">
-            <AlertCircle className="w-4 h-4 text-danger-600 mt-0.5 shrink-0" />
-            <p className="text-sm text-danger-700">
-              {uploadError}
-              <span className="text-danger-600/80">
-                （本部署的文件上传后端尚未启用，返回 503；数据未送入哈希引擎）
-              </span>
-            </p>
-          </div>
+                  if (failed.length) {
+                    setUploadError(`${failed.length} 张图像未能上传：${failed.join('、')}`);
+                  } else {
+                    setSubmittedCount(images.length);
+                    setImages([]);
+                    setSubmitted(true);
+                  }
+                }}
+                className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" /> 送入动态哈希引擎
+              </button>
+            )}
+            {uploadError && (
+              <div className="flex items-start gap-2 py-2.5 px-4 bg-danger-50 rounded-lg border border-danger-500/30">
+                <AlertCircle className="w-4 h-4 text-danger-600 mt-0.5 shrink-0" />
+                <p className="text-sm text-danger-700">
+                  {uploadError}
+                  <span className="text-danger-600/80">
+                    （本部署的文件上传后端尚未启用，返回 503；数据未送入哈希引擎）
+                  </span>
+                </p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -666,7 +672,7 @@ function TextTab({ onReport, onInputChange }: CollectionInputProps) {
 
   return (
     /* 纯文本采集：量表入口已经独立成「量表填写」标签页，这里只留文字记录本身 */
-    <div className="ui-card p-5">
+    <div className="ui-card p-5 min-h-[360px] flex flex-col">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="font-semibold text-slate-800">文本采集</h3>
@@ -687,9 +693,9 @@ function TextTab({ onReport, onInputChange }: CollectionInputProps) {
           setError('');
         }}
         placeholder="今天感觉……最近睡眠……人际上……"
-        className="mt-4 w-full h-32 p-3 border border-slate-200 rounded-lg text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        className="mt-4 w-full flex-1 min-h-32 p-3 border border-slate-200 rounded-lg text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
       />
-      <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mt-auto pt-3">
         <p className="text-xs leading-5 text-slate-500">
           这段文字会保存到你的档案，仅用于自我回顾与检索分析。
         </p>

@@ -31,6 +31,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        /* 上传的语音/图片由后端 /uploads 静态路由提供，开发环境同样需要代理 */
+        '/uploads': {
+          target: proxyTarget,
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
   }

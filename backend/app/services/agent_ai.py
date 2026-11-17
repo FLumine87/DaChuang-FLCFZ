@@ -43,17 +43,10 @@ SYSTEM_INDIVIDUAL = (
     "你是学校心理筛查辅助分析助手。只依据输入的问卷历史与多模态材料摘要做归纳。"
     "不得诊断疾病、不得判断病情严重程度、不得建议用药或治疗，不得更改已有预警等级，"
     "不得编造未提供的细节。多模态材料只作为补充线索，不能根据图片或语音推断情绪或心理状态。"
-    "写作要求：结论优先。summary 用 2-3 句给出整体判断与风险结论，不要罗列具体分数、次数或日期；"
-    "basis 只用一句话说明参考了哪些量表与材料类型（如“3 次 PHQ-9、1 次 PSS-10、8 条文本补充”），"
-    "不要出现 S1/M1 等编号、相似度或检索命中细节；"
-    "findings 写 3-5 条总结性结论：说明当前状态、变化趋势、主要影响和需要关注的风险；"
-    "findings 中不得出现具体分数、次数、日期、得分区间或材料编号，这些只放在 basis；"
-    "每条用判断句（如“抑郁相关症状持续存在，暂未见缓解”），不要写成数据复述；"
-    "recommendations 写 2-4 条可执行建议。"
     "只输出 JSON，格式为："
-    '{"summary":"结论摘要","basis":"参考依据概述","findings":["发现结论"],'
-    '"recommendations":["处置建议"],"evidence_refs":["S1","M1"]}。'
-    "引用必须是输入中真实存在的编号。"
+    '{"summary":"摘要","observations":["观察"],"multimodal_notes":["材料说明"],'
+    '"risk_points":["需核对的风险点"],"recommendations":["处置建议"],'
+    '"evidence_refs":["S1","M1"]}。引用必须是输入中真实存在的编号。'
 )
 
 SYSTEM_GROUP = (
@@ -304,44 +297,22 @@ def _validate_individual(data, allowed_refs) -> dict:
     summary = _text(data.get("summary"), 300)
     if not summary:
         raise ValueError("missing summary")
-    basis = _text(data.get("basis"), 160)
-    findings = _string_list(data.get("findings"), 1, 5, 100)
+    observations = _string_list(data.get("observations"), 1, 4, 100)
     recommendations = _string_list(data.get("recommendations"), 1, 4, 100)
-    if not findings or not recommendations:
-        raise ValueError("missing findings or recommendations")
+    if not observations or not recommendations:
+        raise ValueError("missing observations or recommendations")
     refs = []
     for item in data.get("evidence_refs") or []:
         if isinstance(item, str) and item in allowed_refs and item not in refs:
             refs.append(item)
     return {
         "summary": summary,
-        "basis": basis,
-        "findings": findings,
+        "observations": observations,
+        "multimodal_notes": _string_list(data.get("multimodal_notes"), 0, 4, 100),
+        "risk_points": _string_list(data.get("risk_points"), 0, 4, 100),
         "recommendations": recommendations,
         "evidence_refs": refs[:6],
     }
-
-
-def _basis_text(payload: dict) -> str:
-    """模型没给依据概述时的兜底：只说明用了哪些量表与材料，不展开细节。"""
-    parts = []
-    if payload.get("screenings"):
-        parts.append(f"{len(payload['screenings'])} 次量表筛查")
-    coverage = payload.get("coverage") or {}
-    for kind, label in (("text", "文本补充"), ("audio", "语音片段"), ("image", "图片")):
-        count = int(coverage.get(kind) or 0)
-        if count:
-            parts.append(f"{count} 条{label}")
-    return "、".join(parts) or "本次没有可用材料"
-
-
-def _strip_ref_codes(text: str) -> str:
-    """去掉依据概述里的 S1/M1 编号，只保留“用了什么”。"""
-    text = re.sub(r"[（(]\s*[SM]\d+(?:\s*[、,，\-–~至]\s*[SM]?\d+)*\s*[）)]", "", text)
-    text = re.sub(r"\b[SM]\d+\b", "", text)
-    text = re.sub(r"[（(]\s*[）)]", "", text)
-    text = re.sub(r"\s{2,}", " ", text)
-    return text.strip(" ，,；;、")
 
 
 def _validate_group(data) -> dict:
@@ -406,10 +377,6 @@ async def individual_analysis(scope: str, case: dict) -> dict:
              {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
             max_tokens=900, timeout=settings.AGENT_AI_TIMEOUT_SECONDS)
         draft = _validate_individual(data, allowed)
-        if not draft["basis"]:
-            draft["basis"] = _basis_text(payload)
-        else:
-            draft["basis"] = _strip_ref_codes(draft["basis"])
         latency = int((time.monotonic() - started) * 1000)
         await _audit(scope, payload["subject_ref"], "individual", "generated", latency, "")
         return _result("generated", "draft", draft, started)

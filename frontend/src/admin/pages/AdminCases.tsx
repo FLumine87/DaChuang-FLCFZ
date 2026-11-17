@@ -532,19 +532,10 @@ export default function AdminCases() {
                     {aiCase.assessment.model_draft ? (
                       <>
                         <p className="mt-3 text-sm leading-6 text-slate-700">{aiCase.assessment.model_draft.summary}</p>
-                        {aiCase.assessment.model_draft.basis && (
-                          <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-                            依据：{aiCase.assessment.model_draft.basis}
-                          </p>
-                        )}
                         <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                          <AiList
-                            title="发现结论"
-                            items={aiCase.assessment.model_draft.findings?.length
-                              ? aiCase.assessment.model_draft.findings
-                              : [...(aiCase.assessment.model_draft.observations || []),
-                                 ...(aiCase.assessment.model_draft.risk_points || [])]}
-                          />
+                          <AiList title="观察" items={aiCase.assessment.model_draft.observations} />
+                          <AiList title="多模态材料说明" items={aiCase.assessment.model_draft.multimodal_notes} />
+                          <AiList title="需核对的风险点" items={aiCase.assessment.model_draft.risk_points} />
                           <AiList title="处置建议" items={aiCase.assessment.model_draft.recommendations} />
                         </div>
                         {!!aiCase.assessment.model_draft.evidence_refs.length && (
