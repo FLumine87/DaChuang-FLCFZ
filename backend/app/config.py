@@ -109,6 +109,12 @@ class Settings:
     # → 图像要用弱监督桥接另建通道，而不是在共享码空间里「摘出去」。
     # 置为 ("text","audio") 仅供对照实验，须同时把图像查询路由到独立图像库。
     HASHING_TRAIN_MODALITIES: tuple = ("text", "image", "audio")
+    # 同源对（同一记录的两个模态视图，如 EATD 的 文↔音、AVDD-TCMI 的 音↔图）
+    # 在监督矩阵里的强度。异源对用 HASHING_LAMBDA_S 的弱监督（主题 Jaccard）。
+    # 实测（4646 条记录，同一批 85 条查询）：
+    #   仅通道化            音搜文 0.5136
+    #   通道化 + 分组监督   音搜文 0.5332（+2.0）
+    HASHING_LAMBDA_STRONG: float = 1.0
     # 主引擎的图像特征来源："hand" = 192 维手工描述子（强度分块 ⊕ HOG）；
     # "cnn" = 微调 MobileNetV2 的 1280 维表情特征（models/mobilenetv2-fer.onnx）。
     # 两者有真实权衡（实测同语料 653 查询）：
