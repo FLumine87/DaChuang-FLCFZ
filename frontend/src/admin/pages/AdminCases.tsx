@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronRight, Search, X } from 'lucide-react';
+import { ChevronRight, Loader2, Search, Sparkles, X } from 'lucide-react';
 /* 走 adminApi 的分页接口：后端 /api/admin/cases 返回的是 { items, total, page, pageSize }
    信封，不是裸数组。以前这里用 mockApi.getAdminCases()，它把这个对象直接当数组返回，
    页面再 .filter() 就抛 "caseRecords.filter is not a function"，整页白屏。 */
@@ -8,6 +8,7 @@ import {
   type AdminCaseDetail, type Page,
 } from '../../services/adminApi';
 import type { CaseRecord } from '../data/adminMockData';
+import { analyseCase, loadCase, type CaseDetail as AgentCaseDetail } from '../../services/workspaceApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import AdminStatusBadge from '../components/AdminStatusBadge';
 import UnsavedChangesDialog from '../../components/UnsavedChangesDialog';
@@ -36,6 +37,33 @@ function pageList(current: number, total: number): number[] {
   return Array.from({ length: 5 }, (_, i) => start + i);
 }
 
+const AI_STATUS_LABEL: Record<string, string> = {
+  generated: 'AI 已生成', disabled: '模型未开启', not_configured: '未配置密钥',
+  unavailable: 'AI 暂不可用', live_rules: '仅规则',
+};
+
+function AiStatusBadge({ status }: { status?: string }) {
+  const key = status || 'unavailable';
+  const tone = key === 'generated'
+    ? 'bg-emerald-50 text-emerald-700'
+    : key === 'unavailable'
+      ? 'bg-amber-50 text-amber-700'
+      : 'bg-slate-100 text-slate-500';
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] ${tone}`}>{AI_STATUS_LABEL[key] || 'AI 暂不可用'}</span>;
+}
+
+function AiList({ title, items }: { title: string; items?: string[] }) {
+  if (!items?.length) return null;
+  return (
+    <div>
+      <h4 className="text-xs font-medium text-slate-500">{title}</h4>
+      <ul className="mt-1 list-disc space-y-1 pl-4 text-sm leading-6 text-slate-700">
+        {items.map((item, index) => <li key={index}>{item}</li>)}
+      </ul>
+    </div>
+  );
+}
+
 export default function AdminCases() {
   /* ── 列表 ─────────────────────────────────────────────────────────── */
   const [keyword, setKeyword] = useState('');
@@ -56,6 +84,10 @@ export default function AdminCases() {
   const [drawerClosing, setDrawerClosing] = useState(false);
   const [screeningPage, setScreeningPage] = useState(1);
   const [viewing, setViewing] = useState<AdminCaseDetail['screenings'][number] | null>(null);
+  /* ── AI 个案分析（与「预警研判与处置」共用同一套后端研判） ─────────── */
+  const [aiCase, setAiCase] = useState<AgentCaseDetail | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState('');
 
   /* ── 维护 / 跟进 ──────────────────────────────────────────────────── */
   const [editStatus, setEditStatus] = useState<CaseRecord['status']>('active');
@@ -79,6 +111,9 @@ export default function AdminCases() {
   );
   const unsaved = dirty || eventDirty;
   const canSaveBeforeLeave = !eventDirty || Boolean(eventTitle.trim() && eventDescription.trim());
+  /** 案例在 Agent 工作台里的主体标识；后端也接受直接用 case_id 查询 */
+  const aiSubject = detail?.agentSubject || detail?.id || '';
+  const canRunAi = Boolean(aiSubject) && (detail?.screenings.length ?? 0) > 0;
 
   useEffect(() => {
     let active = true;
@@ -102,6 +137,16 @@ export default function AdminCases() {
     }).finally(() => { if (active) setDetailLoading(false); });
     return () => { active = false; };
   }, [openId, reload]);
+
+  /* 打开案例时取最近一次 AI 研判；没做过或该案例没有已完成筛查时保持空态。 */
+  useEffect(() => {
+    if (!aiSubject) { setAiCase(null); return; }
+    let active = true;
+    loadCase('live', aiSubject)
+      .then((item) => { if (active) setAiCase(item); })
+      .catch(() => { if (active) setAiCase(null); });
+    return () => { active = false; };
+  }, [aiSubject]);
 
   /* 抽屉打开时锁住页面滚动，Esc 逐层关闭（先关弹窗，再关抽屉） */
   useEffect(() => {
@@ -127,6 +172,21 @@ export default function AdminCases() {
     setTab('screening'); setScreeningPage(1); setViewing(null); setDrawerClosing(false);
     setEditStatus('active'); setNotes(''); setActionError(''); setNotice('');
     setEventTitle(''); setEventDescription('');
+    setAiError('');
+  }
+
+  async function runAi() {
+    if (!canRunAi || aiBusy) return;
+    setAiBusy(true);
+    setAiError('');
+    try {
+      const result = await analyseCase('live', aiSubject);
+      setAiCase(result);
+    } catch (reason) {
+      setAiError(reason instanceof Error ? reason.message : 'AI 分析失败，请稍后重试');
+    } finally {
+      setAiBusy(false);
+    }
   }
 
   function openCase(id: string) {
@@ -429,6 +489,84 @@ export default function AdminCases() {
                 {detail.userId == null && (
                   <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
                     该案例尚未关联账号。为避免同名记录混入，历史筛查与预警暂不自动汇总。
+                  </p>
+                )}
+              </section>
+
+              {/* AI 个案分析：与「预警研判与处置」共用同一套后端研判与模型开关 */}
+              <section className="mt-4 rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <Sparkles className="h-4 w-4 text-primary-600" /> AI 个案分析
+                    </h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">
+                      基于问卷历史与多模态材料摘要生成，仅供人工复核参考；运行后会保存研判，并可能生成待审核任务草案。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void runAi()}
+                    disabled={aiBusy || !canRunAi}
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary-500 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                    {aiBusy ? '正在分析…' : aiCase?.assessment ? '重新运行' : '运行 AI 分析'}
+                  </button>
+                </div>
+
+                {aiError && (
+                  <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{aiError}</p>
+                )}
+
+                {aiCase?.assessment ? (
+                  <div className="mt-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AiStatusBadge status={aiCase.assessment.model_status} />
+                      {aiCase.assessment.ai_model && (
+                        <span className="text-[11.5px] text-slate-400">
+                          {aiCase.assessment.ai_model} · {aiCase.assessment.ai_latency_ms ?? 0}ms
+                        </span>
+                      )}
+                    </div>
+                    {aiCase.assessment.model_draft ? (
+                      <>
+                        <p className="mt-3 text-sm leading-6 text-slate-700">{aiCase.assessment.model_draft.summary}</p>
+                        {aiCase.assessment.model_draft.basis && (
+                          <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+                            依据：{aiCase.assessment.model_draft.basis}
+                          </p>
+                        )}
+                        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                          <AiList
+                            title="发现结论"
+                            items={aiCase.assessment.model_draft.findings?.length
+                              ? aiCase.assessment.model_draft.findings
+                              : [...(aiCase.assessment.model_draft.observations || []),
+                                 ...(aiCase.assessment.model_draft.risk_points || [])]}
+                          />
+                          <AiList title="处置建议" items={aiCase.assessment.model_draft.recommendations} />
+                        </div>
+                        {!!aiCase.assessment.model_draft.evidence_refs.length && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {aiCase.assessment.model_draft.evidence_refs.map((ref) => (
+                              <span key={ref} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-500">{ref}</span>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="mt-3 text-sm leading-6 text-slate-600">{aiCase.assessment.summary}</p>
+                    )}
+                    <p className="mt-3 text-[11.5px] text-slate-400">
+                      保存于 {aiCase.assessment.created_at} · 不构成诊断，处置由工作人员决定
+                    </p>
+                  </div>
+                ) : (
+                  !aiBusy && <p className="mt-3 text-xs text-slate-400">
+                    {detail.screenings.length
+                      ? '尚未运行。点击右上角按钮生成 AI 分析。'
+                      : '该案例暂无已完成筛查，无法运行 AI 分析。'}
                   </p>
                 )}
               </section>

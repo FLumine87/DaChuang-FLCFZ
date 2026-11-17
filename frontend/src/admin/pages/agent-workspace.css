@@ -472,6 +472,8 @@
 .aw-history { display: flex; gap: 22px; margin: 20px 0 30px; padding-bottom: 14px; overflow: auto; }
 .aw-history > div { display: flex; gap: 8px; min-width: 160px; }
 .aw-history-dot { width: 8px; height: 8px; background: var(--color-primary-400); border-radius: 50%; margin-top: 9px; }
+.aw-history-dot.material { background: var(--color-warning-500); }
+.aw-history-dot.material + div strong { font-size: 13px; }
 .aw-history strong { font-size: 22px; }
 .aw-history p,
 .aw-history small { font-size: 11px; color: var(--muted); }

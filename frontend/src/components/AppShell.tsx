@@ -29,6 +29,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { getCurrentSession, logout } from "../auth/session";
+import { getMyAccount } from "../services/mockApi";
 import Aurora from "./Aurora";
 import BrandLogo from "./BrandLogo";
 import BackToTop from './BackToTop';
@@ -130,6 +131,24 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   const menuRect = useAnchorRect(profileOpen, profileRef);
   const searchRect = useAnchorRect(searchOpen, searchContainerRef);
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
+  const [avatar, setAvatar] = useState("");
+  /* 头像只在设置页修改；这里取一次并监听设置页发出的更新事件，
+     避免每次切换页面都重新请求账号信息。 */
+  useEffect(() => {
+    let alive = true;
+    getMyAccount()
+      .then((acc) => { if (alive) setAvatar(acc?.avatar || ""); })
+      .catch(() => {});
+    const onAvatar = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      setAvatar(typeof detail === "string" ? detail : "");
+    };
+    window.addEventListener("account-avatar-updated", onAvatar);
+    return () => {
+      alive = false;
+      window.removeEventListener("account-avatar-updated", onAvatar);
+    };
+  }, []);
   const isDark = theme === "dark";
   const isAdmin = mode === "admin";
   const username =
@@ -651,8 +670,12 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                 aria-expanded={profileOpen}
                 className="flex items-center gap-2.5 rounded-xl py-1 pl-1 pr-1.5 transition-colors duration-200 hover:bg-white/70 sm:pr-2.5"
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-sm font-semibold text-primary-600">
-                  {username.slice(0, 1).toUpperCase()}
+                <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-primary-50 text-sm font-semibold text-primary-600">
+                  {avatar ? (
+                    <img src={avatar} alt="头像" className="h-full w-full object-cover" />
+                  ) : (
+                    username.slice(0, 1).toUpperCase()
+                  )}
                 </span>
                 <span className="hidden text-left sm:block">
                   <span className="block max-w-28 truncate text-sm font-medium text-slate-700">

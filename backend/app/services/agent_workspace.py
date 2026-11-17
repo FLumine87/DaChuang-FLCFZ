@@ -302,6 +302,7 @@ async def case_detail(scope, subject):
                 "source": "个人端已保存采集",
                 "text": item.get("text") or item.get("description") or "已登记文件；原文件未在此展示",
                 "url": item.get("url") or None,
+                "createdAt": str(item.get("created_at") or ""),
                 "analysis": _analysis_summary(item.get("analysis")),
             })
     return {**row, "tasks": [t for t in await tasks_for(scope) if t["subject"] == row["subject"]],

@@ -76,6 +76,7 @@ export interface CaseDetail extends Subject {
   tasks: Task[];
   materials: {
     kind: string; title: string; source: string; text?: string; url?: string;
+    createdAt?: string;
     analysis?: { level?: string; levelLabel?: string; conclusion?: string; reason?: string; hit_count?: number } | null;
   }[];
 }

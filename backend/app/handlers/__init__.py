@@ -64,6 +64,7 @@ ROUTES = [
     # auth 用 "user" 级别 = 任何已登录角色，管理端也能用同一套接口。
     ("GET", "/api/account", personal.get_my_account, "user"),
     ("PUT", "/api/account", personal.update_my_account, "user"),
+    ("PUT", "/api/account/avatar", personal.update_my_avatar, "user"),
     ("POST", "/api/account/password", personal.change_my_password, "user"),
 
     # 心理日记：每条记录的便签（写 / 改 / 清空）与删除记录本身

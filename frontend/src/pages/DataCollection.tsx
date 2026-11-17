@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  FileText, Mic, ImageIcon, Upload, Sparkles,
+  FileText, Mic, ImageIcon, Upload, Sparkles, Camera,
   Square, Play, Pause, Trash2, CheckCircle2, AlertCircle, X,
   ClipboardList, Search, ArrowRight,
 } from 'lucide-react';
@@ -354,22 +354,93 @@ function ImageTab({ onReport, onInputChange }: CollectionInputProps) {
   const [submitted, setSubmitted] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
-  const addFiles = useCallback((files: FileList | null) => {
-    if (!files?.length) return;
+  const addFiles = useCallback((files: FileList | File[] | null) => {
+    if (!files) return;
+    const list = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    if (!list.length) return;
     invalidate();
     setSubmitted(false);
-    Array.from(files).forEach((file) => {
-      if (!file.type.startsWith('image/')) return;
-      const url = URL.createObjectURL(file);
-      setImages((prev) => [
-        ...prev,
-        { id: Date.now().toString() + Math.random(), name: file.name, url, size: formatBytes(file.size), file },
-      ]);
-    });
-    setSubmitted(false);
+    setImages((prev) => [
+      ...prev,
+      ...list.map((file) => ({
+        id: Date.now().toString() + Math.random(),
+        name: file.name,
+        url: URL.createObjectURL(file),
+        size: formatBytes(file.size),
+        file,
+      })),
+    ]);
   }, [invalidate]);
+
+  useEffect(() => {
+    if (!cameraOpen) return;
+    let cancelled = false;
+    setCameraError('');
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('当前浏览器不支持直接拍照，请改用选择文件。');
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      // 桌面端没有后置摄像头时，回退到任意可用摄像头。
+      .catch(() => navigator.mediaDevices.getUserMedia({ video: true, audio: false }))
+      .then((stream) => {
+        if (cancelled || !videoRef.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        streamRef.current = stream;
+        videoRef.current.srcObject = stream;
+        void videoRef.current.play();
+      })
+      .catch(() => {
+        if (!cancelled) setCameraError('无法访问摄像头（授权被拒绝或没有可用设备），可改用选择文件。');
+      });
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    };
+  }, [cameraOpen]);
+
+  useEffect(() => {
+    if (!cameraOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCameraOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [cameraOpen]);
+
+  const capturePhoto = async () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) {
+      setCameraError('摄像头尚未就绪，请稍候再试。');
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+    if (!blob) {
+      setCameraError('拍照失败，请重试。');
+      return;
+    }
+    const now = new Date();
+    const pad = (value: number) => String(value).padStart(2, '0');
+    const name = `photo-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-`
+      + `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.jpg`;
+    addFiles([new File([blob], name, { type: 'image/jpeg' })]);
+    setCameraOpen(false);
+  };
 
   const remove = (id: string) => {
     invalidate();
@@ -378,6 +449,7 @@ function ImageTab({ onReport, onInputChange }: CollectionInputProps) {
   };
 
   return (
+    <>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Drop zone */}
       <div className="ui-card p-5">
@@ -385,18 +457,6 @@ function ImageTab({ onReport, onInputChange }: CollectionInputProps) {
         <p className="text-sm text-slate-500 mb-4">
           可上传房树人绘画或情绪记录配图。图片仅用于辅助了解情绪表达，不能单独作为诊断依据。
         </p>
-        <div
-          onClick={() => fileRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
-          className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
-            ${dragging ? 'border-primary-500 bg-primary-50' : 'border-slate-200 hover:border-primary-400 hover:bg-primary-50/30'}`}
-        >
-          <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-slate-600">拖拽图片到此处，或点击选择文件</p>
-          <p className="text-xs text-slate-400 mt-1">支持 JPG、PNG、WEBP，最大 20MB</p>
-        </div>
         <input
           ref={fileRef}
           type="file"
@@ -405,6 +465,29 @@ function ImageTab({ onReport, onInputChange }: CollectionInputProps) {
           className="hidden"
           onChange={(e) => addFiles(e.target.files)}
         />
+        <div className="grid grid-cols-2 gap-3">
+          <div
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
+            className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center cursor-pointer transition-colors
+              ${dragging ? 'border-primary-500 bg-primary-50' : 'border-slate-200 hover:border-primary-400 hover:bg-primary-50/30'}`}
+          >
+            <Upload className="w-8 h-8 text-slate-400" />
+            <p className="text-sm font-medium text-slate-700">选择文件</p>
+            <p className="text-xs leading-5 text-slate-400">拖拽或点击，支持 JPG、PNG、WEBP，最大 20MB</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCameraOpen(true)}
+            className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary-300 bg-primary-50/50 px-4 py-8 text-center transition-colors hover:bg-primary-50 cursor-pointer"
+          >
+            <Camera className="w-8 h-8 text-primary-500" />
+            <p className="text-sm font-medium text-primary-700">拍照</p>
+            <p className="text-xs leading-5 text-primary-500/80">调用摄像头拍摄</p>
+          </button>
+        </div>
         <div className="mt-3 space-y-1 text-xs leading-5 text-slate-500">
           <p className="text-[12px]">房树人（HTP）：画一幅包含房子、树和人的图，拍照或扫描后上传；不需要画得好看。</p>
           <p>情绪记录配图：上传能表达当天心情的照片或画，例如风景或涂鸦。</p>
@@ -489,6 +572,55 @@ function ImageTab({ onReport, onInputChange }: CollectionInputProps) {
         )}
       </div>
     </div>
+
+    {cameraOpen && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-label="拍照采集"
+      >
+        <div className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-xl">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-semibold text-slate-800">拍照</h3>
+            <button
+              type="button"
+              onClick={() => setCameraOpen(false)}
+              aria-label="关闭拍照"
+              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-black">
+            <video ref={videoRef} playsInline muted className="h-full w-full object-contain" />
+            {cameraError && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60 p-4 text-center text-sm leading-6 text-white">
+                {cameraError}
+              </div>
+            )}
+          </div>
+          <div className="mt-4 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setCameraOpen(false)}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={() => void capturePhoto()}
+              disabled={Boolean(cameraError)}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
+            >
+              <Camera className="h-4 w-4" /> 拍摄
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 

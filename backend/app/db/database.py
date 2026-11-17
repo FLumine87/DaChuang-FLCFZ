@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
     department    TEXT,
     phone         TEXT,
     email         TEXT,
+    avatar        TEXT,
     is_active     INTEGER DEFAULT 1,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -341,6 +342,10 @@ def init_db_sync() -> None:
             columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
             if "user_id" not in columns:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN user_id INTEGER")
+        # 头像：存储 256×256 JPEG 的 data URL，纯新增列，ALTER 即可
+        user_columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+        if "avatar" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_screenings_user_id ON screenings(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_cases_user_id ON cases(user_id)")
         # Agent 知识图谱迁移层（对应 worker/seed/002）：早期本地库缺这两列，

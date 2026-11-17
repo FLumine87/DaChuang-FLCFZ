@@ -77,6 +77,34 @@ export default function AgentWorkspaceV2() {
   const caseFindings = caseDraft?.findings?.length
     ? caseDraft.findings
     : [...(caseDraft?.observations || []), ...(caseDraft?.risk_points || [])];
+  /* 时间线合并量表筛查与多模态采集：只靠 detail.history 会漏掉文本/语音/图片。 */
+  const caseTimeline = detail
+    ? [
+        ...detail.history.map((item) => ({
+          key: `screening-${item.id}`,
+          sort: item.date || '',
+          kind: 'screening' as const,
+          score: item.score,
+          maxScore: item.max_score,
+          title: item.questionnaire,
+          content: '',
+          at: item.date,
+        })),
+        ...(detail.materials || []).map((item, index) => {
+          const content = item.text || item.analysis?.conclusion || '已采集';
+          return {
+            key: `material-${index}`,
+            sort: item.createdAt || '',
+            kind: 'material' as const,
+            score: 0,
+            maxScore: 0,
+            title: item.title,
+            content: content.length > 60 ? `${content.slice(0, 60)}…` : content,
+            at: item.createdAt || '',
+          };
+        }),
+      ].sort((a, b) => b.sort.localeCompare(a.sort))
+    : [];
 
   useEffect(() => {
     if (!detailOpen || editing) return;
@@ -243,7 +271,7 @@ export default function AgentWorkspaceV2() {
         <div className="aw-case-lead"><ShieldCheck size={24} /><div><h3>建议由授权工作人员复核</h3><p>{detail.reasons.join('；')}。该结论沿用已记录预警等级。</p></div></div>
         {detail.assessmentState?.status === 'outdated' && <p role="status" className="aw-error">这份研判后新增 {detail.assessmentState.newRecords} 条、修改 {detail.assessmentState.changedRecords} 条、移除 {detail.assessmentState.removedRecords || 0} 条材料，原记录已保留，请重新运行个案研判。</p>}
         {detail.assessmentState?.status === 'unknown' && <p className="aw-footnote">旧研判没有材料快照，请重新运行后确认资料范围。</p>}
-        <h3>筛查时间线</h3><div className="aw-history">{detail.history.map(h => <div key={h.id}><span className="aw-history-dot" /><div><strong>{h.score} <small>/ {h.max_score}</small></strong><p>{h.questionnaire}</p><small>{date(h.date)}</small></div></div>)}</div>
+        <h3>记录时间线</h3><div className="aw-history">{caseTimeline.map(item => <div key={item.key}><span className={`aw-history-dot${item.kind === 'material' ? ' material' : ''}`} /><div><strong>{item.kind === 'screening' ? <>{item.score} <small>/ {item.maxScore}</small></> : item.title}</strong><p>{item.kind === 'screening' ? item.title : item.content}</p><small>{item.at ? date(item.at) : '时间未记录'}</small></div></div>)}</div>
         <section className="aw-individual"><button className="aw-primary" disabled={caseBusy} onClick={runIndividual}>{caseBusy ? <Loader2 className="aw-spin" size={16} /> : <Play size={16} />}{caseBusy ? '正在研判…' : '运行个案研判'}</button>
           {caseRunError && <p role="alert" className="aw-error">{caseRunError}</p>}
           {detail.assessment && <div><h3>个案研判记录</h3><p>{detail.assessment.summary}</p><p>{detail.assessment.recommendation}</p><small>规则依据 · 保存于 {date(detail.assessment.created_at)}</small><details><summary>工具执行与证据边界</summary>{detail.assessment.trace.map(step => <p key={step.tool}>{step.summary} <code>{step.tool}</code></p>)}{detail.assessment.limits.map(limit => <p key={limit}>{limit}</p>)}</details></div>}

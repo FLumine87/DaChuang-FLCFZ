@@ -1343,14 +1343,20 @@ def _account_dict(u: dict) -> dict:
         "department": u.get("department") or "",
         "phone": u.get("phone") or "",
         "email": u.get("email") or "",
+        "avatar": u.get("avatar") or "",
     }
+
+
+_ACCOUNT_COLUMNS = "id, username, name, role, department, phone, email, avatar"
+# 头像以 data URL 存 users.avatar：256×256 JPEG 约 15–40KB，
+# 前端已先压缩，这里只做上限保护，避免异常大字符串写进库。
+_MAX_AVATAR_CHARS = 300_000
 
 
 async def get_my_account(ctx: RequestContext):
     user_id = int(ctx.user["sub"])
     u = await db.query_one_a(
-        "SELECT id, username, name, role, department, phone, email FROM users WHERE id = ?",
-        (user_id,))
+        f"SELECT {_ACCOUNT_COLUMNS} FROM users WHERE id = ?", (user_id,))
     if not u:
         raise HttpError(404, "账号不存在")
     return success_response(data={"account": _account_dict(u)})
@@ -1384,8 +1390,29 @@ async def update_my_account(ctx: RequestContext):
         (name, department or None, phone or None, email or None, user_id))
 
     u = await db.query_one_a(
-        "SELECT id, username, name, role, department, phone, email FROM users WHERE id = ?",
-        (user_id,))
+        f"SELECT {_ACCOUNT_COLUMNS} FROM users WHERE id = ?", (user_id,))
+    return success_response(data={"account": _account_dict(u) if u else None})
+
+
+async def update_my_avatar(ctx: RequestContext):
+    """单独改头像：前端先压成 256×256 JPEG data URL，这里只做格式与大小校验。"""
+    user_id = int(ctx.user["sub"])
+    data = ctx.body or {}
+    avatar = data.get("avatar")
+    if not isinstance(avatar, str):
+        raise HttpError(400, "头像格式无效")
+    avatar = avatar.strip()
+    if avatar:
+        if not avatar.startswith("data:image/"):
+            raise HttpError(400, "头像必须是图片")
+        if len(avatar) > _MAX_AVATAR_CHARS:
+            raise HttpError(413, "头像过大，请选择更小的图片")
+
+    await db.execute_a(
+        "UPDATE users SET avatar = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (avatar or None, user_id))
+    u = await db.query_one_a(
+        f"SELECT {_ACCOUNT_COLUMNS} FROM users WHERE id = ?", (user_id,))
     return success_response(data={"account": _account_dict(u) if u else None})
 
 

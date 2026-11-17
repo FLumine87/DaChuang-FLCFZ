@@ -37,6 +37,8 @@ export default function AdminRetrieval() {
   const [cameraOpen, setCameraOpen] = useState(false);
   /** 图像查询下拉：从文件选择 / 现场拍照 */
   const [imgMenuOpen, setImgMenuOpen] = useState(false);
+  /** 语音查询下拉：从文件选择 / 现场录音 */
+  const [audioMenuOpen, setAudioMenuOpen] = useState(false);
   const [reading, setReading] = useState(false);
   const [searchError, setSearchError] = useState('');
   const busy = useRef(false);
@@ -196,7 +198,7 @@ export default function AdminRetrieval() {
           <div className="relative">
             <button
               type="button"
-              onClick={() => setImgMenuOpen((open) => !open)}
+              onClick={() => { setAudioMenuOpen(false); setImgMenuOpen((open) => !open); }}
               aria-haspopup="menu"
               aria-expanded={imgMenuOpen}
               title="上传图像或现场拍照，作为图像查询线索"
@@ -246,17 +248,61 @@ export default function AdminRetrieval() {
               </>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => document.getElementById('admin-media-audio')?.click()}
-            className={`cursor-pointer rounded-lg border px-3 py-2.5 text-sm transition-colors ${
-              modality === 'audio'
-                ? 'border-primary-500 bg-primary-50 text-primary-600'
-                : 'border-slate-200 text-slate-600 hover:border-primary-300'
-            }`}
-          >
-            语音查询
-          </button>
+          {/* 语音查询：与图像查询一致，一个按钮 + 两个动作（从文件选择 / 现场录音） */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => { setImgMenuOpen(false); setAudioMenuOpen((open) => !open); }}
+              aria-haspopup="menu"
+              aria-expanded={audioMenuOpen}
+              title="上传语音或直接录音，作为语音查询线索"
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                modality === 'audio'
+                  ? 'border-primary-500 bg-primary-50 text-primary-600'
+                  : 'border-slate-200 text-slate-600 hover:border-primary-300'
+              }`}
+            >
+              <Mic className="h-4 w-4" />
+              语音查询
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${audioMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {audioMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setAudioMenuOpen(false)} />
+                <div
+                  role="menu"
+                  aria-label="语音查询方式"
+                  className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAudioMenuOpen(false);
+                      document.getElementById('admin-media-audio')?.click();
+                    }}
+                    className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    从文件选择
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAudioMenuOpen(false);
+                      void recorder.start();
+                    }}
+                    disabled={!recorder.supported}
+                    className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Mic className="h-3.5 w-3.5" />
+                    现场录音
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <button
             onClick={() => void handleSearch()}
             disabled={loading || reading || recorder.recording || (!query.trim() && !media)}
@@ -266,16 +312,18 @@ export default function AdminRetrieval() {
             {loading ? '检索中...' : '检索'}
           </button>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-          {recorder.recording ? <>
-            <span role="status">正在录音 {recorder.seconds} 秒</span>
-            <button type="button" onClick={recorder.stop} className="ui-button">停止并使用录音</button>
-            <button type="button" onClick={recorder.cancel} className="ui-button">取消录音</button>
-          </> : <button type="button" disabled={!recorder.supported || loading || reading} onClick={() => void recorder.start()} className="ui-button">录音查询</button>}
-          {reading && <span role="status">正在读取并转换媒体…</span>}
-          {recorder.error && <p role="alert" className="text-danger-600">{recorder.error}</p>}
-          {searchError && <p role="alert" className="text-danger-600">检索失败：{searchError}，可以重新点击检索。</p>}
-        </div>
+        {(recorder.recording || reading || recorder.error || searchError) && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+            {recorder.recording && <>
+              <span role="status">正在录音 {recorder.seconds} 秒</span>
+              <button type="button" onClick={recorder.stop} className="ui-button">停止并使用录音</button>
+              <button type="button" onClick={recorder.cancel} className="ui-button">取消录音</button>
+            </>}
+            {reading && <span role="status">正在读取并转换媒体…</span>}
+            {recorder.error && <p role="alert" className="text-danger-600">{recorder.error}</p>}
+            {searchError && <p role="alert" className="text-danger-600">检索失败：{searchError}，可以重新点击检索。</p>}
+          </div>
+        )}
 
         {(media || mediaError) && (
           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">

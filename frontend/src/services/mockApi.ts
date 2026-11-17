@@ -717,6 +717,8 @@ export interface MyAccount {
   department: string;
   phone: string;
   email: string;
+  /** 头像：前端压缩后的 data URL；空字符串表示未设置 */
+  avatar: string;
 }
 
 export async function getMyAccount(): Promise<MyAccount | null> {
@@ -733,6 +735,12 @@ export async function updateMyAccount(input: {
 }): Promise<MyAccount | null> {
   if (USE_MOCK) return null;
   const data = await request.put<{ account: MyAccount | null }>('/api/account', input);
+  return data?.account ?? null;
+}
+
+export async function updateMyAvatar(avatar: string): Promise<MyAccount | null> {
+  if (USE_MOCK) return null;
+  const data = await request.put<{ account: MyAccount | null }>('/api/account/avatar', { avatar });
   return data?.account ?? null;
 }
 

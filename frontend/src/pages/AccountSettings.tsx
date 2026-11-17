@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AtSign,
   BrainCircuit,
   Building2,
+  Camera,
   Check,
   Eye,
   EyeOff,
@@ -18,6 +19,7 @@ import {
   changeMyPassword,
   getMyAccount,
   updateMyAccount,
+  updateMyAvatar,
   type MyAccount,
 } from '../services/mockApi';
 import { USE_MOCK } from '../services/http';
@@ -52,6 +54,50 @@ const inputCls =
   'outline-none transition-colors placeholder:text-slate-300 focus:border-primary-400 ' +
   'disabled:bg-slate-50 disabled:text-slate-400';
 
+/** 把用户选的图片裁成 256×256 正方形并压成 JPEG data URL，避免把大图写进数据库。 */
+function readAvatarDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('请选择图片文件'));
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      reject(new Error('图片不能超过 5MB'));
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      if (!image.width || !image.height) {
+        URL.revokeObjectURL(url);
+        reject(new Error('图片尺寸无效'));
+        return;
+      }
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        URL.revokeObjectURL(url);
+        reject(new Error('浏览器不支持图片处理'));
+        return;
+      }
+      const scale = Math.max(size / image.width, size / image.height);
+      const width = image.width * scale;
+      const height = image.height * scale;
+      context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('图片读取失败'));
+    };
+    image.src = url;
+  });
+}
+
 export default function AccountSettings() {
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<MyAccount | null>(null);
@@ -64,6 +110,12 @@ export default function AccountSettings() {
   const [email, setEmail] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  // 头像（data URL，后端存 users.avatar）
+  const [avatar, setAvatar] = useState('');
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarMsg, setAvatarMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // 密码
   const [oldPwd, setOldPwd] = useState('');
@@ -141,6 +193,7 @@ export default function AccountSettings() {
           setDepartment(acc.department);
           setPhone(acc.phone);
           setEmail(acc.email);
+          setAvatar(acc.avatar || '');
         }
       })
       .catch((e) => {
@@ -171,6 +224,40 @@ export default function AccountSettings() {
       setProfileMsg({ kind: 'err', text: e instanceof Error ? e.message : '保存失败' });
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const handleAvatarFile = async (file: File | null) => {
+    if (!file) return;
+    setAvatarBusy(true);
+    setAvatarMsg(null);
+    try {
+      const dataUrl = await readAvatarDataUrl(file);
+      const acc = await updateMyAvatar(dataUrl);
+      if (acc) setAccount(acc);
+      setAvatar(dataUrl);
+      setAvatarMsg({ kind: 'ok', text: '头像已更新' });
+      window.dispatchEvent(new CustomEvent('account-avatar-updated', { detail: dataUrl }));
+    } catch (e) {
+      setAvatarMsg({ kind: 'err', text: e instanceof Error ? e.message : '头像更新失败' });
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setAvatarBusy(true);
+    setAvatarMsg(null);
+    try {
+      const acc = await updateMyAvatar('');
+      if (acc) setAccount(acc);
+      setAvatar('');
+      setAvatarMsg({ kind: 'ok', text: '头像已移除' });
+      window.dispatchEvent(new CustomEvent('account-avatar-updated', { detail: '' }));
+    } catch (e) {
+      setAvatarMsg({ kind: 'err', text: e instanceof Error ? e.message : '移除失败' });
+    } finally {
+      setAvatarBusy(false);
     }
   };
 
@@ -302,6 +389,58 @@ export default function AccountSettings() {
         <p className="mt-1 text-[12.5px] text-slate-400">
           姓名会显示在首页问候与个案档案里。
         </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+          <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-50 text-xl font-semibold text-primary-600">
+            {avatar ? (
+              <img src={avatar} alt="当前头像" className="h-full w-full object-cover" />
+            ) : (
+              (name || account?.username || '我').slice(0, 1).toUpperCase()
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13.5px] font-medium text-slate-700">头像</p>
+            <p className="mt-0.5 text-[11.5px] leading-5 text-slate-400">
+              支持 JPG、PNG、WEBP，自动裁成正方形并压缩，最大 5MB。
+            </p>
+            {avatarMsg && (
+              <p className={`mt-1 text-[12px] ${avatarMsg.kind === 'ok' ? 'text-success-600' : 'text-danger-600'}`}>
+                {avatarMsg.text}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                void handleAvatarFile(e.target.files?.[0] ?? null);
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarBusy || loading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12.5px] font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
+            >
+              {avatarBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+              更换头像
+            </button>
+            {avatar && (
+              <button
+                type="button"
+                onClick={() => void handleRemoveAvatar()}
+                disabled={avatarBusy}
+                className="rounded-lg px-2.5 py-2 text-[12.5px] text-slate-400 transition-colors hover:bg-slate-100 hover:text-danger-600 disabled:opacity-60"
+              >
+                移除
+              </button>
+            )}
+          </div>
+        </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="block">
