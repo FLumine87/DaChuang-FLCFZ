@@ -405,7 +405,7 @@ docker compose up -d
 ### 项目贡献者与开发历程
 
 本项目由多人协作完成。以下为仓库中各 Git 作者的提交分布
-（`git shortlog -sn --all --no-merges`），参赛成员一列标注真实姓名，
+（`git shortlog -sn --all --no-merges`）；参赛成员以真实姓名标注，
 可与完整提交历史对照查看：
 
 | Git 作者 | 姓名 | 提交数 | 主要模块 |
