@@ -504,7 +504,7 @@ export default function Dashboard() {
           <>
             <div className="mt-5 grid gap-6 border-t border-slate-100 pt-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-8">
               {/* 栏一：近30天综合风险，替代单次量表分数展示。 */}
-              <div className="min-w-0"><RiskSummaryCard compact /></div>
+              <div className="min-w-0"><RiskSummaryCard presentation="column" /></div>
 
               {/* 栏二：检索 */}
               <div className="lg:border-l lg:border-slate-100 lg:pl-8">
@@ -692,7 +692,7 @@ export default function Dashboard() {
         ) : (
           <>
             <div className="mt-5 grid gap-6 border-t border-slate-100 pt-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,2.15fr)] lg:gap-8">
-              <div className="min-w-0"><RiskSummaryCard compact /></div>
+              <div className="min-w-0"><RiskSummaryCard presentation="column" /></div>
               <div className="min-w-0 lg:border-l lg:border-slate-100 lg:pl-8">
             <p className="text-[14px] text-slate-500">
               还没有检测记录 —— 从下面「评估心理状态」开始，大约 3 分钟。
