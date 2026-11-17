@@ -192,6 +192,14 @@ class Settings:
                         if k in os.environ:
                             continue
                         setattr(self, k, _coerce(getattr(self, k), v))
+        # 环境变量优先：容器/云平台只注入环境变量、镜像里没有 .env 文件时，
+        # 上面的白名单和 .env 解析都不会生效，SECRET_KEY、DATABASE_URL、
+        # DEEPSEEK_* 等部署参数会被类默认值静默忽略。这里统一按字段类型覆盖。
+        for key in dir(self):
+            if not key.isupper() or key not in os.environ:
+                continue
+            if hasattr(self, key):
+                setattr(self, key, _coerce(getattr(self, key), os.environ[key]))
 
     def apply_worker_overrides(self, env) -> None:
         """Worker 环境下由入口调用：把 Cloudflare vars/secrets 覆盖到配置。
