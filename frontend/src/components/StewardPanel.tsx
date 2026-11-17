@@ -76,7 +76,7 @@ function PersonalSteward({ mode }: { mode: string }) {
     {data && !enabled && !editing && <div className="space-y-3"><p className="text-sm text-slate-600">开启后，我可以结合你允许使用的记录，逐步了解你的近况，给出建议并跟进效果。你可以选择信息来源，也可以随时暂停或清空记忆。</p><button className={button} onClick={() => { setDraft({ ...data.settings, enabled: true }); setEditing(true); }}>选择来源并开启</button></div>}
     {(editing || mode === 'settings') && <div className={mode === 'settings' ? 'space-y-3' : 'space-y-3 rounded-2xl bg-slate-50 p-4'}>
       <h3 className="font-medium">心理管家与记忆设置</h3>
-      <label className="flex items-center gap-2 border-b border-slate-200 pb-2 text-sm font-medium text-slate-800"><input type="checkbox" checked={allOn} onChange={e => setAll(e.target.checked)} />全选开启</label>
+      <label className="flex items-center gap-2 border-b border-slate-200 pb-2 text-sm font-medium text-slate-800"><input type="checkbox" checked={allOn} onChange={e => setAll(e.target.checked)} />全选</label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={source.enabled} onChange={e => setDraft({ ...source, enabled: e.target.checked })} />开启心理管家（关闭即暂停分析与使用记忆）</label>
       {(['screening','chat','checkin','feedback'] as const).map(key => <label key={key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={source[key]} onChange={e => setDraft({ ...source, [key]: e.target.checked })} />允许使用{sourceNames[key]}</label>)}
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!source.risk_ai} disabled={!source.screening} onChange={e=>setDraft({...source,risk_ai:e.target.checked})} />允许AI提取筛查线索用于近期综合评估</label>
