@@ -39,6 +39,7 @@ ROUTES = [
     ("POST", "/api/auth/logout", auth.logout, None),
 
     # ---- 个人端 ----
+    ("GET", "/api/personal/records", personal.get_personal_records, "user"),
     ("GET", "/api/personal/screenings", personal.get_personal_screenings, "user"),
     ("POST", "/api/personal/screenings", personal.submit_personal_screening, "user"),
     # 「多模态采集」上传成功后把补充挂到记录上（前端 persistCollection 调用）

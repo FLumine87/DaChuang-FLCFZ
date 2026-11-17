@@ -53,7 +53,7 @@ export default function ReviewTasks() {
       <div className="flex flex-wrap gap-3">
         {item.status === 'sent' && <button className="ui-button" disabled={busy} onClick={() => void acknowledge(item)}>确认收到</button>}
         {['sent', 'acknowledged'].includes(item.status) && <button className="ui-button ui-button-primary" onClick={() => setSelected(item)}>开始复查</button>}
-        {item.screening_id && <Link className="text-sm text-primary-600 hover:underline" to={`/personal/screening?record=${encodeURIComponent(item.screening_id)}`}>查看本次筛查记录 →</Link>}
+        {item.screening_id && <Link className="text-sm text-primary-600 hover:underline" to={`/personal/records?record=${encodeURIComponent(item.screening_id)}`}>查看本次筛查记录 →</Link>}
       </div>
     </article>)}
   </section>;

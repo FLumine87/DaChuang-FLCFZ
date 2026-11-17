@@ -210,7 +210,13 @@ export interface SearchResponse<T> {
   assessment?: RetrievalAssessment;
 }
 
+export interface DashboardInput {
+  id:string; kind:'scale'|'text'|'audio'|'image'; at:string; text:string;
+  recordId?:string|null; supplement?:PersonalSupplement; scale?:PersonalScreeningRecord;
+}
 export interface DashboardResponse {
+  latestInput?:DashboardInput|null;
+  screeningActivity?: { total:number; byKind:Record<DashboardInput['kind'],number> };
   moodTrend: MoodTrendPoint[];
   warningDistribution: { name: string; value: number; color: string }[];
   warningEvents: WarningEvent[];
@@ -432,6 +438,23 @@ export async function getScreeningRecords(): Promise<PersonalScreeningRecord[]> 
     await delay();
     return personalRecords();
   }
+}
+
+/** Unified screening history. Scales and media remain distinct source records. */
+export async function getPersonalScreeningHistory(): Promise<DashboardInput[]> {
+  if (!USE_MOCK) {
+    try {
+      const rows = await request.get<DashboardInput[]>('/api/personal/records');
+      return rows.map(row => row.scale ? {...row, scale:withLocalRetrieval([row.scale])[0]} : row);
+    } catch (err) {
+      if (!fallbackToDemo(err)) throw err;
+    }
+  }
+  const [scales,media] = await Promise.all([getScreeningRecords(),getPersonalSupplements()]);
+  return [
+    ...scales.filter(s=>s.status==='completed').map<DashboardInput>(s=>({id:`scale:${s.id}`,kind:'scale',at:s.date,recordId:s.id,text:`${s.questionnaire}：${s.score}/${s.maxScore}分`,scale:s})),
+    ...media.map<DashboardInput>(s=>({id:`media:${s.id}`,kind:s.kind,at:s.createdAt || '',recordId:s.screeningId,text:s.text || s.filename || '',supplement:s})),
+  ];
 }
 
 /**

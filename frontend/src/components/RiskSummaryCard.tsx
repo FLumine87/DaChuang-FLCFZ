@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getToken } from '../services/http';
-import { reviewRisk, riskLabels, useRiskSummary, type RiskItem, type RiskLevel } from '../services/riskSummary';
+import { reviewRisk, riskLabels, riskOverview, useRiskSummary, type RiskItem, type RiskLevel } from '../services/riskSummary';
 
 const styles:Record<RiskLevel,string>={unknown:'border-slate-200 bg-slate-50 text-slate-700',green:'border-emerald-100 bg-emerald-50 text-emerald-800',yellow:'border-amber-100 bg-amber-50 text-amber-800',orange:'border-orange-100 bg-orange-50 text-orange-800',red:'border-rose-100 bg-rose-50 text-rose-800'};
 const features:Record<string,string>={symptom:'症状相关表达',duration:'持续时间',frequency:'出现频率',functional_impact:'生活影响',safety:'安全相关疑似线索'};
@@ -34,13 +34,12 @@ export default function RiskSummaryCard({caseId,compact=false,presentation='card
       <div className="flex flex-1 flex-col justify-center py-6">
         <div className="flex items-center gap-2.5"><span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dots[data.level] || dots.unknown}`} /><h3 className="min-w-0 break-words font-semibold leading-tight text-slate-900" style={{fontSize:riskLabels[data.level]?.length>8?26:34}}>{riskLabels[data.level]}</h3></div>
         <p className="mt-2 text-[12.5px] text-slate-400">筛查参考 · 近30天 · {data.coverage.records}条筛查</p>
-        <p className="mt-4 text-[13px] leading-6 text-slate-500">{data.reasons[0]?.text || '当前资料不足以形成综合等级，不将缺少记录视为低风险。'}</p>
+        <p className="mt-4 text-[13px] leading-6 text-slate-500">{riskOverview(data)}</p>
       </div>
     </> : <>
       <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-medium">近期综合风险{!summaryOnly && '（筛查参考）'}</p><h3 className={`mt-2 font-semibold ${compact?'text-base':'text-xl'}`}>{riskLabels[data.level]}</h3></div><span className="text-[11px] opacity-65">近30天 · {data.coverage.records}条筛查</span></div>
-      <p className="mt-2 text-xs leading-6">{data.reasons[0]?.text || '当前资料不足以形成综合等级，不将缺少记录视为低风险。'}</p>
+      <p className="mt-2 text-xs leading-6">{riskOverview(data)}</p>
     </>}
-    {data.safety.status==='needs_review' && <div role="status" className={column?'mt-3 text-xs leading-6 text-rose-700':'mt-3 rounded-xl border border-rose-200 bg-white/80 p-3 text-xs leading-6 text-rose-800'}>另有待复核的安全提示。新低分、积极记录、计划完成或自助标记“已缓解”不会解除该提示。{data.safety.flags.every(f=>!f.recent || f.status==='resolved')?'这些提示来自较早记录，不代表当前仍处于紧急状态。':''}</div>}
     {!summaryOnly && <details className="mt-3 text-xs"><summary className="cursor-pointer font-medium">为什么是这个等级 · 查看维度与依据</summary><div className="mt-3 space-y-3">
       <p className="leading-5 opacity-70">{data.window_start} 至 {data.window_end} · 量表{data.coverage.scales}条 / 多模态{data.coverage.multimodal}条。覆盖{data.coverage.dimension_count}/4个量表维度；缺少的维度不等同于正常。</p>
       {data.dimensions.map(d=><div key={d.code} className="rounded-lg bg-white/70 p-2"><p className="font-medium">{d.label} · {d.code}</p><p className="mt-1">{d.score===undefined?'资料不足':`${d.score}/${d.max_score} · ${d.severity}`}{d.trend?` · ${d.trend.label} ${Math.abs(d.trend.delta)} 分`:''}</p>{d.code==='PSS-10'&&<p className="mt-1 opacity-65">压力是连续分数，不设置诊断界值，也不单凭总分决定综合等级。</p>}</div>)}

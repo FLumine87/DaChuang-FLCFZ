@@ -63,7 +63,7 @@ export default function LatestScreeningCard({ record }: { record?: PersonalScree
         )}
         {displayed && (
           <Link
-            to={isExample ? "/personal/screening?example=1&record=preview-only" : `/personal/screening?record=${encodeURIComponent(displayed.id)}`}
+            to={isExample ? "/personal/screening?example=1&record=preview-only" : `/personal/records?record=${encodeURIComponent(displayed.id)}`}
             className="ml-auto inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
             aria-label={isExample ? "查看示例筛查详情" : "查看最近一次筛查详情"}
           >

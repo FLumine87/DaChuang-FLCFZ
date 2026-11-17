@@ -714,6 +714,45 @@ def _build_action_plan(screenings, alerts, supplements):
     return plan
 
 
+async def _personal_screening_history(user_id):
+    """One owned screening ledger: completed scales and every saved media input."""
+    from app.services.risk_summary import stamp
+    scales = await db.query_a(
+        "SELECT s.*,q.name AS questionnaire_name FROM screenings s "
+        "LEFT JOIN questionnaires q ON q.id=s.questionnaire_id "
+        "WHERE s.user_id=? AND s.status='completed'", (user_id,))
+    media = await db.query_a(
+        "SELECT * FROM screening_supplements WHERE user_id=? AND kind IN ('text','audio','image')",
+        (user_id,))
+    notes = await _notes_by_supplement(user_id, [r['id'] for r in media])
+    entries = []
+    for row in scales:
+        at = stamp(row.get('screening_date')) or stamp(row.get('created_at'), utc=True)
+        label = row.get('questionnaire_name') or '量表筛查'
+        entries.append({'id': f"scale:{row['id']}", 'kind': 'scale', 'at': at.isoformat() if at else '',
+                        'recordId': row['screening_id'], 'text': f"{label}：{row['score']}/{row['max_score']}分",
+                        'scale': _screening_item(row, label)})
+    for row in media:
+        # SQLite supplement timestamps are UTC; business screening dates are local.
+        at = stamp(row.get('created_at'), utc=True)
+        label = {'audio': '语音', 'image': '图片', 'text': '文字记录'}[row['kind']]
+        text = (row.get('text') or '').strip() or f"上传了{label}：{row.get('filename') or '未命名文件'}"
+        supplement = _supplement_dict(row, notes.get(row['id']))
+        supplement['createdAt'] = at.isoformat() if at else ''
+        entries.append({'id': f"media:{row['id']}", 'kind': row['kind'], 'at': at.isoformat() if at else '',
+                        'recordId': row.get('screening_id'), 'text': text, 'supplement': supplement})
+    return sorted(entries, key=lambda entry: (entry['at'], entry['kind'] != 'scale',
+                                             int(entry['id'].split(':')[1])), reverse=True)
+
+
+async def get_personal_records(ctx: RequestContext):
+    return success_response(data=await _personal_screening_history(int(ctx.user['sub'])))
+
+
+async def _latest_dashboard_input(user_id):
+    return next((entry for entry in await _personal_screening_history(user_id) if entry['at']), None)
+
+
 async def get_personal_dashboard(ctx: RequestContext):
     user_id = int(ctx.user["sub"])
     questionnaires = await db.query_a("SELECT * FROM questionnaires WHERE is_active = 1")
@@ -782,6 +821,16 @@ async def get_personal_dashboard(ctx: RequestContext):
     # 行动计划要在 supplements 取到之后再算 —— 它有一条判据就是"有没有采集记录"
     action_plan = _build_action_plan(screenings, alerts, supplements)
 
+    history = await _personal_screening_history(user_id)
+    from app.services.risk_summary import stamp
+    now = stamp(datetime.now())
+    cutoff = now - timedelta(days=30)
+    counts = {kind: 0 for kind in ('scale', 'text', 'audio', 'image')}
+    for entry in history:
+        at = stamp(entry['at'])
+        if at and cutoff <= at <= now:
+            counts[entry['kind']] += 1
+
     return success_response(data={
         "moodTrend": mood_trend,
         "warningDistribution": warning_distribution,
@@ -792,6 +841,8 @@ async def get_personal_dashboard(ctx: RequestContext):
         "userProfile": user_profile,
         "questionnaireCatalog": questionnaire_catalog,
         "personalTimeline": personal_timeline,
+        "latestInput": next((entry for entry in history if entry["at"]), None),
+        "screeningActivity": {"total": sum(counts.values()), "byKind": counts},
     })
 
 

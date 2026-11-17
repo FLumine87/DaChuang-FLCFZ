@@ -238,7 +238,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             label: "筛查记录",
             /* 放进「工作空间」：这一页是"我提交过什么、当时判成什么样"，
                和「心理筛查分析」（新做一次记录/检索）分开放更好找。 */
-            description: "提交过的文字、语音与照片，按日子回看。",
+            description: "量表、文字、语音与图像筛查，按时间统一回看。",
             icon: NotebookPen,
             group: "工作空间",
           },

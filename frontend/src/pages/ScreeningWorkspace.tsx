@@ -1,5 +1,4 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import StewardPanel from '../components/StewardPanel';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { usePageActive } from '../services/pageActivity';
 import ScreeningDetail from './ScreeningDetail';
@@ -233,7 +232,6 @@ export default function ScreeningWorkspace() {
 
   return (
     <div className="space-y-6">
-      <StewardPanel />
       {/* 量表回写知识图谱的结果提示（团队 main 的功能）：容器换成 .ui-card，
           内层配色改走令牌，深色下不再是一块固定的浅绿。 */}
       {kgSyncMsg && (
@@ -410,7 +408,7 @@ export default function ScreeningWorkspace() {
 
       {/* Toolbar */}
       <div className="ui-card flex flex-wrap items-center justify-between gap-3 p-5">
-        <div><h3 className="font-semibold text-slate-800">我的筛查记录</h3><p className="mt-1 text-sm text-slate-500">完成筛查后，点击下方记录的“查看详情”，回看得分、解释和建议。</p></div>
+        <div><h3 className="font-semibold text-slate-800">量表筛查记录</h3><p className="mt-1 text-sm text-slate-500">完成筛查后，点击下方记录的“查看详情”，回看得分、解释和建议。</p></div>
       </div>
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex flex-wrap gap-3 items-center">

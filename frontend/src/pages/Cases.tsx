@@ -419,7 +419,7 @@ export default function Cases() {
                       </td>
                       <td className={`${tdCls} whitespace-nowrap text-right`}>
                         <Link
-                          to={`/personal/screening?record=${encodeURIComponent(item.id)}`}
+                          to={`/personal/records?record=${encodeURIComponent(item.id)}`}
                           className="text-[12px] font-medium text-primary-600 hover:text-primary-700"
                         >
                           查看详情
