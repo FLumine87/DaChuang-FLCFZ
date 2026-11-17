@@ -50,7 +50,6 @@ import { USE_MOCK } from '../services/http';
 import { supplementModalityText } from '../services/localKg';
 import type { RetrievalResult, RetrievalIndexInfo } from '../data/mockData';
 import CameraCapture from '../components/CameraCapture';
-import ThemeHistogram from '../components/ThemeHistogram';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { toCorpusWavFile } from '../utils/audioRecorder';
 import { assessRetrieval, type RetrievalAnalysisReport as RagReport, type RetrievalAssessment } from '../services/screeningAssessment';
@@ -977,12 +976,6 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
                   <ArrowLeft className="w-4 h-4" /> 返回历史记录
                 </button>
               </div>}
-            </div>
-            {/* 命中主题分布柱状图：让使用者一眼看出"这批相似参考集中在哪些困扰主题上"，
-                而不是逐条去读。数据直接来自检索结果的 tags 字段（不需要额外接口）。
-                放在结果列表之上作为可视化摘要。 */}
-            <div className="px-5 pt-5">
-              <ThemeHistogram hits={results} />
             </div>
             <div className="divide-y divide-slate-100">
               {(showAllResults ? results : results.slice(0, 3)).map((result) => {

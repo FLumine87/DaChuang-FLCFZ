@@ -5,7 +5,6 @@ import { Search, Sparkles, Loader2, Camera, ChevronDown, FolderOpen, Mic, Image 
 import { adminSearch, fetchRetrievalMedia } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import CameraCapture from '../../components/CameraCapture';
-import ThemeHistogram from '../../components/ThemeHistogram';
 import MultimodalFlowTabs from '../components/MultimodalFlowTabs';
 import { useAudioRecorder } from '../../hooks/useAudioRecorder';
 import { toCorpusWavFile } from '../../utils/audioRecorder';
@@ -363,12 +362,6 @@ export default function AdminRetrieval() {
 
       {!loading && results && (
         <>
-          {/* 命中主题分布柱状图：一眼看出这批相似案例集中在哪些困扰主题上。
-              数据来自检索结果的 tags 字段，不需要额外接口。 */}
-          {results.length > 0 && (
-            <ThemeHistogram hits={results} />
-          )}
-
           <div className="ui-card divide-y divide-slate-100">
             {results.length === 0 && (
               <div className="px-5 py-12 text-center text-sm text-slate-400">
