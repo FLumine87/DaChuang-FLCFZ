@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { usePageActive } from '../../services/pageActivity';
 import { Search, Sparkles, Loader2, Camera, ChevronDown, FolderOpen, Mic, Image as ImageIcon, X } from 'lucide-react';
 import { adminSearch, fetchRetrievalMedia } from '../../services/mockApi';
 import AdminAlertBadge from '../components/AdminAlertBadge';
@@ -23,6 +24,7 @@ interface RagReport {
 }
 
 export default function AdminRetrieval() {
+  const pageActive = usePageActive();
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState(() => searchParams.get('q') ?? '');
   const [loading, setLoading] = useState(false);
@@ -514,7 +516,7 @@ export default function AdminRetrieval() {
 
       {/* 现场拍照：拍完与"图像查询"走同一条 pickMedia 链路 */}
       <CameraCapture
-        open={cameraOpen}
+        open={cameraOpen && pageActive}
         onClose={() => setCameraOpen(false)}
         onCapture={(file) => pickMedia('image', file)}
       />

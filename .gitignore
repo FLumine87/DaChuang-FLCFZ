@@ -159,6 +159,7 @@ _shots/
 # 设计稿演示工程的依赖，不入库
 design/home-react/node_modules/
 .trial-data/
+.local-run/
 
 # ---- C++ 作业（Lab2/）的编译产物：不入库 ----
 # VS Code 的构建任务会把可执行文件和调试符号生成在源码旁边，

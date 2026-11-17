@@ -6,11 +6,31 @@
 
 import json
 import re
+import logging
 
 import httpx
 
 from ..config import settings
 from .clinical_lexicon import CRISIS_CANONICAL
+
+
+class LLMRequestError(RuntimeError):
+    """A safe diagnostic without response bodies, credentials or user input."""
+    def __init__(self, code, message, status=None):
+        super().__init__(message)
+        self.code, self.status = code, status
+
+
+def request_error(exc, timeout):
+    if isinstance(exc, httpx.TimeoutException):
+        return LLMRequestError('timeout',f'模型请求超时（等待上限 {timeout} 秒），不代表配置错误')
+    if isinstance(exc,httpx.HTTPStatusError):
+        status=exc.response.status_code
+        labels={400:'模型接口拒绝了请求参数',401:'模型服务鉴权失败',402:'模型服务额度或套餐不足',403:'模型服务拒绝访问',404:'模型或接口地址不存在',413:'模型请求内容超过服务限制',429:'模型服务限流或配额受限'}
+        return LLMRequestError('http_error',f'{labels.get(status,"模型服务返回错误")}（HTTP {status}）',status)
+    if isinstance(exc,httpx.RequestError):
+        return LLMRequestError('connection','模型服务连接失败，请检查网络或代理连接')
+    return LLMRequestError('response_format','模型服务返回的内容格式不符合预期')
 
 SYSTEM_PROMPT = """你是个人心理知识图谱的信息抽取 Agent。从用户输入中抽取与用户本人相关的事实，只输出 JSON 数组，不要输出任何其他文字。
 
@@ -46,18 +66,19 @@ def mock_mode() -> bool:
     return settings.enable_mock_engines or not settings.llm_api_key
 
 
-def chat(system: str, user: str, temperature: float = 0.7) -> str:
+def chat(system: str, user: str, temperature: float = 0.7, *, strict=False, request_timeout=None, max_tokens=None, extra_body=None) -> str:
     """通用对话。Mock 模式返回空串，由调用方回退到模板逻辑。"""
     return chat_messages([{"role": "system", "content": system},
-                          {"role": "user", "content": user}], temperature=temperature)
+                          {"role": "user", "content": user}], temperature=temperature,strict=strict,request_timeout=request_timeout,max_tokens=max_tokens,extra_body=extra_body)
 
 
-def chat_messages(messages: list[dict], temperature: float = 0.7) -> str:
+def chat_messages(messages: list[dict], temperature: float = 0.7, *, strict=False, request_timeout=None, max_tokens=None, extra_body=None) -> str:
     """多轮对话（陪伴聊天等场景）。Mock 模式返回空串，由调用方回退到本地文案。
 
     messages 为 OpenAI 格式 [{"role": ..., "content": ...}, ...]。
     """
     if mock_mode():
+        if strict:raise LLMRequestError('disabled','当前服务启用了演示模式或未读取到模型密钥')
         return ""
     url = settings.llm_base_url.rstrip("/") + "/chat/completions"
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
@@ -66,12 +87,25 @@ def chat_messages(messages: list[dict], temperature: float = 0.7) -> str:
         "messages": messages,
         "temperature": temperature,
     }
+    if max_tokens is not None:payload['max_tokens']=max_tokens
+    if extra_body:payload.update(extra_body)
+    timeout=request_timeout or settings.llm_timeout
     try:
-        with httpx.Client(timeout=settings.llm_timeout, verify=settings.llm_verify_ssl) as client:
+        with httpx.Client(timeout=timeout, verify=settings.llm_verify_ssl) as client:
             resp = client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
-    except Exception:
+            choice=resp.json()["choices"][0]
+            if choice.get('finish_reason') in ('length','content_filter'):
+                raise LLMRequestError('incomplete','模型回复被截断或过滤，尚未生成完整分析')
+            content=choice['message'].get('content')
+            if isinstance(content,list):content=''.join(p.get('text','') for p in content if isinstance(p,dict))
+            if not isinstance(content,str) or not content.strip():
+                raise LLMRequestError('empty_response','模型接口已响应，但没有返回可用的分析正文')
+            return content
+    except Exception as exc:
+        error=exc if isinstance(exc,LLMRequestError) else request_error(exc,timeout)
+        logging.getLogger(__name__).warning('LLM request failed: code=%s status=%s exception=%s',error.code,error.status,type(exc).__name__)
+        if strict:raise error from exc
         return ""
 
 
@@ -99,6 +133,7 @@ def stream_chat_messages(messages: list[dict], temperature: float = 0.7):
     with httpx.Client(timeout=settings.llm_timeout, verify=settings.llm_verify_ssl) as client:
         with client.stream("POST", url, json=payload, headers=headers) as resp:
             resp.raise_for_status()
+            complete = False
             for line in resp.iter_lines():
                 if not line or not line.startswith("data:"):
                     continue
@@ -112,9 +147,15 @@ def stream_chat_messages(messages: list[dict], temperature: float = 0.7):
                 choices = chunk.get("choices") or []
                 if not choices:
                     continue
+                if choices[0].get('finish_reason') not in (None, 'stop'):
+                    raise RuntimeError('模型回复提前结束，可重试')
+                if choices[0].get('finish_reason'):
+                    complete = True
                 text = (choices[0].get("delta") or {}).get("content")
                 if text:
                     yield text
+            if not complete:
+                raise RuntimeError('模型回复未完整结束')
 
 
 def extract_triples(text: str) -> list[dict]:

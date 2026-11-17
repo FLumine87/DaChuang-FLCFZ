@@ -516,14 +516,15 @@ html.theme-switching *::after {
   /* AI 陪伴对话页：整页撑满"视口 - 顶栏(h-16)"，输入框贴底，
      和主流大模型对话软件一致。只对带 .chat-fullheight 的页面生效，
      其余页面保持普通文档流。 */
-  .app-content:has(.chat-fullheight) {
+  .app-content:has(.workspace-view[data-workspace-active="true"] > .chat-fullheight) {
     display: flex;
     flex-direction: column;
     /* 顶栏高度走 --topbar-height（4rem），再留 24px 让输入框不贴视口最底边
        （main 自带 32px padding，合计离底约 56px） */
     min-height: calc(100dvh - var(--topbar-height, 4rem) - 24px);
   }
-  .app-content:has(.chat-fullheight) .page-body {
+  .app-content:has(.workspace-view[data-workspace-active="true"] > .chat-fullheight) .page-body,
+  .workspace-view[data-workspace-active="true"]:has(> .chat-fullheight) {
     flex: 1 0 auto;
     display: flex;
     flex-direction: column;
@@ -539,7 +540,7 @@ html.theme-switching *::after {
      星图卡片因此必须可收缩（flex-1 min-h-0），否则整条高度链不成立。
      极小视口下星图会被压到 0 高、内容溢出到文档流 —— 那种情况退回滚动，
      比硬裁掉内容好。 */
-  .app-content:has(.kg-fullheight) {
+  .app-content:has(.workspace-view[data-workspace-active="true"] > .kg-fullheight) {
     display: flex;
     flex-direction: column;
     /* 与对话页同一套口径：main 盒高 = 视口 − 顶栏 − 24px 留白
@@ -548,7 +549,8 @@ html.theme-switching *::after {
        两页互切时内容底边不会忽高忽低。 */
     height: calc(100dvh - var(--topbar-height, 4rem) - 24px);
   }
-  .app-content:has(.kg-fullheight) .page-body {
+  .app-content:has(.workspace-view[data-workspace-active="true"] > .kg-fullheight) .page-body,
+  .workspace-view[data-workspace-active="true"]:has(> .kg-fullheight) {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
@@ -881,6 +883,26 @@ h1.text-3xl {
    这里按断点给：手机 32 / 平板 44 / 桌面 54（桌面与调参定稿一致）。 */
 .dash-hero-title {
   font-size: 2rem; /* 32px */
+}
+/* Keep the desktop welcome area spacious even after the last task is completed. */
+@media (min-width: 1180px) {
+  .dashboard-hero {
+    min-height: max(36rem, calc(100svh - var(--topbar-height, 4rem) - 8rem));
+  }
+  .dashboard-hero > section {
+    display: flex;
+    flex-direction: column;
+  }
+  .dashboard-hero .plan-empty-state {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .dashboard-hero > section > ul {
+    flex: 1;
+    align-content: start;
+  }
 }
 @media (min-width: 640px) {
   .dash-hero-title { font-size: 2.75rem; } /* 44px */
@@ -2708,3 +2730,35 @@ html:not(.app-booted) .page-enter {
   .kg-halo-pulse { opacity: 0.75; }
 }
 
+/* Todo completion: strike first, celebrate, then collapse the saved item. */
+@keyframes plan-strike {
+  from { background-size: 0% 1.5px; }
+  to { background-size: 100% 1.5px; }
+}
+@keyframes plan-row-finish {
+  0%, 70% { max-height: var(--plan-row-height); opacity: 1; transform: translateY(0); overflow: visible; }
+  100% { max-height: 0; opacity: 0; transform: translateY(-5px); padding-top: 0; padding-bottom: 0; border-top-width: 0; border-bottom-width: 0; overflow: hidden; }
+}
+@keyframes plan-confetti-burst {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0deg) scale(.3); }
+  12% { opacity: 1; }
+  65% { opacity: 1; transform: translate(var(--confetti-x), var(--confetti-y)) rotate(var(--confetti-spin)) scale(1); }
+  100% { opacity: 0; transform: translate(var(--confetti-x), calc(var(--confetti-y) + 55px)) rotate(var(--confetti-spin)) scale(.6); }
+}
+.plan-task-title {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 58%;
+  background-size: 0% 1.5px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.plan-task-completing { animation: plan-row-finish 1100ms ease both; pointer-events: none; }
+.plan-task-completing .plan-task-title { animation: plan-strike 350ms 80ms ease-out both; color: var(--color-slate-400); }
+.plan-confetti { position: absolute; top: 50%; left: 50%; z-index: 20; pointer-events: none; }
+.plan-confetti-piece { position: absolute; width: 6px; height: 9px; border-radius: 2px; background: var(--confetti-color); opacity: 0; animation: plan-confetti-burst 700ms cubic-bezier(.15,.7,.3,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .plan-task-completing, .plan-task-completing .plan-task-title { animation: none; }
+  .plan-task-completing .plan-task-title { background-size: 100% 1.5px; }
+  .plan-confetti { display: none; }
+}

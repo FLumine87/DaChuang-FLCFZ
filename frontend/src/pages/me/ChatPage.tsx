@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { stewardApi, streamSteward, useSteward } from '../../services/steward';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Send, Sparkles, RefreshCw, AlertTriangle, MessageCircleHeart, HardDrive, BellRing, Trash2 } from 'lucide-react';
 import { api, type ChatTurn, type InferenceRunResult, type DailyCheckinItem } from '../../services/api';
 import { getCurrentSession } from '../../auth/session';
 import { briefErrorMessage } from '../../services/http';
 import {
-  appendLocalTriples,
-  buildLocalCheckin,
   buildLocalReport,
   collectLocalSignals,
   readLocalKg,
-  triplesFromText,
 } from '../../services/localKg';
 import {
   clearChatHistory,
@@ -20,13 +18,14 @@ import {
 } from '../../services/chatHistory';
 import { withTimeDividers } from '../../services/chatTime';
 import DailyCheckinDialog from '../../components/DailyCheckinDialog';
-import { markCheckinDeclined, markCheckinLater } from '../../services/dailyCheckinFlags';
+import { markCheckinDeclined, markCheckinReplied } from '../../services/dailyCheckinFlags';
 import RoamingBot from '../../components/RoamingBot';
+import { usePageActive } from '../../services/pageActivity';
 
 /** 消息结构与本机存储层一致（StoredChatMessage），避免两边各定义一份走样 */
 type ChatMessage = StoredChatMessage;
 
-const WELCOME = '你好，我是你的 AI 心理陪伴助手。和我聊聊最近的状态、喜欢的事或烦恼吧——我会把关键信息整理进你的个人知识图谱，并在需要时为你生成状态报告。';
+const WELCOME = '你好，我是你的 AI 心理陪伴助手。愿意的话，我们可以聊聊近况。我只会在你允许时将聊天用于长期记忆；你可以随时查看或纠正我的理解，也可以选择临时对话。';
 
 /**
  * 新一条欢迎语（带当前时间）。
@@ -47,8 +46,15 @@ const FALLBACK_REPLIES = [
 ];
 
 export default function ChatPage() {
+  const pageActive = usePageActive();
   const session = getCurrentSession();
   const userId = session?.username ?? 'demo_user';
+  const workspaceOwner=useRef(userId);
+  const [temporary, setTemporary] = useState(false);
+  const { data: stewardState } = useSteward();
+  const generationVersion = useRef(0);
+  const savedRegular = useRef<ChatMessage[]>([]);
+  const [recovering, setRecovering] = useState(session?.role === 'user');
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -62,30 +68,28 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [checkinError, setCheckinError] = useState('');
   /** 清空确认弹窗 */
   const [confirmClear, setConfirmClear] = useState(false);
   /** 是否还有历史可清（只有欢迎语时不必给清空入口） */
   const canClear = messages.some((m) => m.role === 'user');
   /** 本机（localStorage）已记录的三元组条数：L1 方案下这是"越聊越有"的唯一凭据 */
-  const [localCount, setLocalCount] = useState(() => readLocalKg(userId).triples.length);
+  const [localCount] = useState(() => readLocalKg(userId).triples.length);
   /** 服务端是否处于演示（mock）模式：右上角如实标注，不把演示抽取说成真实抽取 */
-  const [mockServer, setMockServer] = useState<boolean | null>(null);
-  /** 登录触发落库的「待回复」每日问询：此前只写日志，用户端拿不到，这里是闭环入口 */
-  const [pending, setPending] = useState<DailyCheckinItem[]>([]);
-  /**
-   * 对话流里的「今日关怀问询」卡片。
-   *
-   * 以前是居中弹窗：问询和对话是两套交互，用户关掉弹窗后还要回顶栏横幅找它。
-   * 现在把问询直接作为一条卡片挂进消息流（2026-11-12），回复/稍后/不想回复
-   * 三个动作仍在卡片上，状态机仍由本页接管。
-   * 服务端不可用时用本机问询兜底（id 为负数，不回写服务端）。
-   */
+  const [mockServer] = useState<boolean | null>(null);
+  /** 今日问询由服务端统一分配展示资格，卡片只呈现允许的这一轮。 */
   const [flowCheckin, setFlowCheckin] = useState<{
     item: DailyCheckinItem;
     message: string;
     note?: string;
     err?: string;
   } | null>(null);
+  useEffect(() => {
+    if (!flowCheckin || busy) return;
+    const timer = window.setTimeout(() => setFlowCheckin(null), 120_000);
+    return () => window.clearTimeout(timer);
+  }, [flowCheckin, busy]);
+
   const bottomRef = useRef<HTMLDivElement>(null);
 
   /* ── 机器人（2026-11-08 第三轮：改为全屏游走） ──────────────────────────
@@ -106,11 +110,44 @@ export default function ChatPage() {
   /* 消息一变就写回本机：用户消息、流式回复的增量文本、后到的抽取结果、离线兜底，
      全部自动落盘。写空消息由 saveChatHistory 内部滤掉（流式占位气泡不算）。 */
   useEffect(() => {
-    saveChatHistory(userId, messages);
-  }, [userId, messages]);
+    if (!temporary && workspaceOwner.current === userId) saveChatHistory(userId, messages);
+  }, [userId, messages, temporary]);
+
+  useEffect(() => {
+    if (session?.role !== 'user' || workspaceOwner.current !== userId) return;
+    let alive = true;
+    const revision = generationVersion.current;
+    const recover = async () => {
+      const runs = await stewardApi.history();
+      if (!alive || generationVersion.current !== revision) return;
+      if (runs.length) {
+        setMessages(runs.flatMap(r => {
+          const id = Number.parseInt(r.id.slice(0, 12), 16);
+          return [{ id, role:'user' as const, text:r.message, at:r.created_at }, { id:id+1, role:'assistant' as const, text:r.reply || (r.status === 'failed' ? r.error : '回复仍在后台生成…'), at:r.created_at, runId:r.id, generationStatus:r.status }];
+        }));
+      }
+      setRecovering(false);
+      if (runs.some(r => r.status === 'queued' || r.status === 'running')) timeout = setTimeout(() => void recover().catch(() => setRecovering(false)), 1000);
+    };
+    let timeout: ReturnType<typeof setTimeout>;
+    void recover().catch(() => { if (alive) setRecovering(false); });
+    return () => { alive = false; clearTimeout(timeout); };
+  }, [userId, session?.role]);
 
   /** 正在回复的每日问询：用户点"回复"或从弹窗跳来后置位，下一条发出的消息即作为它的答复 */
   const [answering, setAnswering] = useState<DailyCheckinItem | null>(null);
+  const privacySources=JSON.stringify(stewardState?.settings);
+  useEffect(() => {
+    const id=flowCheckin?.item?.id ?? answering?.id;
+    if (!pageActive || !id || id < 1) return;
+    let alive=true;
+    void api.getPendingCheckins(userId).then(result => {
+      if (alive && !(result.pending ?? []).some(item => item.id === id)) {
+        setFlowCheckin(null); setAnswering(null);
+      }
+    }).catch(() => {});
+    return () => { alive=false; };
+  },[pageActive,userId,flowCheckin?.item?.id,answering?.id,stewardState?.evidence_count,privacySources]);
 
   /* 从「每日问询」弹窗点「现在就聊聊」跳过来时，路由 state 里带着那条问询。
      两处都要用到它的 id：
@@ -124,32 +161,11 @@ export default function ChatPage() {
   const incomingConsumedRef = useRef(false);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, busy]); // busy 也要滚：思考占位出现时把气泡滚进视口
-
-  /* 拉取待回复的问询：进对话页时由 DailyCheckinDialog 触发 ensure 落库，
-     这里取出来提示用户（弹窗关了以后仍能在页内横幅看到）。
-     失败不影响正常聊天（问询是可选增强），静默跳过即可。 */
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const r = await api.getPendingCheckins(userId);
-        if (!alive) return;
-        const skipId = incomingRef.current?.id;
-        setPending(r.pending.filter((p) => p.id !== skipId));
-      } catch {
-        /* 忽略：问询拉取失败不阻断对话 */
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [userId]);
+    if (pageActive) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, busy, pageActive]);
 
   /** 开始回复某条每日问询：把它作为助手消息补进对话，并标记为当前待答复对象 */
   const startAnswer = (item: DailyCheckinItem) => {
-    setPending((prev) => prev.filter((p) => p.id !== item.id));
     setAnswering(item);
     setMessages((prev) => [
       ...prev,
@@ -173,9 +189,8 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** 取消回复：恢复成待回复状态，避免误点后卡在"正在回复" */
+  /** 取消手动回复；下一轮仍由服务端提醒预算决定。 */
   const cancelAnswer = () => {
-    if (answering) setPending((prev) => [answering, ...prev]);
     setAnswering(null);
   };
 
@@ -184,7 +199,6 @@ export default function ChatPage() {
    * 失败不重挂横幅 —— 用户的意图已经表达清楚，不该因为网络问题再追着问一次。
    */
   const declineCheckin = (item: DailyCheckinItem) => {
-    setPending((prev) => prev.filter((p) => p.id !== item.id));
     void api.declineCheckin(item.id, userId).catch(() => {
       /* 静默：拒绝是"减负"操作，失败不打扰用户 */
     });
@@ -192,18 +206,14 @@ export default function ChatPage() {
 
   /* ── 对话流卡片上的三个动作（与原来的弹窗一一对应） ─────────────────── */
 
-  /** 卡片里正在展示的问询：页内横幅不再重复展示同一条 */
-  const visiblePending = pending.filter((p) => p.id !== flowCheckin?.item.id);
-
   const replyFlowCheckin = () => {
     const target = flowCheckin?.item;
     setFlowCheckin(null);
     if (target) startAnswer(target);
   };
 
-  /** 稍后回复：今天不再自动出现，但问询仍是 pending，横幅里还能回 */
+  /** 收起本次提醒，下一次需满足服务端的间隔和次数限制。 */
   const laterFlowCheckin = () => {
-    markCheckinLater(userId);
     setFlowCheckin(null);
   };
 
@@ -222,18 +232,26 @@ export default function ChatPage() {
    * （psych_kg:v1:*）与量表记录 —— 图谱是你长期积累的画像，不该因为
    * "清个聊天框"就一起没了。要清图谱请到「我的知识图谱」页。
    */
-  const doClear = () => {
-    clearChatHistory(userId);
+  const doClear = async () => {
+    if (workspaceOwner.current !== getCurrentSession()?.username) return;
+    if (!temporary && session?.role === 'user') {
+      try { await stewardApi.clearHistory(); }
+      catch { setError('服务端聊天记录暂未清空，请稍后重试。'); return; }
+    }
+    generationVersion.current += 1;
+    if (!temporary) clearChatHistory(userId);
     setConfirmClear(false);
     setError('');
     setMessages([welcomeMessage()]);
   };
 
-  const send = async () => {
-    const text = input.trim();
-    if (!text || busy) return;
-    setInput('');
+  const send = async (suggestion?: string, checkin?: DailyCheckinItem) => {
+    const text = (suggestion ?? input).trim();
+    if (!text || busy || recovering || workspaceOwner.current !== getCurrentSession()?.username) return;
+    generationVersion.current += 1;
+    if (!suggestion) setInput('');
     setError('');
+    setCheckinError('');
     setBusy(true);
 
     /* 一条消息一个时间戳：用户消息与它的回复同刻创建，共用同一个 at，
@@ -250,13 +268,24 @@ export default function ChatPage() {
     /* 若本条是每日问询的答复：只向后端提交"已回复"状态流转。
        三元组抽取不在这里做——回复内容会照常走下面的 /kg/extract，
        统一一条入图路径，避免同一条文本被抽取两次、图谱 cnt 翻倍。 */
-    if (answering) {
-      const target = answering;
+    if (checkin ?? answering) {
+      const target = (checkin ?? answering)!;
+      if (target.id > 0) {
+        try {
+          await api.replyCheckin(target.id, userId, text);
+        } catch (e) {
+          setCheckinError(`问询回复未保存，请重试：${briefErrorMessage(e, '请求失败')}`);
+          if (!suggestion) setInput(text);
+          setBusy(false);
+          return;
+        }
+      }
+      markCheckinReplied(userId);
       setAnswering(null);
-      void api.replyCheckin(target.id, userId, text).catch(() => {
-        /* 状态标记失败不阻断对话：内容仍会走 /kg/extract 进图谱 */
-      });
+      setFlowCheckin(null);
     }
+
+    if (workspaceOwner.current !== getCurrentSession()?.username) { setBusy(false); return; }
 
     /* 先把 user 消息插进去，再插一条**空的** assistant 消息占位。
        大模型改成流式返回后，增量文本会逐段追加到这条占位上 —— 用户几秒内
@@ -268,32 +297,23 @@ export default function ChatPage() {
       { id: replyId, role: 'assistant', text: '', at },
     ]);
 
-    /* 抽取独立跑，不参与回复的等待：三元组进图谱属于后台增强，
-       不该让用户为此多等一轮大模型的时间。 */
-    void (async () => {
-      try {
-        const data = await api.extract(userId, text);
-        if (data.triples?.length) {
-          setLocalCount(appendLocalTriples(userId, data.triples).triples.length);
-        }
-        setMockServer(Boolean(data.mock));
-        // 抽取结果补到这条回复上（界面显示"已抽取 N 条..."），
-        // 因为抽取是后台跑的，到达时间通常晚于回复文本
-        setMessages((prev) =>
-          prev.map((m) => (m.id === replyId ? { ...m, extract: data } : m)),
-        );
-      } catch {
-        const triples = triplesFromText(text);
-        if (triples.length) setLocalCount(appendLocalTriples(userId, triples).triples.length);
-      }
-    })();
+    if (session?.role === 'user') void stewardApi.safety(text).then(result => {
+      setMessages(prev => prev.map(m => m.id === replyId ? { ...m,crisisHits:result.crisis_hits } : m));
+    }).catch(() => { /* Safety scanning does not gate or store temporary chat. */ });
+
+    // Memory extraction now belongs to the consent-aware durable worker.
+    // Temporary messages never enter the legacy graph or local memory store.
 
     let acc = '';
     let offline = false;
     let replyMock = true;
     let streamBroken = false;
     try {
-      for await (const chunk of api.streamChatCompanion(userId, text, history)) {
+      const stream = session?.role === 'user' && !temporary
+        ? streamSteward(`message_${userMsg.id}`, text, history)
+        : api.streamChatCompanion(userId, text, history, undefined, temporary);
+      for await (const chunk of stream) {
+        if ('run_id' in chunk && chunk.run_id) setMessages(prev => prev.map(m => m.id === replyId ? { ...m,runId:chunk.run_id as string,generationStatus:'running' } : m));
         if (chunk?.error) {
           // 上游流中断：不再把半截话当完整回复，转非流式重新生成
           streamBroken = true;
@@ -311,7 +331,7 @@ export default function ChatPage() {
       streamBroken = true;
     }
 
-    if (streamBroken && !offline) {
+    if (streamBroken && !offline && session?.role !== 'user') {
       /* 流式中断：自动改走非流式接口重新生成一份完整回复替换半截文本 */
       try {
         const full = await api.chatCompanion(userId, text, history);
@@ -339,8 +359,31 @@ export default function ChatPage() {
       setMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, text: acc } : m)));
     }
 
+    if (streamBroken && acc.trim() && !offline) {
+      setError('本条回复未完整生成，已保留进度。刷新后可查看后台状态，或重试本条消息。');
+    }
+    setMessages(prev => prev.map(m => m.id === replyId ? { ...m,generationStatus:streamBroken ? 'failed' : 'done' } : m));
+
     setBusy(false);
   };
+
+  const retryReply = async (message: ChatMessage) => {
+    if (!message.runId || busy) return;
+    setBusy(true); setError('');
+    try {
+      await stewardApi.retry(message.runId);
+      while (true) {
+        const run = await stewardApi.run(message.runId);
+        setMessages(prev => prev.map(m => m.id === message.id ? { ...m,text:run.reply || '正在重新生成…',generationStatus:run.status } : m));
+        if (run.status === 'failed') throw new Error(run.error);
+        if (run.status === 'done') break;
+        await new Promise(resolve => setTimeout(resolve,250));
+      }
+    } catch { setError('本条回复暂未生成成功，进度已保留，可稍后重试。'); }
+    finally { setBusy(false); }
+  };
+
+  if (workspaceOwner.current !== userId) return <div className="p-4 text-sm text-slate-500">正在切换账号…</div>;
 
   return (
     /* chat-fullheight：配合 index.css 的 :has 规则把高度链打通到视口，
@@ -349,6 +392,7 @@ export default function ChatPage() {
       {/* 头部：不再放静态小头像 —— 机器人已经"活"在页面里走动（见文件末尾的
           RoamingBot），页头再钉一个不动的头像是同一形象出现两次，反而乱。 */}
       <div className="ui-card p-4 shrink-0">
+        {session?.role === 'user' && <label className="mb-3 flex items-center gap-2 text-xs text-slate-500"><input type="checkbox" checked={temporary} disabled={busy || recovering} onChange={e => { generationVersion.current += 1; if (e.target.checked) { savedRegular.current=messages; setMessages([welcomeMessage()]); } else { setMessages(savedRegular.current.length ? savedRegular.current : [welcomeMessage()]); } setTemporary(e.target.checked); }} />临时对话：不保存本次消息，不形成长期记忆</label>}
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
@@ -362,7 +406,7 @@ export default function ChatPage() {
             {canClear && (
               <button
                 onClick={() => setConfirmClear(true)}
-                title="清空本机聊天记录"
+                title="清空聊天记录"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm font-medium hover:bg-slate-200 whitespace-nowrap cursor-pointer"
               >
                 <Trash2 className="w-4 h-4 shrink-0" /> 清空记录
@@ -372,16 +416,16 @@ export default function ChatPage() {
               userId={userId}
               onMessage={(payload) => setFlowCheckin(payload)}
             />
-            <RunInferenceButton userId={userId} />
+            {session?.role === 'user' ? <button className="rounded-xl bg-primary-50 px-3 py-2 text-sm text-primary-600" onClick={() => navigate('/personal/me/kg')}>我的心理档案</button> : <RunInferenceButton userId={userId} />}
           </div>
         </div>
 
         {/* 状态徽标行：说明数据存在哪，避免被当成已写入图数据库 */}
         <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-500">
-          <span>你的话语会被抽取成知识图谱三元组 · 当前用户 <span className="font-mono">{userId}</span></span>
+          <span>{temporary ? '临时内容不保存、不写入记忆' : stewardState?.settings.chat && stewardState.settings.enabled ? '已允许聊天参与个人记忆' : '聊天不参与长期记忆，可在心理档案中开启'}</span>
           {/* 聊天原文同样只存本机：说清它不会跑到服务端，也不跨设备 */}
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
-            <HardDrive className="w-3 h-3" /> 聊天记录存本机
+            <HardDrive className="w-3 h-3" /> {temporary ? '本次仅保留在页面' : '聊天与生成进度存服务端'}
           </span>
           {/* L1：抽取结果存在本机，说清存在哪 */}
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
@@ -398,42 +442,15 @@ export default function ChatPage() {
       {error && (
         <div className="mt-3 flex items-center gap-2 text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
           <AlertTriangle className="w-4 h-4 shrink-0 text-warning-500" />
-          <span>未连接到服务端（{error}），已切到离线模式：回应由本机规则生成，抽取结果只存在本机。</span>
+          <span>{error}</span>
         </div>
       )}
-
-      {/* 待回复问询：进对话页时由 ensure 触发生成；对话流卡片关闭后仍能在这里看到并回复 */}
-      {visiblePending.length > 0 && (
-        <div className="mt-3 rounded-xl border border-primary-100 bg-primary-50/60 px-4 py-3 space-y-2">
-          <p className="text-xs font-medium text-primary-700 flex items-center gap-1.5">
-            <BellRing className="w-3.5 h-3.5" /> 有 {visiblePending.length} 条来自助手的关怀问询待回复
-          </p>
-          {visiblePending.map((item) => (
-            <div key={item.id} className="flex items-start gap-3 bg-white rounded-lg px-3 py-2">
-              <p className="flex-1 text-sm text-slate-700 leading-relaxed">{item.message}</p>
-              <div className="flex shrink-0 items-center gap-1.5 self-center">
-                <button
-                  onClick={() => startAnswer(item)}
-                  className="px-3 py-1.5 rounded-lg bg-primary-500 text-white text-xs font-medium hover:bg-primary-600 cursor-pointer"
-                >
-                  回复
-                </button>
-                <button
-                  onClick={() => declineCheckin(item)}
-                  className="px-2.5 py-1.5 rounded-lg text-slate-400 text-xs hover:bg-slate-50 hover:text-slate-600 cursor-pointer"
-                >
-                  不想回复
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {checkinError && <p role="alert" className="mt-3 text-sm text-amber-700">{checkinError}</p>}
 
       {answering && (
         <div className="mt-3 flex items-center gap-2 text-sm text-primary-700 bg-primary-50 border border-primary-100 rounded-lg px-3 py-2">
           <BellRing className="w-4 h-4 shrink-0" />
-          <span className="flex-1">正在回复这条问询（{answering.checkin_date}）：发送的消息会作为答复并整理进你的图谱。</span>
+          <span className="flex-1">正在回复这条问询（{answering.checkin_date}）：发送后保存为答复，仅在你允许时用于个人记忆。</span>
           <button onClick={cancelAnswer} className="text-primary-600 hover:text-primary-800 text-xs cursor-pointer">
             取消
           </button>
@@ -479,6 +496,7 @@ export default function ChatPage() {
                     </span>
                   </span>
                 )}
+                {m.runId && m.generationStatus === 'failed' && <button className="mt-2 block text-xs text-primary-600" disabled={busy} onClick={() => void retryReply(m)}>重新生成此回复</button>}
                 {m.offline && (
                   <span className="mt-2 inline-block rounded-full bg-warning-50 px-2 py-0.5 text-[11px] text-warning-600">
                     离线模式
@@ -489,7 +507,7 @@ export default function ChatPage() {
                     本机文案 · 未走大模型
                   </span>
                 )}
-                {m.extract?.crisis_hits && m.extract.crisis_hits.length > 0 && (
+                {((m.crisisHits?.length ?? 0) > 0 || (m.extract?.crisis_hits?.length ?? 0) > 0) && (
                   /* 安全提示放在抽取结果之前：它是这条消息里优先级最高的信息，
                      不该排在"已抽取 N 条"下面。后端在原文上直检得到（不经语义归一），
                      所以不会因为抽取器把"活着没意思"归成"无意义感"而漏掉。 */
@@ -546,12 +564,23 @@ export default function ChatPage() {
                   服务端问询暂时取不到（{flowCheckin.err}），已改用本机问询。
                 </p>
               )}
+              <p className="mt-3 text-xs text-slate-400">
+                {flowCheckin.item.suggestions_source === 'ai' ? 'AI 推荐回复 · 选择符合你实际情况的一项' : '备用快捷回复（AI 推荐暂不可用）'}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(flowCheckin.item.suggested_replies ?? []).map((reply) => (
+                  <button key={reply} disabled={busy} onClick={() => void send(reply, flowCheckin.item)}
+                    className="cursor-pointer rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-left text-sm text-primary-700 hover:bg-primary-100 disabled:opacity-50">
+                    {reply}
+                  </button>
+                ))}
+              </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
                   onClick={replyFlowCheckin}
                   className="cursor-pointer rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary-600"
                 >
-                  回复
+                  自己写一句
                 </button>
                 <button
                   onClick={laterFlowCheckin}
@@ -589,7 +618,7 @@ export default function ChatPage() {
           className="flex-1 resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-300"
         />
         <button
-          onClick={send}
+          onClick={() => void send()}
           disabled={busy}
           className="self-end inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 disabled:opacity-50 cursor-pointer"
         >
@@ -604,27 +633,22 @@ export default function ChatPage() {
           那一行的外侧探身往里看。
           这里没有"绕开面板"的逻辑：用户明确要求"直接在对话框下层走过即可"，
           所以它走的是直线，从背后穿过 —— 读起来是"从下面经过"，不是闪现。 */}
-      <RoamingBot
+      {pageActive && <RoamingBot
         panelRef={panelRef}
         composerRef={composerRef}
         peeking={peeking}
         busy={busy}
-      />
+      />}
 
-      {/* 今日问询：进入本页当天首次自动拉取，但不再弹窗 ——
-          问询作为对话流卡片展示（见上方 flowCheckin），三个动作在卡片上处理。
-          onEnsure 把生成的这条同步进「待回复」横幅：用户点「稍后回复」关掉卡片后，
-          横幅里还留着它，随时可以回来回复。 */}
+      {/* 每日最多三轮提醒；卡片可见或正在手动回复时暂停领取下一轮。 */}
       <DailyCheckinDialog
-        inline
-        onReply={startAnswer}
+        active={Boolean(flowCheckin) || Boolean(answering)}
         onEnsure={(item) => {
           if (item.status !== 'pending') return;
-          setPending((prev) => (prev.some((p) => p.id === item.id) ? prev : [item, ...prev]));
           setFlowCheckin({
             item,
             message: item.message,
-            note: '每天只问一次；回复后内容会自动整理进你的个人图谱',
+            note: '每天最多提醒三次，回复后今天不再出现；仅在你允许时用于个人记忆',
           });
         }}
       />
@@ -641,15 +665,15 @@ export default function ChatPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-              <Trash2 className="w-4 h-4 text-danger-500" /> 清空本机聊天记录？
+              <Trash2 className="w-4 h-4 text-danger-500" /> 清空聊天记录？
             </h3>
             <p className="mt-3 text-sm text-slate-600 leading-relaxed">
-              将删除本机保存的这段对话记录，删除后无法恢复，页面只保留开头的欢迎语。
+              将删除服务端和本机保存的聊天记录，删除后无法恢复。临时对话只清除当前页面内容。
             </p>
             <p className="mt-2 text-xs text-slate-400 leading-relaxed">
               只清对话原文 —— 已抽取的知识图谱条目（本机已记录 {localCount} 条）与量表记录
               <span className="text-slate-500 font-medium">不受影响</span>。
-              若也要清空图谱，请到「我的知识图谱」页操作。
+              若要让管家忘记相关内容，请到「我的心理档案」中删除记忆或排除来源。
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -690,53 +714,14 @@ function DailyCheckinButton({
   const fetchCheckin = async () => {
     setLoading(true);
     try {
-      /* 走 ensure（幂等）而不是 getDailyCheckin（每次重新生成）：
-         拿到的就是「今天那一条」，与自动问询是同一份内容。
-         这样点按钮不会跑出第二条问询，也不会多消耗一次大模型调用。 */
-      const r = await api.ensureDailyCheckin(userId);
-      /* 服务端没落库（演示模式等）时合成一条本机问询，保证卡片动作可用 */
-      const now = new Date().toISOString();
-      const item: DailyCheckinItem = r.checkin ?? {
-        id: -Date.now(),
-        user_id: userId,
-        message: r.message,
-        status: 'pending',
-        reply: '',
-        source: 'local',
-        checkin_date: now.slice(0, 10),
-        created_at: now,
-        replied_at: '',
-      };
+      const r = await api.presentDailyCheckin(userId);
+      if (!r.checkin) return;
       onMessage({
-        item,
-        message: item.message,
-        note: '每天只问一次；回复后内容会自动整理进你的个人图谱',
-        err: r.checkin && !r.neo4j_connected ? '服务端知识图谱未连接：本次抽取结果会存在本机。' : undefined,
+        item: r.checkin, message: r.checkin.message,
+        note: '每天最多提醒三次，回复后今天不再出现',
       });
-    } catch (e) {
-      /* 服务端拿不到也照样给一句：用本机已有数据（兴趣/记录）挑一条问询，并注明来源。
-         同时合成一条本机问询记录，让卡片上的回复 / 稍后 / 不想回复仍然可用
-         （id 为负数，服务端回写必然失败，但本机标记与对话流程不受影响）。 */
-      const err = briefErrorMessage(e, '未连接到服务端');
-      const signals = await collectLocalSignals(userId);
-      const message = buildLocalCheckin(signals);
-      const now = new Date().toISOString();
-      onMessage({
-        item: {
-          id: -Date.now(),
-          user_id: userId,
-          message,
-          status: 'pending',
-          reply: '',
-          source: 'local',
-          checkin_date: now.slice(0, 10),
-          created_at: now,
-          replied_at: '',
-        },
-        message,
-        note: '本机问询（服务端未连接）：回复后内容会存进本机记录',
-        err,
-      });
+    } catch {
+      // 无法核对服务端预算时不生成额外的本机问询。
     } finally {
       setLoading(false);
     }

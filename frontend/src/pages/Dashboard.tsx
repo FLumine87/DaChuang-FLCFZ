@@ -423,7 +423,7 @@ export default function Dashboard() {
         都会横向溢出、压到卡片上（1270×750 实测）。2xl 再放开到 430。 */}
       {/* 1180 以下改成单列：1024–1179 时内容区只有 670–820px，
           380px 的计划卡会剩不下左栏（标题要断成三行，灰字压到卡片上）。 */}
-      <div className="grid gap-6 min-[1180px]:grid-cols-[minmax(0,1fr)_minmax(0,380px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
+      <div className="dashboard-hero grid gap-6 min-[1180px]:grid-cols-[minmax(0,1fr)_minmax(0,380px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
       {/* ============ 首屏：左标题 + 右「今日行动计划」（缩小后移到右上角） ============ */}
       {/* 左栏：标题 + 灰字 + 两个动作，整块在左栏内垂直居中（对齐右侧计划卡的高度） */}
       <div className="lg:flex lg:flex-col lg:justify-center" style={{ paddingTop: tune.offset }}>

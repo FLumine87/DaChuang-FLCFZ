@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { usePageActive } from '../../services/pageActivity';
+import { RetainedView } from '../../components/RetainedWorkspace';
 import { Activity, ArrowRight, Bell, Check, ChevronRight, ClipboardCheck, FileText, Image,
   Loader2, Mic, Play, Search, ShieldCheck, Sparkles, Users, X } from 'lucide-react';
 import { analyseCase, loadCase, loadWorkspace, saveTask, startRun, type CaseDetail, type Scope,
@@ -25,6 +27,7 @@ function dialogKeys(event: KeyboardEvent<HTMLElement>, close: () => void) {
 }
 
 export default function AgentWorkspaceV2() {
+  const pageActive = usePageActive();
   const [searchParams, setSearchParams] = useSearchParams();
   const deepCase = searchParams.get('caseId');
   const scope: Scope = deepCase || searchParams.get('scope') === 'live' ? 'live' : 'demo';
@@ -61,7 +64,7 @@ export default function AgentWorkspaceV2() {
   const run = workspace?.latest_run;
 
   useEffect(() => {
-    if (!detailOpen || editing) return;
+    if (!detailOpen || editing || !pageActive) return;
     const handleKey = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         ++detailGeneration.current; setDetailOpen(false); dialogOrigin.current?.focus();
@@ -74,7 +77,7 @@ export default function AgentWorkspaceV2() {
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [detailOpen, editing]);
+  }, [detailOpen, editing, pageActive]);
 
   useEffect(() => {
     if (USE_MOCK) {
@@ -162,7 +165,7 @@ export default function AgentWorkspaceV2() {
         return <button key={String(id)} aria-pressed={tab === id} disabled={busy} className={tab === id ? 'active' : ''} onClick={() => { closeCase(); changeView({ tab: String(id), scope: id === 'alerts' ? 'live' : undefined, clearCase: Boolean(deepCase) }); }}><I size={16} />{String(label)}</button>;
       })}{showWorkflow && <span className="aw-save">{run ? `上次运行 ${date(run.created_at)}` : '尚未生成研判'}</span>}
     </div>
-    {tab === 'alerts' && <section aria-label="预警队列"><p className="aw-source">按单条业务预警分配处理人、记录进展和查看处置历史。</p><AdminAlerts onOpenCase={code => void openCase(`screening-code:${code}`)} /></section>}
+    <RetainedView active={tab === 'alerts'}><section aria-label="预警队列"><p className="aw-source">按单条业务预警分配处理人、记录进展和查看处置历史。</p><AdminAlerts onOpenCase={code => void openCase(`screening-code:${code}`)} /></section></RetainedView>
     {tab !== 'alerts' && USE_MOCK && <OfflineBackendNotice feature="预警研判与处置" detail="群体研判、个案档案和随访任务需要连接主后端。" />}
     {showWorkflow && (loading ? <div className="aw-empty"><Loader2 className="aw-spin" />正在读取工作台…</div> : <>
       {tab === 'overview' && (run ? <>

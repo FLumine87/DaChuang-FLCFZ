@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { RetainedView } from '../../components/RetainedWorkspace';
 import { Link } from 'react-router-dom';
 import {
   FileText, Mic, ImageIcon, Search, ChevronDown,
@@ -646,9 +647,9 @@ export default function AdminDataCollection() {
       {/* 注：三个页签的条目目前来自前端样例数据（adminMockData）；
           后端采集审阅接口现在只返回空列表，等上传与审阅链路启用后再切服务层。 */}
 
-      {activeTab === 'text'  && <TextTab rows={data?.text ?? []} />}
-      {activeTab === 'audio' && <AudioTab rows={data?.audio ?? []} />}
-      {activeTab === 'image' && <ImageTab rows={data?.image ?? []} />}
+      <RetainedView active={activeTab === 'text'}><TextTab rows={data?.text ?? []} /></RetainedView>
+      <RetainedView active={activeTab === 'audio'}><AudioTab rows={data?.audio ?? []} /></RetainedView>
+      <RetainedView active={activeTab === 'image'}><ImageTab rows={data?.image ?? []} /></RetainedView>
     </div>
   );
 }

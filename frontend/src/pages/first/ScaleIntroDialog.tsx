@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { usePageActive } from '../../services/pageActivity';
 import {
   Activity,
   AlarmClock,
@@ -61,6 +62,7 @@ export default function ScaleIntroDialog({
   open: boolean;
   onClose: () => void;
 }) {
+  const pageActive = usePageActive();
   const closeRef = useRef<HTMLButtonElement>(null);
   const guide = getScaleGuide(scaleId);
   /* 关闭时先播退场动画再真正卸载：open 由父组件控制，
@@ -77,7 +79,7 @@ export default function ScaleIntroDialog({
 
   /* Esc 关闭 + 打开期间锁住背景滚动（与项目里其他弹窗一致） */
   useEffect(() => {
-    if (!open) return;
+    if (!open || !pageActive) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKey = (event: KeyboardEvent) => {
@@ -91,7 +93,7 @@ export default function ScaleIntroDialog({
     };
     // requestClose 每次渲染都是新函数，这里只依赖 open
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, pageActive]);
 
   if (!open || !guide) return null;
 

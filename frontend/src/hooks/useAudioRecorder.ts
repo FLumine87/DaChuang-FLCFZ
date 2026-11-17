@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toCorpusWavFile } from '../utils/audioRecorder';
+import { usePageActive } from '../services/pageActivity';
 
 /** 单次录音上限：语料片段约 2.3s，60s 足够，同时挡住忘停导致的超大体积 */
 const MAX_SECONDS = 60;
@@ -25,6 +26,9 @@ export interface AudioRecorder {
  * onComplete 收到的是已转码的 24414Hz 单声道 WAV，可直接走上传链路。
  */
 export function useAudioRecorder(onComplete: (file: File) => void): AudioRecorder {
+  const pageActive = usePageActive();
+  const activeRef = useRef(pageActive);
+  useEffect(() => { activeRef.current = pageActive; }, [pageActive]);
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +68,10 @@ export function useAudioRecorder(onComplete: (file: File) => void): AudioRecorde
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!activeRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       const rec = new MediaRecorder(stream);
       recorderRef.current = rec;
@@ -112,6 +120,11 @@ export function useAudioRecorder(onComplete: (file: File) => void): AudioRecorde
     cancelledRef.current = true;
     recorderRef.current?.stop();
   }, []);
+
+  // 切页停止采集并保留已录内容，后台分析请求仍可继续。
+  useEffect(() => {
+    if (!pageActive && recorderRef.current?.state === 'recording') stop();
+  }, [pageActive, stop]);
 
   // 组件卸载时释放麦克风，避免指示灯一直亮
   useEffect(() => release, [release]);

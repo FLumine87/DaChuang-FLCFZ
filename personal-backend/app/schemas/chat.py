@@ -19,6 +19,7 @@ class CompanionChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     # 最近几轮对话（不含本轮 user 消息），前端截断后传入
     history: list[ChatTurn] = Field(default_factory=list, max_length=12)
+    temporary: bool = False
 
 
 class CompanionChatResponse(BaseModel):

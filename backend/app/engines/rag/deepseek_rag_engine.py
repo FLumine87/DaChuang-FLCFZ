@@ -158,7 +158,10 @@ class DeepSeekRAGEngine(RAGEngineInterface):
     def _build_prompt(self, screening_data: Dict, knowledge_text: str) -> str:
         if screening_data.get("screening_assessment"):
             from app.services.screening_assessment import assessment_prompt
-            return assessment_prompt(screening_data["screening_assessment"], knowledge_text, screening_data.get("original_input"))
+            prompt = assessment_prompt(screening_data["screening_assessment"], knowledge_text, screening_data.get("original_input"))
+            if screening_data.get('personal_context'):
+                prompt += '\n【获准使用的个人档案，仅用于个性化解释与建议，不得改变本次筛查结论】\n' + screening_data['personal_context']
+            return prompt
         score = screening_data.get("score", 0)
         max_score = screening_data.get("max_score", 100)
         alert_level = screening_data.get("alert_level", "green")

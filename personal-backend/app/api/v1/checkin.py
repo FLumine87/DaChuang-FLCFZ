@@ -37,6 +37,16 @@ from ...services.llm_client import mock_mode
 router = APIRouter(tags=["daily-checkin"], dependencies=[Depends(require_user)])
 
 
+@router.post("/checkin/present", response_model=DailyCheckinEnsureResponse)
+def present_daily_checkin(user_id: str, user: dict = Depends(require_user)):
+    assert_owns(user, user_id, what="该用户的问询")
+    item = checkin_service.present_daily_checkin(user_id) if settings.enable_daily_checkin else None
+    return DailyCheckinEnsureResponse(
+        user_id=user_id, created=False, checkin=item,
+        message=item.message if item else "", neo4j_connected=neo4j_health(),
+    )
+
+
 @router.post("/checkin/ensure", response_model=DailyCheckinEnsureResponse)
 def ensure_daily_checkin(
     user_id: str,

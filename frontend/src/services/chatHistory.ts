@@ -45,6 +45,9 @@ export interface StoredChatMessage {
   offline?: boolean;
   /** 对话服务端处于演示模式（未配 LLM 或 Mock），回复来自本机文案 */
   replyMock?: boolean;
+  runId?: string;
+  generationStatus?: string;
+  crisisHits?: string[];
 }
 
 export interface ChatHistoryStore {

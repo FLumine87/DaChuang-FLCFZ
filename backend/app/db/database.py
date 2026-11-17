@@ -446,6 +446,8 @@ def init_db_sync() -> None:
                         conn.execute(f"UPDATE {table} SET review_status = 'approved'")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_screenings_review ON screenings(review_status)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_supplements_review ON screening_supplements(review_status)")
+        from app.handlers.steward_bridge import SCHEMA as steward_schema
+        conn.executescript(steward_schema)
         _seed_demo_accounts(conn)
         conn.commit()
 
@@ -525,6 +527,8 @@ async def init_db() -> None:
         if env is None:
             return
         await env.DB.exec(SCHEMA_SQL)
+        from app.handlers.steward_bridge import SCHEMA as steward_schema
+        await env.DB.exec(steward_schema)
     else:
         init_db_sync()
 

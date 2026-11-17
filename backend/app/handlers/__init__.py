@@ -4,9 +4,12 @@ auth_level: None=公开 / 'user'=需登录 / 'admin'=需管理员
 """
 from app.handlers import (auth, screening, alerts, cases, retrieval, upload,
                           dashboard, personal, admin, knowledge_graph, warning_agent,
-                          agent_workspace, review, reviews)
+                          agent_workspace, review, reviews, steward_bridge)
 
 ROUTES = [
+    ("GET", "/api/internal/steward/context", steward_bridge.context, None),
+    ("POST", "/api/internal/steward/plan", steward_bridge.plan, None),
+    ("POST", "/api/personal/steward/feedback", steward_bridge.feedback, "user"),
     ("POST", "/api/personal/retrieval-screening", personal.personal_retrieval_screening, "user"),
     ("POST", "/api/admin/reviews", reviews.send, "admin"),
     ("GET", "/api/admin/reviews", reviews.staff_list, "admin"),

@@ -985,7 +985,9 @@ async def personal_rag_report(ctx: RequestContext):
         original_text = str(source.get("query") or "").strip()[:6000] if include_original else ""
         engine = get_rag_engine()
         await engine.initialize()
+        from app.services.steward_context import personal_context
         report = await engine.generate_report({"name": "多模态检索初筛", "screening_assessment": assessment,
+            "personal_context": await personal_context(ctx.user['sub']),
             "original_input": {"enabled": include_original, "text": original_text, "modality": source["modality"]},
             "alert_level": assessment["level"] or "unknown"})
         if isinstance(report, dict) and "risk_level" in report:
@@ -1024,6 +1026,9 @@ async def personal_rag_report(ctx: RequestContext):
         "score": (assessment.get("scaleResult") or {}).get("score"),
         "max_score": (assessment.get("scaleResult") or {}).get("maxScore"),
         "alert_level": assessment["level"] or "unknown"}
+
+    from app.services.steward_context import personal_context
+    screening_data['personal_context'] = await personal_context(user_id)
 
     report = await rag_engine.generate_report(screening_data)
     if isinstance(report, dict) and "risk_level" in report:

@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import StewardPanel from '../components/StewardPanel';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { usePageActive } from '../services/pageActivity';
 import ScreeningDetail from './ScreeningDetail';
 import {
   Search,
@@ -35,7 +37,18 @@ type AlertLevel = 'green' | 'yellow' | 'orange' | 'red';
  *   - 内层改参数时保留其它参数（尤其是 ?tab=），刷新后仍停在同一标签页
  */
 export default function ScreeningWorkspace() {
+  const pageActive = usePageActive();
   const navigate = useNavigate();
+  const pageActiveRef = useRef(pageActive);
+  const pendingNavigation = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    pageActiveRef.current = pageActive;
+    if (pageActive && pendingNavigation.current) {
+      const target = pendingNavigation.current;
+      pendingNavigation.current = null;
+      navigate(target, { replace: true });
+    }
+  }, [pageActive, navigate]);
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('record');
   // ?paper=PHQ-9 时直接打开该量表的作答表单（首页「评估心理状态」等入口跳到这里）
@@ -89,8 +102,8 @@ export default function ScreeningWorkspace() {
   }, [fetchRecords]);
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [activeQuestionnaire, selectedId]);
+    if (pageActive) window.scrollTo(0, 0);
+  }, [activeQuestionnaire, selectedId, pageActive]);
 
   // 让 ?paper= 成为"当前在作答哪个量表"的唯一来源：
   // 带参数进来会打开表单，参数被清掉（点侧栏/关闭表单）则回到列表
@@ -99,7 +112,7 @@ export default function ScreeningWorkspace() {
   }, [paperParam]);
 
   useEffect(() => {
-    if (!infoQuestionnaire) return;
+    if (!infoQuestionnaire || !pageActive) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleEscape = (event: KeyboardEvent) => {
@@ -110,7 +123,7 @@ export default function ScreeningWorkspace() {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [infoQuestionnaire]);
+  }, [infoQuestionnaire, pageActive]);
 
   const selectedInfo = questionnaires.find((item) => item.id === infoQuestionnaire);
 
@@ -153,7 +166,8 @@ export default function ScreeningWorkspace() {
       authoritativeScore = response.score ?? score;
       const serverLevel = ['green', 'yellow', 'orange', 'red'].includes(response.riskLevel) ? response.riskLevel as AlertLevel : level;
       setSavedRecord({ id: response.id, questionnaire: scaleId, score: authoritativeScore, maxScore: response.maxScore ?? maxScore, level: serverLevel, status: 'completed', moodTag: '已完成', date: new Date().toLocaleDateString('sv-SE') });
-      patchParams({ record: response.id });
+      if (pageActiveRef.current) patchParams({ record: response.id });
+      else pendingNavigation.current = `/personal/screening?${new URLSearchParams({ tab: 'scale', record: response.id })}`;
     } catch (e) {
       console.error('提交筛查失败', e);
       throw e;
@@ -190,7 +204,9 @@ export default function ScreeningWorkspace() {
       const next = new URLSearchParams({ tab: 'retrieval', assessmentSupplementId: supplementId, screeningId: recordId });
       const query = params.get('assessmentQuery');
       if (query) next.set('q', query);
-      navigate(`/personal/screening?${next.toString()}`);
+      const target = `/personal/screening?${next.toString()}`;
+      if (pageActiveRef.current) navigate(target);
+      else pendingNavigation.current = target;
     }
   };
 
@@ -217,6 +233,7 @@ export default function ScreeningWorkspace() {
 
   return (
     <div className="space-y-6">
+      <StewardPanel />
       {/* 量表回写知识图谱的结果提示（团队 main 的功能）：容器换成 .ui-card，
           内层配色改走令牌，深色下不再是一块固定的浅绿。 */}
       {kgSyncMsg && (

@@ -17,10 +17,14 @@ pending 还是 replied）就直接复用，不重复生成、不重复调 LLM。
 """
 
 import time
+import json
 from typing import Optional
 
+from sqlalchemy import exists, select, update
+from sqlalchemy.dialects.sqlite import insert
+
 from ..db.database import SessionLocal
-from ..db.models import DailyCheckin
+from ..db.models import CheckinPresentation, DailyCheckin
 from ..schemas.checkin import DailyCheckinOut
 
 
@@ -30,6 +34,59 @@ def _today() -> str:
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def present_daily_checkin(user_id: str) -> Optional[DailyCheckinOut]:
+    """领取一次展示资格：最多三次、间隔30分钟，已处理当天不再展示。
+
+    原子条件更新共享提醒预算；两个标签页同时打开也不能超过三次。
+    """
+    from .daily_checkin_agent import generate_reply_options
+
+    with SessionLocal() as session:
+        completed = session.query(DailyCheckin.id).filter(
+            DailyCheckin.user_id == user_id, DailyCheckin.checkin_date == _today(),
+            DailyCheckin.status.in_(["replied", "declined"]),
+        ).first()
+        if completed:
+            return None
+    result = ensure_daily_checkin(user_id)
+    item = result.get("checkin")
+    if item is None or item.status != "pending":
+        return None
+    day, now = _today(), int(time.time())
+    with SessionLocal() as session:
+        state = session.get(CheckinPresentation, (user_id, day))
+        if state and (state.count >= 3 or now - state.last_shown < 1800):
+            return None
+        needs_options = not state
+    options, source = generate_reply_options(item.message) if needs_options else ([], "fallback")
+    with SessionLocal.begin() as session:
+        session.execute(insert(CheckinPresentation).values(
+            user_id=user_id, day=day, count=0, last_shown=0,
+            options=json.dumps(options, ensure_ascii=False), options_source=source,
+        ).on_conflict_do_nothing(index_elements=["user_id", "day"]))
+        claimed = session.execute(update(CheckinPresentation).where(
+            CheckinPresentation.user_id == user_id,
+            CheckinPresentation.day == day,
+            CheckinPresentation.count < 3,
+            CheckinPresentation.last_shown <= now - 1800,
+            ~exists(select(DailyCheckin.id).where(
+                DailyCheckin.user_id == user_id, DailyCheckin.checkin_date == day,
+                DailyCheckin.status.in_(["replied", "declined"]),
+            )),
+            exists(select(DailyCheckin.id).where(
+                DailyCheckin.id == item.id, DailyCheckin.status == "pending",
+                DailyCheckin.checkin_date == day,
+            )),
+        ).values(count=CheckinPresentation.count + 1, last_shown=now))
+        if claimed.rowcount != 1:
+            return None
+        state = session.get(CheckinPresentation, (user_id, day))
+        item.suggested_replies = json.loads(state.options)
+        item.suggestions_source = state.options_source
+        item.presentation_count = state.count
+        return item
 
 
 def save_checkins(messages: dict[str, str], source: str = "manual") -> int:
@@ -52,7 +109,6 @@ def save_checkins(messages: dict[str, str], source: str = "manual") -> int:
                 .filter(
                     DailyCheckin.user_id == uid,
                     DailyCheckin.checkin_date == today,
-                    DailyCheckin.status == "pending",
                 )
                 .first()
             )

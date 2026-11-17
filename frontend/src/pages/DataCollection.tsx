@@ -12,6 +12,8 @@ import {
 } from '../services/mockApi';
 import ScreeningWorkspace from './ScreeningWorkspace';
 import Retrieval from './Retrieval';
+import { RetainedView } from '../components/RetainedWorkspace';
+import { usePageActive } from '../services/pageActivity';
 
 interface PersistResult {
   ok: boolean;
@@ -86,6 +88,9 @@ function useCollectionRevision(onInputChange: () => void) {
 
 // ─── Audio Tab ────────────────────────────────────────────────────────────────
 function AudioTab({ onReport, onInputChange }: CollectionInputProps) {
+  const pageActive = usePageActive();
+  const activeRef = useRef(pageActive);
+  useEffect(() => { activeRef.current = pageActive; }, [pageActive]);
   const { revision, invalidate } = useCollectionRevision(onInputChange);
   const [recordState, setRecordState] = useState<RecordState>('idle');
   const [elapsed, setElapsed] = useState(0);
@@ -103,6 +108,18 @@ function AudioTab({ onReport, onInputChange }: CollectionInputProps) {
   const uploadRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (pageActive) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (recorderRef.current?.state === 'recording') {
+      recorderRef.current.stop();
+      setRecordState('stopped');
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    Object.values(audioRefs.current).forEach((audio) => audio.pause());
+    setPlayingId(null);
+  }, [pageActive]);
+
+  useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -116,6 +133,11 @@ function AudioTab({ onReport, onInputChange }: CollectionInputProps) {
     setRecordState('requesting');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!activeRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordState('idle');
+        return;
+      }
       streamRef.current = stream;
       const recorder = new MediaRecorder(stream);
       chunksRef.current = [];
@@ -598,7 +620,7 @@ function TextTab({ onReport, onInputChange }: CollectionInputProps) {
   );
 }
 
-// 结果只属于当前表单会话；切换标签卸载后不恢复历史结果。
+// 当前表单会话随工作页保留，修改输入时才清理旧结果。
 function CollectionSession({ kind }: { kind: 'text' | 'audio' | 'image' }) {
   const [report, setReport] = useState<CollectionAnalysis | null>(null);
   const clearReport = useCallback(() => setReport(null), []);
@@ -689,11 +711,13 @@ export default function DataCollection() {
         })}
       </div>
 
-      {(activeTab === 'text' || activeTab === 'audio' || activeTab === 'image') && <CollectionSession key={activeTab} kind={activeTab} />}
-      {activeTab === 'scale' && <ScreeningWorkspace />}
+      {(['text', 'audio', 'image'] as const).map((kind) => (
+        <RetainedView key={kind} active={activeTab === kind}><CollectionSession kind={kind} /></RetainedView>
+      ))}
+      <RetainedView active={activeTab === 'scale'}><ScreeningWorkspace /></RetainedView>
       {/* 检索分析：与采集同页。Retrieval 的根元素是 space-y-6 的普通容器，
           直接嵌进来即可，不需要为它另做一套页面外壳。 */}
-      {activeTab === 'retrieval' && <Retrieval />}
+      <RetainedView active={activeTab === 'retrieval'}><Retrieval /></RetainedView>
 
 
     </div>

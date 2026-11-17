@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
     llm_timeout: int = 60
+    # Aggregating a profile requires more generation time than a short chat turn.
+    steward_llm_timeout: int = 180
+    steward_max_tokens: int = 8192
     # 校园网/代理环境 SSL 校验失败时可设为 False 跳过证书校验
     llm_verify_ssl: bool = True
 

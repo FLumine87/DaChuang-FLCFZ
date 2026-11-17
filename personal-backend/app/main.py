@@ -6,6 +6,7 @@ from .api.v1.chat import router as chat_router
 from .api.v1.checkin import router as checkin_router
 from .api.v1.inference import router as inference_router
 from .api.v1.kg import router as kg_router
+from .api.v1.steward import router as steward_router
 from .config import settings
 from .core.neo4j import neo4j_health
 from .db.database import init_db
@@ -28,6 +29,9 @@ app.add_middleware(
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+    from .services import steward, steward_store
+    steward_store.init()
+    app.state.stop_steward = steward.start_worker()
     # 每日问询已改为「当天第一次登录时触发」（POST /api/v1/checkin/ensure），
     # 服务端不再起任何定时器 —— 原先的 APScheduler 调度器已移除。
     # 问询时机由"用户真的来了"决定，而不是靠一个到点就跑的闹钟：
@@ -40,6 +44,13 @@ app.include_router(inference_router, prefix="/api/v1")
 app.include_router(alerts_router, prefix="/api/v1")
 app.include_router(checkin_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
+app.include_router(steward_router, prefix="/api/v1")
+
+
+@app.on_event('shutdown')
+def stop_steward():
+    if hasattr(app.state, 'stop_steward'):
+        app.state.stop_steward()
 
 
 @app.get("/api/v1/health")

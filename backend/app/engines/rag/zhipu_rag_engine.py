@@ -117,6 +117,8 @@ class ZhipuRAGEngine(RAGEngineInterface):
         if screening_data.get("screening_assessment"):
             from app.services.screening_assessment import assessment_prompt
             prompt = assessment_prompt(screening_data["screening_assessment"], knowledge_text, screening_data.get("original_input"))
+            if screening_data.get('personal_context'):
+                prompt += '\n【获准使用的个人档案，仅用于个性化解释与建议，不得改变本次筛查结论】\n' + screening_data['personal_context']
         
         try:
             call_kwargs = dict(

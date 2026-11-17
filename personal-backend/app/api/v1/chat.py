@@ -37,8 +37,8 @@ COMPANION_SYSTEM_PROMPT = """你是「心晴伙伴」，一位温暖的 AI 心�
 1. 共情先行：先接住对方的情绪，再自然展开；不评判、不说教。
 2. 简短真诚：一次回复 2-4 句话（50-150 字），像朋友聊天，不写小作文。
 3. 善用倾听：可以温和地提一个开放式问题帮助对方表达，但一次最多问一个问题。
-4. 个性化：如果给你提供了用户的兴趣或近况（来自个人知识图谱），可以在自然合适时提及，让对方感到被记住；不要生硬罗列。
-5. 安全边界：你不做心理诊断，不评价量表，不建议任何药物；如果对方流露自伤、自杀念头或描述危机处境，用温和而坚定的语气建议立即联系信任的人、学校心理中心或心理援助热线（如全国 24 小时心理援助热线 12356）。
+4. 个性化：如果给你提供了用户的兴趣或近况（来自本人授权的个人档案与原始依据），可以在自然合适时提及，让对方感到被记住；不要生硬罗列。
+5. 安全边界：你可以解释已提供的筛查结果，但不能重算分层、做心理诊断或建议药物；如果对方流露自伤、自杀念头或描述危机处境，用温和而坚定的语气建议立即联系信任的人、学校心理中心或心理援助热线（如全国 24 小时心理援助热线 12356）。
 6. 用简体中文回复，语气温暖自然，避免 AI 腔和排比句。"""
 
 
@@ -69,7 +69,9 @@ def _kg_context(user_id: str) -> tuple[str, bool]:
 def companion_chat(body: CompanionChatRequest, user: dict = Depends(require_user)) -> CompanionChatResponse:
     assert_owns(user, body.user_id, what="该用户的对话")
     mock = mock_mode()
-    kg_prompt, kg_used = _kg_context(body.user_id)
+    from ...services.steward import context
+    kg_prompt = '' if body.temporary else context(str(user.get('sub')), body.message)
+    kg_used = bool(kg_prompt)
     if mock:
         # Mock（离线演示）模式：不假装是大模型，交给前端本地兜底
         return CompanionChatResponse(user_id=body.user_id, reply="", mock=True, kg_context_used=False)
@@ -103,7 +105,8 @@ def companion_chat_stream(body: CompanionChatRequest, user: dict = Depends(requi
     if mock_mode():
         return CompanionChatResponse(user_id=body.user_id, reply="", mock=True, kg_context_used=False)
 
-    kg_prompt, _kg_used = _kg_context(body.user_id)
+    from ...services.steward import context
+    kg_prompt = '' if body.temporary else context(str(user.get('sub')), body.message)
     messages: list[dict] = [
         {"role": "system", "content": COMPANION_SYSTEM_PROMPT + (f"\n\n{kg_prompt}" if kg_prompt else "")}
     ]

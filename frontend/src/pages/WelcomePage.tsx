@@ -1,4 +1,5 @@
 import { useState } from "react";
+import StewardPanel from '../components/StewardPanel';
 import { useNavigate } from "react-router-dom";
 import {
   BarChart3,
@@ -100,6 +101,7 @@ export default function WelcomePage() {
         "约 2–4 分钟",
         "结果仅供自我了解，不构成诊断",
       ]}
+      afterBody={<StewardPanel />}
     >
       <div className="mx-auto w-full max-w-[460px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7">
         <p className="text-[13px] font-medium tracking-[0.16em] text-primary-500">

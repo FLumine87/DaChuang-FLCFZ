@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { usePageActive } from '../../services/pageActivity';
 import { ChevronRight, Search, X } from 'lucide-react';
 /* 走 adminApi 的分页接口：后端 /api/admin/cases 返回的是 { items, total, page, pageSize }
    信封，不是裸数组。以前这里用 mockApi.getAdminCases()，它把这个对象直接当数组返回，
@@ -37,6 +38,7 @@ function pageList(current: number, total: number): number[] {
 }
 
 export default function AdminCases() {
+  const pageActive = usePageActive();
   /* ── 列表 ─────────────────────────────────────────────────────────── */
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('');
@@ -105,7 +107,7 @@ export default function AdminCases() {
 
   /* 抽屉打开时锁住页面滚动，Esc 逐层关闭（先关弹窗，再关抽屉） */
   useEffect(() => {
-    if (!openId) return;
+    if (!openId || !pageActive) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const onKey = (event: KeyboardEvent) => {
@@ -120,7 +122,7 @@ export default function AdminCases() {
     };
     // closeCase 会读取最新的未保存状态，所以 dirty/eventDirty 变化时重注册
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openId, viewing, dirty, eventDirty]);
+  }, [openId, viewing, dirty, eventDirty, pageActive]);
 
   function openCaseNow(id: string) {
     setOpenId(id); setDetail(null); setDetailLoading(true); setDetailError('');
