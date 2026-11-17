@@ -56,6 +56,8 @@ services:
       # SQLite 与哈希检索语料都放在 ./backend/data（首次启动自动建库）
       - ./backend/data:/app/data
       - ./backend/uploads:/app/uploads
+      # 大模型不入库：由服务器上的 backend/models 提供（见 deploy/DEPLOY.md）
+      - ./backend/models:/app/models
     expose:
       - "8000"
     healthcheck:

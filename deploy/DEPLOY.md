@@ -47,12 +47,22 @@ Host github.com
 EOF
 chmod 600 ~/.ssh/config
 
-git clone git@github.com:FLumine87/DaChuang-FLCFZ.git ~/app
+git clone --depth 1 git@github.com:FLumine87/DaChuang-FLCFZ.git ~/app
 cd ~/app
 ```
 
+浅克隆只拉最新代码（约 5–8MB），部署足够；需要历史时再 `git fetch --unshallow`。
+
 部署文件（compose、Dockerfile、nginx 配置、env 模板）随仓库一起克隆，无需额外上传；
 真实密钥只在服务器上创建的 `.env.prod` 里，该文件已被 `.gitignore` 排除。
+
+**补齐检索模型**（未入库，从本机上传）：
+
+```powershell
+scp backend/models/bge-small-zh.onnx backend/models/mobilenetv2-fer.onnx ubuntu@<服务器公网IP>:~/app/backend/models/
+```
+
+compose 已把 `./backend/models` 挂载到容器；缺模型时服务仍能启动，但文本检索会降级。
 
 ## 3. 配置生产环境变量
 

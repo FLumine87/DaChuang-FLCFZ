@@ -215,6 +215,26 @@ DaChuang-FLCFZ/
 - npm 9+
 - 可选：Docker（Neo4j、容器化部署）
 
+### 获取代码
+
+仓库保留了完整开发历史，历史中包含早期提交的大模型文件，完整 `clone` 约 75MB。
+只使用最新代码时建议**浅克隆**（约 5–8MB）：
+
+```bash
+git clone --depth 1 git@github.com:FLumine87/DaChuang-FLCFZ.git
+```
+
+需要查看历史提交时再执行 `git fetch --unshallow` 补全。
+
+以下大文件不在最新代码中，首次使用前需补齐到 `backend/models/`：
+
+| 文件 | 体积 | 获取方式 |
+| --- | --- | --- |
+| `bge-small-zh.onnx` | 约 91MB | `python backend/scripts/fetch_bge_model.py`，或从已部署环境拷贝 |
+| `mobilenetv2-fer.onnx` | 约 8.5MB | 仅 `HASHING_IMAGE_FEATURE=cnn` 时需要 |
+
+缺失时服务仍可启动：文本特征降级为 TF 275 维，检索精度下降，启动日志会提示。
+
 ### 一键启动（Windows，推荐）
 
 双击 `启动项目.bat`，或：

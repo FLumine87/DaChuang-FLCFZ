@@ -84,6 +84,11 @@ data/
 # 「连接真实后端」的本地环境文件：只有本机代理地址，按环境各写一份，不入库
 frontend/.env.backend
 
+# ---- 大型模型与本地数据库：不入库（获取方式见 README「获取代码」）----
+# 模型约 91MB + 8.5MB，完整历史里仍有旧版本；新提交不再包含
+/backend/models/*.onnx
+/backend/data/dev.db
+
 # ---- 本地工具 / 对比产物（不入库）----
 # .screenshots/  截图工作目录；.trae/、.trae-html-share-packages/ 为 AI 工具产物
 .screenshots/
