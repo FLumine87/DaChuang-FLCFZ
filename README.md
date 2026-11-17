@@ -57,6 +57,7 @@
 | 机制 | 说明 |
 |---|---|
 | CMFH | 协同矩阵分解哈希，共享二值码 + 各模态投影矩阵，目标中含记录级主题/情绪相似度 `λS` |
+| **特征通道化** | 把「模态」细分为「特征通道」：每个（模态 × 特征空间）一个投影矩阵（如 `text@531` / `audio@64` / `audio@2048` / `image@192` / `image@98`），各通道只拟合自己那批样本，但**共享同一个 64 位码空间**。不同数据集的同模态特征因此不会互相拉偏；某通道在某数据集上没有数据时按「缺失视图」处理（Gram 贡献记 0）。实测九格均值 0.3656 → 0.5207 |
 | 时间窗模型池 | 每个窗口独立训练一套 CMFH，`WindowModelBank` 按窗口保存；当前 `HASHING_WINDOW_DAYS=122` |
 | 多哈希表 | 64 位码切 8 张位带表（每带 8 位），位带内探测 2 比特，汉明半径 16 内不漏召回 |
 | 非对称距离 | 库端存二值码、查询端用连续向量，得分 `u·s/(‖u‖√K)` 后归一化，避免查询端量化损失 |
@@ -68,31 +69,43 @@
 
 ### 当前语料规模
 
-`backend/data/hashing/real_corpus.db`（本地生成，不入库）现有 **4928 条记录 / 14502 个单元**：
+`backend/data/hashing/real_corpus.db`（本地生成，不入库）现有 **5876 条记录 / 16398 个单元**：
 
 | 数据集 | 文本 | 语音 | 图像 |
 |---|---:|---:|---:|
 | EATD-Corpus | 486 | 486 | — |
 | CSEMOTIONS | 4160 | 4160 | — |
 | FER2013 | — | — | 4646 |
-| AVDD-TCMI | — | 282 | 282 |
-| **合计** | **4646** | **4928** | **4928** |
+| AVDD-TCMI | — | 1230 | 1230 |
+| **合计** | **4646** | **5876** | **5876** |
+
+> AVDD-TCMI 含两个子集：**HDS**（华西医院面诊，282 条，临床确诊）与 **SDS**（中学筛查，948 条）。
 
 ### AVDD-TCMI 音-图强配对
 
-AVDD-TCMI 的同一受试者同时提供 1024 维帧级音频特征与中医面诊区域图，属于**真实同源强配对**。
-接入方式不新增页面和接口，只是往现有主索引追加 282 条音-图记录：
+AVDD-TCMI 的同一受试者同时提供 1024 维帧级音频特征与人脸望诊信息（OpenFace 2.0 的
+AU / 头姿 / 眼动），属于**真实同源强配对**——这是本项目唯一「图像 ↔ 音频」的真同源数据，
+FER2013 的表情图与任何模态都不同源。
+
+接入方式：**走与其他数据集完全相同的标准适配器**，进入同一份语料、同一次训练、同一个索引，
+不新增页面与接口：
 
 ```powershell
-# 1) 把 zip 里的特征与面诊图整理成 avdd_corpus.db
-backend\venv\Scripts\python.exe backend\scripts\build_avdd_corpus.py
+# 构建语料（--with-avdd 额外接入 AVDD-TCMI）
+$env:DACHUANG_ASSETS_ROOT = "D:\DaChuang\dataset"
+backend\venv\Scripts\python.exe backend\scripts\build_real_corpus.py `
+    --dataset all --with-avdd --queries 280 --out backend\data\hashing\real_corpus.db
 
-# 2) 停掉后端后，把 AVDD 单元用现有 W_audio / W_image 编码并入索引，并写回 real_corpus.db
-backend\venv\Scripts\python.exe backend\scripts\integrate_avdd_into_engine.py
+# 重建索引（通道化后 W 的键变为 modality@dim，需重训一次）
+# 停掉后端后删除 backend\data\hashing\index.db 与 hashing_state.json，再启动后端
 ```
 
-音频 1024 维池化后 PCA 到 64 维，面诊图用与 FER2013 相同的强度 + HOG（192 维）提取器，
-因此不需要重训主模型；重启后端后在原检索页即可查到 AVDD 结果。
+通道化后 AVDD 落到两个独立通道：`audio@2048`（声学特征池化）与 `image@98`（OpenFace 人脸行为），
+音↔图的同源约束由监督矩阵 `S` 表达为强约束。实测 AVDD 的音↔图同记录汉明距离
+**20.53**（随机配对 30.17），对齐强度 **+9.63 位**。
+
+> 数据集本身不随仓库分发，需自行下载解压到仓库外，目录结构与下载说明见
+> [offline/datasets/README.md](./offline/datasets/README.md)。
 
 ## 数据集与配对关系
 
@@ -104,14 +117,17 @@ backend\venv\Scripts\python.exe backend\scripts\integrate_avdd_into_engine.py
 | EATD-Corpus（ICASSP 2022，中文） | 语音 + 中文转写 | SDS（≥53 判抑郁，30:132 不平衡） | 真实抑郁主轴 |
 | CSEMOTIONS（Apache-2.0，中文） | 语音 + 中文文本 | 7 类情绪 | 语音/文本情绪 |
 | FER2013 | 48×48 灰度人脸 | 7 类表情 | 图像模态 |
-| AVDD-TCMI | 音频特征 + 中医面诊图 | 受试者级 | 音-图**强配对** |
+| AVDD-TCMI | 音频特征 + 人脸望诊信息 | 受试者级（临床确诊 / 筛查） | 音-图**强配对** |
 
 **配对关系（论文/答辩必须如实说明）**
 
 - 文本 ↔ 语音：EATD 的 `.wav` 与同名 `.txt`、CSEMOTIONS 每条音频与其文本，都是**真实同源配对**
 - 图像 ↔ 文本/语音：FER2013 是纯图像集，按情绪语义挂接到记录上，属**弱配对**
   （`meta.fer.attach_mode` 已标注）
-- 音频 ↔ 图像：只有 AVDD-TCMI 是同一受试者的**真实强配对**
+- 音频 ↔ 图像：只有 AVDD-TCMI 是同一受试者的**真实强配对**（HDS 临床确诊 / SDS 筛查两个子集）
+
+> 同源关系由数据集适配器在构建记录时声明（`records.pairing_type`），引擎据此在监督矩阵里
+> 把同源对提到强约束、其余走主题弱监督；`scripts/datasets/avdd_tcmi.py` 是 AVDD 的接入点。
 
 引擎的配对训练要求同组记录模态集合一致，纯图像记录与「文本+语音」记录混在一起会让模态交集为空，
 因此 FER2013 图像以弱配对方式挂接，这一点无法用实现绕过。
@@ -161,7 +177,7 @@ DaChuang-FLCFZ/
 │   │   ├── core/                 # 请求上下文、响应、鉴权
 │   │   ├── db/                   # SQLite 访问层与迁移守卫
 │   │   ├── engines/
-│   │   │   ├── hashing/          # CMFH、窗口模型池、多哈希表、跨模态桥
+│   │   │   ├── hashing/          # CMFH、特征通道化、同源分组监督、窗口模型池、多哈希表、跨模态桥
 │   │   │   ├── multimodal/       # 文本 / 语音 / 图像特征
 │   │   │   ├── rag/              # RAG 报告
 │   │   │   └── agent/            # 研判与 Agent 能力
@@ -172,7 +188,8 @@ DaChuang-FLCFZ/
 │   ├── data/
 │   │   ├── hashing/              # corpus.db 随仓库；real_corpus.db、索引、桥接权重本地生成
 │   │   └── avdd_media/           # AVDD 面诊图（本地生成）
-│   ├── scripts/                  # 语料构建、AVDD 并入、桥接训练、评测
+│   ├── scripts/                  # 语料构建、数据集下载、桥接训练、九格评测
+│   │   └── datasets/             # 各数据集适配器（eatd / csemotions / fer2013 / avdd_tcmi）
 │   ├── tests/                    # 冒烟与验收脚本
 │   ├── worker/                   # Cloudflare Worker 部署代码与 D1 seed
 │   ├── start.bat / start.sh
@@ -291,6 +308,7 @@ RAG 报告、AI 陪伴、推荐语、日常问询共用同一个 OpenAI 兼容�
 | `HASHING_BAND_BITS` | 8 | 每条位带的比特数 |
 | `HASHING_PROBE_BITS` | 2 | 位带内探测翻转的比特数 |
 | `HASHING_LAMBDA_S` | 0.6 | CMFH 中记录级相似度权重 |
+| `HASHING_LAMBDA_STRONG` | 1.0 | 同源对（文↔音、音↔图）的强约束权重 |
 | `HASHING_WINDOW_DAYS` | 122 | 时间窗跨度（天） |
 | `HASHING_EPOCH` | 2025-08-01 | 时间窗起点 |
 | `HASHING_TABLE_RHO_MIN` | 0.10 | 表的语义一致性下限 |
@@ -308,9 +326,9 @@ cd backend
 python scripts/build_real_corpus.py
 python scripts/build_real_corpus.py --dataset eatd   # 其他取值：csemotions | fer | all
 
-# AVDD-TCMI 音-图强配对（先构建特征库，再并入索引；并入前先停后端）
-python scripts/build_avdd_corpus.py
-python scripts/integrate_avdd_into_engine.py
+# 额外接入 AVDD-TCMI（音↔图真同源；需先下载解压到仓库外）
+python scripts/build_real_corpus.py --dataset all --with-avdd
+python scripts/download_datasets.py --dataset avdd    # 约 14.5 GB，走国内镜像
 
 # 跨模态桥（文-图 / 音-图）
 python scripts/build_bridges.py --pair text  --lambda-s 20
@@ -321,7 +339,32 @@ python scripts/demo_hashing.py        # 索引概览 + 三模态查询 + 动态�
 python scripts/eval_retrieval.py      # mAP / 跨模态类别一致率 / 效率 → data/hashing/eval_report.json
 python scripts/eval_dynamic.py        # 动态增量与窗口融合
 python scripts/eval_bridge_audio.py   # 音-图桥接
+python scripts/eval_modality_matrix.py  # 九格（文/音/图 × 文/音/图）mAP@10
 ```
+
+### 九格检索矩阵（通道化后）
+
+`scripts/eval_modality_matrix.py` 在 4646 条记录 / 653 条查询上给出九个格子的 mAP@10。
+通道化（特征通道化 + 同源分组监督）把它从 **0.3656 提到 0.5207**：
+
+| 格子 | 通道化前 | 通道化后 |
+|---|---:|---:|
+| 文搜文 | 0.6145 | 0.6264 |
+| 文搜音 | 0.3925 | 0.3859 |
+| 文搜图 | 0.4316 | 0.4875 |
+| 音搜文 | 0.4128 | 0.6035 |
+| 音搜音 | 0.3744 | 0.4043 |
+| 音搜图 | 0.3192 | 0.4802 |
+| 图搜文 | 0.2609 | 0.7629 |
+| 图搜音 | 0.2718 | 0.4185 |
+| 图搜图 | 0.2123 | 0.5171 |
+| **九格均值** | **0.3656** | **0.5207** |
+
+> 提升主要来自**图像终于有了自己的投影矩阵**：此前图像退出配对训练、单元的码是借来的，
+> 图像检索实为文本检索的镜像。评测产物见
+> `backend/data/hashing/eval_nine_grid_unified.json`。
+>
+> ⚠️ 重训存在约 ±2 点的随机波动（训练抽样未固定 seed），做 A/B 对比前请先固定 seed。
 
 最近一次写入 `eval_report.json` 的评测基于 1686 条双模态语料（当时的语料规模）：
 
@@ -364,6 +407,28 @@ docker compose up -d
 | [演示用户README.md](./演示用户README.md) | 演示账号与数据 |
 | [offline/datasets/README.md](./offline/datasets/README.md) | 数据集目录与构建说明 |
 | [docs/答辩演示方案.md](./docs/答辩演示方案.md) | 答辩演示流程 |
+
+## 团队信息
+
+> ⚠️ **待补充**：本节内容由团队成员信息填写后替换下表。
+
+| 成员 | 负责模块 | 主要贡献 |
+|---|---|---|
+| _（待填）_ | _（待填）_ | _（待填）_ |
+
+提交历史按 Git 作者名统计（`git shortlog -sn --all --no-merges`）：
+
+| Git 作者 | 提交数 | 主要模块 |
+|---|---:|---|
+| `frontend-dev` | 150 | 前端（学生端 / 管理端 / 组件） |
+| `drinkbeerbest` | 54 | 后端与业务接口 |
+| `gong` | 37 | 后端 / 数据与工具 |
+| `zwz` | 35 | 跨模态哈希检索（通道化、AVDD-TCMI 接入） |
+| `FLumine87` | 32 | 项目总体、集成与合并 |
+| 其他贡献者 | 14 | 见 `git shortlog -sn --all` |
+
+> 仓库共 362 次提交，完整历史保留了从「个人端 Agent」到「管理端工作台」再到
+> 「动态跨模态哈希通道化」的演进过程。
 
 ## 许可证
 
