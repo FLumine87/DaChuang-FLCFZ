@@ -10,8 +10,7 @@
  *      睡眠/情绪/压力三条曲线是前端 mock 造的，已撤。
  *   ③ 今天可以做的：两个动作（记录 / 评估）并进这一块，与行动清单一处。
  *
- * 分数带不另写阈值表：拿量表自己的 scoring() 在 0..满分 上扫一遍，
- * 分档因此永远与「筛查结果页」一致。
+ * 检测结果首栏展示统一的近期综合风险，单次量表分数在对应报告中查看。
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -21,7 +20,7 @@ import {
   type DashboardResponse,
   type SearchResponse,
 } from "../services/mockApi";
-import { questionnaires, type QuestionnaireDefinition } from "../data/questionnaireData";
+import { questionnaires } from "../data/questionnaireData";
 import {
   retrievalResults,
   type AlertLevel,
@@ -33,6 +32,7 @@ import { supplementModalityText } from "../services/localKg";
 import { getCurrentSession } from "../auth/session";
 import { USE_MOCK, clearToken } from "../services/http";
 import ActionPlanCard from "../components/ActionPlanCard";
+import RiskSummaryCard from "../components/RiskSummaryCard";
 
 /* ------------------------------------------------------------------ 小工具 */
 
@@ -69,22 +69,6 @@ function monthOf(value?: string | null): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/** 用各量表自己的 scoring() 扫出分档，避免另写一张阈值表 */
-function scoringBands(
-  definition: QuestionnaireDefinition | undefined,
-  maxScore: number,
-): { level: AlertLevel; from: number; to: number }[] {
-  if (!definition || maxScore <= 0) return [];
-  const bands: { level: AlertLevel; from: number; to: number }[] = [];
-  for (let score = 0; score <= maxScore; score += 1) {
-    const level = definition.scoring(score).level;
-    const last = bands[bands.length - 1];
-    if (last && last.level === level) last.to = score;
-    else bands.push({ level, from: score, to: score });
-  }
-  return bands;
-}
-
 /** 等级外观沿用旧版口径：稳定 / 关注 / 警告 / 高危，分数带与预警列表共用 */
 const LEVEL_LABEL: Record<string, string> = {
   green: "稳定",
@@ -105,18 +89,9 @@ const LEVEL_TEXT: Record<string, string> = {
   red: "text-danger-600",
 };
 const LEVEL_DOT: Record<string, string> = {
-  green: "bg-success-500",
-  yellow: "bg-warning-500",
-  orange: "bg-orange-500",
-  red: "bg-danger-500",
+  green: "bg-success-500", yellow: "bg-warning-500",
+  orange: "bg-orange-500", red: "bg-danger-500",
 };
-const LEVEL_BAR: Record<string, string> = {
-  green: "bg-success-500",
-  yellow: "bg-warning-500",
-  orange: "bg-orange-500",
-  red: "bg-danger-500",
-};
-
 /** 记录上的模态标记：用户自愿补充的那条记录才有 supplement */
 /* 用户还没写补充内容时的占位样例。
    出处：backend/data/hashing/corpus.db → units 表 → unit_id = 'R0001-txt'（真实语料原文）。
@@ -169,7 +144,6 @@ export default function Dashboard() {
     /* 左栏展示最新一次量表结果：跳过 pending（还没答完的那条） */
     const last = records.find((r) => r.status === "completed") ?? records[0];
     const def = questionnaires.find((q) => q.id === last?.questionnaire);
-    const bands = scoringBands(def, last?.maxScore ?? 0);
     const result = def && last ? def.scoring(last.score) : null;
 
     /* 「最近 30 天」必须按今天的日期筛，而不是把全部历史累计进来。
@@ -300,7 +274,6 @@ export default function Dashboard() {
       totalRecords,
       last,
       def,
-      bands,
       result,
       counts,
       maxCount,
@@ -400,9 +373,6 @@ export default function Dashboard() {
   }
 
   const level = view.last?.level ?? "green";
-  const activeBand = view.bands.findIndex(
-    (b) => view.last && view.last.score >= b.from && view.last.score <= b.to
-  );
   const hasVoiceOrImage = view.counts["语音"] + view.counts["图像"] > 0;
 
   /* 真检索成功就用真结果，否则退回演示数据。
@@ -533,54 +503,8 @@ export default function Dashboard() {
         {view.last ? (
           <>
             <div className="mt-5 grid gap-6 border-t border-slate-100 pt-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-8">
-              {/* 栏一：量表给的分数
-                  表头固定在顶（三栏表头必须对齐），**只有下面的分数+分数带**
-                  在剩余高度里竖直居中 —— 这一栏内容比左右两栏矮，贴顶会显得上重下空。 */}
-              <div className="flex flex-col">
-                <p className="text-[15px] font-semibold text-slate-700">量表给的分数</p>
-                <div className="flex flex-1 flex-col justify-center">
-                <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <span className="flex items-baseline gap-2">
-                    <span className="text-[34px] font-semibold leading-none tabular-nums text-slate-900">
-                      {view.last.score}
-                    </span>
-                    <span className="text-[14px] text-slate-400">/ {view.last.maxScore}</span>
-                    {/* 等级胶囊从卡片右上角挪到分数旁边：它描述的就是这个分值 */}
-                    <span
-                      className={`ml-1 inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2 py-0.5 text-[12.5px] font-medium ${LEVEL_TEXT[level]}`}
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full ${LEVEL_DOT[level]}`} />
-                      {LEVEL_LABEL[level]}
-                    </span>
-                  </span>
-                  <span className="text-[14px] font-medium text-slate-600">
-                    {LEVEL_LABEL[level]}范围
-                  </span>
-                </div>
-                <p className="mt-1.5 text-[12.5px] text-slate-400">
-                  {view.result?.label ?? "—"}（量表自身分档）
-                </p>
-
-                {/* 分数带：段下带 稳定/关注/警告/高危，口径与「最近预警」一致 */}
-                <div className="mt-4 flex gap-1.5">
-                  {view.bands.map((b, i) => (
-                    <span
-                      key={i}
-                      className={`h-2 flex-1 rounded-full ${
-                        i === activeBand ? LEVEL_BAR[b.level] : "bg-slate-200/70"
-                      }`}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2 flex flex-wrap justify-between gap-x-2 text-[11.5px] text-slate-400">
-                  {view.bands.map((b, i) => (
-                    <span key={i} className={i === activeBand ? "font-semibold text-slate-600" : ""}>
-                      {b.from}–{b.to} {LEVEL_LABEL[b.level]}
-                    </span>
-                  ))}
-                </div>
-                </div>
-              </div>
+              {/* 栏一：近30天综合风险，替代单次量表分数展示。 */}
+              <div className="min-w-0"><RiskSummaryCard compact /></div>
 
               {/* 栏二：检索 */}
               <div className="lg:border-l lg:border-slate-100 lg:pl-8">
@@ -741,7 +665,7 @@ export default function Dashboard() {
               <span className="flex items-center gap-3">
                 {/* 两个入口与卡内三栏一一对应：
                     「检索到了什么 / RAG 解释与建议」→ 检索与分析；
-                    「量表给的分数」→ 我的档案里的这条记录 */}
+                    「近期综合风险」→ 左栏展开维度与依据；单次量表分数仍可在本次报告中查看 */}
                 <Link
                   to={
                     view.retrievalQuery
@@ -767,7 +691,10 @@ export default function Dashboard() {
           </>
         ) : (
           <>
-            <p className="mt-5 border-t border-slate-100 pt-4 text-[14px] text-slate-500">
+            <div className="mt-5 grid gap-6 border-t border-slate-100 pt-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,2.15fr)] lg:gap-8">
+              <div className="min-w-0"><RiskSummaryCard compact /></div>
+              <div className="min-w-0 lg:border-l lg:border-slate-100 lg:pl-8">
+            <p className="text-[14px] text-slate-500">
               还没有检测记录 —— 从下面「评估心理状态」开始，大约 3 分钟。
             </p>
             {/* 新账号还没做筛查时，采集内容挂在用户名下——这里也要让它露脸，
@@ -797,6 +724,8 @@ export default function Dashboard() {
                 </p>
               </div>
             )}
+              </div>
+            </div>
           </>
         )}
       </section>

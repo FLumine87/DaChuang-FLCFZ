@@ -1086,7 +1086,7 @@ def _days_since(ts) -> int | None:
     return None
 
 
-def _auto_plan_rules(screenings: list, supplements: list, alerts: list) -> list:
+def _auto_plan_rules(screenings: list, supplements: list, alerts: list, current_risk=None) -> list:
     """按用户真实数据算出"该提醒什么"，返回 (rule_key, 标题, 说明, 截止偏移天)。
 
     每条规则都对应一个**可验证的事实**，不是套话：
@@ -1125,9 +1125,9 @@ def _auto_plan_rules(screenings: list, supplements: list, alerts: list) -> list:
                     f"有 {len(pending)} 条预警还没有处置结果。", 1))
 
     # ④ 最近一次是高危
-    if screenings and screenings[0].get("alert_level") == "red":
-        out.append(("auto-high-risk", "预约一次心理辅导",
-                    "最近一次筛查达到高危，建议尽快与咨询师聊一次。", 2))
+    if current_risk and current_risk['level'] in ('orange','red'):
+        out.append(('auto-profile-review','及时核实安全状况' if current_risk['level']=='red' else '查看专业复核建议',
+                    '近期综合筛查提示需要人工复核，请联系可信任的人或专业人员了解当前支持需要；完成此计划不会解除安全提示。',0 if current_risk['level']=='red' else 1))
 
     # ⑤ 到了该回看报告的时候
     if last_scr is not None and 7 <= last_scr < 14:
@@ -1154,7 +1154,9 @@ async def _ensure_auto_plans(user_id: int) -> None:
         (user_id, user_id))
 
     now = datetime.now()
-    for rule_key, title, detail, due_days in _auto_plan_rules(screenings, supplements, alerts):
+    from app.services import risk_summary
+    current_risk=await risk_summary.summary(user_id)
+    for rule_key, title, detail, due_days in _auto_plan_rules(screenings, supplements, alerts,current_risk):
         existing = await db.query_a(
             "SELECT status, completed_at FROM action_plans "
             "WHERE user_id = ? AND rule_key = ? ORDER BY id DESC LIMIT 1",

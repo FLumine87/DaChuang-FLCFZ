@@ -5,6 +5,7 @@ import {
 import { type WarningEvent } from '../data/mockData';
 import { getWarnings, updateWarningStatus } from '../services/mockApi';
 import AlertBadge from '../components/AlertBadge';
+import RiskSummaryCard from '../components/RiskSummaryCard';
 import StatusBadge from '../components/StatusBadge';
 import { MasterDetail, DetailPanel } from '../components/MasterDetail';
 
@@ -105,6 +106,8 @@ export default function Alerts() {
 
   return (
     <div className="space-y-5">
+      <RiskSummaryCard compact />
+      <p className="text-xs text-slate-500">以下为历史预警事件，保留触发时的等级和处置状态；当前综合状态见上方。</p>
       {/* 统计：原来的四张卡各占一行高度，把下面的“列表 + 详情”挤到首屏之外；
           改成同一张卡里四格，省下约 70px，也是这里最要紧的纵向空间。 */}
       <div className="ui-card grid grid-cols-2 divide-slate-100 p-0 sm:grid-cols-4 sm:divide-x">

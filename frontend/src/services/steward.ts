@@ -3,7 +3,7 @@ import { personalRequest } from './api';
 import { getToken } from './http';
 import { usePageActive } from './pageActivity';
 
-export interface StewardSettings { enabled: boolean; screening: boolean; chat: boolean; checkin: boolean; feedback: boolean; history: boolean }
+export interface StewardSettings { enabled: boolean; screening: boolean; chat: boolean; checkin: boolean; feedback: boolean; history: boolean; risk_ai?: boolean }
 export interface Evidence { id: string; source: string; source_key: string; occurred_at: string; body: string; payload: Record<string, unknown> }
 export interface Observation { text: string; evidence_ids: string[] }
 export interface Memory { id: string; content: string; status: string; evidence_ids: string[] }

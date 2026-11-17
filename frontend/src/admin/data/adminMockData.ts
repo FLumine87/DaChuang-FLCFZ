@@ -34,7 +34,7 @@ export interface CaseRecord {
   tags: string[];
   screeningCount: number;
   lastScreening: string;
-  alertLevel: 'green' | 'yellow' | 'orange' | 'red';
+  alertLevel: 'green' | 'yellow' | 'orange' | 'red' | 'unknown';
   status: 'active' | 'monitoring' | 'closed';
 }
 

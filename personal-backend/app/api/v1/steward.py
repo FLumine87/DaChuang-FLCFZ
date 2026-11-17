@@ -54,6 +54,7 @@ def expire_prompts(c,uid):
 @router.get('')
 def state(a=Depends(current)):
     uid = a['user_id']
+    risk=service.current_risk(uid)
     with db.transaction() as c:
         ev = db.rows(c, 'SELECT * FROM steward_evidence WHERE user_id=:u ORDER BY occurred_at DESC', {'u':uid})
         ids = {e['id'] for e in ev}
@@ -74,7 +75,7 @@ def state(a=Depends(current)):
             if p.get('scale'):
                 series.setdefault(p['scale'], []).append({'at':e['occurred_at'], 'score':p.get('score'), 'max':p.get('max_score'), 'id':e['id'], 'version':db.load(p.get('answers')).get('_meta', {}).get('questionnaireVersion')})
         return {'settings': db.load(a['settings']), 'version':a['version'], 'updated_at':a['updated_at'],
-                'indicators':service.profile_indicators(ev) if db.enabled(a) else {'risk':{'level':'unknown'},'mbti':None},
+                'indicators':{**(service.profile_indicators(ev) if db.enabled(a) else {'mbti':None}),'risk':risk},
                 'snapshot': service.valid_snapshot(a,c), 'status':'paused' if not db.enabled(a) else 'failed' if a['sync_error'] else 'updating' if a['dirty'] or a['lease'] > time.time() else 'ready',
                 'error':a['sync_error'], 'evidence_count':len(ev), 'memories':memories if db.enabled(a) else [], 'suggestions':suggestions if db.enabled(a) else [], 'series':series if db.enabled(a) else {},'multimodal_history':multimodal_history if db.enabled(a) else []}
 
@@ -86,6 +87,7 @@ class SettingsInput(BaseModel):
     checkin: bool = False
     feedback: bool = False
     history: bool = True
+    risk_ai: bool = False
 
 
 @router.put('/settings')
@@ -106,6 +108,11 @@ def settings(body: SettingsInput, a=Depends(current)):
             if not set(db.load(m['evidence_ids'], [])) <= live:
                 db.execute(c,'DELETE FROM steward_memories WHERE id=:id',{'id':m['id']})
         invalidate(c, uid)
+    try:
+        from ...services.risk_analysis import sync_consent
+        sync_consent(uid)
+    except Exception:
+        pass  # The risk worker retries consent synchronization independently.
     try:
         service.project_graph(uid)
     except Exception:
@@ -223,6 +230,11 @@ def clear(a=Depends(current)):
         s=db.load(a['settings']);s.update(enabled=False,history=False)
         db.execute(c,'UPDATE steward_accounts SET settings=:s,since=:at WHERE user_id=:u',{'u':uid,'s':db.dump(s),'at':db.now()})
         invalidate(c,uid)
+    try:
+        from ...services.risk_analysis import sync_consent
+        sync_consent(uid)
+    except Exception:
+        pass
     try:
         service.project_graph(uid)
     except Exception:

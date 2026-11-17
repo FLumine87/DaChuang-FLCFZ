@@ -16,14 +16,18 @@ from app.api.v1.steward import router, clear
 
 
 class StewardTests(unittest.TestCase):
-    def test_risk_uses_latest_per_scale_and_never_mbti(self):
+    def test_risk_uses_business_canonical_summary_and_never_mbti(self):
         self.enable()
         with store.transaction() as c:
             service.put_evidence(c,'1','screening','older','2026-11-16T00:00:00+00:00','原始量表',{'scale':'PHQ-9','alert_level':'orange'})
             service.put_evidence(c,'1','screening','newer',store.now(),'原始量表',{'scale':'PHQ-9','alert_level':'green'})
             service.put_evidence(c,'1','manual','type',store.now(),'我的 MBTI 是 INFP',{})
-        data=self.client.get('/steward').json()
-        self.assertEqual(data['indicators']['risk']['level'],'green')
+        canonical={'level':'yellow','data_version':'shared-v1','rule_version':'test','safety':{'status':'not_identified'},'computed_at':store.now()}
+        with patch.object(service,'bridge',return_value=canonical) as bridge:
+            data=self.client.get('/steward').json()
+            self.assertEqual(bridge.call_args.args[0],'risk-summary')
+        self.assertEqual(data['indicators']['risk']['level'],'yellow')
+        self.assertEqual(data['indicators']['risk']['data_version'],'shared-v1')
         self.assertEqual(data['indicators']['mbti']['type'],'INFP')
         self.assertEqual(data['indicators']['mbti']['status'],'self_report')
 
@@ -277,6 +281,53 @@ class StewardTests(unittest.TestCase):
         with store.transaction() as c:
             a=store.one(c,'SELECT * FROM steward_accounts WHERE user_id=\'1\'')
         self.assertEqual(a['dirty'],0)
+
+    def test_canonical_risk_outage_never_falls_back_to_an_independent_grade(self):
+        with patch.object(service,'bridge',side_effect=RuntimeError('offline')):
+            self.assertEqual(service.current_risk('1'),{'level':'unknown','available':False})
+
+    def test_risk_worker_requires_explicit_additional_consent(self):
+        from app.services import risk_analysis
+        self.enable()
+        with patch.object(risk_analysis,'bridge',return_value={'saved':True}),patch.object(risk_analysis.llm_client,'chat') as model:
+            risk_analysis.process_user('1');model.assert_not_called()
+
+    def test_risk_worker_uses_existing_model_and_publishes_only_structured_findings(self):
+        from app.services import risk_analysis
+        self.enable(risk_ai=True)
+        published=[];consent={}
+        def bridge(path,**kwargs):
+            if path=='risk-consent':consent.update(kwargs['body']);return {'saved':True}
+            if path=='risk-context':return {'revision':consent['revision'],'units':[{'id':'m:1:part:0','source_id':'m:1','source_hash':'h','at':store.now(),'text':'这周安排变化了'}]}
+            if path=='risk-extraction':published.append(kwargs['body']);return {'saved':True}
+        output={'findings':[{'feature':'duration','quote':'这周','certainty':'explicit','subject':'self'}]}
+        with patch.object(risk_analysis,'bridge',side_effect=bridge),patch.object(risk_analysis.llm_client,'chat',return_value=json.dumps(output)) as model:
+            risk_analysis.process_user('1')
+            self.assertTrue(model.call_args.kwargs['strict'])
+        self.assertEqual(published[0]['status'],'done');self.assertEqual(published[0]['findings'],output['findings'])
+        self.assertNotIn('level',published[0]);self.assertEqual(published[0]['revision'],consent['revision'])
+
+    def test_risk_worker_clear_during_model_request_cannot_publish(self):
+        from app.services import risk_analysis
+        self.enable(risk_ai=True);consent={};published=[]
+        def bridge(path,**kwargs):
+            if path=='risk-consent':consent.update(kwargs['body']);return {'saved':True}
+            if path=='risk-context':return {'revision':consent['revision'],'units':[{'id':'m:1:part:0','source_id':'m:1','source_hash':'h','at':store.now(),'text':'合成内容'}]}
+            if path=='risk-extraction':published.append(kwargs['body'])
+        def model(*args,**kwargs):
+            clear(store.account(self.user));return '{"findings":[]}'
+        with patch.object(risk_analysis,'bridge',side_effect=bridge),patch.object(risk_analysis.llm_client,'chat',side_effect=model):risk_analysis.process_user('1')
+        self.assertEqual(published,[]);self.assertFalse(consent['enabled'])
+
+    def test_risk_worker_invalid_model_output_reports_failure_instead_of_empty_success(self):
+        from app.services import risk_analysis
+        self.enable(risk_ai=True);consent={};published=[]
+        def bridge(path,**kwargs):
+            if path=='risk-consent':consent.update(kwargs['body']);return {'saved':True}
+            if path=='risk-context':return {'revision':consent['revision'],'units':[{'id':'m:1:part:0','source_id':'m:1','source_hash':'h','at':store.now(),'text':'合成内容'}]}
+            if path=='risk-extraction':published.append(kwargs['body'])
+        with patch.object(risk_analysis,'bridge',side_effect=bridge),patch.object(risk_analysis.llm_client,'chat',return_value='unfinished json'):risk_analysis.process_user('1')
+        self.assertEqual(published[0]['status'],'failed')
 
 
 if __name__=='__main__':unittest.main()

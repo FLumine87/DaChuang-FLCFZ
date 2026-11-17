@@ -25,9 +25,6 @@ async def create_tag(data: dict) -> dict:
 async def get_cases(page: int = 1, page_size: int = 10, alert_level: Optional[str] = None,
               status: Optional[str] = None, keyword: Optional[str] = None) -> dict:
     where, params = [], []
-    if alert_level:
-        where.append("c.alert_level = ?")
-        params.append(alert_level)
     if status:
         where.append("c.status = ?")
         params.append(status)
@@ -36,16 +33,20 @@ async def get_cases(page: int = 1, page_size: int = 10, alert_level: Optional[st
         params.append(f"%{keyword}%")
 
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
-    total = await db.query_one_a(
+    total_row = await db.query_one_a(
         "SELECT COUNT(*) AS c FROM cases c" + where_sql, params
-    )["c"]
+    )
+    total=total_row['c']
 
     offset = (page - 1) * page_size
     rows = await db.query_a(
-        "SELECT * FROM cases c" + where_sql + " ORDER BY c.updated_at DESC LIMIT ? OFFSET ?",
-        params + [page_size, offset],
+        "SELECT * FROM cases c" + where_sql + " ORDER BY c.updated_at DESC" + ('' if alert_level else ' LIMIT ? OFFSET ?'),
+        params if alert_level else params + [page_size, offset],
     )
     items = [await _case_to_dict(r) for r in rows]
+    if alert_level:
+        items=[r for r in items if r['alert_level']==alert_level];total=len(items)
+        items=items[offset:offset+page_size]
     return {"items": items, "total": total}
 
 
@@ -58,6 +59,11 @@ async def _case_to_dict(r: dict) -> dict:
     tags = [t["name"] for t in await db.query_a(
         "SELECT t.name FROM case_tags_association a JOIN case_tag_master t ON a.tag_id = t.id "
         "WHERE a.case_id = ?", (r["id"],))]
+    from app.services import risk_summary
+    current=None
+    if r.get('user_id') is not None:
+        count=await db.query_one_a('SELECT COUNT(*) AS n FROM cases WHERE user_id=?',(r['user_id'],))
+        if count['n']==1:current=await risk_summary.summary(r['user_id'])
     return {
         "id": r.get("id"),
         "case_id": r.get("case_id"),
@@ -65,7 +71,8 @@ async def _case_to_dict(r: dict) -> dict:
         "age": r.get("age"),
         "gender": r.get("gender"),
         "department": r.get("department"),
-        "alert_level": r.get("alert_level"),
+        "alert_level": current['level'] if current else 'unknown',
+        "risk_summary": current,
         "status": r.get("status"),
         "screening_count": r.get("screening_count"),
         "last_screening": _fmt_date(r.get("last_screening_date")),

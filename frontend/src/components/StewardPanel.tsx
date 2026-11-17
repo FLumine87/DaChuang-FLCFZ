@@ -76,6 +76,8 @@ function PersonalSteward({ mode }: { mode: string }) {
       <h3 className="font-medium">心理管家与记忆设置</h3>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={source.enabled} onChange={e => setDraft({ ...source, enabled: e.target.checked })} />开启心理管家（关闭即暂停分析与使用记忆）</label>
       {(['screening','chat','checkin','feedback'] as const).map(key => <label key={key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={source[key]} onChange={e => setDraft({ ...source, [key]: e.target.checked })} />允许使用{sourceNames[key]}</label>)}
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!source.risk_ai} disabled={!source.screening} onChange={e=>setDraft({...source,risk_ai:e.target.checked})} />允许AI提取筛查线索用于近期综合评估</label>
+      <p className="text-xs leading-5 text-slate-500">开启后会将获准的本人筛查原文交给已配置的模型提取线索；最终等级仍由系统规则确定。关闭不影响基础规则汇总。</p>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={source.history} onChange={e => setDraft({ ...source, history: e.target.checked })} />导入已允许来源的历史记录（本机聊天最多200条，仅本人发言）</label>
       <p className="text-xs text-slate-500">AI 会将选定记录的必要内容交给项目配置的大模型服务分析。关闭某个来源后，该来源及相关派生认识退出后续分析；原始筛查记录保留。</p>
       {source.chat && source.history && <p className="text-xs text-slate-500">历史聊天只导入当前设备保存的本人发言；旧知识图谱中的兴趣线索缺少原文依据，需要你确认后才作为长期记忆。</p>}

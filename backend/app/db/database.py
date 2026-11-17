@@ -448,6 +448,9 @@ def init_db_sync() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS ix_supplements_review ON screening_supplements(review_status)")
         from app.handlers.steward_bridge import SCHEMA as steward_schema
         conn.executescript(steward_schema)
+        from app.services.risk_summary import SCHEMA as risk_schema
+        for statement in risk_schema:
+            conn.execute(statement)
         _seed_demo_accounts(conn)
         conn.commit()
 
@@ -529,6 +532,9 @@ async def init_db() -> None:
         await env.DB.exec(SCHEMA_SQL)
         from app.handlers.steward_bridge import SCHEMA as steward_schema
         await env.DB.exec(steward_schema)
+        from app.services.risk_summary import SCHEMA as risk_schema
+        for statement in risk_schema:
+            await env.DB.prepare(statement).run()
     else:
         init_db_sync()
 

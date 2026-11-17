@@ -83,7 +83,7 @@ class BridgeTests(unittest.TestCase):
         fetch=AsyncMock(return_value=response)
         with patch.object(bridge.runtime,'is_worker',return_value=True),patch.object(bridge.runtime,'get_binding',side_effect=binding.get),patch.dict(sys.modules,{'js':SimpleNamespace(fetch=fetch)}):
             self.assertEqual(bridge.setting('STEWARD_SYNC_SECRET'),'worker-test-secret')
-            self.assertEqual(asyncio.run(personal_context(self.alice)),'authorized context')
+            self.assertIn('authorized context',asyncio.run(personal_context(self.alice)))
         self.assertTrue(fetch.call_args.args[0].startswith('https://agent.example.test/'))
 
 

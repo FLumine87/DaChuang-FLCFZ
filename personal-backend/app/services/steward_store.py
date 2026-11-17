@@ -80,7 +80,7 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
-DEFAULTS = {'enabled': False, 'screening': True, 'chat': False, 'checkin': False, 'feedback': False, 'history': True}
+DEFAULTS = {'enabled': False, 'screening': True, 'chat': False, 'checkin': False, 'feedback': False, 'history': True, 'risk_ai': False}
 
 
 def account(user):

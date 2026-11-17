@@ -32,6 +32,8 @@ def _startup() -> None:
     from .services import steward, steward_store
     steward_store.init()
     app.state.stop_steward = steward.start_worker()
+    from .services import risk_analysis
+    app.state.stop_risk = risk_analysis.start_worker()
     # 每日问询已改为「当天第一次登录时触发」（POST /api/v1/checkin/ensure），
     # 服务端不再起任何定时器 —— 原先的 APScheduler 调度器已移除。
     # 问询时机由"用户真的来了"决定，而不是靠一个到点就跑的闹钟：
@@ -49,6 +51,8 @@ app.include_router(steward_router, prefix="/api/v1")
 
 @app.on_event('shutdown')
 def stop_steward():
+    if hasattr(app.state, 'stop_risk'):
+        app.state.stop_risk()
     if hasattr(app.state, 'stop_steward'):
         app.state.stop_steward()
 

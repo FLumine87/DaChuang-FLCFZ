@@ -29,7 +29,8 @@ const token=name=>'e30.'+Buffer.from(JSON.stringify({sub:name==='__steward_ui'?7
     const auth=req.headers()['authorization'];
     const own=auth==='Bearer '+token('__steward_ui');
     let result={};
-    if(p==='/api/v1/steward')result=own?state:{...state,settings:{...settings,enabled:false},snapshot:{},memories:[],suggestions:[],evidence_count:0};
+    if(p==='/api/personal/risk-summary')result={level:'yellow',label:'需要关注',rule_version:'test',data_version:'shared-test',window_start:'2026-10-19',window_end:'2026-11-17',computed_at:new Date().toISOString(),notice:'合成测试',dimensions:[],reasons:[{text:'合成筛查关注线索',source_ids:['scale:1']}],coverage:{records:2,scales:1,multimodal:1,incompatible:0,dimension_count:1},safety:{status:'not_identified',flags:[]},ai:{status:'paused',units:0,completed:0,failed:0,findings:[]},evidence:[]};
+    else if(p==='/api/v1/steward')result=own?state:{...state,settings:{...settings,enabled:false},snapshot:{},memories:[],suggestions:[],evidence_count:0};
     else if(p.endsWith('/steward/settings')){Object.assign(settings,body);result={saved:true};}
     else if(p.endsWith('/steward/chat/import')){imports++;result={imported:true};}
     else if(p.endsWith('/steward/evidence')){const ids=url.searchParams.get('ids');result=ids?evidence.filter(e=>ids.split(',').includes(e.id)):evidence;}
@@ -62,7 +63,7 @@ const token=name=>'e30.'+Buffer.from(JSON.stringify({sub:name==='__steward_ui'?7
     await page.getByRole('heading',{name:'我眼中的你',exact:true}).waitFor();
     assert.equal(imports,1);
     await page.getByRole('heading',{name:'我眼中的你',exact:true}).waitFor();
-    await page.getByRole('heading',{name:'近期需要关注',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'需要关注',exact:true}).waitFor();
     await page.getByRole('heading',{name:'心理档案关系图谱',exact:true}).waitFor();
     const history=page.locator('details').filter({has:page.locator('summary').filter({hasText:'筛查历史与原始记录'})});
     await history.locator('summary').click();
