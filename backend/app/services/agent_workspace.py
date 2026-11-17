@@ -95,12 +95,24 @@ async def records_for(scope):
     for row in rows:
         if row["case_id"] and unique_cases.get(row["user_id"]) == row["case_id"]:
             media[row["id"]].update(standalone[row["user_id"]])
-    return [{
+    records=[{
         **r, "subject": f"case:{r['case_id']}" if r["case_id"] else f"screening:{r['id']}",
         "ref": f"案例 {r['case_id']}" if r["case_id"] else f"筛查 {r['id']}",
         "source": "local", "linked": bool(r["case_id"]),
         "media": sorted(media[r["id"]]), "department": r["department"] or "未分组",
     } for r in rows]
+    # A case with only multimodal screening still belongs in the current cohort.
+    for uid,cid in unique_cases.items():
+        if any(r.get('user_id')==uid for r in records):continue
+        media_row=await db.query_one_a('SELECT created_at FROM screening_supplements WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 1',(uid,))
+        if not media_row:continue
+        case=await db.query_one_a('SELECT department FROM cases WHERE id=?',(cid,))
+        records.append({'id':f'media-user:{uid}','screening_code':'','user_id':uid,'case_id':cid,
+                        'questionnaire_id':None,'questionnaire':'多模态筛查（无量表）','score':0,'max_score':0,
+                        'alert_level':'unknown','status':'completed','date':media_row['created_at'],
+                        'subject':f'case:{cid}','ref':f'案例 {cid}','source':'local','linked':True,
+                        'media':sorted(standalone[uid]),'department':case.get('department') or '未分组'})
+    return records
 
 
 def parse_date(value):
@@ -160,6 +172,20 @@ def compile_subjects(records):
     return sorted(output, key=lambda r: (LEVEL_ORDER.get(r["alert_level"], 4), -(r["delta"] or 0), r["subject"]))
 
 
+async def current_subjects(subjects,scope):
+    if scope!='live':return subjects
+    from app.services import risk_summary
+    for subject in subjects:
+        subject['recorded_level']=subject.get('recorded_level',subject.get('alert_level'))
+        uid=subject.get('user_id')
+        count=await db.query_one_a('SELECT COUNT(*) AS n FROM cases WHERE user_id=?',(uid,)) if uid is not None else None
+        current=await risk_summary.summary(uid) if uid is not None and subject.get('linked') and count['n']==1 else None
+        subject['alert_level']=current['level'] if current else 'unknown'
+        subject['risk_summary']=current
+        subject['reasons']=[r['text'] for r in current['reasons']] if current else ['缺少唯一账号关联，当前综合风险待评估']
+    return sorted(subjects,key=lambda s:LEVEL_ORDER.get(s['alert_level'],4))
+
+
 async def tasks_for(scope):
     rows = await db.query_a(
         "SELECT * FROM agent_workspace_tasks WHERE scope=? ORDER BY due_at,id", (scope,))
@@ -176,10 +202,16 @@ async def overview(scope):
     latest = await db.query_one_a(
         "SELECT payload FROM agent_workspace_runs WHERE scope=? ORDER BY created_at DESC,id DESC LIMIT 1",
         (scope,))
+    report=json.loads(latest['payload']) if latest else None
+    if scope=='live' and report:
+        report['subjects']=await current_subjects(report.get('subjects',[]),scope)
+        report['distribution']=dict(Counter(s['alert_level'] for s in report['subjects']))
+        report['priority_count']=sum(s['alert_level'] in ('yellow','orange','red') for s in report['subjects'])
+        report['summary']='对象范围沿用最近一次运行；当前等级实时采用统一的近30天综合评估。'
     return {
         "scope": scope, "mode": "workflow-preview", "model_connected": False,
         "model_available": (await agent_model.availability())["available"],
-        "latest_run": json.loads(latest["payload"]) if latest else None,
+        "latest_run": report,
         "tasks": await tasks_for(scope),
         "available_subjects": len(compile_subjects(records)),
         "departments": sorted({r["department"] for r in records}),
@@ -208,7 +240,7 @@ async def run(scope, days, department, actor):
     record_step("证据整理", "read_completed_screenings", f"读取 {len(filtered)} 条已完成筛查；按范围过滤", len(filtered))
     # Selection uses the window; history is restricted to each latest selected
     # observation to prevent future observations leaking into historical reports.
-    subjects = compile_subjects(filtered)
+    subjects = await current_subjects(compile_subjects(filtered),scope)
     distribution = dict(Counter(s["alert_level"] for s in subjects))
     record_step("群体分析", "aggregate_subjects", f"按对象去重，统计 {len(subjects)} 个对象；不混算不同量表", len(subjects))
     priority = [s for s in subjects if s["alert_level"] in ("red", "orange", "yellow")]
@@ -223,7 +255,7 @@ async def run(scope, days, department, actor):
         "priority_count": len(priority), "unlinked_count": missing,
         "summary": f"本次分析覆盖 {len(subjects)} 个对象，{distribution.get('red', 0) + distribution.get('orange', 0)} 个对象已有橙红预警，需要优先人工复核。",
         "limits": ["群体统计和随访草案均由规则生成。",
-                   "预警等级来自已完成筛查；不从图片、声音或检索相似度推断心理状况。",
+                   "当前等级采用统一近30天评估；范围筛选用于选择对象。历史预警事件保持原始等级。",
                    "时间窗口变化会影响样本组成，不自动解释为群体状况改善或恶化。"],
         "subjects": [{k: v for k, v in s.items() if k != "history"} for s in subjects],
         "trace": trace,
@@ -274,7 +306,7 @@ async def propose_tasks(scope, subjects, actor):
 
 async def case_detail(scope, subject):
     await ensure_schema()
-    subjects = compile_subjects(await records_for(scope))
+    subjects = await current_subjects(compile_subjects(await records_for(scope)),scope)
     row = next((s for s in subjects if s["subject"] == subject), None)
     if row is None and scope == "live" and subject.startswith("screening-code:"):
         code = subject.removeprefix("screening-code:")
@@ -287,9 +319,11 @@ async def case_detail(scope, subject):
     if row is None:
         raise HttpError(404, "没有已完成且关联到该案例的筛查；请先完成案例关联")
     live_materials = []
+    case_code=None
     if scope == "live" and row["subject"].startswith("case:"):
         from app.services import case_context
         case = await db.query_one_a("SELECT * FROM cases WHERE id=?", (row["subject"][5:],))
+        case_code=case['case_id'] if row.get('risk_summary') else None
         context = await case_context.load(case)
         counters = {"text": 0, "audio": 0, "image": 0}
         for item in context["supplements"]:
@@ -305,7 +339,8 @@ async def case_detail(scope, subject):
                 "createdAt": str(item.get("created_at") or ""),
                 "analysis": _analysis_summary(item.get("analysis")),
             })
-    return {**row, "tasks": [t for t in await tasks_for(scope) if t["subject"] == row["subject"]],
+    return {**row, "case_code": case_code,
+            "tasks": [t for t in await tasks_for(scope) if t["subject"] == row["subject"]],
             "materials": [
                 {"kind": "text", "title": "虚构学习日记", "source": "项目原创合成素材",
                  "text": "这周课程比较多，我想整理一下学习计划，周末和同学一起散步。"},

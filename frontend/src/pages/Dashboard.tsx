@@ -10,8 +10,7 @@
  *      睡眠/情绪/压力三条曲线是前端 mock 造的，已撤。
  *   ③ 今天可以做的：两个动作（记录 / 评估）并进这一块，与行动清单一处。
  *
- * 分数带不另写阈值表：拿量表自己的 scoring() 在 0..满分 上扫一遍，
- * 分档因此永远与「筛查结果页」一致。
+ * 检测结果首栏展示统一的近期综合风险，单次量表分数在对应报告中查看。
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -21,22 +20,23 @@ import {
   type DashboardResponse,
   type SearchResponse,
 } from "../services/mockApi";
-import { questionnaires, type QuestionnaireDefinition } from "../data/questionnaireData";
+import { questionnaires } from "../data/questionnaireData";
 import {
-  retrievalResults,
   type AlertLevel,
-  type PersonalScreeningRecord,
   type RetrievalResult,
 } from "../data/mockData";
 import { getDraft } from "../services/firstRun";
-import { supplementModalityText } from "../services/localKg";
+import { dashboardInputTime, latestDashboardInput } from "../services/dashboardInput";
+import { usePageActive } from "../services/pageActivity";
 import { getCurrentSession } from "../auth/session";
 import { USE_MOCK, clearToken } from "../services/http";
 import ActionPlanCard from "../components/ActionPlanCard";
+import RiskSummaryCard from "../components/RiskSummaryCard";
 
 /* ------------------------------------------------------------------ 小工具 */
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
+const INPUT_LABEL = { scale: "量表筛查", text: "文字筛查", audio: "语音筛查", image: "图像筛查" };
 
 function greeting() {
   const h = new Date().getHours();
@@ -69,24 +69,9 @@ function monthOf(value?: string | null): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/** 用各量表自己的 scoring() 扫出分档，避免另写一张阈值表 */
-function scoringBands(
-  definition: QuestionnaireDefinition | undefined,
-  maxScore: number,
-): { level: AlertLevel; from: number; to: number }[] {
-  if (!definition || maxScore <= 0) return [];
-  const bands: { level: AlertLevel; from: number; to: number }[] = [];
-  for (let score = 0; score <= maxScore; score += 1) {
-    const level = definition.scoring(score).level;
-    const last = bands[bands.length - 1];
-    if (last && last.level === level) last.to = score;
-    else bands.push({ level, from: score, to: score });
-  }
-  return bands;
-}
-
 /** 等级外观沿用旧版口径：稳定 / 关注 / 警告 / 高危，分数带与预警列表共用 */
 const LEVEL_LABEL: Record<string, string> = {
+  unknown: "未评估",
   green: "稳定",
   yellow: "关注",
   orange: "警告",
@@ -99,43 +84,20 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   resolved: { label: "已解决", cls: "bg-success-50 text-success-600" },
 };
 const LEVEL_TEXT: Record<string, string> = {
+  unknown: "text-slate-500",
   green: "text-success-600",
   yellow: "text-warning-600",
   orange: "text-orange-600",
   red: "text-danger-600",
 };
 const LEVEL_DOT: Record<string, string> = {
-  green: "bg-success-500",
-  yellow: "bg-warning-500",
-  orange: "bg-orange-500",
-  red: "bg-danger-500",
+  green: "bg-success-500", yellow: "bg-warning-500",
+  orange: "bg-orange-500", red: "bg-danger-500",
 };
-const LEVEL_BAR: Record<string, string> = {
-  green: "bg-success-500",
-  yellow: "bg-warning-500",
-  orange: "bg-orange-500",
-  red: "bg-danger-500",
-};
-
-/** 记录上的模态标记：用户自愿补充的那条记录才有 supplement */
-/* 用户还没写补充内容时的占位样例。
-   出处：backend/data/hashing/corpus.db → units 表 → unit_id = 'R0001-txt'（真实语料原文）。
-   为什么用它：新用户进来「最近一次输入」是空的，只放一句干巴巴的提示看不出"输入长什么样"；
-   放一条系统里真实存在的历史自述，既能示意格式，又不会让人误以为是自己的记录
-   —— 所以下面必须带「样例」标记。 */
-const SAMPLE_INPUT =
-  "最近这段时间，考试前脑子一片空白；像被一层灰蒙住，看不到出路，这种情况已经持续一阵了。";
-
-function modalityOf(r: PersonalScreeningRecord) {
-  const kind = r.supplement?.kind;
-  if (kind === "audio") return "语音";
-  if (kind === "image") return "图像";
-  return "文本";
-}
-
 /* ------------------------------------------------------------------ 页面 */
 
 export default function Dashboard() {
+  const pageActive = usePageActive();
   /* 首屏排版参数（已在调参面板里定稿，面板已移除） */
   const tune = {
     line1: 20, line1Gap: 16,
@@ -147,10 +109,11 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!pageActive) return;
     let alive = true;
     getDashboardData()
       .then((d) => {
-        if (alive) setData(d);
+        if (alive) { setData(d); setError(null); }
       })
       .catch((e) => {
         if (alive) setError(e instanceof Error ? e.message : "加载失败");
@@ -158,7 +121,7 @@ export default function Dashboard() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [pageActive]);
 
   const view = useMemo(() => {
     if (!data) return null;
@@ -169,7 +132,6 @@ export default function Dashboard() {
     /* 左栏展示最新一次量表结果：跳过 pending（还没答完的那条） */
     const last = records.find((r) => r.status === "completed") ?? records[0];
     const def = questionnaires.find((q) => q.id === last?.questionnaire);
-    const bands = scoringBands(def, last?.maxScore ?? 0);
     const result = def && last ? def.scoring(last.score) : null;
 
     /* 「最近 30 天」必须按今天的日期筛，而不是把全部历史累计进来。
@@ -181,23 +143,19 @@ export default function Dashboard() {
       const date = parseDateValue(value);
       return Boolean(date && date >= cutoff && date <= now);
     };
-    const recentRecords = records.filter((r) => inLast30Days(r.date));
-    /* 挂用户名下（未挂记录）的采集也计入：新账号采集后，
-       「这 30 天你记录了 N 次」与模态条形图不该还是 0。
-       挂记录的在上面已按记录计过，这里只补未挂记录且时间在 30 天内的，避免重复计数。 */
-    const userSupplements = supplements.filter((s) => !s.screeningId);
-    const recentSupplements = userSupplements.filter((s) => inLast30Days(s.createdAt));
-
-    const counts: Record<string, number> = { 文本: 0, 语音: 0, 图像: 0 };
-    recentRecords.forEach((r) => {
-      const k = modalityOf(r);
-      counts[k] = (counts[k] ?? 0) + 1;
+    const recentRecords = records.filter(r => r.status === "completed" && inLast30Days(r.date));
+    const recentSupplements = supplements.filter(s => inLast30Days(s.createdAt));
+    const counts: Record<string, number> = { 量表: recentRecords.length, 文本: 0, 语音: 0, 图像: 0 };
+    recentSupplements.forEach(s => {
+      const key = s.kind === "audio" ? "语音" : s.kind === "image" ? "图像" : "文本";
+      counts[key]++;
     });
-    recentSupplements.forEach((s) => {
-      const k = s.kind === "audio" ? "语音" : s.kind === "image" ? "图像" : "文本";
-      counts[k] = (counts[k] ?? 0) + 1;
-    });
-    const totalRecords = recentRecords.length + recentSupplements.length;
+    // The authoritative totals cover the complete ledger, not the dashboard preview limits.
+    if (data.screeningActivity) {
+      const {scale,text,audio,image} = data.screeningActivity.byKind;
+      Object.assign(counts, {量表:scale,文本:text,语音:audio,图像:image});
+    }
+    const totalRecords = Object.values(counts).reduce((sum,n)=>sum+n,0);
     const maxCount = Math.max(1, ...Object.values(counts));
 
     /* 演示数据所在的月份：只在"最近 30 天/本月为空"时展示，避免把旧样例说成现在 */
@@ -238,10 +196,7 @@ export default function Dashboard() {
       return acc;
     }, {});
 
-    /* 「最近一次输入」= 这张卡展示的那条记录的补充内容。
-       记录优先、用户级采集兜底、草稿最后：草稿只服务首次引导那一次；
-       新账号没有筛查记录时，采集挂在用户名下（supplements），
-       用它保证"上传后一定看得到"，而不是只上传不挂靠。 */
+    /* 草稿只用于继续作答的入口，不计入已提交的最近一次输入。 */
     const draft = getDraft();
     const draftDefinition = draft ? questionnaires.find((q) => q.id === draft.scaleId) : undefined;
     const pendingDraft =
@@ -254,24 +209,14 @@ export default function Dashboard() {
             updatedAt: draft.updatedAt,
           }
         : null;
-    const supplement =
-      records.find((r) => r.supplement)?.supplement ??
-      supplements[0] ??
-      draft?.supplement;
-    /* 文本取原文；音频 / 图片取**与检索历史同一段**模态文字描述
-       （supplementModalityText 是两处共用的唯一实现：有分析描述就是
-       「语音片段特征：…」/「记录到的非言语线索：…」，没有就回退成文件名）。
-       以前这里对音频/图片直接摆了一段写死的"样例"描述，与历史记录对不上。 */
-    const supplementText = supplementModalityText(supplement);
-    const input = supplement
-      ? { kind: supplement.kind, text: supplementText }
-      : null;
-    /* 哈希检索引擎对这次采集的分析报告（保存时同步生成，随补充挂载）：
-       卡里展示风险等级与结论，把"采集 → 分析 → 结论"闭环带到这里 */
+    const input = latestDashboardInput(data);
+    const supplement = input?.supplement;
     const inputAnalysis = supplement?.analysis ?? null;
-
-    /* 检索结果：取相似度最高的一条，其余用「还有 N 条」带过（版面只放得下一条） */
-    const ranked = [...retrievalResults].sort((a, b) => b.similarity - a.similarity);
+    const ranked = (inputAnalysis?.hits ?? []).map<RetrievalResult>(hit=>({
+      id:hit.id,similarity:hit.similarity,modality:['text','audio','image','multimodal'].includes(hit.modality || '') ? hit.modality as RetrievalResult['modality'] : 'text',
+      summary:hit.summary || '',tags:hit.tags || [],date:hit.date || '',
+      alertLevel:['green','yellow','orange','red'].includes(hit.alertLevel)?hit.alertLevel as AlertLevel:'unknown',
+    })).sort((a,b)=>b.similarity-a.similarity);
 
     /* 「查看检索依据」要带着这次的输入跳到检索页，否则用户到了那边还得再输一遍。
        没有补充文字时用「量表名 + 本次分档」兜底 —— 这是卡里确实显示过的内容，
@@ -300,7 +245,6 @@ export default function Dashboard() {
       totalRecords,
       last,
       def,
-      bands,
       result,
       counts,
       maxCount,
@@ -322,12 +266,15 @@ export default function Dashboard() {
      只有特征描述，重跑等于拿描述当媒体去检索，结论不可信。
      失败（401 / 后端未起）时不伪造结果，由界面如实显示"没跑成"。 */
   const inputText = view?.input?.kind === "text" ? view.input.text.trim() : "";
-  const [live, setLive] = useState<{
+  const inputKey = view?.input ? `${view.input.id}:${view.input.at}` : "";
+  const [liveResult, setLive] = useState<{
+    key: string;
     top?: RetrievalResult;
     second?: RetrievalResult;
     report?: SearchResponse<RetrievalResult>["report"];
     error?: string;
   } | null>(null);
+  const live = liveResult?.key === inputKey ? liveResult : null;
 
   useEffect(() => {
     let alive = true;
@@ -343,13 +290,14 @@ export default function Dashboard() {
         .then((res) => {
           if (alive)
             setLive({
+              key: inputKey,
               top: res.results?.[0],
               second: res.results?.[1],
               report: res.report,
             });
         })
         .catch((e) => {
-          if (alive) setLive({ error: e instanceof Error ? e.message : "检索失败" });
+          if (alive) setLive({ key: inputKey, error: e instanceof Error ? e.message : "检索失败" });
         });
     }
 
@@ -357,7 +305,7 @@ export default function Dashboard() {
       alive = false;
       window.clearTimeout(resetTimer);
     };
-  }, [inputText]);
+  }, [inputText, inputKey]);
 
   /* 数据没拿到时的两种状态要分开，不能混：
        · 还在加载（error 为空）→ 骨架屏，会自己结束；
@@ -400,21 +348,21 @@ export default function Dashboard() {
   }
 
   const level = view.last?.level ?? "green";
-  const activeBand = view.bands.findIndex(
-    (b) => view.last && view.last.score >= b.from && view.last.score <= b.to
-  );
   const hasVoiceOrImage = view.counts["语音"] + view.counts["图像"] > 0;
 
-  /* 真检索成功就用真结果，否则退回演示数据。
+  /* 仅展示这条输入的实时结果或其保存的分析，禁止使用其他记录的样例。
      后端返回的是 alert_level（snake_case），前端类型写的是 alertLevel，两边都认。 */
-  const matched = live?.top ?? view.top;
+  const matched = live && !live.error ? live.top : view.top;
   /* 相似度第二高的一条，紧跟第一条展示 */
-  const matched2 = live?.top ? live.second : view.second;
-  const matchedLevel = (raw: unknown): AlertLevel => {
-    const r = raw as { alertLevel?: AlertLevel; alert_level?: AlertLevel } | undefined;
-    return r?.alertLevel ?? r?.alert_level ?? "green";
+  const matched2 = live && !live.error ? live.second : view.second;
+  const matchedLevel = (raw: unknown): AlertLevel | 'unknown' => {
+    const r = raw as { alertLevel?: AlertLevel | 'unknown'; alert_level?: AlertLevel | 'unknown' } | undefined;
+    return r?.alertLevel ?? r?.alert_level ?? "unknown";
   };
-  const matchedLevelOf = matched ? matchedLevel(matched) : "green";
+  const matchedLevelOf = matchedLevel(matched);
+  const savedAssessmentHref = view.input?.supplement
+    ? `/personal/screening?tab=retrieval&assessmentSupplementId=${view.input.supplement.id}`
+    : null;
 
   return (
     <div className="grid gap-6">
@@ -423,7 +371,7 @@ export default function Dashboard() {
         都会横向溢出、压到卡片上（1270×750 实测）。2xl 再放开到 430。 */}
       {/* 1180 以下改成单列：1024–1179 时内容区只有 670–820px，
           380px 的计划卡会剩不下左栏（标题要断成三行，灰字压到卡片上）。 */}
-      <div className="grid gap-6 min-[1180px]:grid-cols-[minmax(0,1fr)_minmax(0,380px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
+      <div className="dashboard-hero grid gap-6 min-[1180px]:grid-cols-[minmax(0,1fr)_minmax(0,380px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
       {/* ============ 首屏：左标题 + 右「今日行动计划」（缩小后移到右上角） ============ */}
       {/* 左栏：标题 + 灰字 + 两个动作，整块在左栏内垂直居中（对齐右侧计划卡的高度） */}
       <div className="lg:flex lg:flex-col lg:justify-center" style={{ paddingTop: tune.offset }}>
@@ -523,85 +471,29 @@ export default function Dashboard() {
           <div>
             <h2 className="text-[20px] font-semibold text-slate-900">近期的检测结果</h2>
             <p className="mt-1 text-[13px] text-slate-500">
-              {view.last
-                ? `${view.last.date} 完成 · ${view.def?.name ?? view.last.questionnaire}`
+              {view.input
+                ? `${new Date(dashboardInputTime(view.input.at)).toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',hour12:false})} · ${INPUT_LABEL[view.input.kind]}`
                 : "还没有检测记录"}
             </p>
           </div>
         </div>
 
-        {view.last ? (
+        {view.input ? (
           <>
             <div className="mt-5 grid gap-6 border-t border-slate-100 pt-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-8">
-              {/* 栏一：量表给的分数
-                  表头固定在顶（三栏表头必须对齐），**只有下面的分数+分数带**
-                  在剩余高度里竖直居中 —— 这一栏内容比左右两栏矮，贴顶会显得上重下空。 */}
-              <div className="flex flex-col">
-                <p className="text-[15px] font-semibold text-slate-700">量表给的分数</p>
-                <div className="flex flex-1 flex-col justify-center">
-                <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <span className="flex items-baseline gap-2">
-                    <span className="text-[34px] font-semibold leading-none tabular-nums text-slate-900">
-                      {view.last.score}
-                    </span>
-                    <span className="text-[14px] text-slate-400">/ {view.last.maxScore}</span>
-                    {/* 等级胶囊从卡片右上角挪到分数旁边：它描述的就是这个分值 */}
-                    <span
-                      className={`ml-1 inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2 py-0.5 text-[12.5px] font-medium ${LEVEL_TEXT[level]}`}
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full ${LEVEL_DOT[level]}`} />
-                      {LEVEL_LABEL[level]}
-                    </span>
-                  </span>
-                  <span className="text-[14px] font-medium text-slate-600">
-                    {LEVEL_LABEL[level]}范围
-                  </span>
-                </div>
-                <p className="mt-1.5 text-[12.5px] text-slate-400">
-                  {view.result?.label ?? "—"}（量表自身分档）
-                </p>
-
-                {/* 分数带：段下带 稳定/关注/警告/高危，口径与「最近预警」一致 */}
-                <div className="mt-4 flex gap-1.5">
-                  {view.bands.map((b, i) => (
-                    <span
-                      key={i}
-                      className={`h-2 flex-1 rounded-full ${
-                        i === activeBand ? LEVEL_BAR[b.level] : "bg-slate-200/70"
-                      }`}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2 flex flex-wrap justify-between gap-x-2 text-[11.5px] text-slate-400">
-                  {view.bands.map((b, i) => (
-                    <span key={i} className={i === activeBand ? "font-semibold text-slate-600" : ""}>
-                      {b.from}–{b.to} {LEVEL_LABEL[b.level]}
-                    </span>
-                  ))}
-                </div>
-                </div>
-              </div>
+              {/* 栏一：近30天综合风险，替代单次量表分数展示。 */}
+              <div className="min-w-0"><RiskSummaryCard presentation="column" /></div>
 
               {/* 栏二：检索 */}
               <div className="lg:border-l lg:border-slate-100 lg:pl-8">
                 <p className="flex items-center gap-1.5 text-[15px] font-semibold text-slate-700">
                   最近一次输入
-                  {!view.input && (
-                    <span className="rounded bg-slate-100 px-1 text-[11px] font-medium text-slate-400">
-                      样例
-                    </span>
-                  )}
                 </p>
-                {view.input ? (
-                  /* 文本给原文，音频/图片给该记录在检索历史里的同一段模态描述 */
-                  <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-700">
-                    「{view.input.text}」
-                  </p>
-                ) : (
-                  <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-500">
-                    「{SAMPLE_INPUT}」
-                  </p>
-                )}
+                {/* 量表显示实际提交结果；文字用原文；媒体显示原始文件信息。 */}
+                <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-700">
+                  「{view.input.text}」
+                </p>
+                <p className="mt-2 text-xs text-slate-400">{INPUT_LABEL[view.input.kind]} · {new Date(dashboardInputTime(view.input.at)).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})}</p>
                 {/* 这次采集的哈希检索结论（等级 + 结论，一行压住版面） */}
                 {view.inputAnalysis?.conclusion && (
                   <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[12.5px] leading-[1.6] text-slate-500">
@@ -620,14 +512,12 @@ export default function Dashboard() {
                         检索到的最相似记录
                         <span
                           className={`rounded px-1 text-[11px] font-medium ${
-                            !USE_MOCK && live?.top
+                            !USE_MOCK
                               ? "bg-success-50 text-success-600"
-                              : live?.error
-                                ? "bg-danger-50 text-danger-600"
-                                : "bg-slate-100 text-slate-400"
+                              : "bg-slate-100 text-slate-400"
                           }`}
                         >
-                          {!USE_MOCK && live?.top ? "实时" : live?.error ? "未跑成" : "演示"}
+                          {USE_MOCK ? "演示" : live?.top ? "实时" : "已保存"}
                         </span>
                       </p>
                       <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-2">
@@ -719,14 +609,11 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <p className="mt-2 text-[14px] leading-[1.7] text-slate-600">
-                      入睡困难与注意力下降在你自己的历史里反复出现过；恢复较快的几条，
-                      都是从「先把睡眠拉回来」开始的。
+                      {view.input?.scale?.retrieval?.summary || view.inputAnalysis?.conclusion || '这次输入尚未保存解释与建议，可打开对应记录查看或继续分析。'}
                     </p>
-                    <ul className="mt-3 grid gap-1 text-[13.5px] leading-[1.7] text-slate-600">
-                      <li>· 本周内预约一次校心理中心</li>
-                      <li>· 睡前 30 分钟离开屏幕</li>
-                      <li>· 继续每天记一条（缺语音/图像会打折）</li>
-                    </ul>
+                    {(view.input.scale?.retrieval?.advice ?? []).length > 0 && <ul className="mt-3 grid gap-1 text-[13.5px] leading-[1.7] text-slate-600">
+                      {view.input.scale?.retrieval?.advice?.slice(0,3).map((advice,i)=><li key={i}>· {advice}</li>)}
+                    </ul>}
                   </>
                 )}
               </div>
@@ -741,12 +628,12 @@ export default function Dashboard() {
               <span className="flex items-center gap-3">
                 {/* 两个入口与卡内三栏一一对应：
                     「检索到了什么 / RAG 解释与建议」→ 检索与分析；
-                    「量表给的分数」→ 我的档案里的这条记录 */}
+                    「近期综合风险」→ 左栏展开维度与依据；单次量表分数仍可在本次报告中查看 */}
                 <Link
                   to={
-                    view.retrievalQuery
+                    savedAssessmentHref ?? (view.retrievalQuery
                       ? `/personal/screening?tab=retrieval&q=${encodeURIComponent(view.retrievalQuery)}`
-                      : "/personal/screening?tab=retrieval"
+                      : "/personal/screening?tab=retrieval")
                   }
                   className="ui-button ui-button-primary"
                 >
@@ -754,49 +641,27 @@ export default function Dashboard() {
                 </Link>
                 <Link
                   to={
-                    view.last
-                      ? `/personal/screening?record=${encodeURIComponent(view.last.id)}`
-                      : "/personal/screening?tab=scale"
+                    savedAssessmentHref ?? (view.input?.recordId
+                      ? `/personal/records?record=${encodeURIComponent(view.input.recordId)}`
+                      : "/personal/records")
                   }
                   className="ui-button"
                 >
-                  查看本次报告
+                  {view.input.recordId ? "查看本次报告" : "查看本次记录"}
                 </Link>
               </span>
             </div>
           </>
         ) : (
           <>
-            <p className="mt-5 border-t border-slate-100 pt-4 text-[14px] text-slate-500">
+            <div className="mt-5 grid gap-6 border-t border-slate-100 pt-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,2.15fr)] lg:gap-8">
+              <div className="min-w-0"><RiskSummaryCard presentation="column" /></div>
+              <div className="min-w-0 lg:border-l lg:border-slate-100 lg:pl-8">
+            <p className="text-[14px] text-slate-500">
               还没有检测记录 —— 从下面「评估心理状态」开始，大约 3 分钟。
             </p>
-            {/* 新账号还没做筛查时，采集内容挂在用户名下——这里也要让它露脸，
-                否则「心理筛查」页里的采集传完东西、首页什么都看不到（只上传不挂靠的剩余死角）。 */}
-            {view.input && (
-              <div className="mt-4 rounded-xl border border-slate-100 p-4">
-                <p className="flex items-center gap-1.5 text-[15px] font-semibold text-slate-700">
-                  最近一次输入
-                  <span className="rounded bg-primary-50 px-1 text-[11px] font-medium text-primary-600">
-                    来自心理筛查
-                  </span>
-                </p>
-                <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[13.5px] leading-[1.6] text-slate-700">
-                  「{view.input.text}」
-                </p>
-                {view.inputAnalysis?.conclusion && (
-                  <p className="mt-2 line-clamp-2 border-l-2 border-slate-200 pl-3 text-[12.5px] leading-[1.6] text-slate-500">
-                    <span className="font-medium text-slate-600">
-                      {view.inputAnalysis.levelLabel ?? ""}
-                    </span>
-                    <span className="mx-1">·</span>
-                    {view.inputAnalysis.conclusion}
-                  </p>
-                )}
-                <p className="mt-2 text-[12px] text-slate-400">
-                  完成一次筛查后，这里会显示对应的分析与建议。
-                </p>
               </div>
-            )}
+            </div>
           </>
         )}
       </section>
@@ -815,7 +680,7 @@ export default function Dashboard() {
           </div>
 
           <p className="mt-3 text-[24px] font-semibold leading-[1.3] text-slate-900">
-            这 30 天你记录了 {view.totalRecords} 次
+            这 30 天你完成了 {view.totalRecords} 次筛查
           </p>
           {view.totalRecords === 0 && (
             <p className="mt-2 text-[12.5px] leading-6 text-slate-400">
@@ -826,7 +691,7 @@ export default function Dashboard() {
           )}
 
           <div className="mt-5">
-            {(["文本", "语音", "图像"] as const).map((k) => (
+            {(["量表", "文本", "语音", "图像"] as const).map((k) => (
               <div
                 key={k}
                 className="grid grid-cols-[44px_minmax(0,1fr)_32px] items-center gap-4 py-2.5"
@@ -846,8 +711,8 @@ export default function Dashboard() {
           </div>
           <p className="mt-4 text-[12.5px] leading-[1.75] text-slate-400">
             {hasVoiceOrImage
-              ? `语音 ${view.counts["语音"]} 次、图像 ${view.counts["图像"]} 次 —— 三种线索都在，跨模态比对才立得住。`
-              : "目前还只有文字记录 —— 补一条语音或传一张图，跨模态比对才立得住。"}
+              ? `语音 ${view.counts["语音"]} 次、图像 ${view.counts["图像"]} 次 —— 与量表、文字筛查一起保存在「筛查记录」。`
+              : "量表、文字、语音和图像筛查统一计入记录，可按自己的需要选择。"}
           </p>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 lg:mt-auto">

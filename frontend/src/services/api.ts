@@ -217,6 +217,9 @@ export interface CheckinMessage {
 
 // 每日问询记录（当天首次进入 AI 陪伴对话页时落库，前端可拉取；2026-11-07 打通"生成即送达"的闭环）
 export interface DailyCheckinItem {
+  suggested_replies?: string[];
+  suggestions_source?: 'ai' | 'fallback';
+  presentation_count?: number;
   id: number;
   user_id: string;
   message: string;
@@ -334,7 +337,7 @@ export async function* streamRequest<T>(
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function personalRequest<T>(path: string, init?: RequestInit): Promise<T> {
   if (!PERSONAL_API_READY) {
     throw new Error(
       '知识图谱 / 推理服务未配置：打包版没有开发代理，需要设置 VITE_PERSONAL_API_BASE ' +
@@ -351,6 +354,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return resp.json() as Promise<T>;
 }
+
+const request = personalRequest;
 
 /**
  * 在线优先、失败退本机。
@@ -449,12 +454,13 @@ export const api = {
     message: string,
     history: ChatTurn[] = [],
     signal?: AbortSignal,
+    temporary = false,
   ): AsyncGenerator<{ delta?: string; error?: string }> {
     /* 离线：本机生成整段回复，再**逐字吐出**，让打字机效果照样成立
        （演示时这一点很关键 —— 一次性蹦出一整段，看着就不像在生成）。 */
     if (!PERSONAL_API_READY) {
       const { reply, triples } = buildLocalCompanionReply(message);
-      if (triples.length) appendLocalTriples(userId, triples);
+      if (!temporary && triples.length) appendLocalTriples(userId, triples);
       for (const ch of reply) {
         if (signal?.aborted) return;
         yield { delta: ch };
@@ -465,13 +471,13 @@ export const api = {
     try {
       yield* streamRequest<{ delta?: string; error?: string }>('/api/v1/chat/companion/stream', {
         method: 'POST',
-        body: JSON.stringify({ user_id: userId, message, history }),
+        body: JSON.stringify({ user_id: userId, message, history, temporary }),
         signal,
       });
     } catch {
       /* 后端不可用：退到本机逐字输出，不把"连不上"当成对话结束 */
       const { reply, triples } = buildLocalCompanionReply(message);
-      if (triples.length) appendLocalTriples(userId, triples);
+      if (!temporary && triples.length) appendLocalTriples(userId, triples);
       for (const ch of reply) {
         if (signal?.aborted) return;
         yield { delta: ch };
@@ -542,6 +548,12 @@ export const api = {
   ensureDailyCheckin: (userId: string) =>
     request<DailyCheckinEnsureResult>(
       `/api/v1/checkin/ensure?user_id=${encodeURIComponent(userId)}`,
+      { method: 'POST' },
+    ),
+
+  presentDailyCheckin: (userId: string) =>
+    request<DailyCheckinEnsureResult>(
+      `/api/v1/checkin/present?user_id=${encodeURIComponent(userId)}`,
       { method: 'POST' },
     ),
 

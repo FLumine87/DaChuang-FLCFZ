@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useWorkspaceNavigate } from '../../services/useWorkspaceNavigate';
 import {
   ArrowRight,
   BookOpen,
@@ -29,7 +30,7 @@ import { firstRunSteps } from "./firstRunSteps";
  * 引导流程里少一次权限弹窗，实现也轻；实时录制仍在「心理筛查」页里。
  */
 export default function FirstRunSupplement() {
-  const navigate = useNavigate();
+  const navigate = useWorkspaceNavigate();
   const draft = getDraft();
   const [kind, setKind] = useState<SupplementKind>("text");
   const [text, setText] = useState(draft?.supplement?.text ?? "");

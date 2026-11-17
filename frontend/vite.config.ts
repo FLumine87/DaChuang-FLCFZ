@@ -17,7 +17,18 @@ export default defineConfig(({ mode }) => {
 
   return {
     base,
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), {
+      name: 'local-checkout-identity',
+      configureServer(server) {
+        // Only the local launcher supplies these; never expose checkout paths in builds.
+        if (!process.env.LOCAL_DEV_TOKEN || !process.env.LOCAL_DEV_ROOT) return
+        server.middlewares.use('/__dev_instance', (_req, res) => {
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ root: process.env.LOCAL_DEV_ROOT,
+            service: 'frontend', token: process.env.LOCAL_DEV_TOKEN }))
+        })
+      },
+    }],
     server: {
       proxy: {
         /* 更具体的键在前：/api/v1/* → personal-backend */

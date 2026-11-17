@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { usePageActive } from '../../services/pageActivity';
+import { RetainedView } from '../../components/RetainedWorkspace';
 import { Activity, ArrowRight, Bell, Check, ChevronRight, ClipboardCheck, FileText, Image,
   Loader2, Mic, Play, Search, ShieldCheck, Sparkles, Users, X } from 'lucide-react';
 import { analyseCase, loadCase, loadWorkspace, saveTask, startRun, type CaseDetail, type Scope,
   type Subject, type Task, type Workspace } from '../../services/workspaceApi';
 import { USE_MOCK } from '../../services/http';
+import RiskSummaryCard from '../../components/RiskSummaryCard';
 import OfflineBackendNotice from '../components/OfflineBackendNotice';
 import AdminAlerts from './AdminAlerts';
 import './agent-workspace.css';
 
-const levels: Record<string, string> = { red: '优先复核', orange: '需要复核', yellow: '持续关注', green: '常规关注' };
+const levels: Record<string, string> = { red: '需及时安全复核', orange: '建议人工复核', yellow: '需要关注', green: '现有记录未提示明显关注信号', unknown:'待评估' };
 const states: Record<string, string> = { proposed: '待审核', confirmed: '已分配', modified: '已调整', completed: '已完成', rejected: '已拒绝' };
 const actions: Record<string, string> = { confirm: '确认并分配', modify: '修改并分配', reject: '拒绝草案', complete: '完成任务', followup: '记录随访' };
 const aiLabels: Record<string, string> = {
@@ -39,6 +42,7 @@ function dialogKeys(event: KeyboardEvent<HTMLElement>, close: () => void) {
 }
 
 export default function AgentWorkspaceV2() {
+  const pageActive = usePageActive();
   const [searchParams, setSearchParams] = useSearchParams();
   const deepCase = searchParams.get('caseId');
   const scope: Scope = 'live';
@@ -104,7 +108,7 @@ export default function AgentWorkspaceV2() {
     : [];
 
   useEffect(() => {
-    if (!detailOpen || editing) return;
+    if (!detailOpen || editing || !pageActive) return;
     const handleKey = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         ++detailGeneration.current; setDetailOpen(false); dialogOrigin.current?.focus();
@@ -117,7 +121,7 @@ export default function AgentWorkspaceV2() {
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [detailOpen, editing]);
+  }, [detailOpen, editing, pageActive]);
 
   useEffect(() => {
     if (USE_MOCK) {
@@ -182,7 +186,7 @@ export default function AgentWorkspaceV2() {
     setDetail(current => current && ({ ...current, tasks: current.tasks.map(t => t.id === task.id ? task : t) }));
     setEditing(null); setNotice('处理结果已保存到后端，刷新页面仍可查看。');
   };
-  const subjects = (run?.subjects || []).filter(s => s.alert_level !== 'green' && `${s.ref} ${s.department}`.includes(keyword));
+  const subjects = (run?.subjects || []).filter(s => ['yellow','orange','red'].includes(s.alert_level) && `${s.ref} ${s.department}`.includes(keyword));
   const pending = workspace?.tasks.filter(t => t.state === 'proposed').length || 0;
   const active = workspace?.tasks.filter(t => ['confirmed', 'modified'].includes(t.state)).length || 0;
 
@@ -207,7 +211,7 @@ export default function AgentWorkspaceV2() {
         return <button key={String(id)} aria-pressed={tab === id} disabled={busy} className={tab === id ? 'active' : ''} onClick={() => { closeCase(); changeView({ tab: String(id), scope: id === 'alerts' ? 'live' : undefined, clearCase: Boolean(deepCase) }); }}><I size={16} />{String(label)}</button>;
       })}{showWorkflow && <span className="aw-save">{run ? `上次运行 ${date(run.created_at)}` : '尚未生成研判'}</span>}
     </div>
-    {tab === 'alerts' && <section aria-label="预警队列"><p className="aw-source">按单条业务预警分配处理人、记录进展和查看处置历史。</p><AdminAlerts onOpenCase={code => void openCase(`screening-code:${code}`)} /></section>}
+    <RetainedView active={tab === 'alerts'}><section aria-label="预警队列"><p className="aw-source">按单条业务预警分配处理人、记录进展和查看处置历史。</p><AdminAlerts onOpenCase={code => void openCase(`screening-code:${code}`)} /></section></RetainedView>
     {tab !== 'alerts' && USE_MOCK && <OfflineBackendNotice feature="预警研判与处置" detail="群体研判、个案档案和随访任务需要连接主后端。" />}
     {showWorkflow && (loading ? <div className="aw-empty"><Loader2 className="aw-spin" />正在读取工作台…</div> : <>
       {tab === 'overview' && (run ? <>
@@ -265,7 +269,8 @@ export default function AgentWorkspaceV2() {
     {detailOpen && <div className="aw-overlay" onClick={closeCase}><section className="aw-drawer" role="dialog" aria-modal="true" aria-label="个人研判档案" onKeyDown={e => dialogKeys(e, closeCase)} onClick={e => e.stopPropagation()}><button autoFocus className="aw-close" aria-label="关闭档案" onClick={closeCase}><X /></button>
       {detailError ? <div role="alert" className="aw-error">{detailError}</div> : !detail ? <div className="aw-empty"><Loader2 className="aw-spin" />正在读取档案…</div> : <>
         <p className="aw-breadcrumb">个人档案 / 证据与处置</p><h2>{detail.ref}</h2><div className="aw-case-meta"><Level value={detail.alert_level} /><span>{detail.department}</span><span>{detail.questionnaire}</span></div>
-        <div className="aw-case-lead"><ShieldCheck size={24} /><div><h3>建议由授权工作人员复核</h3><p>{detail.reasons.join('；')}。该结论沿用已记录预警等级。</p></div></div>
+        {detail.case_code && <RiskSummaryCard caseId={detail.case_code} />}
+        <div className="aw-case-lead"><ShieldCheck size={24} /><div><h3>建议由授权工作人员复核</h3><p>{detail.reasons.join('；')}。{scope==='live'?'当前等级采用统一近期综合评估，历史检测保留当次结论。':'演示数据仅用于工作流预览。'}</p></div></div>
         {detail.assessmentState?.status === 'outdated' && <p role="status" className="aw-error">这份研判后新增 {detail.assessmentState.newRecords} 条、修改 {detail.assessmentState.changedRecords} 条、移除 {detail.assessmentState.removedRecords || 0} 条材料，原记录已保留，请重新运行个案研判。</p>}
         {detail.assessmentState?.status === 'unknown' && <p className="aw-footnote">旧研判没有材料快照，请重新运行后确认资料范围。</p>}
         <h3>记录时间线</h3><div className="aw-history">{caseTimeline.map(item => <div key={item.key}><span className={`aw-history-dot${item.kind === 'material' ? ' material' : ''}`} /><div><strong>{item.kind === 'screening' ? <>{item.score} <small>/ {item.maxScore}</small></> : item.title}</strong><p>{item.kind === 'screening' ? item.title : item.content}</p><small>{item.at ? date(item.at) : '时间未记录'}</small></div></div>)}</div>

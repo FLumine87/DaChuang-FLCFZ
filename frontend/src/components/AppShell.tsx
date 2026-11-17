@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import RetainedWorkspace from './RetainedWorkspace';
+import { usePageActive } from '../services/pageActivity';
 import {
   ArrowUpRight,
   NotebookPen,
@@ -109,6 +111,7 @@ function useAnchorRect(
 }
 
 export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
+  const pageActive = usePageActive();
   const location = useLocation();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
@@ -128,8 +131,8 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   /* portal 下拉的容器引用：脱离顶栏 DOM 后，"点外面关闭"仍要认得它们 */
   const menuRef = useRef<HTMLDivElement>(null);
   const searchResultsRef = useRef<HTMLDivElement>(null);
-  const menuRect = useAnchorRect(profileOpen, profileRef);
-  const searchRect = useAnchorRect(searchOpen, searchContainerRef);
+  const menuRect = useAnchorRect(profileOpen && pageActive, profileRef);
+  const searchRect = useAnchorRect(searchOpen && pageActive, searchContainerRef);
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
   const [avatar, setAvatar] = useState("");
   /* 头像只在设置页修改；这里取一次并监听设置页发出的更新事件，
@@ -225,15 +228,15 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           },
           {
             path: `${root}/me/kg`,
-            label: "我的知识图谱",
-            description: "把记录里的线索连成图，看清状态之间的关系。",
+            label: "我的心理档案",
+            description: "了解近期状态，查看并纠正管家记忆和知识图谱。",
             icon: Network,
             group: "智能心理助手",
           },
           {
             path: `${root}/me/feed`,
-            label: "个性化推送",
-            description: "按你的关注点，推送可执行的调适建议。",
+            label: "建议与行动",
+            description: "把适合你的建议化为小计划，记录效果并持续调整。",
             icon: Rss,
             group: "智能心理助手",
           },
@@ -269,7 +272,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             label: "筛查记录",
             /* 放进「工作空间」：这一页是"我提交过什么、当时判成什么样"，
                和「心理筛查分析」（新做一次记录/检索）分开放更好找。 */
-            description: "提交过的文字、语音与照片，按日子回看。",
+            description: "量表、文字、语音与图像筛查，按时间统一回看。",
             icon: NotebookPen,
             group: "工作空间",
           },
@@ -355,16 +358,17 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   }, [theme]);
 
   useEffect(() => {
-    if (!isMobile || !mobileOpen) return;
+    if (!isMobile || !mobileOpen || !pageActive) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [isMobile, mobileOpen]);
+  }, [isMobile, mobileOpen, pageActive]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
+      if (!pageActive) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         searchRef.current?.focus();
@@ -396,7 +400,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       window.removeEventListener("keydown", handleKey);
       window.removeEventListener("pointerdown", handleOutside);
     };
-  }, []);
+  }, [pageActive]);
 
   const closeNavigation = () => {
     setMobileOpen(false);
@@ -625,7 +629,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
               </kbd>
               {/* 搜索结果下拉：portal 到 body 定位。
                   留在顶栏内会被 .nav-blur 的 mask 渐隐整块裁掉（2026-10-14 实测）。 */}
-              {searchOpen &&
+              {searchOpen && pageActive &&
                 searchRect &&
                 createPortal(
                   <div
@@ -688,7 +692,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                 <ChevronDown className="hidden h-4 w-4 text-slate-400 sm:block" />
               </button>
               {/* 用户菜单（退出登录在这里）：同样 portal 到 body，逃离顶栏 mask */}
-              {profileOpen &&
+              {profileOpen && pageActive &&
                 menuRect &&
                 createPortal(
                   <div
@@ -797,12 +801,11 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             </div>
           </div>
           )}
-          {/* key 跟着路由走：每次换页重放一次 260ms 的淡入上浮，
-              与登录页 ↔ 主页的转场是同一段动画（.page-enter）。 */}
+          {/* 工作页由 RetainedWorkspace 保留；外壳不能随路径变化重新挂载。 */}
           {/* 管理端所有页面 + 个人端首页显示回到顶部（个人端其余页面内容短，不需要） */}
           {(isAdmin || isDashboard) && <BackToTop />}
-          <div className="page-body page-enter" key={location.pathname}>
-            <Outlet />
+          <div className="page-body">
+            <RetainedWorkspace key={`${mode}:${getCurrentSession()?.username ?? ''}`} />
           </div>
           
         </main>

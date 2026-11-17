@@ -110,6 +110,10 @@ export const DEEP_SPACE: DeepSpacePalette = {
   edgeLabel: '#8ea3d8',
   type: {
     User: '#5c7cff',
+    Evidence: '#818cf8',
+    Memory: '#22d3ee',
+    Observation: '#fbbf24',
+    Suggestion: '#34d399',
     Interest: '#22d3ee',
     Emotion: '#fbbf24',
     Symptom: '#fb7185',
@@ -151,6 +155,10 @@ export function nodeColorOf(label: string, category?: string | null): string {
 /** 图例用：八个标签的中文名 */
 export const LABEL_NAME: Record<string, string> = {
   User: '用户',
+  Evidence: '本人记录',
+  Memory: '个人记忆',
+  Observation: 'AI近期观察',
+  Suggestion: '行动建议',
   Interest: '兴趣',
   Emotion: '情绪',
   Symptom: '症状',

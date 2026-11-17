@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { lazy, Suspense, type ReactElement } from 'react';
 import Layout from './components/Layout';
+import RetainedWorkspace from './components/RetainedWorkspace';
 import ScrollToTop from './components/ScrollToTop';
 import ScrollHint from './components/ScrollHint';
 import Dashboard from './pages/Dashboard';
@@ -33,7 +34,9 @@ import FirstRunResult from './pages/first/FirstRunResult';
    拆出去之后：首屏包变小，这三个页面各自一小块，切换时先出占位再填内容。 */
 const ChatPage = lazy(() => import('./pages/me/ChatPage'));
 const KgPage = lazy(() => import('./pages/me/KgPage'));
+const ProfilePage = lazy(() => import('./pages/me/ProfilePage'));
 const FeedPage = lazy(() => import('./pages/me/FeedPage'));
+const ActionsPage = lazy(() => import('./pages/me/ActionsPage'));
 import { getCurrentSession } from './auth/session';
 
 function RequireRole({ role, children }: { role: 'admin' | 'user'; children: ReactElement }) {
@@ -47,6 +50,12 @@ function RequireRole({ role, children }: { role: 'admin' | 'user'; children: Rea
   }
 
   return children;
+}
+
+function SessionWorkspaces() {
+  const session = getCurrentSession();
+  if (!session) return <Navigate to="/auth" replace />;
+  return <RetainedWorkspace key={`${session.role}:${session.username}`} groupShells />;
 }
 
 /** 按需加载的占位：给一块与页面同色的骨架，避免切换时闪白 */
@@ -99,6 +108,7 @@ export default function App() {
       {/* 旧地址兼容：原 /auth 是「介绍 + 登录」合页，现统一到登录页 */}
       <Route path="/auth" element={<Navigate to="/login" replace />} />
       <Route path="/selector" element={<SystemSelector />} />
+      <Route element={<SessionWorkspaces />}>
 
       {/* 个人端首次登录的欢迎页：独立成页（不带侧栏，与登录页同一套顶栏）。
           只在账号第一次登录时由登录页跳进来；主页空状态的入口也会走到这里，
@@ -161,8 +171,8 @@ export default function App() {
         <Route path="cases" element={<Cases />} />
         {/* 智能心理助手（个人端 Agent + 知识图谱） */}
         <Route path="me/chat" element={<ChatPage />} />
-        <Route path="me/kg" element={<KgPage />} />
-        <Route path="me/feed" element={<FeedPage />} />
+        <Route path="me/kg" element={<ProfilePage />} />
+        <Route path="me/feed" element={<ActionsPage />} />
         <Route path="*" element={<Navigate to="/personal/dashboard" replace />} />
       </Route>
 
@@ -185,6 +195,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 
+      </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     </Suspense>

@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { usePageActive } from '../services/pageActivity';
 import { Bell } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { loadNotices, readNotice, type Notice } from '../services/reviewRequestsApi';
 import { USE_MOCK } from '../services/http';
 
 export default function NotificationBell() {
+  const pageActive = usePageActive();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<{ unread: number; items: Notice[] } | null>(null);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
   useEffect(() => {
+    if (!pageActive) return;
     let active = true;
     let pending = false;
     async function refresh() {
@@ -25,12 +28,12 @@ export default function NotificationBell() {
     const timer = window.setInterval(() => void refresh(), 30000);
     window.addEventListener('focus', refresh);
     return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); };
-  }, [location.pathname, reload]);
+  }, [location.pathname, reload, pageActive]);
   return <div className="relative">
     <button type="button" aria-label={data?.unread ? `站内通知，${data.unread} 条未读` : '站内通知'} aria-expanded={open}
       className="ui-button relative" onClick={() => { setOpen(!open); setReload((n) => n + 1); }}><Bell className="h-4 w-4" />
       {!!data?.unread && <span className="rounded-full bg-rose-600 px-1 text-xs text-white">{data.unread}</span>}</button>
-    {open && createPortal(<section aria-label="站内通知列表" className="fixed right-4 top-16 z-[100] max-h-[70vh] w-80 max-w-[90vw] space-y-3 overflow-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
+    {open && pageActive && createPortal(<section aria-label="站内通知列表" className="fixed right-4 top-16 z-[100] max-h-[70vh] w-80 max-w-[90vw] space-y-3 overflow-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
       onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }}>
       <div className="flex justify-between"><h3 className="font-semibold text-slate-800">站内通知</h3><button className="text-sm text-slate-500" onClick={() => setOpen(false)}>关闭通知</button></div>
       <p className="text-xs text-slate-500">打开页面时自动更新；约每30秒检查新通知。</p>

@@ -21,6 +21,9 @@ class DailyCheckinOut(BaseModel):
     checkin_date: str
     created_at: str
     replied_at: str
+    suggested_replies: list[str] = Field(default_factory=list)
+    suggestions_source: str = "fallback"
+    presentation_count: int = 0
 
 
 class DailyCheckinEnsureResponse(BaseModel):

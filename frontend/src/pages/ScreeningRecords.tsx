@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   NotebookPen,
   AlertTriangle,
@@ -11,20 +11,27 @@ import {
   ArrowRight,
   StickyNote,
   Trash2,
+  ClipboardList,
   X,
 } from 'lucide-react';
 import {
   deletePersonalSupplement,
-  getPersonalSupplements,
+  getPersonalScreeningHistory,
   saveSupplementNote,
   type PersonalSupplement,
   type CollectionAnalysis,
+  type DashboardInput,
 } from '../services/mockApi';
+import type { PersonalScreeningRecord } from '../data/mockData';
+import { QUESTIONNAIRE_VERSION, questionnaires } from '../data/questionnaireData';
+import { dashboardInputTime } from '../services/dashboardInput';
+import { usePageActive } from '../services/pageActivity';
+import ScreeningDetail from './ScreeningDetail';
 
 /*
  * 筛查记录
  * ========
- * 把提交过的每一条文字 / 语音 / 照片记录下来，连同系统当时的判断结论一起沉淀：
+ * 统一回看每一次量表、文字、语音与图像筛查，保留各自原始结果。
  * 写的是什么、判成了什么等级、比对出了哪些相似样本。
  *
  * 版式按"记录本"来排，而不是数据列表：
@@ -36,8 +43,7 @@ import {
  * 记录不在这里创建 —— 统一走「心理筛查分析」的文本/语音/图像采集，
  * 这样"在哪里记录"只有一个入口，避免两套写入路径产生不一致。
  *
- * 数据来自 GET /api/personal/supplements：每条记录落库时，后端会同步跑一次
- * 哈希检索引擎，把 analysis（等级 / 结论 / 命中）一起存下来。
+ * 数据来自 GET /api/personal/records；多模态记录保留原有便签和删除操作。
  */
 
 const LEVEL_TONE: Record<string, { pill: string; dot: string; text: string }> = {
@@ -52,7 +58,7 @@ const LEVEL_NAME: Record<string, string> = {
 };
 const MODALITY_NAME: Record<string, string> = { text: '文字', audio: '语音', image: '照片' };
 const MODALITY_ICON = { text: FileText, audio: Mic, image: ImageIcon } as const;
-type Filter = 'all' | 'text' | 'audio' | 'image';
+type Filter = 'all' | 'scale' | 'text' | 'audio' | 'image';
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
@@ -67,13 +73,10 @@ function assetUrl(url?: string): string {
 /** 把 `YYYY-MM-DD HH:MM` 解析成 Date；解析失败返回 null */
 function parseTime(raw?: string): Date | null {
   if (!raw) return null;
-  const s = String(raw).replace('T', ' ').trim();
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ ](\d{2}):(\d{2}))?/);
-  if (!m) return null;
-  const d = new Date(
-    Number(m[1]), Number(m[2]) - 1, Number(m[3]),
-    m[4] ? Number(m[4]) : 0, m[5] ? Number(m[5]) : 0,
-  );
+  // Group explicit offsets and legacy local timestamps into the same Shanghai day.
+  const chinaTime = new Date(dashboardInputTime(raw));
+  if (Number.isNaN(chinaTime.getTime())) return null;
+  const d = new Date(chinaTime.toLocaleString('sv-SE', {timeZone:'Asia/Shanghai'}).replace(' ', 'T'));
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -91,7 +94,7 @@ function dayParts(raw?: string): { day: string; meta: string } {
   if (!d) return { day: '—', meta: '时间未知' };
   return {
     day: String(d.getDate()).padStart(2, '0'),
-    meta: `${d.getMonth() + 1} 月 · ${WEEKDAYS[d.getDay()]}`,
+    meta: `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 · ${WEEKDAYS[d.getDay()]}`,
   };
 }
 
@@ -506,37 +509,68 @@ function RecordEntry({
   );
 }
 
+function ScaleRecordEntry({item,at,href}:{item:PersonalScreeningRecord;at:string;href:string}) {
+  const definition = questionnaires.find(q=>q.id===item.questionnaire || q.name===item.questionnaire);
+  const legacyPss = definition?.id==='PSS-10' && item.questionnaireVersion!==QUESTIONNAIRE_VERSION;
+  const explanation = legacyPss ? '历史量表版本待核对，保留原始总分。' : definition?.scoring(item.score).label;
+  return <li className="relative">
+    <span className="absolute -left-[25px] top-4 h-2 w-2 rounded-full bg-primary-300 ring-4 ring-white" aria-hidden="true" />
+    <article className="rounded-2xl border border-slate-200 bg-white px-4 py-3.5">
+      <div className="flex flex-wrap items-center gap-2 text-[12px] text-slate-400">
+        <time>{timeOf(at)}</time>
+        <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-primary-600"><ClipboardList className="h-3 w-3" />量表</span>
+        <span>已完成 · 当次量表结果</span>
+      </div>
+      <h4 className="mt-2 text-[15px] font-medium leading-7 text-slate-700">{definition?.name ?? item.questionnaire}</h4>
+      <p className="mt-1 text-sm text-slate-600"><strong className="text-xl tabular-nums text-slate-800">{item.score}</strong> / {item.maxScore} 分{explanation && ` · ${explanation}`}</p>
+      {item.retrieval?.summary && <p className="mt-2 line-clamp-2 text-[13px] leading-6 text-slate-500">{item.retrieval.summary}</p>}
+      <Link to={href} className="mt-3 inline-flex items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1 text-[11.5px] font-medium text-primary-600 hover:bg-primary-100">
+        查看量表详情与原始作答 <ArrowRight className="h-3 w-3" />
+      </Link>
+    </article>
+  </li>;
+}
+
 export default function ScreeningRecords() {
-  const [items, setItems] = useState<PersonalSupplement[]>([]);
+  const pageActive = usePageActive();
+  const [params,setParams] = useSearchParams();
+  const selectedId = params.get('record');
+  const requestedFilter = params.get('type');
+  const filter:Filter = ['scale','text','audio','image'].includes(requestedFilter || '') ? requestedFilter as Filter : 'all';
+  const [items, setItems] = useState<DashboardInput[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>('all');
-  const [openIds, setOpenIds] = useState<Record<number, boolean>>({});
+  const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
+  const loadSequence = useRef(0);
 
   const reload = useCallback(async () => {
+    const sequence = ++loadSequence.current;
     try {
-      const list = await getPersonalSupplements();
+      const list = await getPersonalScreeningHistory();
+      if (sequence !== loadSequence.current) return;
       setItems(list);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '读取记录失败');
+      if(sequence===loadSequence.current)setError(e instanceof Error ? e.message : '读取记录失败');
     } finally {
-      setLoading(false);
+      if(sequence===loadSequence.current)setLoading(false);
     }
   }, []);
+  const cancelLoad = useCallback(()=>{loadSequence.current++;},[]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    if(pageActive)void reload();
+    return cancelLoad;
+  }, [reload,pageActive,cancelLoad]);
 
   /** 先按模态筛，再按自然日分组（组内按时间倒序、组间也倒序） */
   const groups = useMemo(() => {
     const base = filter === 'all' ? items : items.filter((it) => it.kind === filter);
     const sorted = [...base].sort((a, b) =>
-      String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')));
-    const out: { key: string; items: PersonalSupplement[] }[] = [];
+      (parseTime(b.at)?.getTime() ?? 0) - (parseTime(a.at)?.getTime() ?? 0));
+    const out: { key: string; items: DashboardInput[] }[] = [];
     for (const it of sorted) {
-      const k = dayKey(it.createdAt);
+      const k = dayKey(it.at);
       const last = out[out.length - 1];
       if (last && last.key === k) last.items.push(it);
       else out.push({ key: k, items: [it] });
@@ -548,14 +582,20 @@ export default function ScreeningRecords() {
     () => (filter === 'all' ? items.length : items.filter((i) => i.kind === filter).length),
     [items, filter],
   );
-  const notedCount = useMemo(() => items.filter((i) => i.note && i.note.trim()).length, [items]);
+  const notedCount = useMemo(() => items.filter((i) => i.supplement?.note?.trim()).length, [items]);
 
   const counts = useMemo(() => ({
     all: items.length,
+    scale: items.filter(i=>i.kind==='scale').length,
     text: items.filter((i) => i.kind === 'text').length,
     audio: items.filter((i) => i.kind === 'audio').length,
     image: items.filter((i) => i.kind === 'image').length,
   }), [items]);
+
+  const selected = selectedId ? items.find(i=>i.kind==='scale' && i.scale?.id===selectedId)?.scale : null;
+  const clearSelection = () => setParams(prev=>{const next=new URLSearchParams(prev);next.delete('record');return next;});
+  if(selected)return <ScreeningDetail record={selected} onBack={clearSelection} />;
+  if(selectedId)return <div className="ui-card p-6"><p className="text-sm text-slate-500">{loading ? '正在读取筛查记录…' : error || '未找到这条量表筛查记录。'}</p><button className="ui-button mt-3" onClick={clearSelection}>返回筛查记录</button></div>;
 
   return (
     <div className="space-y-6">
@@ -566,8 +606,8 @@ export default function ScreeningRecords() {
           筛查记录
         </h3>
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          你提交过的文字、语音与照片，连同系统当时的判断结论，都按日子留在这里。
-          每条后面还能补一张便签，记下后来想到的事。
+          量表、文字、语音与图像筛查统一按时间保存在这里，可筛选类型、查看当次结果与原始记录。
+          多模态记录还可以补充便签，记下后来想到的事。
         </p>
         {items.length > 0 && (
           <p className="mt-2 text-[12px] text-slate-400">
@@ -581,6 +621,7 @@ export default function ScreeningRecords() {
       <div className="ml-2 flex w-fit max-w-full flex-wrap gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_2px_rgba(16,24,40,0.05)]">
         {([
           ['all', '全部'],
+          ['scale', '量表'],
           ['text', '文字'],
           ['audio', '语音'],
           ['image', '照片'],
@@ -590,7 +631,8 @@ export default function ScreeningRecords() {
             <button
               key={value}
               type="button"
-              onClick={() => setFilter(value)}
+              onClick={() => setParams(prev=>{const next=new URLSearchParams(prev);if(value==='all')next.delete('type');else next.set('type',value);return next;})}
+              aria-pressed={active}
               className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
                 active ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
@@ -611,6 +653,7 @@ export default function ScreeningRecords() {
       {!loading && error && (
         <div className="ui-card border-danger-200 bg-danger-50 p-5 text-sm text-danger-700">
           读取失败：{error}
+          <button onClick={()=>void reload()} className="ml-3 underline">重试</button>
         </div>
       )}
 
@@ -618,10 +661,10 @@ export default function ScreeningRecords() {
         <div className="ui-card p-10 text-center">
           <p className="text-sm text-slate-500">这一页还是空白。</p>
           <p className="mt-1.5 text-xs text-slate-400">
-            去「心理筛查分析」写下一段话，或用语音、照片记录一次，之后这里就会有内容。
+            完成一次量表，或提交文字、语音、图像筛查后，就能在这里统一回看。
           </p>
           <Link
-            to="/personal/screening?tab=text"
+            to={`/personal/screening?tab=${filter==='scale'?'scale':'text'}`}
             className="ui-button mt-4 inline-flex items-center gap-2"
           >
             <Search className="h-4 w-4" />
@@ -634,7 +677,7 @@ export default function ScreeningRecords() {
       {!loading && !error && groups.length > 0 && (
         <div className="space-y-7">
           {groups.map((group) => {
-            const parts = dayParts(group.items[0].createdAt);
+            const parts = dayParts(group.items[0].at);
             return (
               <section
                 key={group.key}
@@ -650,15 +693,17 @@ export default function ScreeningRecords() {
 
                 {/* 条目 */}
                 <ul className="space-y-3 border-l border-slate-200 pl-5 sm:pl-6">
-                  {group.items.map((item) => (
+                  {group.items.map((item) => item.kind==='scale' && item.scale ? (
+                    <ScaleRecordEntry key={item.id} item={item.scale} at={item.at} href={`/personal/records?${new URLSearchParams({...Object.fromEntries(params),record:item.scale.id})}`} />
+                  ) : item.supplement ? (
                     <RecordEntry
-                      key={`${item.id}-${item.createdAt ?? ''}`}
-                      item={item}
+                      key={item.id}
+                      item={item.supplement}
                       open={!!openIds[item.id]}
                       onToggle={() => setOpenIds((s) => ({ ...s, [item.id]: !s[item.id] }))}
                       onChanged={() => void reload()}
                     />
-                  ))}
+                  ) : null)}
                 </ul>
               </section>
             );

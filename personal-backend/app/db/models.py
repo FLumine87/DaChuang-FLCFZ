@@ -51,3 +51,15 @@ class DailyCheckin(Base):
     checkin_date: Mapped[str] = mapped_column(String(16), index=True)
     created_at: Mapped[str] = mapped_column(String(32), default=_now)
     replied_at: Mapped[str] = mapped_column(String(32), default="")
+
+
+class CheckinPresentation(Base):
+    """按账号和本地日期持久化提醒预算，不因刷新或换设备重置。"""
+
+    __tablename__ = "checkin_presentations"
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    day: Mapped[str] = mapped_column(String(16), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
+    last_shown: Mapped[int] = mapped_column(Integer, default=0)
+    options: Mapped[str] = mapped_column(Text, default="[]")
+    options_source: Mapped[str] = mapped_column(String(16), default="fallback")

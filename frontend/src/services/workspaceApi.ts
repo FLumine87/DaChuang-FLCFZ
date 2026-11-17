@@ -58,6 +58,7 @@ export interface ModelSettings {
   available: boolean;
 }
 export interface CaseDetail extends Subject {
+  case_code?: string | null;
   assessmentState?: { status: 'none' | 'unknown' | 'current' | 'outdated'; newRecords: number; changedRecords: number; removedRecords?: number };
   assessment?: {
     id: string; created_at: string; summary: string; recommendation: string; evidence_ids: string[];

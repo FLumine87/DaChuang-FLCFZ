@@ -1,4 +1,6 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import StewardPanel from '../components/StewardPanel';
+import { usePageActive } from '../services/pageActivity';
 import { useSearchParams } from 'react-router-dom';
 import {
   corpusRecords,
@@ -97,6 +99,9 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 export default function Retrieval({ collectionReport }: { collectionReport?: CollectionAnalysis } = {}) {
+  const pageActive = usePageActive();
+  const pageActiveRef = useRef(pageActive);
+  useLayoutEffect(() => { pageActiveRef.current = pageActive; }, [pageActive]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<'all' | 'text' | 'audio' | 'image'>('all');
@@ -492,7 +497,7 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
         setAssessment(current);
         if (current.supplementId && queryModality === 'text') savedContextRef.current = { id: current.supplementId, query: effQuery };
         retrievalTokenRef.current = current.retrievalToken;
-        if (searchParams.get('assessmentSupplementId')) {
+        if (pageActiveRef.current && searchParams.get('assessmentSupplementId')) {
           const next = new URLSearchParams(searchParams);
           next.delete('assessmentSupplementId'); next.delete('screeningId'); next.delete('q');
           setSearchParams(next, { replace: true });
@@ -601,6 +606,7 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
 
   return (
     <div className="space-y-6">
+      <StewardPanel />
       {!collectionReport && <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
           <Hash className="w-5 h-5 text-primary-600" />
@@ -1391,7 +1397,7 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
 
       {/* 现场拍照：拍完与"从文件选择"走同一条 pickMedia → base64 → 检索链路 */}
       <CameraCapture
-        open={cameraOpen}
+        open={cameraOpen && pageActive}
         onClose={() => setCameraOpen(false)}
         onCapture={(file) => pickMedia('image', file)}
       />

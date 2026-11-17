@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { usePageActive } from '../../services/pageActivity';
+import { Link, useSearchParams } from "react-router-dom";
+import { useWorkspaceNavigate } from '../../services/useWorkspaceNavigate';
 import {
   ArrowLeft,
   ArrowRight,
@@ -42,7 +44,7 @@ import ScaleIntroDialog from "./ScaleIntroDialog";
  *      可展开具体求助方式；它不占用左侧主视觉，也不是量表介绍。
  */
 export default function FirstRunQuestionnaire() {
-  const navigate = useNavigate();
+  const navigate = useWorkspaceNavigate();
   const [params] = useSearchParams();
   const scaleParam = params.get("scale") ?? getFirstRunState().scaleId ?? null;
   const definition = useMemo(
@@ -571,8 +573,9 @@ function EnterToAdvance({
   enabled: boolean;
   onEnter: () => boolean;
 }) {
+  const pageActive = usePageActive();
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !pageActive) return;
     const handleKey = (event: KeyboardEvent) => {
       if (event.key !== "Enter" || event.repeat || event.metaKey || event.ctrlKey) return;
       const target = event.target as HTMLElement | null;
@@ -582,6 +585,6 @@ function EnterToAdvance({
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [enabled, onEnter]);
+  }, [enabled, onEnter, pageActive]);
   return null;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { usePageActive } from '../../services/pageActivity';
 import { ChevronRight, Loader2, Search, Sparkles, X } from 'lucide-react';
 /* 走 adminApi 的分页接口：后端 /api/admin/cases 返回的是 { items, total, page, pageSize }
    信封，不是裸数组。以前这里用 mockApi.getAdminCases()，它把这个对象直接当数组返回，
@@ -12,6 +13,7 @@ import { analyseCase, loadCase, type CaseDetail as AgentCaseDetail } from '../..
 import AdminAlertBadge from '../components/AdminAlertBadge';
 import AdminStatusBadge from '../components/AdminStatusBadge';
 import UnsavedChangesDialog from '../../components/UnsavedChangesDialog';
+import RiskSummaryCard, { RiskBadge } from '../../components/RiskSummaryCard';
 
 /* 案例管理（2026-11-07 按设计稿改版）
    结构从「左列表 + 右详情」改成：
@@ -65,6 +67,7 @@ function AiList({ title, items }: { title: string; items?: string[] }) {
 }
 
 export default function AdminCases() {
+  const pageActive = usePageActive();
   /* ── 列表 ─────────────────────────────────────────────────────────── */
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('');
@@ -150,7 +153,7 @@ export default function AdminCases() {
 
   /* 抽屉打开时锁住页面滚动，Esc 逐层关闭（先关弹窗，再关抽屉） */
   useEffect(() => {
-    if (!openId) return;
+    if (!openId || !pageActive) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const onKey = (event: KeyboardEvent) => {
@@ -165,7 +168,7 @@ export default function AdminCases() {
     };
     // closeCase 会读取最新的未保存状态，所以 dirty/eventDirty 变化时重注册
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openId, viewing, dirty, eventDirty]);
+  }, [openId, viewing, dirty, eventDirty, pageActive]);
 
   function openCaseNow(id: string) {
     setOpenId(id); setDetail(null); setDetailLoading(true); setDetailError('');
@@ -359,7 +362,7 @@ export default function AdminCases() {
                   <div className="mt-0.5 text-xs text-slate-400">{item.id}</div>
                 </td>
                 <td className="px-5 py-3.5 text-slate-600">{item.department || '未填写院系'}</td>
-                <td className="px-5 py-3.5"><AdminAlertBadge level={item.alertLevel} size="sm" /></td>
+                <td className="px-5 py-3.5"><RiskBadge level={item.alertLevel} /></td>
                 <td className="px-5 py-3.5"><AdminStatusBadge status={item.status} /></td>
                 <td className="px-5 py-3.5 text-slate-600">{item.screeningCount} 次</td>
                 <td className="px-5 py-3.5 text-slate-600">{item.lastScreening || '暂无'}</td>
@@ -458,11 +461,12 @@ export default function AdminCases() {
             )}
 
             {detail && !detailLoading && <>
+              <div className="mt-4"><RiskSummaryCard caseId={detail.id} /></div>
               {/* 资料卡 */}
               <section className="mt-4 rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <h3 className="text-[26px] font-semibold leading-tight text-slate-900">{detail.name || '未填写姓名'}</h3>
-                  <AdminAlertBadge level={detail.alertLevel} />
+                  <RiskBadge level={detail.alertLevel} />
                   <AdminStatusBadge status={detail.status} />
                 </div>
                 <p className="mt-1 text-sm text-slate-400">{detail.id}</p>

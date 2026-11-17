@@ -10,6 +10,7 @@ import AdminAlertBadge from '../components/AdminAlertBadge';
 import AdminStatusBadge from '../components/AdminStatusBadge';
 import { MasterDetail, DetailPanel } from '../../components/MasterDetail';
 import UnsavedChangesDialog from '../../components/UnsavedChangesDialog';
+import CurrentRiskPopulation from '../../components/CurrentRiskPopulation';
 
 const nextStatus: Record<AlertRecord['status'], AlertRecord['status'] | null> = {
   pending: 'processing', processing: 'resolved', resolved: 'closed', closed: null,
@@ -196,6 +197,7 @@ export default function AdminAlerts({ onOpenCase }: { onOpenCase?: (screeningId:
   const selectedRow = result?.items.find((item) => item.id === selectedId);
 
   return <div className="space-y-3">
+    <CurrentRiskPopulation />
     {/* 筛选条不单独占一张卡：页面头（标题+说明）已经很高，
         筛选再套一张卡会把列表推到首屏之外。这里用一条紧凑的输入行，
         让「4 条/页 + 等高的详情栏」尽量在一屏内铺满，不用上下滚。

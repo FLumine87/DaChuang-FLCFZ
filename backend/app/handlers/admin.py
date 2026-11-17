@@ -353,6 +353,11 @@ async def _admin_case_dict(c: dict, tags: list = None) -> dict:
             "JOIN case_tag_master t ON a.tag_id = t.id WHERE a.case_id = ? ORDER BY t.name",
             (c["id"],))
         tags = [tag["name"] for tag in tag_rows]
+    from app.services import risk_summary
+    current_risk=None
+    if c.get('user_id') is not None:
+        count=await db.query_one_a('SELECT COUNT(*) AS n FROM cases WHERE user_id=?',(c['user_id'],))
+        if count['n']==1:current_risk=await risk_summary.summary(c['user_id'])
     return {
         "id": c["case_id"], "userId": c.get("user_id"),
         "name": c.get("name") or "", "age": c.get("age"),
@@ -360,7 +365,8 @@ async def _admin_case_dict(c: dict, tags: list = None) -> dict:
         "tags": tags,
         "screeningCount": c.get("actual_count", c.get("screening_count")) or 0,
         "lastScreening": format_dt(c.get("actual_latest", c.get("last_screening_date"))),
-        "alertLevel": c.get("actual_level") or c.get("alert_level") or "green",
+        "alertLevel": current_risk['level'] if current_risk else 'unknown',
+        "riskSummary": current_risk,
         "status": c.get("status") or "active",
         "notes": c.get("notes") or "",
     }

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import StewardPanel from '../../components/StewardPanel';
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -171,6 +172,7 @@ export default function FirstRunResult() {
         </>
       }
       steps={firstRunSteps(4)}
+      afterBody={<StewardPanel />}
     >
       {/* ============ 本次筛查报告卡 ============ */}
       {/* 长宽固定：切「结果摘要 / 分析依据 / 后续建议」时卡片尺寸不变，内容多就在卡内滚动（用户要求：方框长宽不要变） */}

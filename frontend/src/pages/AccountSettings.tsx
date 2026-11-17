@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import StewardPanel from '../components/StewardPanel';
 import {
   AtSign,
   BrainCircuit,
@@ -99,6 +100,7 @@ function readAvatarDataUrl(file: File): Promise<string> {
 }
 
 export default function AccountSettings() {
+  const edited=useRef(new Set<string>());
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<MyAccount | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -189,10 +191,10 @@ export default function AccountSettings() {
         if (!alive) return;
         setAccount(acc);
         if (acc) {
-          setName(acc.name);
-          setDepartment(acc.department);
-          setPhone(acc.phone);
-          setEmail(acc.email);
+          if (!edited.current.has('name')) setName(acc.name);
+          if (!edited.current.has('department')) setDepartment(acc.department);
+          if (!edited.current.has('phone')) setPhone(acc.phone);
+          if (!edited.current.has('email')) setEmail(acc.email);
           setAvatar(acc.avatar || '');
         }
       })
@@ -449,7 +451,7 @@ export default function AccountSettings() {
             </span>
             <input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { edited.current.add('name'); setName(e.target.value); }}
               maxLength={50}
               disabled={savingProfile || loading}
               placeholder="你的姓名"
@@ -463,7 +465,7 @@ export default function AccountSettings() {
             </span>
             <input
               value={department}
-              onChange={(e) => setDepartment(e.target.value)}
+              onChange={(e) => { edited.current.add('department'); setDepartment(e.target.value); }}
               maxLength={100}
               disabled={savingProfile || loading}
               placeholder="如：外国语学院 大三"
@@ -477,7 +479,7 @@ export default function AccountSettings() {
             </span>
             <input
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => { edited.current.add('phone'); setPhone(e.target.value); }}
               disabled={savingProfile || loading}
               placeholder="选填"
               className={inputCls}
@@ -490,7 +492,7 @@ export default function AccountSettings() {
             </span>
             <input
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { edited.current.add('email'); setEmail(e.target.value); }}
               disabled={savingProfile || loading}
               placeholder="选填"
               className={inputCls}
@@ -516,51 +518,6 @@ export default function AccountSettings() {
               {savingProfile ? '保存中…' : '保存个人信息'}
             </button>
           </div>
-        </div>
-      </section>
-
-      {/* 检索与分析偏好：原在「心理筛查 · 检索与分析」页，统一收到设置页 */}
-      <section className="ui-card p-5 sm:p-6">
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-800">
-          <SlidersHorizontal className="h-4 w-4 text-primary-600" />
-          检索与分析偏好
-        </h2>
-        <p className="mt-1 text-[12.5px] text-slate-400">
-          只影响个人端「心理筛查 · 检索与分析」页面的行为，设置保存在当前浏览器。
-        </p>
-
-        <div className="mt-4 space-y-4">
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              checked={includeOriginalInput}
-              onChange={(e) => toggleIncludeOriginalInput(e.target.checked)}
-              className="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500"
-            />
-            <span>
-              <span className="block text-[13.5px] font-medium text-slate-700">结合本次原始输入分析</span>
-              <span className="mt-1 block text-[12px] leading-5 text-slate-400">
-                默认开启，报告结合原始文字与检索筛查结果；关闭后只依据检索结果。当前大模型不直接解读原始图片或语音。
-                修改后对之后发起的检索分析生效。
-              </span>
-            </span>
-          </label>
-
-          <label className="flex cursor-pointer items-start gap-3 border-t border-slate-100 pt-4">
-            <input
-              type="checkbox"
-              checked={saveToSystem}
-              onChange={(e) => toggleSaveToSystem(e.target.checked)}
-              className="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500"
-            />
-            <span>
-              <span className="block text-[13.5px] font-medium text-slate-700">送入检索数据</span>
-              <span className="mt-1 block text-[12px] leading-5 text-slate-400">
-                默认开启。本次检索会作为一条记录存入系统，首页「最近一次输入」、我的档案与管理端都能看到；
-                不想留痕就取消勾选。
-              </span>
-            </span>
-          </label>
         </div>
       </section>
 
@@ -645,6 +602,55 @@ export default function AccountSettings() {
           </div>
         </div>
       </section>
+      {/* 检索与分析偏好：原在「心理筛查 · 检索与分析」页，统一收到设置页 */}
+      <section className="ui-card p-5 sm:p-6">
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-800">
+          <SlidersHorizontal className="h-4 w-4 text-primary-600" />
+          AI 与分析偏好
+        </h2>
+        <h3 className="mt-5 text-sm font-medium text-slate-800">检索与分析偏好</h3>
+        <p className="mt-1 text-[12.5px] text-slate-400">
+          只影响个人端「心理筛查 · 检索与分析」页面的行为，设置保存在当前浏览器。
+        </p>
+
+        <div className="mt-4 space-y-4">
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={includeOriginalInput}
+              onChange={(e) => toggleIncludeOriginalInput(e.target.checked)}
+              className="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500"
+            />
+            <span>
+              <span className="block text-[13.5px] font-medium text-slate-700">结合本次原始输入分析</span>
+              <span className="mt-1 block text-[12px] leading-5 text-slate-400">
+                默认开启，报告结合原始文字与检索筛查结果；关闭后只依据检索结果。当前大模型不直接解读原始图片或语音。
+                修改后对之后发起的检索分析生效。
+              </span>
+            </span>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-3 border-t border-slate-100 pt-4">
+            <input
+              type="checkbox"
+              checked={saveToSystem}
+              onChange={(e) => toggleSaveToSystem(e.target.checked)}
+              className="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500"
+            />
+            <span>
+              <span className="block text-[13.5px] font-medium text-slate-700">送入检索数据</span>
+              <span className="mt-1 block text-[12px] leading-5 text-slate-400">
+                默认开启。本次检索会作为一条记录存入系统，首页「最近一次输入」、我的档案与管理端都能看到；
+                不想留痕就取消勾选。
+              </span>
+            </span>
+          </label>
+        </div>
+        <div className="mt-6 border-t border-slate-100 pt-5">
+          <StewardPanel mode="settings" />
+        </div>
+      </section>
+
     </div>
   );
 }

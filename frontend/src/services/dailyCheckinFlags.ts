@@ -6,12 +6,14 @@
  * 聊天页的对话流卡片也要读写同一套标记，不能各存一份。
  */
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
 
-/** 用户今天主动说"待会再说"（稍后回复 / 关闭）——今天不再出现，但问询仍是 pending */
-const dismissedKey = (user: string) => `psych_checkin_dismissed::${user}`;
 /** 用户今天明确"不想回复"——今天不再出现，服务端也已置 declined */
 const declinedKey = (user: string) => `psych_checkin_declined::${user}`;
+const repliedKey = (user: string) => `psych_checkin_replied::${user}`;
 
 function readFlag(key: string): string | null {
   try {
@@ -29,19 +31,17 @@ function writeFlag(key: string, value: string) {
   }
 }
 
-/** 今天是否已被用户明确"稍后回复"或"不想回复" */
+/** 今天是否已回复或拒绝；稍后回复不再静音整天。 */
 export function isCheckinMutedToday(user: string): boolean {
   const today = todayStr();
-  return readFlag(dismissedKey(user)) === today || readFlag(declinedKey(user)) === today;
+  return readFlag(repliedKey(user)) === today || readFlag(declinedKey(user)) === today;
 }
 
-/** 记下"今天稍后回复" */
-export function markCheckinLater(user: string) {
-  writeFlag(dismissedKey(user), todayStr());
+export function markCheckinReplied(user: string) {
+  writeFlag(repliedKey(user), todayStr());
 }
 
 /** 记下"今天不想回复"（调用方同时把服务端置 declined） */
 export function markCheckinDeclined(user: string) {
-  writeFlag(dismissedKey(user), todayStr());
   writeFlag(declinedKey(user), todayStr());
 }

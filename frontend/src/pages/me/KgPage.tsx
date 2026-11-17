@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePageActive } from '../../services/pageActivity';
 import { Network, RefreshCw, AlertTriangle, HardDrive, MessageCircleHeart, Trash2, X, ZoomIn, ZoomOut, Maximize2, Pause, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { api, type GraphData } from '../../services/api';
+import { api, personalRequest, type GraphData } from '../../services/api';
+import { stewardApi, useSteward } from '../../services/steward';
 import { briefErrorMessage } from '../../services/http';
 import { getCurrentSession } from '../../auth/session';
 import { localGraph, mergeGraphs, removeLocalTriples } from '../../services/localKg';
@@ -109,7 +111,9 @@ function glowId(color: string): string {
   return `kgGlow-${color.replace('#', '')}`;
 }
 
-export default function KgPage() {
+export default function KgPage({ stewardGraph = false }: { stewardGraph?: boolean } = {}) {
+  const {data:stewardState}=useSteward();
+  const pageActive = usePageActive();
   const session = getCurrentSession();
   const userId = session?.username ?? 'demo_user';
   /* 性别：当前档案无此字段 → resolveGender 兜底男生 */
@@ -154,12 +158,13 @@ export default function KgPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setServerNotice('');
-    const local = localGraph(userId);
+    const local = stewardGraph ? { user_id:userId,nodes:[],links:[],neo4j_connected:false } : localGraph(userId);
     setLocalCount(Math.max(0, local.nodes.length - 1));
     try {
-      const server = await api.getGraph(userId);
+      const server = stewardGraph ? await personalRequest<GraphData>('/api/v1/steward/graph') : await api.getGraph(userId);
       setServerNodes(Math.max(0, server.nodes.length - 1));
-      setData(mergeGraphs(server, local));
+      setData(stewardGraph ? server : mergeGraphs(server, local));
+      if (stewardGraph) { setGraphConnected(Boolean(server.neo4j_connected)); setServerNotice('来自你的心理档案，可查看记录、记忆、近期观察与建议之间的依据关联。'); return; }
       /* 说明文案只按**真实连接状态**给：连上了就什么都不说；
          确实没连上才提示一句人话，且不含任何后端原始响应体。 */
       setGraphConnected(Boolean(server.neo4j_connected));
@@ -171,6 +176,7 @@ export default function KgPage() {
         );
       }
     } catch (e) {
+      if (stewardGraph) { setData(null); setServerNotice('档案关系暂时无法读取，请稍后刷新。'); return; }
       /* 后端不可用不该让页面空掉：本机三元组照样画出来，失败只在顶部如实说明。
          注意 briefErrorMessage：axios 的消息里可能带着原始响应体（裸 JSON），
          直接上屏就是"把后端返回体糊在用户脸上"。 */
@@ -183,11 +189,11 @@ export default function KgPage() {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, stewardGraph]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!stewardGraph || pageActive) void load();
+  }, [load,stewardGraph,pageActive,stewardState?.version,stewardState?.evidence_count]);
 
   /* 换数据时清掉选中/悬停并复位相机，避免残留一个不存在的节点 id */
   useEffect(() => {
@@ -465,7 +471,7 @@ export default function KgPage() {
 
   /* ── 主循环：自转 + 每帧重绘 ─────────────────────────────────────────── */
   useEffect(() => {
-    if (nodes.length === 0) return;
+    if (nodes.length === 0 || !pageActive) return;
     let raf = 0;
     let prev = performance.now();
     let running = true;
@@ -495,7 +501,7 @@ export default function KgPage() {
       running = false;
       cancelAnimationFrame(raf);
     };
-  }, [nodes.length, paint]);
+  }, [nodes.length, paint, pageActive]);
 
   /**
    * 自转开关放 ref 供主循环读。
@@ -640,6 +646,15 @@ export default function KgPage() {
     const node = pendingDelete;
     if (!node || deleting) return;
     setDeleting(true);
+    if (stewardGraph) {
+      try {
+        if (node.label === 'Memory') await stewardApi.memory(node.id, 'forget');
+        else await stewardApi.forget(node.id);
+        setPendingDelete(null); setSelected(null); setHovered(null); await load();
+      } catch { setServerNotice('忘记记录失败，请稍后重试。'); }
+      finally { setDeleting(false); }
+      return;
+    }
 
     /* 1) 本机：按名字删掉所有指向它的三元组 */
     const nextLocal = removeLocalTriples(userId, { name: node.name });
@@ -716,7 +731,7 @@ export default function KgPage() {
       <div className="ui-card shrink-0 p-4 flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-            <Network className="w-4 h-4 text-primary-600" /> 我的个人知识图谱
+            <Network className="w-4 h-4 text-primary-600" /> {stewardGraph ? '心理档案关系图谱' : '我的个人知识图谱'}
           </h2>
           <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span>
@@ -725,7 +740,7 @@ export default function KgPage() {
             {/* 来源标注：本机（localStorage）/ 服务端图谱，两者都画在同一张图上时说清主次 */}
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
               <HardDrive className="w-3 h-3" />
-              {graphConnected
+              {stewardGraph ? `来自心理档案 · ${serverNodes} 个关联节点` : graphConnected
                 ? serverNodes > 0
                   ? `已连接个人知识图谱 · ${serverNodes} 个节点（本机记录作补充）`
                   : `已连接个人知识图谱 · 该用户暂无图谱数据（本机记录 ${Math.max(0, localCount)} 条）`
@@ -736,7 +751,7 @@ export default function KgPage() {
         <button
           onClick={load}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-50 text-primary-600 text-sm font-medium hover:bg-primary-100 disabled:opacity-50 cursor-pointer"
+          className="inline-flex shrink-0 whitespace-nowrap items-center gap-2 px-4 py-2 rounded-lg bg-primary-50 text-primary-600 text-sm font-medium hover:bg-primary-100 disabled:opacity-50 cursor-pointer"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> 刷新
         </button>
@@ -963,7 +978,7 @@ export default function KgPage() {
                         </text>
 
                         {/* 删除按钮：悬停或选中该节点时浮出（用户节点是核心，不给删） */}
-                        {!isUser && (isFocus || hovered === n.id) && (
+                        {!isUser && (!stewardGraph || ['Evidence','Memory'].includes(n.label)) && (isFocus || hovered === n.id) && (
                           <g
                             transform={`translate(${n.r + 6},${-n.r - 6})`}
                             style={{ cursor: 'pointer' }}
@@ -1081,7 +1096,7 @@ export default function KgPage() {
                   </p>
                   <div className="flex shrink-0 items-center gap-2">
                     {/* 用户节点是核心，不给删（删了整张图没有根了） */}
-                    {selNode.label !== 'User' && (
+                    {selNode.label !== 'User' && (!stewardGraph || ['Evidence','Memory'].includes(selNode.label)) && (
                       <button
                         onClick={() => setPendingDelete(selNode)}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-danger-500/20 px-2.5 py-1.5 text-xs font-medium text-danger-100 hover:bg-danger-500/35 cursor-pointer"
@@ -1117,7 +1132,7 @@ export default function KgPage() {
           标题卡/图例/详情，星图吃剩下的。 */}
       <div className="ui-card shrink-0 p-4 flex flex-wrap gap-3 items-center">
         <span className="text-xs font-medium text-slate-500 mr-1">星体类型：</span>
-        {Object.entries(LABEL_NAME).map(([k, v]) => (
+        {Object.entries(LABEL_NAME).filter(([k]) => !stewardGraph || nodes.some(n=>n.label===k)).map(([k, v]) => (
           <span key={k} className="inline-flex items-center gap-1.5 text-xs text-slate-600">
             <span className="w-3 h-3 rounded-full inline-block" style={{ background: nodeColorOf(k) }} />
             {v}

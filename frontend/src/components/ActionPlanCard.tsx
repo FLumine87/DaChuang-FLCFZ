@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarClock, Check, Clock, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { usePageActive } from '../services/pageActivity';
+import { CalendarClock, Check, Clock, Loader2, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import {
   completePersonalPlan,
   createPersonalPlan,
@@ -80,10 +81,15 @@ function defaultDue(): string {
 }
 
 export default function ActionPlanCard() {
+  const pageActive=usePageActive();
   const [plans, setPlans] = useState<PersonalPlansResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [finishing, setFinishing] = useState<{item: ActionPlanItem; height: number} | null>(null);
+  const completionLock = useRef(false);
+  const loadSequence = useRef(0);
+  const [completionNotice, setCompletionNotice] = useState('');
 
   const [formOpen, setFormOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -98,34 +104,41 @@ export default function ActionPlanCard() {
   const [confirmPurgeId, setConfirmPurgeId] = useState<number | null>(null);
 
   const reload = useCallback(async () => {
+    const sequence=++loadSequence.current;
     try {
       const data = await getPersonalPlans();
+      if(sequence !== loadSequence.current)return;
       setPlans(data);
       setError(null);
     } catch (e) {
+      if(sequence !== loadSequence.current)return;
       setError(e instanceof Error ? e.message : '读取计划失败');
     } finally {
-      setLoading(false);
+      if(sequence === loadSequence.current)setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    if (pageActive) void reload();
+    const updated = () => { if (pageActive) void reload(); };
+    window.addEventListener('steward-plans-changed',updated);
+    return () => window.removeEventListener('steward-plans-changed',updated);
+  }, [reload,pageActive]);
 
-  const pending = plans?.pending ?? [];
   const archived = plans?.archived ?? [];
 
   /* 排一次序：有截止的按时间升序在前，没设截止的沉底。
      后端已排过，这里再排一道是防止个别数据 due_at 为空串导致顺序不稳。 */
   const sortedPending = useMemo(() => {
-    return [...pending].sort((a, b) => {
+    const pending=plans?.pending ?? [];
+    const visible = finishing && !pending.some(p=>p.id===finishing.item.id) ? [...pending,finishing.item] : pending;
+    return [...visible].sort((a, b) => {
       const da = parsePlanTime(a.dueAt)?.getTime() ?? Number.MAX_SAFE_INTEGER;
       const db = parsePlanTime(b.dueAt)?.getTime() ?? Number.MAX_SAFE_INTEGER;
       if (da !== db) return da - db;
       return a.id - b.id;
     });
-  }, [pending]);
+  }, [plans,finishing]);
 
   /*
    * 操作失败时的统一善后。
@@ -151,16 +164,25 @@ export default function ActionPlanCard() {
     );
   };
 
-  const handleComplete = async (item: ActionPlanItem) => {
-    if (busyId !== null) return;
+  const handleComplete = async (item: ActionPlanItem, input: HTMLInputElement) => {
+    if (busyId !== null || completionLock.current) return;
+    completionLock.current=true;
+    const height=input.closest('li')?.getBoundingClientRect().height ?? 160;
     setBusyId(item.id);
     setError(null);
     try {
-      await completePersonalPlan(item.id);
+      const completed=await completePersonalPlan(item.id);
+      loadSequence.current++;
+      setFinishing({item,height});
+      setPlans(previous=>previous ? {...previous,pending:previous.pending.filter(p=>p.id!==item.id),archived:[{...item,...completed,status:'done',completedAt:completed?.completedAt || new Date().toISOString()},...previous.archived.filter(p=>p.id!==item.id)]} : previous);
+      setCompletionNotice(`已完成：${item.title}`);
+      await new Promise(resolve=>setTimeout(resolve,window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 120 : 1150));
       await reload();
     } catch (e) {
-      await settleFailure(e, '归档失败');
+      await settleFailure(e, '完成状态未保存，请重试');
     } finally {
+      setFinishing(null);
+      completionLock.current=false;
       setBusyId(null);
     }
   };
@@ -233,6 +255,7 @@ export default function ActionPlanCard() {
 
   return (
     <section className="ui-card p-4 sm:p-5">
+      <p className="sr-only" role="status" aria-live="polite">{completionNotice}</p>
       {/* 头部：只有标题与一句说明。
           「计划制定时间」不放这里 —— 它是**每条计划各自的属性**，
           统一挂在卡片右上角会让人误以为是整张卡的刷新时间。
@@ -245,7 +268,7 @@ export default function ActionPlanCard() {
           </p>
         </div>
         <span className="shrink-0 text-[12.5px] tabular-nums text-slate-400">
-          待进行 {sortedPending.length} 项
+          待进行 {sortedPending.length - (finishing ? 1 : 0)} 项
         </span>
       </div>
 
@@ -320,7 +343,7 @@ export default function ActionPlanCard() {
       )}
 
       {!loading && !error && sortedPending.length === 0 && (
-        <div className="py-6 text-center">
+        <div className="plan-empty-state py-6 text-center">
           <p className="text-[13px] text-slate-500">待进行的计划都做完了。</p>
           <p className="mt-1 text-[12px] text-slate-400">
             有新该做的事时会自动出现在这里，也可以自己写一条。
@@ -333,17 +356,28 @@ export default function ActionPlanCard() {
           {sortedPending.map((plan) => {
             const d = dueLabel(plan.dueAt);
             const busy = busyId === plan.id;
+            const done = finishing?.item.id === plan.id;
             return (
               <li
                 key={plan.id}
-                className="group flex min-w-0 items-start gap-2.5 rounded-xl border border-slate-100 p-3 transition-colors hover:border-slate-200"
+                className={`group relative flex min-w-0 items-start gap-2.5 rounded-xl border border-slate-100 p-3 transition-colors hover:border-slate-200 ${done ? 'plan-task-completing' : ''}`}
+                style={done ? {'--plan-row-height':`${finishing.height}px`} as CSSProperties : undefined}
               >
+                <label className="relative -ml-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center">
+                  <input type="checkbox" aria-label={`完成计划：${plan.title}`} aria-busy={busy && !done} checked={done} disabled={busyId !== null} onChange={e=>{if(e.target.checked) void handleComplete(plan,e.currentTarget);}} className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 bg-white transition-colors checked:border-primary-500 checked:bg-primary-500 hover:border-primary-400 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-200 disabled:cursor-wait" />
+                  {done && <Check aria-hidden="true" className="pointer-events-none absolute h-3.5 w-3.5 text-white" strokeWidth={3} />}
+                  {busy && !done && <Loader2 aria-hidden="true" className="pointer-events-none absolute h-3.5 w-3.5 animate-spin text-primary-500" />}
+                  {done && <span className="plan-confetti" aria-hidden="true" data-plan-celebration>{Array.from({length:22},(_,i)=>{
+                    const angle=(i/22)*Math.PI*2;
+                    return <i key={i} className="plan-confetti-piece" style={{'--confetti-x':`${Math.cos(angle)*(55+(i%4)*17)}px`,'--confetti-y':`${Math.sin(angle)*65-35}px`,'--confetti-spin':`${(i%2?1:-1)*(180+i*31)}deg`,'--confetti-color':['#6366f1','#f59e0b','#ec4899','#14b8a6','#8b5cf6'][i%5],animationDelay:`${(i%4)*20}ms`} as CSSProperties} />;
+                  })}</span>}
+                </label>
                 <div className="min-w-0 flex-1">
                   {/* 标题行：左边是计划内容，右上角挂这条计划**自己的**制定时刻。
                       每条各自标注，不用卡片级别的统一时间 —— 那样看不出哪条是先加的。 */}
                   <div className="flex items-start justify-between gap-2">
                     <p className="min-w-0 break-words text-[13.5px] font-medium leading-6 text-slate-700">
-                      {plan.title}
+                      <span className="plan-task-title">{plan.title}</span>
                     </p>
                     <span
                       className="shrink-0 whitespace-nowrap pt-0.5 text-[10.5px] tabular-nums leading-5 text-slate-400"
@@ -370,27 +404,13 @@ export default function ActionPlanCard() {
                   </div>
                 </div>
 
-                {/* 右侧操作区：
-                    · 「归档」是主操作 —— 用文字按钮而不是左上角那个圆圈打勾，
-                      打勾的语义太模糊（是"选中"还是"完成"？），写成"归档"更直白。
-                    · 「删除」只给自己写的计划；系统提醒删了下次还会按规则长出来，
-                      所以它只能归档。 */}
+                {/* 完成由左侧复选框操作，右侧只保留删除。 */}
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => void handleComplete(plan)}
-                    disabled={busy}
-                    title="标记为已完成并移入归档"
-                    aria-label={`归档：${plan.title}`}
-                    className="whitespace-nowrap rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[12px] font-medium text-slate-600 transition-colors hover:border-primary-400 hover:bg-primary-50 hover:text-primary-600 disabled:opacity-50"
-                  >
-                    {busy ? '归档中…' : '归档'}
-                  </button>
                   {plan.source === 'user' && (
                     <button
                       type="button"
                       onClick={() => void handleDelete(plan)}
-                      disabled={busy}
+                      disabled={busyId !== null}
                       title="删除这条计划"
                       aria-label={`删除计划：${plan.title}`}
                       className="inline-flex items-center gap-0.5 whitespace-nowrap px-1 text-[11px] text-slate-300 opacity-0 transition-opacity hover:text-danger-600 group-hover:opacity-100 focus:opacity-100 disabled:opacity-40"
@@ -414,7 +434,7 @@ export default function ActionPlanCard() {
           className="inline-flex items-center gap-1.5 text-[12.5px] text-slate-400 transition-colors hover:text-slate-600"
           aria-expanded={archiveOpen}
         >
-          归档计划
+          已完成计划
           {archived.length > 0 && <span className="tabular-nums">({archived.length})</span>}
           <X
             className={`h-3 w-3 transition-transform ${archiveOpen ? 'rotate-0' : 'rotate-45'}`}

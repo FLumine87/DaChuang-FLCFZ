@@ -19,9 +19,11 @@
  */
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { usePageActive } from '../services/pageActivity';
 import { ArrowUpToLine } from 'lucide-react';
 
 export default function BackToTop() {
+  const pageActive = usePageActive();
   const [visible, setVisible] = useState(false);
 
   /* 滚动检测：监听**捕获阶段**的 scroll 事件，从事件源读 scrollTop。
@@ -57,6 +59,6 @@ export default function BackToTop() {
   );
 
   /* SSR/预渲染时没有 document，兜一下 */
-  if (typeof document === 'undefined') return null;
+  if (typeof document === 'undefined' || !pageActive) return null;
   return createPortal(node, document.body);
 }
