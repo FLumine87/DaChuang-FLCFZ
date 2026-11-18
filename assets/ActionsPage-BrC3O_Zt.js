@@ -1,1 +1,0 @@
-import{j as s,v as a,F as e}from"./index-ByhIPqmu.js";function x(){return s.jsxs("div",{className:"mx-auto max-w-4xl space-y-5",children:[s.jsx("h1",{className:"text-xl font-semibold",children:"建议与行动"}),s.jsx("p",{className:"text-sm text-slate-500",children:"选择适合你的小行动，加入计划并按自己的节奏完成。"}),s.jsx(a,{mode:"actions"}),s.jsx(e,{})]})}export{x as default};
