@@ -884,13 +884,22 @@ h1.text-3xl {
 .dash-hero-title {
   font-size: 2rem; /* 32px */
 }
-/* 首屏高度跟随内容：之前这里用 min-height 强制铺满一屏，
-   计划条目一多，右侧计划卡被撑高后左侧标题被居中下沉、下方内容被推出屏幕。
-   现在右卡列表内部滚动，首屏高度取两栏内容的较大值即可。 */
+/* 桌面首屏由视口决定高度，不能由待办数量决定。
+   左侧欢迎区始终居中，右卡填满同一高度；长列表在卡内滚动。
+   单列布局保留自然高度，避免手机出现大块留白。 */
 @media (min-width: 1180px) {
-  .dashboard-hero > section {
+  .dashboard-hero {
+    height: max(36rem, calc(100svh - var(--topbar-height, 4rem) - 8rem));
+  }
+  .dashboard-hero > .action-plan-card {
+    align-self: stretch;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+  }
+  .dashboard-hero > .action-plan-card > * {
+    flex-shrink: 0;
   }
   .dashboard-hero .plan-empty-state {
     display: flex;
@@ -898,9 +907,17 @@ h1.text-3xl {
     flex-direction: column;
     justify-content: center;
   }
-  .dashboard-hero > section > ul {
+  .dashboard-hero .plan-pending-list {
     flex: 1;
-    align-content: start;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.25rem;
+  }
+  .dashboard-hero .plan-archive {
+    max-height: 40%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 }
 @media (min-width: 640px) {
