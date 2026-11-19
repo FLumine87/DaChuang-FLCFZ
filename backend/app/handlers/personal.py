@@ -14,6 +14,8 @@ from app.services import screening_service, case_service, alert_service
 # 筛查结论由统一后端规则生成，RAG仅解释同一份证据。
 from app.engines import get_rag_engine
 from app.handlers.retrieval import perform_search, to_frontend_hit, viewer_of
+from app.handlers.upload import resolve_index_media
+from app.handlers.upload import resolve_upload_path as _resolve_upload_path
 from app.services import screening_assessment as assessment_service
 from app.services import retrieval_screening as retrieval_service
 
@@ -243,19 +245,6 @@ async def save_personal_supplement(ctx: RequestContext):
 _KIND_LABEL = {"text": "文本", "audio": "语音", "image": "图像"}
 
 
-def _resolve_upload_path(url: str) -> str | None:
-    """/uploads/audio/xxx.wav → 磁盘绝对路径（前缀校验防穿越；不存在返回 None）。"""
-    from app.handlers.upload import UPLOAD_ROOT
-    rel = (url or "")[len("/uploads/"):] if (url or "").startswith("/uploads/") else ""
-    if not rel:
-        return None
-    root = os.path.realpath(UPLOAD_ROOT)
-    candidate = os.path.realpath(os.path.join(root, rel))
-    if candidate.startswith(root + os.sep) and os.path.isfile(candidate):
-        return candidate
-    return None
-
-
 def _report_hit(h: dict) -> dict:
     """报告里的命中记录（精简版：去掉缩略图/媒体元数据，保留可解释信息）。"""
     return {
@@ -295,7 +284,7 @@ async def _index_supplement(sup_id, kind: str, data: dict, user_id: int) -> None
     try:
         from app.engines import get_hashing_engine
         text = (data.get("text") or "").strip()
-        media_path = (_resolve_upload_path(data.get("url") or "")
+        media_path = (resolve_index_media(data.get("url") or "", user_id, kind)
                       if kind in ("audio", "image") else None)
         summary = text
         if not summary:

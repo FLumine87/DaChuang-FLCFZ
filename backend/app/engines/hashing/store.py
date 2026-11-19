@@ -360,6 +360,35 @@ class HashingStore:
 
     # ------------------------- 训练队列 -------------------------
 
+    def set_review_scope(self, record_id: str, scope: str, window: Optional[int]) -> None:
+        """Persist the review decision and the pending training entry together."""
+        with self._lock:
+            conn = self._c()
+            with conn:
+                conn.execute("UPDATE units SET scope = ?, updated_at = CURRENT_TIMESTAMP "
+                             "WHERE record_id = ?", (scope, record_id))
+                cursor = conn.execute("UPDATE records SET scope = ? WHERE record_id = ?",
+                                      (scope, record_id))
+                if not cursor.rowcount:
+                    raise ValueError("索引中不存在该记录")
+                if scope == "public":
+                    conn.execute(
+                        "INSERT INTO train_queue(record_id, window) SELECT ?, ? "
+                        "WHERE NOT EXISTS (SELECT 1 FROM train_queue "
+                        "WHERE record_id = ? AND consumed_at IS NULL)",
+                        (record_id, window, record_id))
+                else:
+                    conn.execute("DELETE FROM train_queue WHERE record_id = ? AND consumed_at IS NULL",
+                                 (record_id,))
+
+    def discard_pending(self, queue_ids: List[int]) -> None:
+        if queue_ids:
+            with self._lock:
+                conn = self._c()
+                with conn:
+                    conn.executemany("DELETE FROM train_queue WHERE id = ? AND consumed_at IS NULL",
+                                     ((qid,) for qid in queue_ids))
+
     def enqueue(self, record_id: str, window: Optional[int], version: str = "") -> None:
         with self._lock:
             conn = self._c()
@@ -402,15 +431,20 @@ class HashingStore:
     def save_train_run(self, version: str, started_at: str, finished_at: str,
                        windows: List[int], n_samples: int,
                        map_before: Optional[float] = None,
-                       map_after: Optional[float] = None, note: str = "") -> None:
+                       map_after: Optional[float] = None, note: str = "",
+                       queue_ids: Optional[List[int]] = None) -> None:
         with self._lock:
             conn = self._c()
-            conn.execute(
-                "INSERT INTO train_runs(version, started_at, finished_at, windows, n_samples, "
-                "map_before, map_after, note) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                (version, started_at, finished_at, json.dumps(windows), n_samples,
-                 map_before, map_after, note))
-            conn.commit()
+            with conn:
+                conn.execute(
+                    "INSERT INTO train_runs(version, started_at, finished_at, windows, n_samples, "
+                    "map_before, map_after, note) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                    (version, started_at, finished_at, json.dumps(windows), n_samples,
+                     map_before, map_after, note))
+                if queue_ids:
+                    conn.executemany(
+                        "UPDATE train_queue SET consumed_at = CURRENT_TIMESTAMP, train_version = ? "
+                        "WHERE id = ? AND consumed_at IS NULL", ((version, qid) for qid in queue_ids))
 
     def last_train_version(self) -> str:
         with self._lock:

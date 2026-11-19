@@ -82,29 +82,28 @@ class BridgeContractTests(unittest.IsolatedAsyncioTestCase):
 
 class BridgeModelTests(unittest.TestCase):
     def test_retraining_reextracts_cached_image_from_previous_encoder(self):
-        engine = DynamicCrossModalHashingEngine.__new__(DynamicCrossModalHashingEngine)
-        engine.units = {'img':{'record_id':'r','modality':'image','feature':[.1] * 4,'media_path':'sample.png'}}
-        engine._train_cap = 10
-        engine._scope_epoch = 0
-        engine._train = Mock(return_value=True)
-        encoder = SimpleNamespace(W={'image':[[.1] * 6] * 3}, encode=Mock(return_value=[1,0,1]))
+        engine = DynamicCrossModalHashingEngine()
+        engine.units = {'img': {'record_id':'r', 'modality':'image',
+                                'feature':[.1] * 192, 'media_path':'sample.png'}}
+        encoder = SimpleNamespace(W={'image@1280':[[.1] * 1280]},
+                                  encode=Mock(return_value=[1,0,1]))
         engine._encoder_for = Mock(return_value=encoder)
-        engine._feature_of = Mock(return_value={'image':[.2] * 6})
+        engine._feature_of = Mock(return_value={'image':[.2] * 1280})
         engine._new_index = Mock(return_value=Mock())
-        engine._save_state = Mock()
-        engine._persist_all = Mock()
-        self.assertTrue(engine._retrain_in_place())
-        self.assertEqual(len(encoder.encode.call_args.args[0]['image']),6)
-        self.assertEqual(len(engine.units['img']['feature']),6)
+        engine._store = Mock()
+        with patch.object(settings, 'HASHING_IMAGE_FEATURE', 'cnn'):
+            self.assertEqual(engine._reencode_units(), 1)
+        self.assertEqual(len(encoder.encode.call_args.args[0]['image@1280']), 1280)
+        self.assertEqual(len(engine.units['img']['feature']), 1280)
 
     def test_cnn_query_uses_training_encoder_and_handles_unavailable_model(self):
-        engine = DynamicCrossModalHashingEngine.__new__(DynamicCrossModalHashingEngine)
+        engine = DynamicCrossModalHashingEngine()
         engine.model = SimpleNamespace(W={'image': [[1.]]})
         engine._cnn_image_feature = Mock(return_value=[.1] * 1280)
         with patch.object(settings, 'HASHING_IMAGE_FEATURE', 'cnn'), patch('app.engines.hashing.engine.RF.image_feature', return_value=[.2] * 192):
             self.assertEqual(len(engine._extract_query_features('', 'image', 'sample.png')['image']), 1280)
             engine._cnn_image_feature.return_value = None
-            self.assertEqual(len(engine._extract_query_features('', 'image', 'sample.png')['image']), 192)
+            self.assertEqual(len(engine._extract_query_features('', 'image', 'other.png')['image']), 192)
 
     def test_changed_feature_backend_or_training_modalities_rejects_stale_state(self):
         engine = DynamicCrossModalHashingEngine.__new__(DynamicCrossModalHashingEngine)

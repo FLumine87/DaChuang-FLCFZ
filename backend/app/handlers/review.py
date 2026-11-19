@@ -133,7 +133,7 @@ async def set_scope(ctx: RequestContext):
     try:
         uid = int(user.get("sub"))
     except (TypeError, ValueError):
-        uid = None
+        raise HttpError(403, "无法确认记录所属账号")
     result = await review_service.set_scope(record_id, scope, user_id=uid)
     if not result.get("ok"):
         raise HttpError(403, result.get("reason") or "操作失败")

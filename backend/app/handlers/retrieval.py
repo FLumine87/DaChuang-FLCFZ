@@ -204,23 +204,25 @@ async def _bridge_search_all(data, modality, top_k, tmp_path, viewer):
     return results[:top_k], {'route':'bridge:multi','channels':used,'balanced':True}
 
 
-def _image_corpus_search(data: dict, top_k: int):
+def _image_corpus_search(data: dict, top_k: int, *, media_path=None, optional=False):
     """图像搜图像：走全量 FER2013 独立索引，不经过跨模态引擎。"""
     from app.engines import get_image_index
     from app.engines.hashing import real_features as RF
 
     index = get_image_index()
     if index is None:
+        if optional:
+            return [], {}, "image", "image"
         raise HttpError(503, "图像库未就绪，请先运行 scripts/build_image_corpus.py")
     raw = data.get("media_base64") or data.get("media")
     tmp_path = None
-    if raw:
+    if raw and media_path is None:
         try:
             tmp_path = decode_media_query(raw, data.get("media_name") or "", "image")
         except MediaQueryError as exc:
             raise HttpError(400, str(exc)) from exc
     try:
-        items = index.search(path=tmp_path or "", top_k=top_k)
+        items = index.search(path=media_path or tmp_path or "", top_k=top_k)
     finally:
         remove_media_query(tmp_path)
 
@@ -266,17 +268,14 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
     """
     modality, modality_filter, top_k = _params(data, default_top_k)
     # 路由规则：
-    #   上传图像 + 范围「仅图像线索」→ 全量图像库（同模态近邻，35887 张）
+    #   上传图像 + 范围「仅图像线索」→ 动态索引及可用的独立图像库
     #   图→文 / 图→音              → 可用的弱监督桥接；模型缺失回退主引擎
     #   文→图                     → 主引擎和桥接加权；音→图保留主引擎
     #   其余                       → 主引擎共享码空间
     #   上传图像 + 范围「全部模态」  → 按结果模态交错展示，保留不同模态单元
-    # 前端上传图像时默认把范围设为「仅图像线索」，因此图搜图自动走新库，
-    # 无需前端改动；corpus=image 仍保留为显式覆盖入口。
+    # corpus=image 为显式的独立图像库入口。
     has_media = bool(data.get("media_base64") or data.get("media"))
-    if modality == "image" and has_media and (
-            modality_filter == "image"
-            or (data.get("corpus") or "").strip() == "image"):
+    if modality == "image" and has_media and (data.get("corpus") or "").strip() == "image":
         return _image_corpus_search(data, top_k)
     engine = get_hashing_engine()
     if getattr(engine, '_initialized', False) is not True:
@@ -332,6 +331,13 @@ async def perform_search(data: dict, default_top_k: int = 5, viewer: dict = None
             top_k=top_k, modality_filter=modality_filter, media_path=tmp_path,
             viewer=viewer,
         )
+        if modality == modality_filter == "image" and tmp_path:
+            corpus_hits, _, _, _ = _image_corpus_search(data, top_k, media_path=tmp_path, optional=True)
+            if corpus_hits:
+                by_id = {hit["id"]: hit for hit in corpus_hits}
+                by_id.update((hit["id"], hit) for hit in results)
+                results = sorted(by_id.values(), key=lambda hit: -hit["similarity"])[:top_k]
+                info["includes_image_corpus"] = True
         result = finalize(results, info, modality, modality_filter)
     finally:
         remove_media_query(tmp_path)
@@ -406,6 +412,9 @@ async def get_media(ctx: RequestContext, unit_id: str):
         await engine._ensure_initialized()
     if not hasattr(engine, "media_payload"):
         raise HttpError(503, "当前引擎不支持媒体取用")
+    allowed = engine._allowed_ids(viewer_of(ctx))
+    if allowed is not None and unit_id not in allowed:
+        raise HttpError(404, "该单元没有可用的媒体文件（或数据集未就位）")
     payload = engine.media_payload(unit_id)
     if not payload:
         raise HttpError(404, "该单元没有可用的媒体文件（或数据集未就位）")

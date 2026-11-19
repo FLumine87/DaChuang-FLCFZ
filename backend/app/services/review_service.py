@@ -168,35 +168,22 @@ async def review(record_ids: List[str], action: str, reviewer_id: Optional[int] 
     await engine._ensure_initialized()
     if not _supports_review(engine):
         raise ValueError("当前运行环境不支持数据审核（检索引擎为降级实现）")
-    by_rec = _units_by_record(engine)
-
     scope = "public" if action == "approve" else "rejected"
     status = "approved" if action == "approve" else "rejected"
     done, skipped = [], []
 
-    for rid in record_ids:
-        units = by_rec.get(rid) or []
-        if not units:
-            skipped.append({"record_id": rid, "reason": "索引中不存在该记录"})
-            continue
-        rec = engine.records.get(rid) or {}
-        for meta in units:
-            meta["scope"] = scope
-        if rec:
-            rec["scope"] = scope
+    for rid in dict.fromkeys(record_ids):
         try:
-            engine._store.update_scope(scope, record_ids=[rid])
-            if action == "approve":
-                engine._store.enqueue(rid, rec.get("window"))
+            engine.set_review_scope(rid, scope)
+        except ValueError as exc:
+            skipped.append({"record_id": rid, "reason": str(exc)})
+            continue
         except Exception as exc:
             skipped.append({"record_id": rid, "reason": f"持久化失败：{exc}"})
             continue
         await _sync_business_table(rid, status, reviewer_id, note)
         done.append(rid)
 
-    # 可见性缓存失效
-    engine._scope_epoch += 1
-    engine._visible_cache = {}
     pending = engine._store.pending_count()
     scheduled = False
     threshold = int(getattr(settings, "HASHING_AUTO_RETRAIN_MIN", 10) or 0)
@@ -221,21 +208,11 @@ async def set_scope(record_id: str, scope: str, user_id: Optional[int] = None) -
     await engine._ensure_initialized()
     if not _supports_review(engine):
         return {"ok": False, "reason": "当前运行环境不支持该操作"}
-    by_rec = _units_by_record(engine)
-    units = by_rec.get(record_id) or []
-    if not units:
-        return {"ok": False, "reason": "记录不存在"}
-    if user_id is not None and (units[0].get("user_id") not in (None, user_id)):
-        return {"ok": False, "reason": "无权修改该记录"}
     target = "reviewing" if scope == "public" else scope
-    for meta in units:
-        meta["scope"] = target
-    rec = engine.records.get(record_id)
-    if rec:
-        rec["scope"] = target
-    engine._store.update_scope(target, record_ids=[record_id])
-    engine._scope_epoch += 1
-    engine._visible_cache = {}
+    try:
+        target = engine.set_review_scope(record_id, target, requesting_user=user_id)
+    except ValueError as exc:
+        return {"ok": False, "reason": str(exc)}
     return {"ok": True, "record_id": record_id, "scope": target}
 
 

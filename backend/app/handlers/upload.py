@@ -30,6 +30,27 @@ UPLOAD_ROOT = os.path.join(
     "uploads",
 )
 
+def resolve_upload_path(url: str) -> str | None:
+    """Resolve a stored upload URL to a file within the upload directory."""
+    if not url.startswith("/uploads/"):
+        return None
+    root = os.path.realpath(UPLOAD_ROOT)
+    candidate = os.path.realpath(os.path.join(root, url.removeprefix("/uploads/")))
+    if candidate.startswith(root + os.sep) and os.path.isfile(candidate):
+        return candidate
+    return None
+
+
+def resolve_index_media(url: str, user_id: int | None, modality: str) -> str | None:
+    """Only attach a stored media file to an index entry for its uploader."""
+    path = resolve_upload_path(url)
+    if path is None or user_id is None:
+        return None
+    file_type = {"audio": "audio", "image": "images"}.get(modality)
+    owner = db.query_one("SELECT id FROM media_files WHERE file_path=? AND uploaded_by=? AND file_type=?",
+                         (url, user_id, file_type))
+    return path if owner else None
+
 # 单文件上限（本地演示足够；更大的视频等素材不在采集场景里）
 MAX_UPLOAD_BYTES = 30 * 1024 * 1024
 

@@ -80,7 +80,8 @@ except Exception:  # 依赖未安装时（如独立跑算法脚本）使用兜�
 # v4：单元新增 media_path / media_kind / dataset，且图像/语音改用真实特征
 # v5：状态新增 corpus_meta（数据集来源标注需重启后仍可展示）
 # v6：单元新增 media_meta（图像/语音命中展示真实文件名与数据集自带标注）
-STATE_VERSION = 6
+# v7：按审核状态重训，并使用正确的特征通道重新编码旧索引。
+STATE_VERSION = 7
 TRAIN_MODALITIES = ("text", "image", "audio")
 logger = logging.getLogger(__name__)
 # 微调 MobileNetV2 的表情特征维度（models/mobilenetv2-fer.onnx 的输出）
@@ -155,7 +156,7 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         self._scope_epoch = 0      # 可见性缓存版本，审核变更时递增
         self._visible_cache: Dict[Tuple, set] = {}
         self._weight_cache: Tuple[float, Dict[int, float]] = (0.0, {})
-        self._train_lock = threading.Lock()
+        self._train_lock = threading.RLock()
         self._retrain_thread: Optional[threading.Thread] = None
         self.last_search_info: Dict = {}
 
@@ -182,7 +183,9 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             await self.initialize()
 
     async def initialize(self) -> None:
-        self._do_initialize()
+        with self._train_lock:
+            if not self._initialized:
+                self._do_initialize()
 
     def _do_initialize(self):
         """加载索引：SQLite 索引库优先，其次迁移旧状态文件，最后按来源冷启动。
@@ -209,9 +212,17 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 self._persist_all()
 
         # 模型参数与索引分开存：索引在 SQLite，投影矩阵在 state.json
+        repaired = self._restore_runtime_media()
         if not self._load_model():
             # 投影矩阵缺失或与特征维度不匹配 → 用库内数据重训，而不是清库重播
             self._retrain_in_place()
+        elif self.index.K != self.code_length or repaired or self._store.meta_get("reencode_pending") == "1":
+            self._reencode_units()
+            self._store.meta_set("reencode_pending", "0")
+
+        for uid in repaired:
+            meta = self.units[uid]
+            self._sync_unit_to_bridges(uid, meta, self._unit_features(meta), meta["modality"])
 
         self._initialized = True
 
@@ -228,9 +239,6 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         self.index = self._new_index()
         fixed: List[str] = []
         for uid, meta in units.items():
-            code = meta.get("code") or []
-            if not code:
-                continue
             # 运行时数据的窗口每次按当前口径重算：旧版本用 122 天 / 2025-08-01 起算，
             # 会把 2026 年的新数据算进 2025 年 4 月的窗口，与历史数据混表。
             if (meta.get("source") or "") == "runtime":
@@ -241,9 +249,11 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                     if rec is not None:
                         rec["window"] = expect
                     fixed.append(uid)
-            self.index.insert(uid, code, meta, window=meta.get("window"))
+            if len(meta.get("code") or []) == self.code_length:
+                self.index.insert(uid, meta["code"], meta, window=meta.get("window"))
         if fixed:
             try:
+                self._store.meta_set("reencode_pending", "1")
                 self._store.upsert_units({u: self.units[u] for u in fixed})
                 self._store.upsert_records({self.units[u].get("record_id"):
                                             self.records[self.units[u].get("record_id")]
@@ -261,6 +271,33 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 self._corpus_meta = {}
         self._scope_epoch += 1
         return True
+
+    def _restore_runtime_media(self) -> List[str]:
+        """Repair older supplement entries whose upload path was dropped on insert."""
+        from app.db import database as db
+        from app.handlers.upload import resolve_index_media
+
+        repaired = []
+        for uid, meta in self.units.items():
+            prefix, _, number = uid.partition("-")
+            if (prefix != "sup" or not number.isdigit() or meta.get("media_path")
+                    or meta.get("modality") not in ("audio", "image")):
+                continue
+            try:
+                row = db.query_one(
+                    "SELECT url FROM screening_supplements WHERE id=? AND user_id=? AND kind=?",
+                    (int(number), meta.get("user_id"), meta["modality"]),
+                )
+                path = resolve_index_media(row["url"] or "", meta.get("user_id"), meta["modality"]) if row else None
+                if path:
+                    updated = {**meta, "media_path": path, "media_kind": meta["modality"]}
+                    self._store.meta_set("reencode_pending", "1")
+                    self._store.upsert_unit(uid, updated)
+                    self.units[uid] = updated
+                    repaired.append(uid)
+            except Exception:
+                logger.warning("无法补齐已保存采集的媒体索引", exc_info=True)
+        return repaired
 
     def _allowed_ids(self, viewer: Optional[Dict]) -> Optional[set]:
         """按调用者身份算出可见单元集合。
@@ -524,8 +561,8 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         因此图像按当前 HASHING_IMAGE_FEATURE 期望的维度校验，不匹配就重新抽取。
         """
         if feature and modality in ("image", "audio"):
-            if modality == "image" and self._image_feature_dim_mismatch(feature):
-                return list(self._feature_of(modality, text, media_path).values())[0]
+            if modality == "image" and media_path and self._image_feature_dim_mismatch(feature):
+                return self._feature_of(modality, text, media_path).get(modality) or list(feature)
             return list(feature)
         return list(self._feature_of(modality, text, media_path).values())[0]
 
@@ -553,98 +590,22 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         recs = [r for r in records if r.get("views")]
         if not recs:
             return None
-        # 参与配对训练的模态集合（默认 text + audio，见 config.HASHING_TRAIN_MODALITIES）。
-        # 共享码空间的前提是各模态视图**真同源**（同一对象的文字/语音/图像）。
-        # FER2013 是纯图像集，与文本/语音无任何同源关系，仅按情绪语义对齐挂接，
-        # 属于「同类别不同对象」。把这类视图纳入训练，模型会学到虚假的对应关系，
-        # 反而污染了本来正确的文-音对齐（实测图像查询 mAP 0.096、image->audio
-        # 一致性 0.509 与随机无异）。因此默认把 image 排除在配对训练之外 ——
-        # 图像仍保留在索引中可被检索与展示，只是不参与共享码空间的学习。
         train_mods = tuple(m for m in settings.HASHING_TRAIN_MODALITIES
-                           if m in TRAIN_MODALITIES)
-        if not train_mods:
-            train_mods = ("text",)
-        # 不同数据集的记录可能带不同的模态集合（例如纯图像记录与「文本+语音」记录混合）。
-        # 若直接取全局交集会得到空集并静默退化为「纯文本」，导致图像/语音编码器根本没被训练
-        # （表现为图像/语音检索指标全 0）。这里改为取「模态集合相同的最大分组」做配对训练：
-        # 同组内模态严格对齐，跨组不影响；只有单模态可用时才退回纯文本兜底。
-        groups: Dict[frozenset, List[Dict]] = {}
-        for r in recs:
-            sig = frozenset(m for m in r["views"] if m in train_mods)
-            groups.setdefault(sig, []).append(r)
-        # ★ 通道化之后不再丢弃「模态集合不同」的记录组。
-        # 原来的做法是取最大的一组训练、其余整组丢掉 —— 那正是 AVDD-TCMI
-        # 进不来的原因：主语料是 {text,audio,image}，AVDD 是 {audio,image}，
-        # 后者整组被丢（实测通道里根本没有 audio@2048，AVDD 的音单元
-        # 找不到通道 → 特征字典为空 → 编码返回全零 → 符号化后码全是 1，
-        # 1230 个单元的码全相同，污染索引）。
-        # 通道化 + gram_masked 的缺失视图机制正是为此准备的：
-        # AVDD 的记录在 text@531 通道上是「缺失视图」（贡献 0），
-        # 它的音走独立的 audio@2048 通道，音↔图同源约束由 S 表达。
-        best_sig = max(groups, key=lambda s: (len(s), len(groups[s])))
-        if len(best_sig) >= 2:
-            mods = [m for m in train_mods]
-        else:
-            mods = ["text"]
-            recs = [{"record_id": r["record_id"],
-                     "views": {"text": self._view_text(list(r["views"].values())[0])},
-                     "tags": r.get("tags")} for r in recs]
-
-        feats: Dict[str, List[List[float]]] = {}
-        # ── 通道化 ────────────────────────────────────────────────────────
-        # 每个「模态 × 数据集」一个通道（channel），各通道有自己的投影矩阵 W，
-        # 但共享同一个码空间 B。这样不同数据集的同模态特征不会互相拉偏：
-        # 现状把 EATD(486) 与 CSEM(4160) 的 MFCC 混进同一个 W["audio"]，
-        # 岭回归被多数派主导、少数派被拉偏（实测音搜文 mAP 0.4605 → 0.5136）。
-        # AVDD-TCMI 的声学特征 2048 维与 MFCC 64 维更是根本放不进同一个 W，
-        # 通道化是它进入共享码空间的前提。
-        #
-        # 通道内的特征维度必须一致；某个数据集的视图缺失时该行留 None
-        # （linalg.gram_masked 会把缺失行的 Gram 贡献记 0）。
-        channel_of: Dict[Tuple[str, str], List[int]] = {}
-        for i, r in enumerate(recs):
-            for m in mods:
-                v = r["views"].get(m)
-                if not v:
+                           if m in TRAIN_MODALITIES) or ("text",)
+        feats = {}
+        # 保留单模态记录，按真实特征维度分通道。缺失视图留空。
+        for i, record in enumerate(recs):
+            for modality in train_mods:
+                view = record["views"].get(modality)
+                if not view:
                     continue
-                ds = (v.get("dataset") if isinstance(v, dict) else None) \
-                    or r.get("dataset") or "_"
-                channel_of.setdefault((m, ds), []).append(i)
-
-        for (m, ds), rows in channel_of.items():
-            dim_set = set()
-            for i in rows:
-                vec = self._feature_vec(m, self._view_text(recs[i]["views"][m]),
-                                       self._view_path(recs[i]["views"][m]),
-                                       (recs[i]["views"][m] or {}).get("feature")
-                                       if isinstance(recs[i]["views"][m], dict)
-                                       else None)
-                if vec is None:
-                    continue
-                dim_set.add(len(vec))
-            if len(dim_set) != 1:
-                # 同一通道内维度不一致 → 该通道整体不参与（而不是静默算错）
-                continue
-            dim = next(iter(dim_set))
-            vecs: List[Optional[List[float]]] = [None] * len(recs)
-            for i in rows:
-                vecs[i] = self._feature_vec(
-                    m, self._view_text(recs[i]["views"][m]),
-                    self._view_path(recs[i]["views"][m]),
-                    (recs[i]["views"][m] or {}).get("feature")
-                    if isinstance(recs[i]["views"][m], dict) else None)
-            # 通道名按**特征维度**归并：同一模态同一特征空间的样本共用一个通道
-            # （EATD 与 CSEMOTIONS 的 MFCC 都是 64 维 → 合并成一个 audio@64 通道，
-            #   跨数据集的特征级关联与传递性对齐因此得以保留）
-            ch = self._channel_name(m, dim)
-            if ch in feats:
-                # 已有同维度通道：把缺失视图补上（同维度必然同空间，可直接拼接）
-                old = feats[ch]
-                for i, v in enumerate(vecs):
-                    if v is not None:
-                        old[i] = v
-            else:
-                feats[ch] = vecs
+                cached = view.get("feature") if isinstance(view, dict) else None
+                vec = self._feature_vec(modality, self._view_text(view), self._view_path(view), cached)
+                if vec:
+                    channel = self._channel_name(modality, len(vec))
+                    if channel not in feats:
+                        feats[channel] = [None] * len(recs)
+                    feats[channel][i] = vec
         if not feats:
             return None
 
@@ -699,23 +660,17 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         return f"{modality}@{dim}"
 
     def _to_primary_channel(self, feat: Dict[str, List[float]]) -> Dict[str, List[float]]:
-        """把 {modality: vector} 换成 {主通道: vector}。
+        return self._features_for_encoder(feat, self.model)
 
-        通道化后 W 的键是 modality@dataset；未通道化时就是纯模态名，
-        此时本方法原样返回（向后兼容）。
-        """
-        if not feat:
-            return feat
-        W = self.model.W or {}
-        if not W or not any("@" in k for k in W):
-            return feat
+    def _features_for_encoder(self, feat, encoder):
+        """Match each vector to a projection with the same modality and dimension."""
+        W = encoder.W or {}
         out = {}
         for modality, vec in feat.items():
-            if not vec:
-                out[modality] = vec
-                continue
-            cands = self._resolve_channels(W, modality, len(vec))
-            out[cands[0] if cands else modality] = vec
+            channel = next((c for c in self._resolve_channels(W, modality, len(vec))
+                 if W[c] and len(W[c][0]) == len(vec)), None) if vec else None
+            if channel:
+                out[channel] = vec
         return out
 
     def _resolve_channels(self, W: Dict, modality: str,
@@ -848,7 +803,7 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 bad.append(i)
         return bad
 
-    def _train_window(self, window: int, records: List[Dict]) -> bool:
+    def _train_window(self, window: int, records: List[Dict], *, balance: bool = True) -> bool:
         """为单个时间窗训练独立模型（项目书的「基于不同时间子集训练的哈希表」）。"""
         if self.window_bank.code_length != self.code_length:
             self.window_bank = WindowModelBank(
@@ -858,7 +813,8 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             )
         if len(records) < self.code_length:
             return False
-        records = self._balance_supervision(records)
+        if balance:
+            records = self._balance_supervision(records)
         if getattr(settings, "HASHING_ERROR_CORRECTION", True) and len(records) >= 30:
             try:
                 bad = self._error_samples(window, records)
@@ -886,92 +842,43 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 return model
         return self.model
 
-    def _borrowed_sibling_code(self, record_id: Optional[str],
-                               exclude_unit_id: str) -> Optional[List[int]]:
-        """取同记录已编码单元的码，供未参与训练的模态借用。
-
-        共享码空间的语义是「同一记录的不同模态视图共享同一个码」，所以当某模态
-        不参与配对训练（图像为弱配对，W 中无其投影）时，它的码应当与该记录的
-        其他视图一致，而不是退化成全 0/全 1。
-
-        只在同一记录内借用，不跨记录 —— 跨记录借用等于凭空制造错误的对应关系。
-        """
-        if not record_id:
-            return None
-        for uid, m in self.units.items():
-            if uid == exclude_unit_id or m.get("record_id") != record_id:
-                continue
-            code = m.get("code")
-            if code:
-                return list(code)
-        return None
+    def _unit_features(self, meta: Dict) -> Dict:
+        modality = meta.get("modality") or "text"
+        path = meta.get("media_path")
+        content = meta.get("content") or meta.get("summary") or ""
+        cached = meta.get("feature")
+        if modality in ("image", "audio") and cached:
+            if modality == "image" and path and self._image_feature_dim_mismatch(cached):
+                return {modality: self._feature_of(modality, content, path).get(modality) or cached}
+            return {modality: cached}
+        feat = self._feature_of(modality, content, path)
+        if modality in feat:
+            return feat
+        # 只有合成语料才允许用文本代替缺失的媒体。个人上传需有真实特征。
+        if meta.get("user_id") is None and not path:
+            return {modality: feat["text"]} if feat.get("text") else {}
+        return {}
 
     def _add_unit(self, unit_id: str, meta: Dict) -> None:
-        """编码并入索引（单元 = 记录在某模态下的视图），同时登记记录级信息。
-
-        编码器按窗口选取：单元属于哪个时间窗，就用该窗训练的模型编码。
-        窗口尚无模型时借用最近窗口的模型，避免新数据落到未训练的空间里。
-        """
+        """Encode an available view and keep its raw media features for retraining."""
         modality = meta.get("modality", "text")
-        content = meta.get("content") or meta.get("summary") or ""
         window = meta.get("window")
         if window is None:
             window = self.index.window_of(meta.get("date"))
         encoder = self._encoder_for(window)
-        feature = meta.get("feature")
-        # ── 通道化：按「模态 × 特征维度」挑通道 ───────────────────────────
-        # 通道键是 modality@dim（同一特征空间的样本共用一个通道，
-        # 跨数据集的特征级关联与传递性对齐因此得以保留）。
-        # 运行时新增的数据没有 dataset 字段，按特征维度匹配即可。
-        dim = len(feature) if feature else None
-        cands = self._resolve_channels(encoder.W or {}, modality, dim)
-        channel = cands[0] if cands else modality
-        if feature and channel in (encoder.W or {}) \
-                and len(feature) == len(encoder.W[channel][0]):
-            # 语料预抽取的离线特征：直接用，省去重复解码媒体
-            feat = {channel: feature}
-        else:
-            vec = self._feature_of(modality, content,
-                                   meta.get("media_path")).get(modality)
-            if not vec:
-                # 特征抽取失败：feat 必须仍有定义，否则下面 encoder.encode(feat)
-                # 会抛 UnboundLocalError → 播种中断 → 引擎静默退回演示语料
-                # （症状：只训了 24 条、码长 24、索引插入时 IndexError）
-                feat = {}
-            else:
-                # 关键：特征字典的键必须是**通道名**，不是模态名。
-                # 通道化后 W 的键是 modality@dim，用模态名去 encode 会
-                # 找不到投影矩阵 → 返回全 0 向量 → 符号化后码全是 1
-                # （实测 4646 个 text 单元的码唯一值只有 1 个、全 1，
-                #   凡「结果模态是 text」的格子全崩：文搜文 0.0101）
-                _hit = None
-                for c in self._resolve_channels(
-                        encoder.W or {}, modality, len(vec)):
-                    if len(vec) == len(encoder.W[c][0]):
-                        _hit = c
-                        break
-                channel = _hit or channel
-                feat = {channel: vec}
-        code = encoder.encode(feat)
-        # 该模态未参与配对训练（默认 image，见 HASHING_TRAIN_MODALITIES）：
-        # encoder.W 里没有它的投影矩阵，encode 会返回全 0 → 符号化后码全是 1，
-        # 这样的单元会污染索引（所有图像单元码相同）。改为借用**同记录**已编码
-        # 单元的码：共享码空间的定义就是「同一记录的不同模态视图共享同一个码」，
-        # 因此图像视图应该与该记录的文本/语音视图落在同一位置。
-        if not encoder.W.get(channel) and not encoder.W.get(modality):
-            borrowed = self._borrowed_sibling_code(meta.get("record_id"), unit_id)
-            if borrowed:
-                code = borrowed
+        feat = self._unit_features(meta)
+        projected = self._features_for_encoder(feat, encoder)
+        code = list(encoder.encode(projected)) if projected else []
+        if not code:
+            record_id = meta.get("record_id")
+            code = next((list(sibling["code"]) for uid, sibling in self.units.items()
+                         if uid != unit_id and sibling.get("record_id") == record_id
+                         and sibling.get("window") == window and sibling.get("code")), [])
         meta = dict(meta)
-        meta["code"] = list(code)
-        # 媒体特征随单元落库：重训与重编码直接复用，不必重新解码图像/语音。
-        # 文本特征重算只要零点几毫秒，不占存储。
-        if modality in ("image", "audio"):
-            if not meta.get("feature"):
-                vec = feat.get(modality)
-                if vec:
-                    meta["feature"] = list(vec)
-        else:
+        meta["code"] = code
+        if modality in ("image", "audio") and feat.get(modality):
+            meta["feature"] = list(feat[modality])
+        elif modality == "text":
             meta.pop("feature", None)
         # 时间窗只算一次并写回单元：否则重启后重复推算，且 units 里 window 为空
         meta["window"] = window
@@ -996,7 +903,9 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 rec["user_id"] = meta.get("user_id")
             if meta.get("scope") and rec.get("scope") in (None, "", "reviewing"):
                 rec["scope"] = meta.get("scope")
-        self.index.insert(unit_id, code, meta, window=meta.get("window"))
+        self.index.remove(unit_id)
+        if code:
+            self.index.insert(unit_id, code, meta, window=meta.get("window"))
         # 同步到弱监督桥接：运行时新增的采集数据也要能被跨模态检索到。
         # 语料来源的单元不进桥接（桥接自己从语料构建，见 build_bridges.py）。
         self._sync_unit_to_bridges(unit_id, meta, feat, modality)
@@ -1157,12 +1066,19 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         }
 
     def _seed_from_rows(self, rows: List[Dict]) -> bool:
-        sample = (rows if len(rows) <= self._train_cap
-                  else random.sample(rows, self._train_cap))
-        if not self._train([{"record_id": r["id"],
-                             "views": {"text": r.get("summary") or ""},
-                             "tags": r.get("tags") or []} for r in sample]):
-            return False
+        public = [r for r in rows if r.get("scope", "public") == "public"]
+        sample = random.sample(public, min(len(public), self._train_cap))
+        training = []
+        for row in sample:
+            modality = row.get("modality") or "text"
+            feature = self._unit_features(row).get(modality)
+            if feature:
+                view = {"text": row.get("summary") or "", "path": row.get("media_path"),
+                        "feature": feature}
+                training.append({"record_id": row["id"], "views": {modality: view},
+                                 "tags": row.get("tags") or []})
+        if len(training) < self.code_length or not self._train(training):
+            self._rebuild_demo()
         for r in rows:
             summary = r.get("summary") or ""
             self._add_unit(r["id"], {
@@ -1171,16 +1087,20 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 "alert_level": r.get("alert_level", "green"),
                 "date": r.get("date", ""), "content": summary,
                 "deid_terms": r.get("deid_terms") or [],
+                "scope": r.get("scope", "public"), "user_id": r.get("user_id"),
+                "media_path": r.get("media_path"),
             })
         return True
 
     def _collect_db_rows(self) -> List[Dict]:
-        """读取四张业务表，构造可被索引的行（含主题标签与脱敏用词）。"""
+        """Seed business records with their owner and current review scope."""
         try:
             from app.db import database as db
+            from app.handlers.upload import resolve_index_media
         except Exception:
             return []
         rows: List[Dict] = []
+        scopes = {"approved": "public", "rejected": "rejected"}
         try:
             for s in db.query("SELECT * FROM screenings"):
                 q = ""
@@ -1191,44 +1111,37 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 summary = f"{s.get('name') or ''}。{s.get('answers') or ''} {s.get('notes') or ''} {q}".strip()
                 if len(summary) <= len(s.get("name") or "") + 1:
                     summary = f"{s.get('name')} 完成{q or '心理'}筛查，评分 {s.get('score')}。"
-                rows.append(self._make_row(
+                row = self._make_row(
                     cid=f"scr-{s['id']}", summary=summary,
                     tags=F.extract_themes(summary),
                     alert_level=s.get("alert_level") or "green", modality="text",
                     date=_date_iso(s.get("created_at")),
                     deid_terms=[s.get("name")],
-                ))
+                )
+                rows.append({**row, "scope": scopes.get(s.get("review_status"), "reviewing"),
+                             "user_id": s.get("user_id")})
             for c in db.query("SELECT * FROM cases"):
                 summary = f"{c.get('name')}。{c.get('notes') or ''}".strip()
                 tags = [t["name"] for t in db.query(
                     "SELECT t.name FROM case_tags_association a JOIN case_tag_master t ON a.tag_id = t.id "
                     "WHERE a.case_id = ?", (c["id"],))] or F.extract_themes(summary)
-                rows.append(self._make_row(
+                row = self._make_row(
                     cid=f"case-{c['id']}", summary=summary, tags=tags,
                     alert_level=c.get("alert_level") or "green", modality="text",
                     date=_date_iso(c.get("created_at")),
                     deid_terms=[c.get("name")],
-                ))
-            for a in db.query("SELECT * FROM alerts"):
-                summary = f"{a.get('name')}。{a.get('trigger') or ''} {a.get('description') or ''}".strip()
-                rows.append(self._make_row(
-                    cid=f"alt-{a['id']}", summary=summary,
-                    tags=F.extract_themes(summary),
-                    alert_level=a.get("level") or "green", modality="text",
-                    date=_date_iso(a.get("created_at")),
-                ))
-            for m in db.query("SELECT * FROM media_files"):
-                summary = f"{m.get('description') or ''} {m.get('file_type') or ''} 资料".strip()
-                modality_map = {"audio": "audio", "image": "image", "document": "text"}
-                modality = modality_map.get(m.get("file_type"), m.get("file_type")) or "text"
-                if modality not in ("text", "audio", "image", "multimodal"):
-                    modality = "text"
-                rows.append(self._make_row(
-                    cid=f"media-{m['id']}", summary=summary,
-                    tags=F.extract_themes(summary),
-                    alert_level="green", modality=modality,
-                    date=_date_iso(m.get("created_at")),
-                ))
+                )
+                rows.append({**row, "scope": "reviewing", "user_id": c.get("user_id")})
+            for item in db.query("SELECT * FROM screening_supplements"):
+                kind = item.get("kind")
+                if kind not in TRAIN_MODALITIES:
+                    continue
+                summary = item.get("text") or item.get("description") or item.get("filename") or ""
+                row = self._make_row(f"sup-{item['id']}", summary, F.extract_themes(summary),
+                                     "green", kind, _date_iso(item.get("created_at")))
+                rows.append({**row, "scope": scopes.get(item.get("review_status"), "reviewing"),
+                             "user_id": item.get("user_id"),
+                             "media_path": resolve_index_media(item.get("url") or "", item.get("user_id"), kind)})
         except Exception:
             return []
         return rows
@@ -1320,26 +1233,7 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         else:
             text = str(data)
 
-        # 该模态没有投影矩阵时（例如演示语料只训练了文本），退回文本编码器，
-        # 否则 encode_continuous 会因维度不匹配返回全零码 → 所有相似度相等。
-        if modality in ("image", "audio") and modality in (self.model.W or {}):
-            f = (((self._cnn_image_feature(src) or RF.image_feature(src))
-                  if str(settings.HASHING_IMAGE_FEATURE).lower() == "cnn"
-                  else RF.image_feature(src)) if modality == "image" and src
-                 else RF.audio_feature(src) if modality == "audio" and src else None)
-            if f:
-                return {modality: f}
-        elif modality in ("image", "audio"):
-            # 该模态没有自己的编码器：静默退回文本会把「图像查询」变成
-            # 「用图片路径当文本查」，检索结果与文本查询完全相同 ——
-            # 指标看着高，实际图像模态根本没参与检索。
-            # 这里显式告警，调用方应把这类查询路由到该模态的独立通道。
-            logger.warning(
-                "模态 %s 无投影矩阵（模型只训了 %s），本次查询退回文本编码器；"
-                "该模态的检索结果不具备独立意义，应改走独立通道。",
-                modality, sorted((self.model.W or {}).keys()),
-            )
-        return {"text": F.semantic_feature(text or (src or ""))}
+        return self._feature_of(modality, text, src)
 
     async def encode(self, data: Any, modality: str) -> List[int]:
         await self._ensure_initialized()
@@ -1432,15 +1326,20 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         同一单元只属于一个时间窗，理论上不会重复命中；仍保留去重，
         以便窗口模型调整后出现跨窗口重叠时不会返回两条。
         """
-        windows = self.index._active_windows()
+        windows = set(self.index._active_windows())
+        windows.update(meta["window"] for uid, meta in self.index.records.items()
+                       if meta.get("user_id") is not None and (allowed is None or uid in allowed))
         weights = self._window_weights()
         scored: List[Dict] = []
         cand_total = 0
         keys_total = 0
-        for w in windows:
+        for w in sorted(windows):
             encoder = self._encoder_for(w)
-            code = encoder.encode(feat)
-            qvec = encoder.encode_continuous(feat)
+            projected = self._features_for_encoder(feat, encoder)
+            if not projected:
+                continue
+            code = encoder.encode(projected)
+            qvec = encoder.encode_continuous(projected)
             ids, sims, winfo = self.index.search(
                 code, top_k=max(int(top_k) * 4, 40), modality_filter=modality_filter,
                 exclude_ids=exclude_ids, windows=[w], query_vec=qvec,
@@ -1520,22 +1419,21 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         传 None 表示内部调用 / 评测，不做可见性过滤。
         """
         await self._ensure_initialized()
+        with self._train_lock:
+            return self._search_index(query, modality, top_k, modality_filter, exclude_ids, media_path, viewer)
+
+    def _search_index(self, query, modality, top_k, modality_filter, exclude_ids, media_path, viewer):
         allowed = self._allowed_ids(viewer)
         feat = self._extract_query_features(query, modality, media_path)
-        # ── 通道化：把查询特征挂到「主通道」上 ────────────────────────────
-        # W 的键现在是 modality@dataset，W["text"] 已不存在，
-        # 直接 encode({modality: vec}) 会返回全 0 码（所有相似度相等）。
-        # 同维的多个通道里取训练样本最多的那个作为主通道；
-        # 库端单元仍各用各的通道编码，但共享同一个码空间 B → 可互检。
-        feat = self._to_primary_channel(feat)
+        projected = self._to_primary_channel(feat)
         # 混合视图（未指定结果模态）默认按模态轮转交错：
         # 真实语料下同模态码更相近，全局排序的前若干名会被查询模态占满
         # （实测文本查询 top-24 全为文本单元），跨模态命中根本进不了结果页。
         # 因此这里对每个模态各取 top_k 再轮转合并，保证跨模态结果可见。
         balance = (bool(getattr(settings, "HASHING_BALANCE_MODALITIES", True))
-                   and not modality_filter and len(self.units) > top_k)
+                   and not modality_filter and len(self.index.records) > top_k)
 
-        if self.window_bank.models and len(self.index._active_windows()) > 1:
+        if self.window_bank.models:
             # 多窗口路径：每个时间窗用各自的模型编码查询，按表权重融合排序
             items, info = self._multi_window_search(
                 feat, top_k, modality_filter, exclude_ids, allowed, balance)
@@ -1543,13 +1441,16 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             sims = [it["sim"] for it in items]
             codes = [it["code"] for it in items]
             qvecs = [it["qvec"] for it in items]
-            code = codes[0] if codes else self.model.encode(feat)
-            qvec = qvecs[0] if qvecs else self.model.encode_continuous(feat)
+            code = codes[0] if codes else []
             window_items = items
+        elif not projected:
+            window_items = None
+            ids, sims, codes, qvecs, code = [], [], [], [], []
+            info = {"candidates": 0, "scoring": "no-compatible-projection"}
         else:
             window_items = None
-            code = self.model.encode(feat)
-            qvec = self.model.encode_continuous(feat)
+            code = self.model.encode(projected)
+            qvec = self.model.encode_continuous(projected)
             if balance:
                 info = None
                 pool_ids: List[str] = []
@@ -1594,6 +1495,11 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             for hit, it in zip(hits, window_items):
                 hit["explain"]["table_weight"] = round(float(it.get("weight") or 0), 4)
                 hit["explain"]["rank_score"] = round(float(it.get("rank") or 0), 4)
+        if modality in ("audio", "image") and modality_filter in (None, modality) and feat.get(modality):
+            # 媒体可先用原始特征做同模态比对，等该时间窗有可用投影后再参与哈希召回。
+            fallback = self._unencoded_media_hits(feat[modality], modality, allowed, exclude_ids, top_k, q_themes)
+            if fallback:
+                hits = sorted([*hits, *fallback], key=lambda hit: -hit["similarity"])[:top_k]
         info.update({
             "query_code_hex": _bits_to_hex(code),
             "query_themes": q_themes,
@@ -1605,6 +1511,31 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         })
         self.last_search_info = info
         return hits, info
+
+    def _unencoded_media_hits(self, query, modality, allowed, exclude_ids, top_k, themes):
+        blocked = set(exclude_ids or ())
+        norm = math.sqrt(sum(value * value for value in query))
+        if not norm:
+            return []
+        scored = []
+        for uid, meta in self.units.items():
+            if (meta.get("modality") != modality or not meta.get("media_path") or meta.get("code")
+                    or uid in blocked or (allowed is not None and uid not in allowed)):
+                continue
+            feature = meta.get("feature") or []
+            if len(feature) != len(query):
+                continue
+            denom = norm * math.sqrt(sum(value * value for value in feature))
+            if denom:
+                score = max(0.0, min(1.0, sum(a * b for a, b in zip(query, feature)) / denom))
+                scored.append((score, uid))
+        hits = []
+        for score, uid in sorted(scored, reverse=True)[:top_k]:
+            hit = self._to_hit(uid, score, [], themes, modality)
+            hit["explain"].update(route="media-feature", hamming_distance=None,
+                                  hamming_similarity=None, asymmetric_score=None)
+            hits.append(hit)
+        return hits
 
     async def search(self, query: str, modality: str = "text", top_k: int = 5,
                      modality_filter: Optional[str] = None,
@@ -1797,15 +1728,18 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
     async def index_case(self, case_data: Dict) -> bool:
         """增量写入一个案例（动态，异步入口）。"""
         await self._ensure_initialized()
-        return self._index_case_impl(case_data)
+        with self._train_lock:
+            return self._index_case_impl(case_data)
 
     def index_case_sync(self, case_data: Dict) -> bool:
         """增量写入（同步入口），供同步的业务 Service / 脚本使用。"""
         try:
-            if not self._initialized:
-                self._do_initialize()
-            return self._index_case_impl(case_data)
+            with self._train_lock:
+                if not self._initialized:
+                    self._do_initialize()
+                return self._index_case_impl(case_data)
         except Exception:
+            logger.exception("哈希索引写入失败")
             return False
 
     def _index_case_impl(self, case_data: Dict) -> bool:
@@ -1821,12 +1755,17 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         tags = case_data.get("tags") or F.extract_themes(summary)
         modality = case_data.get("modality") or "text"
         date = _date_iso(case_data.get("date")) or datetime.date.today().isoformat()
-        scope = case_data.get("scope") or "reviewing"
+        record_id = case_data.get("record_id") or cid
+        previous = self.records.get(record_id, {})
+        # 重试写入或补齐同一条记录的新视图时沿用已落库的审核结果。
+        scope = previous.get("scope") or case_data.get("scope") or "reviewing"
         self._add_unit(cid, {
-            "record_id": case_data.get("record_id") or cid,
+            "record_id": record_id,
             "modality": modality, "tags": tags,
             "alert_level": case_data.get("alert_level") or "green",
             "date": date, "content": summary,
+            "media_path": case_data.get("media_path"),
+            "media_kind": case_data.get("media_kind") or (modality if case_data.get("media_path") else None),
             "deid_terms": case_data.get("deid_terms") or [],
             "scope": scope,
             "source": case_data.get("source") or "runtime",
@@ -1841,9 +1780,31 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             self._source_count = max(self._source_count, len(self.units))
             self._store.meta_set("source_count", str(self._source_count))
         except Exception:
-            pass
+            logger.exception("哈希索引记录未能持久化")
+            return False
         self._scope_epoch += 1
         return True
+
+    def set_review_scope(self, record_id: str, scope: str, *, requesting_user=None) -> str:
+        with self._train_lock:
+            record = self.records.get(record_id)
+            units = [meta for meta in self.units.values() if meta.get("record_id") == record_id]
+            if not record or not units:
+                raise ValueError("索引中不存在该记录")
+            current = record.get("scope")
+            if requesting_user is not None and record.get("user_id") != requesting_user:
+                raise ValueError("无权修改该记录")
+            if scope == "public" and current not in ("reviewing", "public"):
+                raise ValueError("该记录需先申请公开，才能审核通过")
+            if current == scope:
+                return current
+            self._store.set_review_scope(record_id, scope, record.get("window"))
+            for meta in units:
+                meta["scope"] = scope
+            record["scope"] = scope
+            self._scope_epoch += 1
+            self._visible_cache = {}
+            return scope
 
     # ------------------------- 运维 / 展示 -------------------------
 
@@ -1852,143 +1813,183 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
 
         旧实现走 `_rebuild()`，会从语料库重新播种，把运行时新增数据全部冲掉。
         """
-        return self._retrain_in_place()
+        with self._train_lock:
+            return self._retrain_in_place()
 
-    def _window_records(self, window: int) -> List[Dict]:
-        """取某窗口的全部配对记录（用于该窗口的独立训练）。"""
-        by_rec: Dict[str, Dict[str, Dict]] = {}
-        for _uid, meta in self.units.items():
-            if int(meta.get("window") or 0) != int(window):
+    def _training_records(self, window: Optional[int] = None) -> List[Dict]:
+        """Collect public views with usable features for the shared model."""
+        records: Dict[str, Dict] = {}
+        for meta in self.units.values():
+            if meta.get("scope") != "public":
+                continue
+            if window is not None and int(meta.get("window") or 0) != window:
+                continue
+            modality = meta.get("modality") or "text"
+            if modality not in settings.HASHING_TRAIN_MODALITIES:
                 continue
             rid = meta.get("record_id")
-            if rid:
-                by_rec.setdefault(rid, {})[meta.get("modality") or "text"] = meta
-        out = []
-        for rid, views in by_rec.items():
-            rec_views = {m: {"text": v.get("content") or "", "path": v.get("media_path"),
-                             "feature": v.get("feature")}
-                         for m, v in views.items() if m in TRAIN_MODALITIES}
-            if not rec_views:
+            record = self.records.get(rid)
+            if not rid or (record and record.get("scope") != "public"):
                 continue
-            any_meta = next(iter(views.values()))
-            out.append({"record_id": rid, "views": rec_views,
-                        "tags": any_meta.get("tags") or []})
-        return out
+            content = meta.get("content") or ""
+            feature = meta.get("feature")
+            # Text features are generated only for selected samples. Uploaded
+            # media without a usable original must stay out of shared training.
+            if modality != "text" and meta.get("user_id") is not None and not feature:
+                feature = self._unit_features(meta).get(modality)
+                if not feature:
+                    continue
+            if modality == "text" and not content.strip():
+                continue
+            media_meta = meta.get("media_meta") or {}
+            sample = records.setdefault(rid, {
+                "record_id": rid, "views": {}, "tags": meta.get("tags") or [],
+                "window": int(meta.get("window") or 0),
+                "pairing_type": media_meta.get("pairing_type"),
+            })
+            sample["views"][modality] = {
+                "text": content, "path": meta.get("media_path"),
+                "feature": feature, "pairing_type": media_meta.get("pairing_type"),
+                "dataset": meta.get("dataset"),
+            }
+        return list(records.values())
+
+    def _window_records(self, window: int) -> List[Dict]:
+        return self._training_records(window)
 
     def _donor_records(self, window: int, limit: int = 120) -> List[Dict]:
-        """借邻近窗口的数据做冷启动训练。
-
-        按窗口号接近程度依次累积，不要求单个窗口自身够 8 条——
-        小数据集（如演示集）每个窗口只有几条，按单窗判断会永远借不到。
-        """
-        others = sorted({int(m.get("window") or 0) for m in self.units.values()}
-                        - {int(window)}, key=lambda w: abs(w - int(window)))
-        out: List[Dict] = []
-        for w in others:
-            out.extend(self._window_records(w))
-            if len(out) >= limit:
+        other = {int(meta.get("window") or 0) for meta in self.units.values()} - {window}
+        samples = []
+        for donor in sorted(other, key=lambda w: (abs(window - w), w)):
+            samples.extend(self._window_records(donor))
+            if len(samples) >= limit:
                 break
-        return out[:limit] if len(out) >= 8 else []
+        return samples[:limit]
 
-    def _reencode_window(self, window: int) -> int:
-        """用该窗口当前模型重编码其全部单元，返回重编码数量。"""
-        model = self.window_bank.get(window)
-        if model is None:
-            return 0
-        # 先算码、再整体重建索引：避免边删边插时检索线程读到半个索引
-        new_codes: Dict[str, List[int]] = {}
-        changed: Dict[str, Dict] = {}
-        for uid, meta in self.units.items():
-            if int(meta.get("window") or 0) != int(window):
-                continue
-            mod = meta.get("modality") or "text"
-            if meta.get("feature") and mod in ("image", "audio"):
-                feat = {mod: meta["feature"]}
-            else:
-                feat = self._feature_of(mod, meta.get("content") or "",
-                                        meta.get("media_path"))
-            code = list(model.encode(feat))
-            meta["code"] = code
-            new_codes[uid] = code
-            changed[uid] = meta
-        if not new_codes:
-            return 0
+    def _reencode_units(self, unit_ids=None) -> int:
+        """Rebuild index entries with the same encoder mapping used for new inserts."""
+        changed = {}
+        sibling_codes = {}
+        for uid in self.units if unit_ids is None else unit_ids:
+            meta = self.units[uid]
+            feat = self._unit_features(meta)
+            encoder = self._encoder_for(meta.get("window"))
+            projected = self._features_for_encoder(feat, encoder)
+            code = list(encoder.encode(projected)) if projected else []
+            key = (meta.get("record_id"), meta.get("window"))
+            if code:
+                sibling_codes.setdefault(key, code)
+            updated = {**meta, "code": code}
+            modality = meta.get("modality")
+            if modality in ("image", "audio") and modality in feat:
+                updated["feature"] = list(feat[modality])
+            changed[uid] = updated
+        for meta in changed.values():
+            if not meta["code"]:
+                meta["code"] = sibling_codes.get((meta.get("record_id"), meta.get("window")), [])
+
         rebuilt = self._new_index()
-        for uid, meta in self.units.items():
-            rebuilt.insert(uid, meta.get("code") or [], meta, window=meta.get("window"))
-        self.index = rebuilt
+        for uid, existing in self.units.items():
+            meta = changed.get(uid, existing)
+            if meta.get("code"):
+                rebuilt.insert(uid, meta["code"], meta, window=meta.get("window"))
         self._store.upsert_units(changed)
-        return len(changed)
+        self.units.update(changed)
+        self.index = rebuilt
+        self._weight_cache = (0.0, {})
+        return sum(bool(meta["code"]) for meta in changed.values())
 
     def retrain_pending(self, max_tables: Optional[int] = None) -> Dict:
-        """消费训练队列：只重训有新样本的窗口，其余窗口不动。
+        """Train only windows with pending, approved records."""
+        with self._train_lock:
+            return self._retrain_pending(max_tables)
 
-        对应项目书的「增量重训」：新批次到达 → 该窗口重训 → 淘汰权重最低的表，
-        而不是整库重构。
-        """
+    def _retrain_pending(self, max_tables: Optional[int]) -> Dict:
         pending = self._store.pending_training()
         version = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         result = {"version": version, "pending": len(pending),
                   "retrained": [], "skipped": [], "dropped": []}
-        if not pending:
-            return result
-
         by_window: Dict[int, List[Dict]] = {}
+        discarded = []
         for row in pending:
-            wid = row.get("window")
-            if wid is None:
-                rec = self.records.get(row.get("record_id") or "") or {}
-                wid = rec.get("window")
-            if wid is None:
-                result["skipped"].append({"record_id": row.get("record_id"),
-                                          "reason": "无法确定所属时间窗"})
+            rec = self.records.get(row["record_id"])
+            if not rec or rec.get("scope") != "public":
+                discarded.append(row["id"])
                 continue
-            by_window.setdefault(int(wid), []).append(row)
+            window = rec.get("window")
+            if window is None:
+                window = row.get("window")
+            if window is None:
+                result["skipped"].append({"record_id": row["record_id"], "reason": "无法确定所属时间窗"})
+                continue
+            by_window.setdefault(int(window), []).append(row)
+        self._store.discard_pending(discarded)
 
+        cap = int(getattr(settings, "HASHING_WINDOW_TRAIN_MAX", 150))
         for window, rows in sorted(by_window.items()):
-            recs = self._window_records(window)
-            cold_start = False
-            if len(recs) < 8:
-                # 冷启动：新窗口自己的样本太少，借最近窗口的数据一起训，
-                # 否则这批审核通过的记录永远排不进训练、队列只涨不消化。
-                donor = self._donor_records(window)
-                if donor:
-                    recs = donor + recs
-                    cold_start = True
-            if len(recs) < 8:
-                result["skipped"].append({"window": window,
-                                          "reason": f"样本不足（{len(recs)} 条，且无可借窗口）"})
+            records = self._window_records(window)
+            queued_ids = {row["record_id"] for row in rows}
+            queued = [rec for rec in records if rec["record_id"] in queued_ids]
+            if not queued:
+                result["skipped"].append({"window": window, "reason": "待训练记录没有可用特征"})
                 continue
-            cap = int(getattr(settings, "HASHING_WINDOW_TRAIN_MAX", 150))
-            pick = recs if len(recs) <= cap else random.sample(recs, cap)
-            if not self._train_window(window, pick):
+            base = [rec for rec in records if rec["record_id"] not in queued_ids]
+            shortage = self.code_length - len(records)
+            donors = self._donor_records(window, shortage) if shortage > 0 else []
+            base += donors
+            queued = queued[:cap]
+            pick = queued + random.sample(base, min(len(base), cap - len(queued)))
+            if len(pick) < self.code_length:
+                result["skipped"].append({"window": window, "reason": f"样本不足（{len(pick)} 条）"})
+                continue
+
+            before = self._window_encoders()
+            old_bank = self.window_bank.to_state()
+            if not self._train_window(window, pick, balance=False):
                 result["skipped"].append({"window": window, "reason": "训练失败"})
                 continue
-            n = self._reencode_window(window)
-            self._store.mark_consumed([r["id"] for r in rows], version)
+            n = self._publish_window_models(before, old_bank)
+            trained_ids = {rec["record_id"] for rec in queued}
             self._store.save_train_run(
-                version=version,
-                started_at=version, finished_at=datetime.datetime.now().isoformat(timespec="seconds"),
-                windows=[window], n_samples=len(pick),
-                note=f"incremental; reencoded={n}")
+                version=version, started_at=version,
+                finished_at=datetime.datetime.now().isoformat(timespec="seconds"),
+                windows=[window], n_samples=len(pick), note=f"incremental; reencoded={n}",
+                queue_ids=[row["id"] for row in rows if row["record_id"] in trained_ids])
             result["retrained"].append({"window": window, "samples": len(pick),
-                                        "reencoded": n, "cold_start": cold_start})
+                                        "reencoded": n, "cold_start": bool(donors)})
 
-        # 活跃表超限时淘汰权重最低者。
-        # 注意：淘汰模型会让该窗口的存量码失去对应编码器（查询走最近窗口模型，
-        # 与库内码不同源），因此默认关闭；开启前必须先做数据迁移。
-        weights = self._window_weights()
-        limit = int(max_tables if max_tables is not None
-                    else getattr(settings, "HASHING_MAX_TABLES", 0))
-        if limit > 0:
-            dropped = self.window_bank.prune(limit, weights)
-            for w in dropped:
-                self._store.delete_table_meta(w)
-                result["dropped"].append(w)
-
-        self._weight_cache = (0.0, {})
-        self._save_state()
+        limit = int(max_tables if max_tables is not None else getattr(settings, "HASHING_MAX_TABLES", 0))
+        if result["retrained"] and limit > 0:
+            before = self._window_encoders()
+            old_bank = self.window_bank.to_state()
+            dropped = self.window_bank.prune(limit, self._window_weights())
+            if dropped:
+                self._publish_window_models(before, old_bank)
+                for window in dropped:
+                    self._store.delete_table_meta(window)
+                result["dropped"] = dropped
         return result
+
+    def _window_encoders(self) -> Dict:
+        return {window: self._encoder_for(window)
+                for window in {meta.get("window") for meta in self.units.values()}}
+
+    def _publish_window_models(self, previous: Dict, old_bank: Dict) -> int:
+        # 新窗口可能被邻窗借用，所有编码器发生变化的单元需要一起重编码。
+        affected = {window for window, old in previous.items() if self._encoder_for(window) is not old}
+        self._store.meta_set("reencode_pending", "1")
+        unit_ids = [uid for uid, meta in self.units.items() if meta.get("window") in affected]
+        try:
+            count = self._reencode_units(unit_ids)
+            self._save_state()
+        except Exception:
+            self.window_bank.models.clear()
+            self.window_bank.meta.clear()
+            self.window_bank.from_state(old_bank)
+            self._reencode_units(unit_ids)
+            raise
+        self._store.meta_set("reencode_pending", "0")
+        return count
 
     def schedule_retrain(self) -> bool:
         """后台线程消费训练队列，避免阻塞审核请求。
@@ -2004,11 +2005,10 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         return True
 
     def _retrain_bg(self) -> None:
-        with self._train_lock:
-            try:
-                self.retrain_pending()
-            except Exception:
-                pass
+        try:
+            self.retrain_pending()
+        except Exception:
+            logger.exception("哈希索引增量重训失败")
 
     def retrain_status(self) -> Dict:
         return {
@@ -2174,8 +2174,10 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             "window_days": int(getattr(settings, "HASHING_WINDOW_DAYS", 0)),
             "window_models": self.window_bank.to_state(),
         }
-        with open(self.state_path, "w", encoding="utf-8") as f:
+        staged_path = self.state_path + ".tmp"
+        with open(staged_path, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False)
+        os.replace(staged_path, self.state_path)
 
     def _load_model(self) -> bool:
         """从 state.json 恢复投影矩阵；不兼容时返回 False 由调用方重训。"""
@@ -2232,68 +2234,28 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
         return True
 
     def _retrain_in_place(self) -> bool:
-        """用内存中现有单元重训投影矩阵，并重编码全部单元。
-
-        与 `_rebuild()` 的区别：不读语料库、不清空索引，运行时增量得以保留。
-        仅在投影矩阵缺失或与特征维度不匹配时触发，属冷路径。
-        """
-        by_rec: Dict[str, Dict[str, Dict]] = {}
-        for _uid, meta in self.units.items():
-            rid = meta.get("record_id")
-            if not rid:
-                continue
-            by_rec.setdefault(rid, {})[meta.get("modality") or "text"] = meta
-        rec_ids = sorted(by_rec)
-        if not rec_ids:
+        """Rebuild the shared model from public records while retaining private index entries."""
+        records = self._training_records()
+        if not records:
             return False
-        sample_ids = (rec_ids if len(rec_ids) <= self._train_cap
-                      else random.sample(rec_ids, self._train_cap))
-
-        def _rec_of(rid: str) -> Optional[Dict]:
-            views = {m: {"text": v.get("content") or "", "path": v.get("media_path"),
-                         "feature": v.get("feature")}
-                     for m, v in by_rec[rid].items() if m in TRAIN_MODALITIES}
-            if not views:
-                return None
-            any_meta = next(iter(by_rec[rid].values()))
-            return {"record_id": rid, "views": views,
-                    "tags": any_meta.get("tags") or []}
-
-        train_records = [r for r in (_rec_of(rid) for rid in sample_ids) if r]
-        if not self._train(train_records):
+        pick = random.sample(records, min(len(records), self._train_cap))
+        if not self._train(pick):
             return False
 
-        # 分窗口训练（与语料播种路径保持一致，升级后窗口模型不会为空）
-        per_window: Dict[int, List[str]] = {}
-        for rid in rec_ids:
-            w = next(iter(by_rec[rid].values())).get("window") or 0
-            per_window.setdefault(int(w), []).append(rid)
+        # Old window models may have been fitted on records outside the public pool.
+        self.window_bank.models.clear()
+        self.window_bank.meta.clear()
+        self._window_trained.clear()
+        by_window: Dict[int, List[Dict]] = {}
+        for record in records:
+            by_window.setdefault(record["window"], []).append(record)
         cap = int(getattr(settings, "HASHING_WINDOW_TRAIN_MAX", 150))
-        for w, ids in sorted(per_window.items()):
-            pick = ids if len(ids) <= cap else random.sample(ids, cap)
-            recs = [r for r in (_rec_of(rid) for rid in pick) if r]
-            if len(recs) >= 8:
-                self._train_window(w, recs)
+        for window, rows in sorted(by_window.items()):
+            if min(len(rows), cap) >= self.code_length:
+                self._train_window(window, random.sample(rows, min(len(rows), cap)))
 
-        # 重编码：旧码是上一版 W 的产物，与新 W 混用会让汉明距离失去可比性
-        self.index = self._new_index()
-        for uid, meta in self.units.items():
-            content = meta.get("content") or ""
-            window = meta.get("window")
-            encoder = self._encoder_for(window)
-            mod = meta.get("modality") or "text"
-            if (meta.get("feature") and mod in ("image", "audio")
-                    and encoder.W.get(mod)
-                    and len(meta["feature"]) == len(encoder.W[mod][0])):
-                feat = {mod: meta["feature"]}
-            else:
-                feat = self._feature_of(mod, content, meta.get("media_path"))
-            if mod in ("image", "audio") and feat.get(mod):
-                meta["feature"] = list(feat[mod])
-            code = encoder.encode(feat)
-            meta["code"] = list(code)
-            self.index.insert(uid, code, meta, window=window)
-        self._scope_epoch += 1
+        self._store.meta_set("reencode_pending", "1")
+        self._reencode_units()
         self._save_state()
-        self._persist_all()
+        self._store.meta_set("reencode_pending", "0")
         return True
