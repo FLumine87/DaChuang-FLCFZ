@@ -228,7 +228,7 @@ _ALLOWED_CATEGORIES = {
     "冥想", "认知", "社交", "专业帮助", "通用",
 }
 
-_GENERATE_SYSTEM = """你是心理健康内容推荐助手，为「个人心理状态管理」系统生成「为你推荐」内容。
+_GENERATE_SYSTEM = """你是心理健康内容推荐助手，为「个人心理状态管理」系统生成「为您推荐」内容。直接称呼用户时统一使用「您」，作品名称保持原样。
 输入 JSON 里给出：用户风险等级、可解释因素（近期被记录到的状态）、参考方向（知识图谱给出的建议维度）、兴趣画像。
 
 生成规则：
@@ -335,7 +335,7 @@ def _parse_generated_items(text: str, limit: int) -> list[CopingRecommendation] 
             name=name,
             category=category,
             suggestion="\n".join(parts),
-            reason=str(row.get("reason") or "").strip() or "为你个性化生成",
+            reason=str(row.get("reason") or "").strip() or "为您个性化生成",
         ))
         if len(items) >= limit:
             break
@@ -386,7 +386,7 @@ def _seed_feed_from_report(
         if content_type == "music" and (rec.category in interests_by_cat):
             tracks = _fetch_music_recommendations(interest_names)
             detail = "；".join(f"《{t['title']}》- {t['artist']}（{t['url']}）" for t in tracks)
-            suggestion = f"为你挑选了 {len(tracks)} 首与「{interest_names[0]}」相关的歌：{detail}"
+            suggestion = f"为您挑选了 {len(tracks)} 首与「{interest_names[0]}」相关的歌：{detail}"
             feed.append(CopingRecommendation(
                 name=rec.name, category=rec.category,
                 suggestion=suggestion, reason=rec.reason,
@@ -394,7 +394,7 @@ def _seed_feed_from_report(
         elif content_type == "sports" and (rec.category in interests_by_cat):
             news = _fetch_sports_news(interest_names)
             detail = "；".join(f"{n['title']}（{n['source']}：{n['url']}）" for n in news)
-            suggestion = f"你关注的赛事动态：{detail}"
+            suggestion = f"您关注的赛事动态：{detail}"
             feed.append(CopingRecommendation(
                 name=rec.name, category=rec.category,
                 suggestion=suggestion, reason=rec.reason,
@@ -402,7 +402,7 @@ def _seed_feed_from_report(
         elif content_type == "film" and (rec.category in interests_by_cat):
             films = _fetch_films(interest_names)
             detail = "；".join(f"{n['title']}（{n['source']}：{n['url']}）" for n in films)
-            suggestion = f"为你挑选了这些影视作品：{detail}"
+            suggestion = f"为您挑选了这些影视作品：{detail}"
             feed.append(CopingRecommendation(
                 name=rec.name, category=rec.category,
                 suggestion=suggestion, reason=rec.reason,
@@ -410,7 +410,7 @@ def _seed_feed_from_report(
         elif content_type == "book" and (rec.category in interests_by_cat):
             books = _fetch_books(interest_names)
             detail = "；".join(f"{n['title']}（{n['source']}：{n['url']}）" for n in books)
-            suggestion = f"为你挑选了这些书籍：{detail}"
+            suggestion = f"为您挑选了这些书籍：{detail}"
             feed.append(CopingRecommendation(
                 name=rec.name, category=rec.category,
                 suggestion=suggestion, reason=rec.reason,
@@ -418,7 +418,7 @@ def _seed_feed_from_report(
         elif content_type == "comic" and (rec.category in interests_by_cat):
             comics = _fetch_comics(interest_names)
             detail = "；".join(f"{n['title']}（{n['source']}：{n['url']}）" for n in comics)
-            suggestion = f"为你挑选了这些漫画/动漫：{detail}"
+            suggestion = f"为您挑选了这些漫画/动漫：{detail}"
             feed.append(CopingRecommendation(
                 name=rec.name, category=rec.category,
                 suggestion=suggestion, reason=rec.reason,
@@ -426,7 +426,7 @@ def _seed_feed_from_report(
         elif content_type == "food" and (rec.category in interests_by_cat):
             foods = _fetch_food(interest_names)
             detail = "；".join(f"{n['title']}（{n['source']}：{n['url']}）" for n in foods)
-            suggestion = f"为你挑选了这些美食内容：{detail}"
+            suggestion = f"为您挑选了这些美食内容：{detail}"
             feed.append(CopingRecommendation(
                 name=rec.name, category=rec.category,
                 suggestion=suggestion, reason=rec.reason,
@@ -484,48 +484,48 @@ def _seed_feed_from_interests(
             detail = "；".join(f"《{t['title']}》- {t['artist']}（{t['url']}）" for t in tracks)
             feed.append(CopingRecommendation(
                 name=f"{cat}推荐", category=cat,
-                suggestion=f"为你挑选了 {len(tracks)} 首与「{names[0]}」相关的歌：{detail}",
-                reason=f"基于你的「{cat}」兴趣画像",
+                suggestion=f"为您挑选了 {len(tracks)} 首与「{names[0]}」相关的歌：{detail}",
+                reason=f"基于您的「{cat}」兴趣画像",
             ))
         elif content_type == "sports":
             news = _fetch_sports_news(names)
             detail = "；".join(f"{n['title']}（{n['source']}）" for n in news)
             feed.append(CopingRecommendation(
                 name=f"{cat}动态", category=cat,
-                suggestion=f"你关注的赛事：{detail}",
-                reason=f"基于你的「{cat}」兴趣画像",
+                suggestion=f"您关注的赛事：{detail}",
+                reason=f"基于您的「{cat}」兴趣画像",
             ))
         elif content_type == "film":
             films = _fetch_films(names)
             detail = "；".join(f"{n['title']}" for n in films)
             feed.append(CopingRecommendation(
                 name=f"{cat}推荐", category=cat,
-                suggestion=f"为你挑选了这些影视作品：{detail}",
-                reason=f"基于你的「{cat}」兴趣画像",
+                suggestion=f"为您挑选了这些影视作品：{detail}",
+                reason=f"基于您的「{cat}」兴趣画像",
             ))
         elif content_type == "book":
             books = _fetch_books(names)
             detail = "；".join(f"{n['title']}" for n in books)
             feed.append(CopingRecommendation(
                 name=f"{cat}推荐", category=cat,
-                suggestion=f"为你挑选了这些书籍：{detail}",
-                reason=f"基于你的「{cat}」兴趣画像",
+                suggestion=f"为您挑选了这些书籍：{detail}",
+                reason=f"基于您的「{cat}」兴趣画像",
             ))
         elif content_type == "comic":
             comics = _fetch_comics(names)
             detail = "；".join(f"{n['title']}" for n in comics)
             feed.append(CopingRecommendation(
                 name=f"{cat}推荐", category=cat,
-                suggestion=f"为你挑选了这些漫画/动漫：{detail}",
-                reason=f"基于你的「{cat}」兴趣画像",
+                suggestion=f"为您挑选了这些漫画/动漫：{detail}",
+                reason=f"基于您的「{cat}」兴趣画像",
             ))
         elif content_type == "food":
             foods = _fetch_food(names)
             detail = "；".join(f"{n['title']}" for n in foods)
             feed.append(CopingRecommendation(
                 name=f"{cat}推荐", category=cat,
-                suggestion=f"为你挑选了这些美食内容：{detail}",
-                reason=f"基于你的「{cat}」兴趣画像",
+                suggestion=f"为您挑选了这些美食内容：{detail}",
+                reason=f"基于您的「{cat}」兴趣画像",
             ))
         if len(feed) >= limit:
             break

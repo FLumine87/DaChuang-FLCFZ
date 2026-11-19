@@ -87,7 +87,7 @@ async def send(ctx):
         raise HttpError(409, "该任务已发出，请查看原任务；不能通过重复发送修改内容")
     sql = ("INSERT OR IGNORE INTO review_requests(id,source_task_id,case_id,user_id,title,instructions,questionnaire,due_at,created_by) "
            "SELECT ?,?,?,?,?,?,?,?,? FROM agent_workspace_tasks WHERE id=? AND version=? AND state IN ('confirmed','modified')")
-    notice_sql, notice_params = notification(user["id"], rid, "sent", "你收到一项复查任务，请查看说明和计划日期。")
+    notice_sql, notice_params = notification(user["id"], rid, "sent", "您收到一项复查任务，请查看说明和计划日期。")
     await db.batch_a([
         (sql, (rid, task["id"], case["id"], user["id"], title.strip(), instructions.strip(), questionnaire, due.isoformat(), staff, task["id"], task["version"])),
         (notice_sql.replace("VALUES(?,?,?,?,?)", "SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM review_requests WHERE id=?)"), (*notice_params, rid)),
@@ -185,7 +185,7 @@ async def staff_action(ctx, rid):
         raise HttpError(400, "请填写内部处理记录，限2000字")
     staff = actor_id(ctx)
     placeholders = ",".join("?" for _ in allowed)
-    sql, params = notification(row["user_id"], rid, target, "工作人员已查看你的复查结果。" if action == "review" else "一项复查任务已取消，请以最新任务为准。")
+    sql, params = notification(row["user_id"], rid, target, "工作人员已查看您的复查结果。" if action == "review" else "一项复查任务已取消，请以最新任务为准。")
     await db.batch_a([
         (f"UPDATE review_requests SET status=?,review_notes=?,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=? AND status IN ({placeholders})",
          (target, note.strip(), staff, rid, data["version"], *allowed)),

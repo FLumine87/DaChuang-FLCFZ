@@ -25,7 +25,7 @@ import { usePageActive } from '../../services/pageActivity';
 /** 消息结构与本机存储层一致（StoredChatMessage），避免两边各定义一份走样 */
 type ChatMessage = StoredChatMessage;
 
-const WELCOME = '你好，我是你的 AI 心理陪伴助手。愿意的话，我们可以聊聊近况。我只会在你允许时将聊天用于长期记忆；你可以随时查看或纠正我的理解，也可以选择临时对话。';
+const WELCOME = '您好，我是您的 AI 心理陪伴助手。愿意的话，我们可以聊聊近况。我只会在您允许时将聊天用于长期记忆；您可以随时查看或纠正我的理解，也可以选择临时对话。';
 
 /**
  * 新一条欢迎语（带当前时间）。
@@ -39,10 +39,10 @@ function welcomeMessage(): ChatMessage {
 
 // 本地兜底回复（后端未配置 LLM 对话时），语气温暖支持性
 const FALLBACK_REPLIES = [
-  '谢谢你愿意分享这些。我在认真听，也想多了解一点——能具体说说这件事带给你的感受吗？',
-  '我能感受到这句话背后的分量。这样的时刻确实不容易，你已经在尽力面对了。',
-  '收到。我把你提到的内容记下来了。如果愿意，可以再多聊一点，比如它对你的睡眠或心情有什么影响？',
-  '我在。你说的这些对我很重要，我会一直在这里陪着你梳理。',
+  '谢谢您愿意分享这些。我在认真听，也想多了解一点——能具体说说这件事带给您的感受吗？',
+  '我能感受到这句话背后的分量。这样的时刻确实不容易，您已经在尽力面对了。',
+  '收到。我把您提到的内容记下来了。如果愿意，可以再多聊一点，比如它对您的睡眠或心情有什么影响？',
+  '我在。您说的这些对我很重要，我会一直在这里陪着您梳理。',
 ];
 
 export default function ChatPage() {
@@ -399,7 +399,7 @@ export default function ChatPage() {
               <Sparkles className="w-4 h-4 text-primary-600 shrink-0" /> AI 心理陪伴对话
             </h2>
             <p className="mt-0.5 truncate text-xs text-slate-500">
-              说出来，我陪你一起理一理 —— 它会在页面里陪着你走动
+              说出来，我陪您一起理一理 —— 它会在页面里陪着您走动
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -450,7 +450,7 @@ export default function ChatPage() {
       {answering && (
         <div className="mt-3 flex items-center gap-2 text-sm text-primary-700 bg-primary-50 border border-primary-100 rounded-lg px-3 py-2">
           <BellRing className="w-4 h-4 shrink-0" />
-          <span className="flex-1">正在回复这条问询（{answering.checkin_date}）：发送后保存为答复，仅在你允许时用于个人记忆。</span>
+          <span className="flex-1">正在回复这条问询（{answering.checkin_date}）：发送后保存为答复，仅在您允许时用于个人记忆。</span>
           <button onClick={cancelAnswer} className="text-primary-600 hover:text-primary-800 text-xs cursor-pointer">
             取消
           </button>
@@ -513,12 +513,12 @@ export default function ChatPage() {
                      所以不会因为抽取器把"活着没意思"归成"无意义感"而漏掉。 */
                   <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
                     <p className="text-xs font-medium text-red-700">
-                      你刚才的话让我很在意，谢谢你愿意说出来
+                      您刚才的话让我很在意，谢谢您愿意说出来
                     </p>
                     <p className="mt-1 text-xs leading-5 text-red-700/90 break-words">
-                      如果此刻很难受，请立即联系你信任的人，或拨打全国心理援助热线
+                      如果此刻很难受，请立即联系您信任的人，或拨打全国心理援助热线
                       <span className="font-medium"> 12356</span>（24 小时）；学校心理咨询中心也可以随时去找。
-                      你不需要一个人扛着。
+                      您不需要一个人扛着。
                     </p>
                   </div>
                 )}
@@ -565,7 +565,7 @@ export default function ChatPage() {
                 </p>
               )}
               <p className="mt-3 text-xs text-slate-400">
-                {flowCheckin.item.suggestions_source === 'ai' ? 'AI 推荐回复 · 选择符合你实际情况的一项' : '备用快捷回复（AI 推荐暂不可用）'}
+                {flowCheckin.item.suggestions_source === 'ai' ? 'AI 推荐回复 · 选择符合您实际情况的一项' : '备用快捷回复（AI 推荐暂不可用）'}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {(flowCheckin.item.suggested_replies ?? []).map((reply) => (
@@ -613,7 +613,7 @@ export default function ChatPage() {
               send();
             }
           }}
-          placeholder="聊聊你的状态、兴趣或烦恼…（Enter 发送，Shift+Enter 换行）"
+          placeholder="聊聊您的状态、兴趣或烦恼…（Enter 发送，Shift+Enter 换行）"
           rows={2}
           className="flex-1 resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-300"
         />
@@ -648,7 +648,7 @@ export default function ChatPage() {
           setFlowCheckin({
             item,
             message: item.message,
-            note: '每天最多提醒三次，回复后今天不再出现；仅在你允许时用于个人记忆',
+            note: '每天最多提醒三次，回复后今天不再出现；仅在您允许时用于个人记忆',
           });
         }}
       />
@@ -864,7 +864,7 @@ function RunInferenceButton({ userId }: { userId: string }) {
                           图谱中留有历史安全线索，需核实
                         </p>
                         <p className="mt-1 text-xs leading-5 text-red-700/90 break-words">
-                          这是以往记录中的内容，不代表当前状态。如你近期确有类似感受，
+                          这是以往记录中的内容，不代表当前状态。如您近期确有类似感受，
                           请联系学校心理咨询中心或拨打 12356。
                         </p>
                       </>
@@ -893,7 +893,7 @@ function RunInferenceButton({ userId }: { userId: string }) {
 
                 {result.content_feed.length > 0 && (
                   <div>
-                    <p className="text-sm font-semibold text-slate-700 mb-2">为你推荐的缓解内容</p>
+                    <p className="text-sm font-semibold text-slate-700 mb-2">为您推荐的缓解内容</p>
                     <div className="space-y-2">
                       {result.content_feed.map((f, i) => (
                         <div key={i} className="ui-card p-3">

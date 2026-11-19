@@ -7,9 +7,9 @@ const settings={enabled:false,screening:true,chat:false,checkin:false,feedback:f
 const state={settings,version:1,updated_at:new Date().toISOString(),status:'ready',error:'',evidence_count:2,
   snapshot:{summary:'最近提到考试前的睡眠困扰，也尝试通过散步放松。',window_start:'2026-10-18',window_end:'2026-11-17',source:'ai',context_count:2,observations:[{text:'最近多次提到入睡困扰。',evidence_ids:['e1','e2']}],changes:[],questions:[]},
   memories:[{id:'m1',content:'遇到压力时可能更习惯先自己消化。',status:'pending',evidence_ids:['e1','e2']}],
-  suggestions:[{id:'s1',title:'安排一小段散步',detail:'选择你愿意尝试的轻松活动。',reason:'你提到散步可以放松。',state:'suggested',evidence_ids:['e2']}],series:{'PHQ-9':[{at:'2026-11-10',score:7,max:27,id:'e1',version:'v1'}]}};
+  suggestions:[{id:'s1',title:'安排一小段散步',detail:'选择您愿意尝试的轻松活动。',reason:'您提到散步可以放松。',state:'suggested',evidence_ids:['e2']}],series:{'PHQ-9':[{at:'2026-11-10',score:7,max:27,id:'e1',version:'v1'}]}};
 state.indicators={risk:{level:'yellow',at:'2026-11-17'},mbti:null};
-state.snapshot.portrait=[{text:'你愿意认真理解自己的感受，也在寻找适合自己的放松方式。',evidence_ids:['e1','e2']}];
+state.snapshot.portrait=[{text:'您愿意认真理解自己的感受，也在寻找适合自己的放松方式。',evidence_ids:['e1','e2']}];
 const evidence=[{id:'e1',source:'screening',body:'考试前有点睡不着。',occurred_at:'2026-11-10',payload:{}},{id:'e2',source:'chat',body:'散步让我觉得放松。',occurred_at:'2026-11-17',payload:{}}];
 state.multimodal_history=[...Array.from({length:6},(_,i)=>({id:'text'+i,kind:'text',at:'2026-11-16T02:00:00+00:00',summary:'文字筛查原文 '+i,conclusion:'本次文字检索参考',analysis_mode:'retrieval'})),
   {id:'audio1',kind:'audio',at:'2026-11-15T02:00:00+00:00',summary:'语音筛查的转写原文。',filename:'test-voice.wav',conclusion:'本次语音检索参考',analysis_mode:'retrieval'},
@@ -34,7 +34,7 @@ const token=name=>'e30.'+Buffer.from(JSON.stringify({sub:name==='__steward_ui'?7
     else if(p.endsWith('/steward/settings')){Object.assign(settings,body);result={saved:true};}
     else if(p.endsWith('/steward/chat/import')){imports++;result={imported:true};}
     else if(p.endsWith('/steward/evidence')){const ids=url.searchParams.get('ids');result=ids?evidence.filter(e=>ids.split(',').includes(e.id)):evidence;}
-    else if(p.endsWith('/steward/memories')){state.indicators.mbti={type:body.content.split(' ').pop(),status:'self_report',reason:'来自你本人提供的类型',evidence_ids:['e2']};result={saved:true};}
+    else if(p.endsWith('/steward/memories')){state.indicators.mbti={type:body.content.split(' ').pop(),status:'self_report',reason:'来自您本人提供的类型',evidence_ids:['e2']};result={saved:true};}
     else if(p.includes('/steward/memories/')){const m=state.memories.find(x=>x.id===p.split('/').pop());if(body.action==='confirm')m.status='confirmed';else if(body.action==='correct'){m.content=body.content;m.status='confirmed';}result={saved:true};}
     else if(p.includes('/steward/suggestions/')){state.suggestions[0].state=body.action==='accept'?'accepted':'dismissed';state.suggestions[0].plan_id=42;result={saved:true};}
     else if(p==='/api/personal/steward/feedback'){feedback++;result={saved:true};}
@@ -60,9 +60,9 @@ const token=name=>'e30.'+Buffer.from(JSON.stringify({sub:name==='__steward_ui'?7
     await page.getByLabel('允许使用每日问询',{exact:true}).check();
     await page.getByLabel('允许使用行动效果反馈',{exact:true}).check();
     await page.getByRole('button',{name:'保存选择',exact:true}).click();
-    await page.getByRole('heading',{name:'我眼中的你',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'我眼中的您',exact:true}).waitFor();
     assert.equal(imports,1);
-    await page.getByRole('heading',{name:'我眼中的你',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'我眼中的您',exact:true}).waitFor();
     await page.getByRole('heading',{name:'需要关注',exact:true}).waitFor();
     await page.getByRole('heading',{name:'心理档案关系图谱',exact:true}).waitFor();
     const history=page.locator('details').filter({has:page.locator('summary').filter({hasText:'筛查历史与原始记录'})});
@@ -106,7 +106,7 @@ const token=name=>'e30.'+Buffer.from(JSON.stringify({sub:name==='__steward_ui'?7
     assert.equal(await page.getByRole('button',{name:/^(有帮助|一般|没帮助)$/}).count(),0);
     assert.equal(feedback,0);
     await go('/personal/me/chat');
-    const composer=page.getByPlaceholder('聊聊你的状态、兴趣或烦恼…（Enter 发送，Shift+Enter 换行）');
+    const composer=page.getByPlaceholder('聊聊您的状态、兴趣或烦恼…（Enter 发送，Shift+Enter 换行）');
     const temporary=page.getByRole('checkbox',{name:'临时对话：不保存本次消息，不形成长期记忆'});
     await temporary.check();await composer.fill('不应保存的临时内容');await page.getByRole('button',{name:'发送',exact:true}).click();
     await page.getByText('临时回应，不形成记忆。',{exact:true}).waitFor();
@@ -126,7 +126,7 @@ const token=name=>'e30.'+Buffer.from(JSON.stringify({sub:name==='__steward_ui'?7
     await page.reload();await page.getByText('后台生成到一半，切页后也已完成。',{exact:true}).waitFor();
     assert.equal(chatRequests,1);
     await page.setViewportSize({width:390,height:844});await go('/personal/me/kg');
-    await page.getByRole('heading',{name:'我眼中的你',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'我眼中的您',exact:true}).waitFor();
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'mobile overflow');
     await page.screenshot({path:path.resolve(__dirname,'../../tmp/steward-mobile.png'),fullPage:true});
     await page.evaluate(t=>{localStorage.setItem('psych_token_persistent',t);location.hash='#/personal/me/chat';},token('__other_steward'));

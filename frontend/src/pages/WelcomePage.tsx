@@ -91,9 +91,9 @@ export default function WelcomePage() {
       }
       body={
         <>
-          选择一个你最关心的方向，完成一次简短筛查。
+          选择一个您最关心的方向，完成一次简短筛查。
           <br />
-          结果会保存在你的个人主页，之后也可以随时再做。
+          结果会保存在您的个人主页，之后也可以随时再做。
         </>
       }
       bullets={[
@@ -111,7 +111,7 @@ export default function WelcomePage() {
           从一次简单的筛查开始
         </h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          先选择你想了解的方向，暂时不用一次完成所有量表。
+          先选择您想了解的方向，暂时不用一次完成所有量表。
         </p>
 
         <div
@@ -175,7 +175,7 @@ export default function WelcomePage() {
 
         <p className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-4 text-[13px] leading-5 text-slate-500">
           <Lock className="h-4 w-4 shrink-0" />
-          你可以随时在个人主页重新开始。
+          您可以随时在个人主页重新开始。
         </p>
       </div>
     </FirstRunShell>

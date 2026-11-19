@@ -163,7 +163,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       label: isAdmin ? "数据概览" : "个人首页",
       description: isAdmin
         ? "筛查、预警与处置情况，一目了然。"
-        : "关注每一天的状态，记录属于你的积极变化。",
+        : "关注每一天的状态，记录属于您的积极变化。",
       icon: LayoutDashboard,
       group: "工作空间",
     },
@@ -236,7 +236,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           {
             path: `${root}/me/feed`,
             label: "建议与行动",
-            description: "把适合你的建议化为小计划，记录效果并持续调整。",
+            description: "把适合您的建议化为小计划，记录效果并持续调整。",
             icon: Rss,
             group: "智能心理助手",
           },
@@ -307,7 +307,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           {
             path: `${root}/cases`,
             label: "我的档案",
-            description: "把筛查、采集和行动记录，整理成你的健康档案。",
+            description: "把筛查、采集和行动记录，整理成您的健康档案。",
             icon: FolderOpen,
             group: "健康管理",
           },

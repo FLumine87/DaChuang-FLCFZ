@@ -218,7 +218,7 @@ class DeepSeekRAGEngine(RAGEngineInterface):
 
 要求：分析必须具体引用检索命中案例的证据（相似度、风险分布），不要泛泛而谈；
 报告全文不得出现"得分 0 分 / 满分 100 分"之类的量表得分表述（本场景没有量表）。
-请直接返回JSON，不要包含其他文字。"""
+直接称呼用户时统一使用「您」，保留引用的用户原话。请直接返回JSON，不要包含其他文字。"""
 
     def _call_deepseek(self, prompt: str) -> str:
         url = f"{settings.DEEPSEEK_BASE_URL.rstrip('/')}/chat/completions"

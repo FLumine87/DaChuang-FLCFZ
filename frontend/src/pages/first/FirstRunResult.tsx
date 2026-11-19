@@ -166,7 +166,7 @@ export default function FirstRunResult() {
       }
       body={
         <>
-          本次结果帮助你了解近期状态。
+          本次结果帮助您了解近期状态。
           <br />
           也为之后的记录提供参考。
         </>
@@ -275,7 +275,7 @@ export default function FirstRunResult() {
                   免责声明保持小号浅灰，一眼就能看出哪句是本次结果。 */}
               <p className="text-[17px] font-medium leading-8 text-slate-900">
                 {isPss
-                  ? "本次记录反映你过去一个月的主观压力感受。之后可以结合生活情况，回看自己的得分变化。"
+                  ? "本次记录反映您过去一个月的主观压力感受。之后可以结合生活情况，回看自己的得分变化。"
                   : result.description}
               </p>
               <p className="text-[12px] leading-5 text-slate-400">

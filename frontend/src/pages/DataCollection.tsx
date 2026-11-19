@@ -699,7 +699,7 @@ function TextTab({ onReport, onInputChange }: CollectionInputProps) {
         <div>
           <h3 className="font-semibold text-slate-800">文本采集</h3>
           <p className="mt-1 text-sm text-slate-500">
-            描述你近期的情绪状态、睡眠情况、人际关系和学习压力变化。
+            描述您近期的情绪状态、睡眠情况、人际关系和学习压力变化。
           </p>
         </div>
         <span className="text-xs text-slate-400">{freeText.length} 字</span>
@@ -719,7 +719,7 @@ function TextTab({ onReport, onInputChange }: CollectionInputProps) {
       />
       <div className="flex flex-wrap items-center justify-between gap-3 mt-auto pt-3">
         <p className="text-xs leading-5 text-slate-500">
-          这段文字会保存到你的档案，仅用于自我回顾与检索分析。
+          这段文字会保存到您的档案，仅用于自我回顾与检索分析。
         </p>
         <button
           onClick={submitDiary}
@@ -733,7 +733,7 @@ function TextTab({ onReport, onInputChange }: CollectionInputProps) {
         <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-success-500/30 bg-success-50 py-2.5 px-4">
           <CheckCircle2 className="h-4 w-4 shrink-0 text-success-600" />
           <p className="min-w-0 flex-1 text-sm leading-6 text-success-700">
-            记录已保存到你的档案，可在「筛查记录」里回看。
+            记录已保存到您的档案，可在「筛查记录」里回看。
           </p>
           {/* 直接把这次写的内容带进检索页并自动分析 —— 用户不用再手动搜一遍。
               带上 supplementId 还能直接打开这条记录已算好的结论。 */}

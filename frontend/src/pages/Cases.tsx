@@ -560,7 +560,7 @@ export default function Cases() {
           <p className="px-5 py-10 text-center text-[12.5px] leading-6 text-slate-400">
             还没有完成的筛查记录。
             <br />
-            完成一次筛查后，这里会根据你的最近记录生成摘要。
+            完成一次筛查后，这里会根据您的最近记录生成摘要。
           </p>
         )}
       </div>
@@ -629,7 +629,7 @@ export default function Cases() {
           档案说明
         </p>
         <ul className="mt-2.5 space-y-1.5 text-[12px] leading-6 text-slate-500">
-          <li>· 保持每周至少 2 次记录，连续性越完整，检索与建议越贴近你的实际情况。</li>
+          <li>· 保持每周至少 2 次记录，连续性越完整，检索与建议越贴近您的实际情况。</li>
           <li>· 出现红色预警时不要独自承受，优先联系可信赖的同伴或学校心理支持资源。</li>
           <li>· 连续 7 天执行行动计划后，再回看趋势变化并做下一轮调整。</li>
         </ul>

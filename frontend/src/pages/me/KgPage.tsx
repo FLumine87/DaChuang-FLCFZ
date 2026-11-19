@@ -164,7 +164,7 @@ export default function KgPage({ stewardGraph = false }: { stewardGraph?: boolea
       const server = stewardGraph ? await personalRequest<GraphData>('/api/v1/steward/graph') : await api.getGraph(userId);
       setServerNodes(Math.max(0, server.nodes.length - 1));
       setData(stewardGraph ? server : mergeGraphs(server, local));
-      if (stewardGraph) { setGraphConnected(Boolean(server.neo4j_connected)); setServerNotice('来自你的心理档案，可查看记录、记忆、近期观察与建议之间的依据关联。'); return; }
+      if (stewardGraph) { setGraphConnected(Boolean(server.neo4j_connected)); setServerNotice('来自您的心理档案，可查看记录、记忆、近期观察与建议之间的依据关联。'); return; }
       /* 说明文案只按**真实连接状态**给：连上了就什么都不说；
          确实没连上才提示一句人话，且不含任何后端原始响应体。 */
       setGraphConnected(Boolean(server.neo4j_connected));
@@ -1154,11 +1154,11 @@ export default function KgPage({ stewardGraph = false }: { stewardGraph?: boolea
               <Trash2 className="w-4 h-4 text-danger-500" /> 从图谱中删除「{pendingDelete.name}」？
             </h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              将删除你与这个节点之间的全部关联记录，图谱上这个点会消失。
+              将删除您与这个节点之间的全部关联记录，图谱上这个点会消失。
               删除后无法恢复。
             </p>
             <p className="mt-2 text-xs leading-relaxed text-slate-400">
-              只影响你自己的图谱 —— 节点本身在系统里是共享的，删除不会影响其他用户的记录。
+              只影响您自己的图谱 —— 节点本身在系统里是共享的，删除不会影响其他用户的记录。
               {!graphConnected && ' 当前图数据库未连接，本次只删本机记录。'}
             </p>
             <div className="mt-5 flex justify-end gap-2">

@@ -92,7 +92,7 @@ export default function AiCompanionBot({
       className={className}
       style={{ transform: facing === -1 ? 'scaleX(-1)' : undefined }}
       role="img"
-      aria-label={peeking ? 'AI 陪伴助手正在看你的输入' : 'AI 陪伴助手'}
+      aria-label={peeking ? 'AI 陪伴助手正在看您的输入' : 'AI 陪伴助手'}
       data-mode={mode}
       data-frame={frame}
     >

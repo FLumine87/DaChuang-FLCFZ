@@ -391,11 +391,11 @@ export default function Dashboard() {
             常量 54（as const，无任何响应式逻辑），于是在 390px 手机上也是 54px，
             撑成两行巨字、占掉近半屏。 */}
         <h1 className="dash-hero-title font-medium leading-[1.14] tracking-[0.25px] text-slate-900" style={{ marginTop: tune.line1Gap }}>
-          你最近的状态，都在这里
+          您最近的状态，都在这里
         </h1>
         {/* 灰体小字：一句话交代这一页有什么，避免标题后面直接跳到大卡片 */}
         <p className="mt-4 leading-8 text-slate-500" style={{ fontSize: tune.sub }}>
-          近期的检测结果、最近一段时间的记录，以及需要你留意的地方，都整理在这一页。
+          近期的检测结果、最近一段时间的记录，以及需要您留意的地方，都整理在这一页。
         </p>
       </header>
         {/* 两个动作：从「今日行动计划」卡里拿出来，放到标题灰字下面 */}
@@ -680,7 +680,7 @@ export default function Dashboard() {
           </div>
 
           <p className="mt-3 text-[24px] font-semibold leading-[1.3] text-slate-900">
-            这 30 天你完成了 {view.totalRecords} 次筛查
+            这 30 天您完成了 {view.totalRecords} 次筛查
           </p>
           {view.totalRecords === 0 && (
             <p className="mt-2 text-[12.5px] leading-6 text-slate-400">

@@ -113,7 +113,7 @@ class ZhipuRAGEngine(RAGEngineInterface):
     ]
 }}
 
-请直接返回JSON，不要包含其他文字。"""
+直接称呼用户时统一使用「您」，保留引用的用户原话。请直接返回JSON，不要包含其他文字。"""
         if screening_data.get("screening_assessment"):
             from app.services.screening_assessment import assessment_prompt
             prompt = assessment_prompt(screening_data["screening_assessment"], knowledge_text, screening_data.get("original_input"))

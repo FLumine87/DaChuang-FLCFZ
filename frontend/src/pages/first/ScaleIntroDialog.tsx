@@ -169,7 +169,7 @@ export default function ScaleIntroDialog({
         </div>
 
         <div className="mt-6 grid gap-4 border-t border-slate-100 pt-5">
-          <IntroRow title="它如何帮助你">{guide.helps}</IntroRow>
+          <IntroRow title="它如何帮助您">{guide.helps}</IntroRow>
           <IntroRow title="结果的边界">{guide.boundary}</IntroRow>
         </div>
 

@@ -304,7 +304,7 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
       persistedKeysRef.current.set(key, report);
       if (input.sequence !== searchSeqRef.current) return report;
       setSaveState('saved');
-      setSaveMessage('已作为一条记录存入系统，检索初筛依据已保存到你的档案');
+      setSaveMessage('已作为一条记录存入系统，检索初筛依据已保存到您的档案');
       return report;
     } catch (e) {
       if (input.sequence !== searchSeqRef.current) return null;
@@ -1189,7 +1189,7 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
                 记录与参考语料
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                「我的记录」只属于你自己；「参考语料」是系统内置的相似样例，不是你的历史。
+                「我的记录」只属于您自己；「参考语料」是系统内置的相似样例，不是您的历史。
                 {HIST_MODE_DESC[histMode]}
                 ；点一条直接用它的文本检索。
               </p>
@@ -1265,8 +1265,8 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
                     </span>
                     <span className="text-[11.5px] text-slate-400">
                       {group === 'mine'
-                        ? '仅你自己采集的内容，属于个人历史'
-                        : '系统内置样例，用于参考和对比，不属于你的历史'}
+                        ? '仅您自己采集的内容，属于个人历史'
+                        : '系统内置样例，用于参考和对比，不属于您的历史'}
                     </span>
                   </li>
                 )}
@@ -1333,7 +1333,7 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
           {historyTotal === 0 && (
             <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
               {historySource === 'mine'
-                ? '你还没有采集过这个模态的记录。可以先去「心理筛查」补一条，或切到「参考语料」看看系统样例。'
+                ? '您还没有采集过这个模态的记录。可以先去「心理筛查」补一条，或切到「参考语料」看看系统样例。'
                 : '当前筛选下还没有记录。切回「全部来源」或「全部模态」试试。'}
             </p>
           )}

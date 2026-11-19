@@ -507,7 +507,7 @@ function SafetySupportCard() {
         需要支持时
       </h4>
       <p className="mt-2.5 text-[13px] leading-6 text-slate-600">
-        无论选择哪一项，你都可以先停下来寻求支持。
+        无论选择哪一项，您都可以先停下来寻求支持。
       </p>
 
       {open ? (

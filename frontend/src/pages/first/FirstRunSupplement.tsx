@@ -127,7 +127,7 @@ export default function FirstRunSupplement() {
         <>
           多一条线索，
           <br />
-          由你决定分享多少。
+          由您决定分享多少。
         </>
       }
       body={
@@ -185,7 +185,7 @@ export default function FirstRunSupplement() {
                 htmlFor="supplement-text"
                 className="text-sm font-medium text-slate-700"
               >
-                最近有什么让你在意的事？
+                最近有什么让您在意的事？
               </label>
               <textarea
                 id="supplement-text"

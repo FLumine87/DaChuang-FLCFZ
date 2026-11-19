@@ -235,7 +235,7 @@ async def save_personal_supplement(ctx: RequestContext):
     else:
         report = await _analyze_collection(ctx, row_id, kind, data, user_id, None)
     await _index_supplement(row_id, kind, data, user_id)
-    return success_response(data={"id": row_id, "report": report}, message="已保存到你的档案")
+    return success_response(data={"id": row_id, "report": report}, message="已保存到您的档案")
 
 
 # ─── 采集的哈希检索分析 ────────────────────────────────────────────────────────

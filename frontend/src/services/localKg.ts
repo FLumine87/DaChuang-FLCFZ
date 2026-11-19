@@ -433,7 +433,7 @@ export function buildLocalReport(username: string, signals: LocalSignals): {
       name: plan.title,
       category: '行动计划',
       suggestion: `建议时长 ${plan.duration}`,
-      reason: '本地组装 · 仓库内置行动计划（未按你的数据排序）',
+      reason: '本地组装 · 仓库内置行动计划（未按您的数据排序）',
     });
   }
 
@@ -489,10 +489,10 @@ export function buildLocalFeed(signals: LocalSignals): LocalAdvice[] {
   const kw = [...signals.keywords.symptoms, ...signals.keywords.emotions];
   if (kw.length) {
     items.push({
-      name: `你最近提到的：${kw.slice(0, 4).join('、')}`,
+      name: `您最近提到的：${kw.slice(0, 4).join('、')}`,
       category: '本地记录',
       suggestion:
-        '这些词来自你本机的补充记录与对话抽取结果，可以在「AI 陪伴对话」里继续补充，图谱会随记录生长。',
+        '这些词来自您本机的补充记录与对话抽取结果，可以在「AI 陪伴对话」里继续补充，图谱会随记录生长。',
       reason: '本地生成 · 本机关键词命中（未做任何推断）',
     });
   }
@@ -501,7 +501,7 @@ export function buildLocalFeed(signals: LocalSignals): LocalAdvice[] {
       name: plan.title,
       category: '行动计划',
       suggestion: `建议时长 ${plan.duration}`,
-      reason: '本地生成 · 仓库内置行动计划（未按你的数据排序）',
+      reason: '本地生成 · 仓库内置行动计划（未按您的数据排序）',
     });
   }
   return items;
@@ -516,7 +516,7 @@ const CATEGORY_CHECKINS: Record<string, string> = {
   音乐: '今天有没有听到什么好听的歌？或者有没有想听的音乐？🎵',
   体育赛事: '最近有没有关注什么比赛？支持的球队最近表现怎么样？🏀',
   影视: '最近有没有看什么好看的电影或剧集？🎬',
-  书籍: '最近在读什么书？有没有哪本让你印象深刻？📚',
+  书籍: '最近在读什么书？有没有哪本让您印象深刻？📚',
   美食: '今天有没有吃到什么好吃的美食？😋',
   运动: '今天有没有做什么运动？感觉怎么样？🏃',
   游戏: '最近有没有玩什么游戏？有什么好玩的推荐吗？🎮',
@@ -524,7 +524,7 @@ const CATEGORY_CHECKINS: Record<string, string> = {
 
 const DEFAULT_CHECKINS = [
   '今天过得怎么样？有什么想聊的吗？😊',
-  '今天有没有遇到让你开心的小事？✨',
+  '今天有没有遇到让您开心的小事？✨',
   '今天心情怎么样？想分享一下吗？🌤️',
 ];
 

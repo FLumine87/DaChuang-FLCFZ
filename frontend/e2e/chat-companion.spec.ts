@@ -32,10 +32,10 @@ async function loginAs(page: Page, username: string) {
 }
 
 const FALLBACK_REPLIES = [
-  '谢谢你愿意分享这些。我在认真听，也想多了解一点——能具体说说这件事带给你的感受吗？',
-  '我能感受到这句话背后的分量。这样的时刻确实不容易，你已经在尽力面对了。',
-  '收到。我把你提到的内容记下来了。如果愿意，可以再多聊一点，比如它对你的睡眠或心情有什么影响？',
-  '我在。你说的这些对我很重要，我会一直在这里陪着你梳理。',
+  '谢谢您愿意分享这些。我在认真听，也想多了解一点——能具体说说这件事带给您的感受吗？',
+  '我能感受到这句话背后的分量。这样的时刻确实不容易，您已经在尽力面对了。',
+  '收到。我把您提到的内容记下来了。如果愿意，可以再多聊一点，比如它对您的睡眠或心情有什么影响？',
+  '我在。您说的这些对我很重要，我会一直在这里陪着您梳理。',
 ];
 
 test('AI 陪伴对话走后端 LLM，兜底文案必须如实标注', async ({ page }) => {
@@ -47,10 +47,10 @@ test('AI 陪伴对话走后端 LLM，兜底文案必须如实标注', async ({ p
   const APP = process.env.E2E_APP_URL || 'http://localhost:5173';
   await page.goto(`${APP}/#/personal/me/chat`);
 
-  const welcome = page.getByText('你好，我是你的 AI 心理陪伴助手', { exact: false });
+  const welcome = page.getByText('您好，我是您的 AI 心理陪伴助手', { exact: false });
   await expect(welcome).toBeVisible();
 
-  const input = page.getByPlaceholder('聊聊你的状态、兴趣或烦恼…（Enter 发送，Shift+Enter 换行）');
+  const input = page.getByPlaceholder('聊聊您的状态、兴趣或烦恼…（Enter 发送，Shift+Enter 换行）');
   await input.fill('最近总是失眠，晚上躺在床上翻来覆去，压力有点大。');
   await page.getByRole('button', { name: '发送', exact: true }).click();
 

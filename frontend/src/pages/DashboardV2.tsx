@@ -220,7 +220,7 @@ export default function DashboardV2() {
               {currentAppearance.headline}
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/65">
-              这不是单一量表的判断。文字、语音与图像会共同参与分析，帮助你更早看见连续的状态变化。
+              这不是单一量表的判断。文字、语音与图像会共同参与分析，帮助您更早看见连续的状态变化。
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link

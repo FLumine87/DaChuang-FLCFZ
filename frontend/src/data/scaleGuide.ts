@@ -63,7 +63,7 @@ export const scaleGuides: Record<string, ScaleGuide> = {
       { icon: 'focusGray', title: '注意力、行动与自我感受', desc: '专注困难、动作迟缓或坐立不安、觉得自己很糟' },
       { icon: 'risk', title: '伤害自身的想法', desc: '第 9 题询问死亡或伤害自己的念头，该题作答页会单独给出支持信息' },
     ],
-    helps: '帮助你初步了解近期哪些困扰更常出现。之后再次填写时，也可以对照自己的状态变化。',
+    helps: '帮助您初步了解近期哪些困扰更常出现。之后再次填写时，也可以对照自己的状态变化。',
     boundary: '结果不能单独用于诊断抑郁症。如果困扰持续或影响生活，建议寻求专业评估。',
     recall: '回想过去两周',
     answerHint: '按出现频率选择一项',
@@ -76,7 +76,7 @@ export const scaleGuides: Record<string, ScaleGuide> = {
       { icon: 'body', title: '身体与情绪反应', desc: '难以放松、坐立不安、容易烦躁' },
       { icon: 'expect', title: '对未来的预期', desc: '担心不好的事情会发生' },
     ],
-    helps: '帮助你初步了解担忧和紧张感近期出现得有多频繁；再次填写时，可作为观察变化的参考。',
+    helps: '帮助您初步了解担忧和紧张感近期出现得有多频繁；再次填写时，可作为观察变化的参考。',
     boundary:
       '结果不能单独用于诊断焦虑障碍。如果这些感受持续存在，或明显影响学习、工作、睡眠和人际关系，建议寻求专业评估。',
     recall: '回想过去两周',
@@ -90,7 +90,7 @@ export const scaleGuides: Record<string, ScaleGuide> = {
       { icon: 'satisfaction', title: '睡眠满意度', desc: '对目前睡眠的满意程度' },
       { icon: 'daytime', title: '白天的影响', desc: '睡眠问题对白天生活的影响，以及由此产生的担忧' },
     ],
-    helps: '帮助你看清困扰主要来自夜间睡眠，还是睡眠问题带来的白天影响。之后复评时，可以对照这些感受是否发生变化。',
+    helps: '帮助您看清困扰主要来自夜间睡眠，还是睡眠问题带来的白天影响。之后复评时，可以对照这些感受是否发生变化。',
     boundary:
       '这是对睡眠困难的自我报告，不能替代睡眠障碍诊断。如果问题持续存在，或白天生活明显受到影响，建议咨询医生或睡眠专业人员。',
     recall: '回想过去两周',
@@ -98,14 +98,14 @@ export const scaleGuides: Record<string, ScaleGuide> = {
   },
   'PSS-10': {
     modalTitle: 'PSS-10 主观压力感知量表',
-    summary: '通过 10 个问题，了解你在过去一个月里如何感受生活中的压力。',
+    summary: '通过 10 个问题，了解您在过去一个月里如何感受生活中的压力。',
     focus: [
       { icon: 'events', title: '意外与烦恼', desc: '意外事件带来的烦恼' },
       { icon: 'control', title: '控制感', desc: '对重要事情的控制感' },
       { icon: 'burden', title: '紧张与负担', desc: '感到紧张、觉得负担过重' },
       { icon: 'coping', title: '应对信心', desc: '处理问题和应对变化时的信心' },
     ],
-    helps: '帮助你整理近期的压力感受和应对状态；以后再次填写时，可作为回看自身变化的参考。',
+    helps: '帮助您整理近期的压力感受和应对状态；以后再次填写时，可作为回看自身变化的参考。',
     boundary:
       'PSS-10 不用于诊断心理疾病，也没有统一的临床分界值。平台展示连续分数及同版本变化，不按总分直接划分疾病风险或危机等级。',
     recall: '回想过去一个月',

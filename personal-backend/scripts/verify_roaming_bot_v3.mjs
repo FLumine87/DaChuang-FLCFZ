@@ -293,7 +293,7 @@ try {
   for (let i = 0; i < 50; i++) {
     await page.waitForTimeout(400);
     peek = await page.evaluate(() => {
-      const svg = document.querySelector('svg[aria-label*="看你的输入"]');
+      const svg = document.querySelector('svg[aria-label*="看您的输入"]');
       if (!svg) return { found: false };
       const b = svg.getBoundingClientRect();
       const ta = document.querySelector('textarea').getBoundingClientRect();
@@ -309,7 +309,7 @@ try {
     });
     if (peek?.found && peek.outsidePanel && peek.dy < 90) break;
   }
-  ok('切到「看你的输入」姿态', peek?.found === true, JSON.stringify({ side: peek?.side }));
+  ok('切到「看您的输入」姿态', peek?.found === true, JSON.stringify({ side: peek?.side }));
   ok('纵向对准输入框那一行（中心偏差 < 90px）', (peek?.dy ?? 999) < 90, `偏差 ${peek?.dy}px`);
   ok('整体仍在面板外侧（不压在输入框上）', peek?.outsidePanel === true, `站 ${peek?.side} 侧`);
   ok('探看时瞳孔放大（好奇）', peek?.pupilH === 42, `瞳孔高 ${peek?.pupilH}`);
@@ -359,7 +359,7 @@ try {
   await ta2.click().catch(() => {});
   await ta2.fill('看看你在写什么').catch(() => {});
   await page.waitForTimeout(3200);
-  const peekingBot = page.locator('svg[aria-label*="看你的输入"]').first();
+  const peekingBot = page.locator('svg[aria-label*="看您的输入"]').first();
   if (await peekingBot.count()) {
     await peekingBot.screenshot({ path: path.join(SHOTS, 'bot-v3-peek.png'), omitBackground: true })
       .catch((e) => console.log(`  （探看特写失败：${e.message}）`));

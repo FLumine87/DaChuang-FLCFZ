@@ -93,7 +93,7 @@ def _analyze(kind_dir: str, path: str) -> str:
                 return f"已完成 {len(feat)} 维语音特征（MFCC+韵律）提取与哈希编码，可在「检索与分析」中按语音检索。"
     except Exception:
         pass
-    return "文件已保存并登记到你的档案；该类型暂未纳入哈希编码。"
+    return "文件已保存并登记到您的档案；该类型暂未纳入哈希编码。"
 
 
 async def upload_file(ctx: RequestContext):

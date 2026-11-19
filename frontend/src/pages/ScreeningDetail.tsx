@@ -130,7 +130,7 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
   return (
     <div className="space-y-5">
       <button onClick={onBack} className="ui-button"><ArrowLeft className="h-4 w-4" />返回筛查记录</button>
-      {isExample && <div className="rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-700" role="status">示例报告 · 以下分数和答案仅演示完成筛查后的效果，不是你的实际结果，不计入历史记录。</div>}
+      {isExample && <div className="rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-700" role="status">示例报告 · 以下分数和答案仅演示完成筛查后的效果，不是您的实际结果，不计入历史记录。</div>}
       <section className="ui-card p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -144,7 +144,7 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
         <div className="mt-5 rounded-xl bg-slate-50 p-4">
           <h3 className="font-semibold text-slate-800">结果如何理解</h3>
           <p className="mt-2 text-sm text-slate-700">{legacyPss ? '历史 PSS 题序和计分版本未核对，保留当时总分，不按新版重新分层或直接比较。' : resultLabel ? `本次量表提示：${resultLabel}。` : '暂时没有可用的结果解释。'}</p>
-          <p className="mt-2 text-sm leading-6 text-slate-500">{definition?.introduction.recallPeriod} 总分反映量表所评估问题的整体程度，不能单凭分数判断你有哪些具体症状，也不等同于医学诊断。</p>
+          <p className="mt-2 text-sm leading-6 text-slate-500">{definition?.introduction.recallPeriod} 总分反映量表所评估问题的整体程度，不能单凭分数判断您有哪些具体症状，也不等同于医学诊断。</p>
         </div>
       </section>
       {definition?.id === 'PHQ-9' && (record.answers?.[9] ?? 0) > 0 && <section className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm leading-6 text-slate-700">第 9 题提示需要独立安全复核，无论总分多少，都建议尽快联系专业人员进一步了解当前情况。</section>}
@@ -152,7 +152,7 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
         <section className="ui-card p-6">
           <h3 className="font-semibold text-slate-800">本次补充记录</h3>
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            这次筛查时你自愿补充的内容，仅用于本次分析。
+            这次筛查时您自愿补充的内容，仅用于本次分析。
           </p>
           <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">
             {record.supplement.kind === "text" ? (
@@ -176,7 +176,7 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="ui-card p-5">
           <h3 className="font-semibold text-slate-800">相关表现与关注点</h3>
-          <p className="mt-2 text-xs leading-5 text-slate-500">这是量表关注的常见表现，不代表你全部存在这些情况。</p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">这是量表关注的常见表现，不代表您全部存在这些情况。</p>
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">
             {definition?.introduction.measures.map(item => <li key={item}>{item}</li>)}
           </ul>
@@ -210,7 +210,7 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
               );
             })}
           </div>
-        ) : <p className="mt-3 text-sm leading-6 text-slate-500">当前记录接口仅提供总分，暂时无法回看逐题答案。这里不会根据总分推测你的作答。</p>}
+        ) : <p className="mt-3 text-sm leading-6 text-slate-500">当前记录接口仅提供总分，暂时无法回看逐题答案。这里不会根据总分推测您的作答。</p>}
       </section>
       {definition && <section className="rounded-xl border border-primary-100 bg-primary-50/60 p-5"><h3 className="text-sm font-semibold text-slate-800">阅读提醒</h3><p className="mt-2 text-sm leading-7 text-slate-600">{definition.introduction.notice}</p></section>}
       {definition?.id === 'PHQ-9' && <p className="text-xs text-slate-500">参考资料：<a className="text-primary-600 underline" href="https://www.hiv.uw.edu/page/mental-health-screening/phq-9" target="_blank" rel="noreferrer">PHQ-9 评分说明</a> · <a className="text-primary-600 underline" href="https://www.nimh.nih.gov/health/publications/depression" target="_blank" rel="noreferrer">抑郁症状与自我照顾</a></p>}

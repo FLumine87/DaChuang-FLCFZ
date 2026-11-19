@@ -192,7 +192,7 @@ try {
       const panel = document.querySelector('.chat-fullheight').getBoundingClientRect();
       return {
         /* 探身姿态的 aria-label 与 idle 不同，用它判断姿态是否切换 */
-        peeking: svg.getAttribute('aria-label')?.includes('看你的输入') || false,
+        peeking: svg.getAttribute('aria-label')?.includes('看您的输入') || false,
         /* 纵向对齐输入框那一行（中心偏差） */
         dy: Math.round(Math.abs((minT + maxB) / 2 - (taBox.top + taBox.height / 2))),
         /* 机体整体仍在面板外 —— 它不是"趴"在框上，而是在框旁边探身看 */
@@ -216,7 +216,7 @@ try {
   await page.waitForTimeout(1200);
   const backIdle = await page.evaluate(() => {
     const svg = document.querySelector('svg[aria-label*="AI 陪伴助手"]');
-    return svg ? !svg.getAttribute('aria-label')?.includes('看你的输入') : null;
+    return svg ? !svg.getAttribute('aria-label')?.includes('看您的输入') : null;
   });
   ok('输入清空后回到站姿', backIdle === true);
 
@@ -381,7 +381,7 @@ try {
         const text = document.body.textContent ?? '';
         return {
           title: /从图谱中删除/.test(text),
-          scope: /只影响你自己的图谱/.test(text),
+          scope: /只影响您自己的图谱/.test(text),
           confirm: /确认删除/.test(text),
         };
       });

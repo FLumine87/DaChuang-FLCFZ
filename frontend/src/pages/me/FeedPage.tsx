@@ -112,7 +112,7 @@ export default function FeedPage() {
             <Bell className="w-4 h-4 text-primary-600" /> 个性化推送
           </h2>
           <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span>根据你的量表记录、对话线索与兴趣画像整理缓解内容</span>
+            <span>根据您的量表记录、对话线索与兴趣画像整理缓解内容</span>
             {feed && (
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
                 <HardDrive className="w-3 h-3" />
@@ -202,7 +202,7 @@ export default function FeedPage() {
       {feed && activeTab === 'status' && (
         <div className="ui-card p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-800">为你推荐</h3>
+            <h3 className="text-sm font-semibold text-slate-800">为您推荐</h3>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
               内容来源：{statusSourceLabel}
             </span>

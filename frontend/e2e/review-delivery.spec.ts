@@ -38,7 +38,7 @@ test('真实两端：预览取消、发送、通知、确认收到、完成复�
     await personal.goto('http://127.0.0.1:5178/#/personal/reviews');
     await expect(personal.getByText('请完成一次复查问卷', { exact: true })).toBeVisible();
     await personal.getByRole('button', { name: /站内通知/ }).click();
-    await expect(personal.getByRole('region', { name: '站内通知列表' }).getByText(/你收到一项复查任务/)).toBeVisible();
+    await expect(personal.getByRole('region', { name: '站内通知列表' }).getByText(/您收到一项复查任务/)).toBeVisible();
     await personal.getByRole('button', { name: '关闭通知' }).click();
     await personal.getByRole('button', { name: '确认收到', exact: true }).dblclick();
     await expect(personal.getByText('已确认收到', { exact: true })).toBeVisible();
@@ -71,7 +71,7 @@ test('真实两端：预览取消、发送、通知、确认收到、完成复�
     await expect(personal.getByText('仅内部可见的验收复核备注', { exact: false })).toHaveCount(0);
     await personal.getByRole('button', { name: /站内通知/ }).click();
     const inbox = personal.getByRole('region', { name: '站内通知列表' });
-    await expect(inbox.getByText('工作人员已查看你的复查结果。')).toBeVisible();
+    await expect(inbox.getByText('工作人员已查看您的复查结果。')).toBeVisible();
     await inbox.getByRole('button', { name: '标为已读', exact: true }).click();
     await expect(inbox.getByRole('button', { name: '标为已读', exact: true })).toHaveCount(0);
   } finally { await context.close(); }

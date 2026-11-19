@@ -292,7 +292,7 @@ export default function AccountSettings() {
           账号设置
         </h1>
         <p className="mt-1.5 text-[13px] text-slate-500">
-          改这里的信息只会影响你自己的账号，不会动到筛查记录与预警。
+          改这里的信息只会影响您自己的账号，不会动到筛查记录与预警。
         </p>
       </div>
 
@@ -454,7 +454,7 @@ export default function AccountSettings() {
               onChange={(e) => { edited.current.add('name'); setName(e.target.value); }}
               maxLength={50}
               disabled={savingProfile || loading}
-              placeholder="你的姓名"
+              placeholder="您的姓名"
               className={inputCls}
             />
           </label>
@@ -528,7 +528,7 @@ export default function AccountSettings() {
           修改密码
         </h2>
         <p className="mt-1 text-[12.5px] text-slate-400">
-          需要先验证当前密码，避免别人拿到你的登录状态就能改密码。
+          需要先验证当前密码，避免别人拿到您的登录状态就能改密码。
         </p>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-3">

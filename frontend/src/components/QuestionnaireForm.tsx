@@ -72,7 +72,7 @@ export default function QuestionnaireForm({
       /* 后端可能给出具体原因（如"量表名不在支持列表"），有就透出来，没有再用这句兜底 */
       setSaveError(reason instanceof Error && reason.message
         ? reason.message
-        : '保存失败，你的作答仍保留在页面上，请重试。');
+        : '保存失败，您的作答仍保留在页面上，请重试。');
     } finally {
       submitRef.current = false;
       setSaving(false);
@@ -192,13 +192,13 @@ export default function QuestionnaireForm({
                   className="mt-4 rounded-lg border border-primary-200 bg-primary-50/70 p-4"
                 >
                   <p className="text-sm leading-6 text-slate-700">
-                    谢谢你如实说出来。这样的念头很多人都经历过，它不代表你做错了什么，也不意味着它一定会发生。
+                    谢谢您如实说出来。这样的念头很多人都经历过，它不代表您做错了什么，也不意味着它一定会发生。
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
                     现在就可以联系：校心理健康教育中心（工作日 8:30–17:30，电话以学校公布为准），或
                     24 小时心理援助热线 <span className="font-medium text-slate-800">12356</span>。
                     如果此刻有立即的危险，请拨打 <span className="font-medium text-slate-800">120</span>
-                    ，或请身边的人陪着你。
+                    ，或请身边的人陪着您。
                   </p>
                 </div>
               )}

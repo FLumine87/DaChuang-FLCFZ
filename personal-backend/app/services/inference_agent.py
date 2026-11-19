@@ -554,9 +554,9 @@ def run_inference(user_id: str) -> RiskReport:
             continue
         seen.add(row["name"])
         if row["name"] in effective:
-            reason = "你在个人记录中标记为有效"
+            reason = "您在个人记录中标记为有效"
         elif row.get("category") and row["category"] in interest_cats:
-            reason = f"结合你的兴趣画像（{row['category']}）优先推荐"
+            reason = f"结合您的兴趣画像（{row['category']}）优先推荐"
         else:
             reason = f"来自领域KG对「{row['disorder']}」的常规建议"
         recommendations.append(CopingRecommendation(
@@ -594,7 +594,7 @@ _SUMMARY_PROMPT = """你是心理状况推理报告撰写助手。基于以下�
    只说明"图谱中有待核实线索"；crisis_recent_reference=true 仅表示记录较近，建议及时核实，
    不得渲染成当前已确认危机。
 5. 若 unmapped_terms 非空，用一句话如实说明"部分记录未纳入分析"，不要假装已全部理解。
-6. 语气温暖、支持性，第二人称。直接输出正文，不要标题。"""
+6. 语气温暖、支持性，直接称呼用户时统一使用「您」，保留引用的原话。直接输出正文，不要标题。"""
 
 
 def _assemble_summary(report: RiskReport, interests: list[dict]) -> str:
@@ -611,5 +611,5 @@ def _assemble_summary(report: RiskReport, interests: list[dict]) -> str:
         recs = "；".join(f"{r.name}（{r.reason}）" for r in report.recommendations[:3])
         lines.append(f"建议尝试：{recs}。")
     if interests:
-        lines.append("系统将持续结合你的兴趣画像提供更贴合的缓解内容。")
+        lines.append("系统将持续结合您的兴趣画像提供更贴合的缓解内容。")
     return "\n".join(lines)

@@ -72,11 +72,11 @@ await page.waitForTimeout(20000);
 
 const body = await page.locator('body').innerText();
 console.log('\n[1] 用户消息发出后的即时安全提示（来自 /kg/extract 的 crisis_hits）');
-check('出现危机关怀文案', /谢谢你愿意说出来/.test(body), '');
+check('出现危机关怀文案', /谢谢您愿意说出来/.test(body), '');
 check('给出 12356 求助热线', /12356/.test(body), '');
 
 console.log('\n[2] 提示位置在"已抽取"结果之前（优先级更高）');
-const idxCrisis = body.indexOf('谢谢你愿意说出来');
+const idxCrisis = body.indexOf('谢谢您愿意说出来');
 const idxExtract = body.indexOf('已抽取');
 check('危机提示排在抽取结果之前',
   idxCrisis >= 0 && (idxExtract < 0 || idxCrisis < idxExtract),

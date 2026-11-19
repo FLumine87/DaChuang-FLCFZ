@@ -294,7 +294,7 @@ try {
   for (let i = 0; i < 40; i++) {
     await page.waitForTimeout(500);
     peek = await page.evaluate(() => {
-      const svg = document.querySelector('svg[aria-label*="看你的输入"]');
+      const svg = document.querySelector('svg[aria-label*="看您的输入"]');
       if (!svg) return null;
       const mover = svg.closest('div[aria-hidden="true"]')?.firstElementChild;
       const t = document.querySelector('textarea')?.getBoundingClientRect();
