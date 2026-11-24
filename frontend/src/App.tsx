@@ -11,6 +11,8 @@ import ReviewTasks from './pages/ReviewTasks';
 import DataCollection from './pages/DataCollection';
 import ScreeningRecords from './pages/ScreeningRecords';
 import AccountSettings from './pages/AccountSettings';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import ConsentHost from './components/ConsentHost';
 import Alerts from './pages/Alerts';
 import Cases from './pages/Cases';
 import SystemSelector from './pages/SystemSelector';
@@ -99,6 +101,7 @@ export default function App() {
     {/* 路由切换即滚回顶部：单页应用不会自动复位滚动位置，
         否则从翻到中间的页面点进登录/首次引导/量表页，会停在上一页的高度上。
         放在 Suspense 内、Routes 之前，保证每次路径变化都执行。 */}
+    <ConsentHost />
     <ScrollToTop />
     {/* 「下面还有内容」的底部提醒，仅手机端显示；滚到底自动消失 */}
     <ScrollHint />
@@ -108,6 +111,9 @@ export default function App() {
       {/* 旧地址兼容：原 /auth 是「介绍 + 登录」合页，现统一到登录页 */}
       <Route path="/auth" element={<Navigate to="/login" replace />} />
       <Route path="/selector" element={<SystemSelector />} />
+      {/* 隐私政策放在角色守卫之外：个人端与管理端都能从侧栏页脚进来看，
+          不会被各自的 RequireRole 拦住 */}
+      <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route element={<SessionWorkspaces />}>
 
       {/* 个人端首次登录的欢迎页：独立成页（不带侧栏，与登录页同一套顶栏）。

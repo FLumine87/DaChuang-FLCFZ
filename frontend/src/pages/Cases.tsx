@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
   ClipboardList,
-  Clock,
   FileText,
   Lock,
   Phone,
@@ -20,6 +19,8 @@ import {
 import { getCases, getMyAccount, getPersonalSupplements, type PersonalSupplement } from '../services/mockApi';
 import { getCurrentSession, getDisplayName } from '../auth/session';
 import AlertBadge from '../components/AlertBadge';
+import { RiskBadge } from '../components/RiskSummaryCard';
+import { riskLabels, useRiskSummary, type RiskLevel } from '../services/riskSummary';
 
 /*
  * 我的心理档案
@@ -66,6 +67,7 @@ const SCALE_TEXT: Record<string, string> = {
 function buildSummary(
   records: PersonalScreeningRecord[],
   warnings: WarningEvent[],
+  overallLevel?: RiskLevel,
 ): string[] | null {
   const completed = records
     .filter((item) => item.status === 'completed')
@@ -78,6 +80,15 @@ function buildSummary(
   lines.push(
     `最近一次${scaleName}（${latest.date}）得分 ${latest.score}/${latest.maxScore}，处于「${LEVEL_TEXT[latest.level] ?? latest.level}」区间。`,
   );
+
+  /* 单条量表的等级与「近 30 天综合风险」可能不同（最近一次可能刚好是绿色，
+     但 30 天内其他量表偏高）。摘要要说清以哪个为准，否则会和档案状态打架。 */
+  const overall = overallLevel ?? latest.level;
+  if (overallLevel && overallLevel !== latest.level) {
+    lines.push(
+      `不过按近 30 天的全部记录，综合风险为「${riskLabels[overallLevel] ?? overallLevel}」，以这一整体判断为准。`,
+    );
+  }
 
   const previous = completed.find(
     (item) => item.id !== latest.id && item.questionnaire === latest.questionnaire,
@@ -104,9 +115,9 @@ function buildSummary(
     lines.push('目前没有未处理的预警记录。');
   }
 
-  if (latest.level === 'red' || latest.level === 'orange') {
+  if (overall === 'red' || overall === 'orange') {
     lines.push('建议优先联系学校心理中心、咨询师或医疗专业人员，先安排一次面对面的支持。');
-  } else if (latest.level === 'yellow') {
+  } else if (overall === 'yellow') {
     lines.push('建议保持规律记录，并在 1–2 周内用同一份量表复测一次；若持续加重，及时联系专业人员。');
   } else {
     lines.push('当前结果较平稳，保持现有节奏即可；下次想了解变化时再做一次同量表复测。');
@@ -120,14 +131,6 @@ const tdCls = 'px-4 py-2.5 text-[12.5px] text-slate-700';
 const thCls =
   'px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-slate-400';
 
-const SUP_MODALITY: Record<string, string> = { text: '文字', audio: '语音', image: '照片' };
-
-/** 检索记录的摘要：文字取原文，语音/照片取文件名或描述 */
-function supplementSummary(item: PersonalSupplement): string {
-  if (item.kind === 'text') return (item.text || '').trim() || '（空文本）';
-  return item.filename || item.description || '（媒体文件）';
-}
-
 /** 基本信息的一行：标签 + 值 */
 function Field({
   label,
@@ -139,6 +142,7 @@ function Field({
   mono?: boolean;
 }) {
   const empty = !value || value === '—';
+
   return (
     <div className="flex items-baseline gap-3 px-5 py-2.5">
       <span className="w-20 shrink-0 text-[12px] text-slate-400">{label}</span>
@@ -158,20 +162,40 @@ function SectionTitle({
   icon: Icon,
   title,
   extra,
+  hint,
 }: {
   icon: typeof UserRound;
   title: string;
   extra?: string;
+  /** 标题下一句说明，用来交代这个区块和相邻区块的分工（避免几块看着像同一件事） */
+  hint?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-2.5">
-      <h3 className="flex items-center gap-2 text-[12.5px] font-semibold uppercase tracking-wider text-slate-600">
-        <Icon className="h-3.5 w-3.5 text-slate-400" />
-        {title}
-      </h3>
-      {extra && <span className="text-[11px] tabular-nums text-slate-400">{extra}</span>}
+    <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-2.5">
+      <div className="min-w-0">
+        <h3 className="flex items-center gap-2 text-[12.5px] font-semibold uppercase tracking-wider text-slate-600">
+          <Icon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          {title}
+        </h3>
+        {hint && <p className="mt-1 pl-5 text-[11px] leading-4 text-slate-400">{hint}</p>}
+      </div>
+      {extra && <span className="shrink-0 text-[11px] tabular-nums text-slate-400">{extra}</span>}
     </div>
   );
+}
+
+
+const SUP_MODALITY: Record<string, string> = { text: '文字', audio: '语音', image: '照片' };
+
+/** 检索记录的摘要：文字取原文，语音/照片取文件名或描述 */
+function supplementSummary(item: PersonalSupplement): string {
+  if (item.kind === 'text') return (item.text || '').trim() || '（空文本）';
+  return item.filename || item.description || '（媒体文件）';
+}
+
+/** 预警状态 → 人话 */
+function alertStatusLabel(status: WarningEvent['status']): string {
+  return status === 'resolved' ? '已处置' : status === 'tracking' ? '跟踪中' : '待处置';
 }
 
 export default function Cases() {
@@ -240,12 +264,35 @@ export default function Cases() {
     ...personalTimeline.map((t) => t.date),
   ]);
 
-  /* 档案摘要：照着远端那套口径，从当前账号的筛查/预警记录里自动生成 */
-  const summary = buildSummary(screeningRecords, warningEvents);
+  /* 当前等级与「预警中心 · 近期综合风险」同一个口径：直接复用它的数据源。
+     只取"最近一条筛查"是不对的 —— 最近一次可能是绿色，但 30 天内其他量表偏高，
+     综合结论应为橙色，两处会互相矛盾。 */
+  const risk = useRiskSummary();
 
-  // 当前等级：取最近一次筛查（没有就看最近预警）
+  /* 档案摘要：从筛查/预警记录生成，并用综合等级兜住「单条 vs 整体」的差异 */
+  const summary = buildSummary(screeningRecords, warningEvents, risk.data?.level);
+
   const latest = screeningRecords[0];
-  const latestLevel = latest?.level ?? warningEvents[0]?.level ?? 'green';
+  const latestLevel = risk.data?.level ?? latest?.level ?? warningEvents[0]?.level ?? 'green';
+
+  /* 预警按来源建索引：量表看 screeningId，检索记录看 analysis.alertId。
+     这样在原表格的行上就能直接标出"这条产生了预警"，不必再单列一张预警表。 */
+  const alertsByScreen = useMemo(() => {
+    const map = new Map<string, WarningEvent[]>();
+    for (const a of warningEvents) {
+      if (!a.screeningId) continue;
+      const list = map.get(a.screeningId) ?? [];
+      list.push(a);
+      map.set(a.screeningId, list);
+    }
+    return map;
+  }, [warningEvents]);
+
+  const alertsById = useMemo(() => {
+    const map = new Map<string, WarningEvent>();
+    for (const a of warningEvents) map.set(a.id, a);
+    return map;
+  }, [warningEvents]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -286,6 +333,27 @@ export default function Cases() {
             <p className="font-mono text-[12.5px] text-slate-600">{openedAt || '—'}</p>
           </div>
         </div>
+      </div>
+
+      {/* ==================== 档案摘要（先看结论，再看明细） ==================== */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <SectionTitle icon={Sparkles} title="档案摘要" />
+        {summary ? (
+          <div className="space-y-2.5 px-5 py-4 text-[13px] leading-6 text-slate-600">
+            {summary.map((line, index) => (
+              <p key={index} className="flex gap-2">
+                <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-slate-300" />
+                <span>{line}</span>
+              </p>
+            ))}
+          </div>
+        ) : (
+          <p className="px-5 py-10 text-center text-[12.5px] leading-6 text-slate-400">
+            还没有完成的筛查记录。
+            <br />
+            完成一次筛查后，这里会根据您的最近记录生成摘要。
+          </p>
+        )}
       </div>
 
       {/* ==================== 基本信息 + 档案状态 ==================== */}
@@ -332,9 +400,11 @@ export default function Cases() {
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <SectionTitle icon={ShieldCheck} title="档案状态" />
             <div className="divide-y divide-slate-100">
-              <div className="flex items-center justify-between px-5 py-3">
+              <div className="flex items-center justify-between gap-3 px-5 py-3">
                 <span className="text-[12px] text-slate-400">当前等级</span>
-                <AlertBadge level={latestLevel} size="sm" />
+                {/* 用与「预警中心 · 近期综合风险」同一套等级与措辞，
+                    否则同一个账号在两处看到"警告"和"建议人工复核"两种说法。 */}
+                <RiskBadge level={latestLevel} />
               </div>
               <div className="flex items-center justify-between px-5 py-3">
                 <span className="text-[12px] text-slate-400">筛查次数</span>
@@ -348,12 +418,29 @@ export default function Cases() {
                   {warningEvents.length}
                 </span>
               </div>
+              <div className="flex items-center justify-between gap-3 px-5 py-3">
+                <span className="shrink-0 text-[12px] text-slate-400">最近一次筛查</span>
+                <span className="min-w-0 truncate text-right text-[12px] text-slate-600">
+                  {latest ? `${latest.questionnaire} ${latest.score}/${latest.maxScore}` : '—'}
+                </span>
+              </div>
               <div className="flex items-center justify-between px-5 py-3">
                 <span className="text-[12px] text-slate-400">最近更新</span>
                 <span className="font-mono text-[12px] text-slate-600">
                   {latest?.date?.slice(0, 10) ?? '—'}
                 </span>
               </div>
+            </div>
+            <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-2.5">
+              <p className="text-[11px] leading-5 text-slate-400">
+                当前等级取自
+                <Link to="/personal/alerts" className="mx-1 font-medium text-primary-600 hover:text-primary-700">
+                  预警中心
+                </Link>
+                的「近期综合风险」，按近 30 天记录综合得出
+                {risk.data ? `（覆盖 ${risk.data.coverage.dimension_count}/${risk.data.dimensions.length} 个维度 · ${risk.data.coverage.records} 条记录）` : ''}
+                ，与下方单条记录的等级不是一回事。
+              </p>
             </div>
           </div>
 
@@ -370,11 +457,11 @@ export default function Cases() {
         </div>
       </div>
 
-      {/* ==================== 记录明细：量表 / 检索 切换 ==================== */}
+      {/* ==================== 筛查记录：量表 / 检索，预警附在条目上 ==================== */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-2.5">
           <h3 className="flex items-center gap-2 text-[12.5px] font-semibold uppercase tracking-wider text-slate-600">
-            <ClipboardList className="h-3.5 w-3.5 text-slate-400" />
+            <ClipboardList className="h-3.5 w-3.5 shrink-0 text-slate-400" />
             筛查记录
           </h3>
           {/* 量表 / 检索 切换：两类记录都挂在"筛查记录"名下，用切换代替并列两张表 */}
@@ -391,15 +478,11 @@ export default function Cases() {
                   onClick={() => setRecordTab(key)}
                   aria-pressed={active}
                   className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
-                    active
-                      ? 'bg-primary-500 text-white shadow-sm'
-                      : 'text-slate-500 hover:bg-slate-50'
+                    active ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'
                   }`}
                 >
                   {label}
-                  <span className={`tabular-nums ${active ? 'text-white/80' : 'text-slate-400'}`}>
-                    {n}
-                  </span>
+                  <span className={`tabular-nums ${active ? 'text-white/80' : 'text-slate-400'}`}>{n}</span>
                 </button>
               );
             })}
@@ -413,7 +496,7 @@ export default function Cases() {
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] border-collapse">
+              <table className="w-full min-w-[560px] border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-white">
                     <th className={thCls}>日期</th>
@@ -424,29 +507,46 @@ export default function Cases() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {screeningRecords.map((item) => (
-                    <tr key={item.id} className="transition-colors hover:bg-slate-50/70">
-                      <td className={`${tdCls} whitespace-nowrap font-mono text-slate-500`}>
-                        {item.date}
-                      </td>
-                      <td className={tdCls}>{item.questionnaire}</td>
-                      <td className={`${tdCls} whitespace-nowrap tabular-nums`}>
-                        {item.score}
-                        <span className="text-slate-400">/{item.maxScore}</span>
-                      </td>
-                      <td className={tdCls}>
-                        <AlertBadge level={item.level} size="sm" />
-                      </td>
-                      <td className={`${tdCls} whitespace-nowrap text-right`}>
-                        <Link
-                          to={`/personal/records?record=${encodeURIComponent(item.id)}`}
-                          className="text-[12px] font-medium text-primary-600 hover:text-primary-700"
-                        >
-                          查看详情
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                  {screeningRecords.map((item) => {
+                    const linked = alertsByScreen.get(item.id) ?? [];
+                    return (
+                      <tr key={item.id} className="transition-colors hover:bg-slate-50/70">
+                        <td className={`${tdCls} whitespace-nowrap font-mono text-slate-500`}>
+                          {item.createdAt ?? item.date}
+                        </td>
+                        <td className={tdCls}>{item.questionnaire}</td>
+                        <td className={`${tdCls} whitespace-nowrap tabular-nums`}>
+                          {item.score}
+                          <span className="text-slate-400">/{item.maxScore}</span>
+                        </td>
+                        <td className={tdCls}>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <AlertBadge level={item.level} size="sm" />
+                            {/* 这次筛查产生的预警，直接附在这一行上 */}
+                            {linked.map((a) => (
+                              <Link
+                                key={a.id}
+                                to="/personal/alerts"
+                                title={`${a.id} · ${a.title}`}
+                                className="inline-flex items-center gap-1 text-[11px] font-medium text-danger-600 hover:underline"
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                预警 · {alertStatusLabel(a.status)}
+                              </Link>
+                            ))}
+                          </div>
+                        </td>
+                        <td className={`${tdCls} whitespace-nowrap text-right`}>
+                          <Link
+                            to={`/personal/screening?record=${encodeURIComponent(item.id)}`}
+                            className="text-[12px] font-medium text-primary-600 hover:text-primary-700"
+                          >
+                            查看详情
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -458,7 +558,7 @@ export default function Cases() {
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] border-collapse">
+            <table className="w-full min-w-[600px] border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-white">
                   <th className={thCls}>时间</th>
@@ -469,156 +569,50 @@ export default function Cases() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {supplements.map((item) => (
-                  <tr key={item.id} className="transition-colors hover:bg-slate-50/70">
-                    <td className={`${tdCls} whitespace-nowrap font-mono text-slate-500`}>
-                      {item.createdAt ?? '—'}
-                    </td>
-                    <td className={tdCls}>
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
-                        {SUP_MODALITY[item.kind] ?? item.kind}
-                      </span>
-                    </td>
-                    <td className={`${tdCls} max-w-[280px] truncate`} title={supplementSummary(item)}>
-                      {supplementSummary(item)}
-                    </td>
-                    <td className={tdCls}>
-                      <AlertBadge level={item.analysis?.level ?? 'unknown'} size="sm" />
-                    </td>
-                    <td className={`${tdCls} whitespace-nowrap text-right`}>
-                      <Link
-                        to={`/personal/screening?tab=retrieval&assessmentSupplementId=${item.id}`}
-                        className="text-[12px] font-medium text-primary-600 hover:text-primary-700"
-                      >
-                        查看结论
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {supplements.map((item) => {
+                  const linked = item.analysis?.alertId ? alertsById.get(item.analysis.alertId) : undefined;
+                  return (
+                    <tr key={item.id} className="transition-colors hover:bg-slate-50/70">
+                      <td className={`${tdCls} whitespace-nowrap font-mono text-slate-500`}>
+                        {item.createdAt ?? '—'}
+                      </td>
+                      <td className={tdCls}>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
+                          {SUP_MODALITY[item.kind] ?? item.kind}
+                        </span>
+                      </td>
+                      <td className={`${tdCls} max-w-[300px] truncate`} title={supplementSummary(item)}>
+                        {supplementSummary(item)}
+                      </td>
+                      <td className={tdCls}>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <AlertBadge level={item.analysis?.level ?? 'unknown'} size="sm" />
+                          {linked && (
+                            <Link
+                              to="/personal/alerts"
+                              title={`${linked.id} · ${linked.title}`}
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-danger-600 hover:underline"
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              预警 · {alertStatusLabel(linked.status)}
+                            </Link>
+                          )}
+                        </div>
+                      </td>
+                      <td className={`${tdCls} whitespace-nowrap text-right`}>
+                        <Link
+                          to={`/personal/screening?tab=retrieval&assessmentSupplementId=${item.id}`}
+                          className="text-[12px] font-medium text-primary-600 hover:text-primary-700"
+                        >
+                          查看结论
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-        )}
-      </div>
-
-      {/* ==================== 预警记录（明细表） ==================== */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <SectionTitle
-          icon={AlertTriangle}
-          title="预警记录"
-          extra={`共 ${warningEvents.length} 条`}
-        />
-        {warningEvents.length === 0 ? (
-          <p className="px-5 py-10 text-center text-[12.5px] text-slate-400">
-            目前没有预警记录。当情绪、压力或睡眠出现持续变化时，系统会在这里登记。
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 bg-white">
-                  <th className={thCls}>时间</th>
-                  <th className={thCls}>事项</th>
-                  <th className={thCls}>等级</th>
-                  <th className={`${thCls} text-right`}>状态</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {warningEvents.map((item) => (
-                  <tr key={item.id} className="transition-colors hover:bg-slate-50/70">
-                    <td className={`${tdCls} whitespace-nowrap font-mono text-slate-500`}>
-                      {item.createdAt}
-                    </td>
-                    <td className={tdCls}>{item.title}</td>
-                    <td className={tdCls}>
-                      <AlertBadge level={item.level} size="sm" />
-                    </td>
-                    <td className={`${tdCls} whitespace-nowrap text-right text-slate-500`}>
-                      {item.status === 'resolved' ? '已处置' : item.status === 'tracking' ? '跟踪中' : '待处置'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ==================== 档案摘要 ==================== */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <SectionTitle icon={Sparkles} title="档案摘要" />
-        {summary ? (
-          <div className="space-y-2.5 px-5 py-4 text-[13px] leading-6 text-slate-600">
-            {summary.map((line, index) => (
-              <p key={index} className="flex gap-2">
-                <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-slate-300" />
-                <span>{line}</span>
-              </p>
-            ))}
-          </div>
-        ) : (
-          <p className="px-5 py-10 text-center text-[12.5px] leading-6 text-slate-400">
-            还没有完成的筛查记录。
-            <br />
-            完成一次筛查后，这里会根据您的最近记录生成摘要。
-          </p>
-        )}
-      </div>
-
-      {/* ==================== 关键时间线 ==================== */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <SectionTitle
-          icon={Clock}
-          title="关键时间线"
-          extra={personalTimeline.length ? `最近 ${personalTimeline.length} 条` : undefined}
-        />
-        {personalTimeline.length === 0 ? (
-          <p className="px-5 py-10 text-center text-[12.5px] text-slate-400">
-            还没有时间线事件。完成筛查、记录近况或产生预警后会自动登记。
-          </p>
-        ) : (
-          <ol className="divide-y divide-slate-100">
-            {personalTimeline.map((event, idx) => {
-              /* 事件类型标出来：问卷（筛查）与检索/采集是两类不同的留痕，
-                 不加标记会让人以为时间线里全是量表 */
-              const chip =
-                event.type === 'screening'
-                  ? { text: '筛查', cls: 'bg-primary-50 text-primary-600' }
-                  : event.type === 'collection'
-                    ? {
-                        text: event.modalityLabel ? `检索·${event.modalityLabel}` : '检索',
-                        cls: 'bg-slate-100 text-slate-600',
-                      }
-                    : event.type === 'warning'
-                      ? { text: '预警', cls: 'bg-danger-50 text-danger-600' }
-                      : { text: '计划', cls: 'bg-warning-50 text-warning-700' };
-              return (
-                <li key={`${event.date}-${idx}`} className="flex gap-4 px-5 py-3">
-                  {/* 日期与时间分两行：时间线现在精确到分钟，一行放不下 */}
-                  <span className="w-20 shrink-0 font-mono text-[11.5px] leading-5 text-slate-400">
-                    {String(event.date).split(' ')[0]}
-                    {String(event.date).split(' ')[1] && (
-                      <>
-                        <br />
-                        {String(event.date).split(' ')[1]}
-                      </>
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-medium ${chip.cls}`}>
-                        {chip.text}
-                      </span>
-                      <p className="text-[13px] font-medium text-slate-800">{event.title}</p>
-                    </div>
-                    {event.detail && (
-                      <p className="mt-0.5 text-[12px] leading-5 text-slate-500">{event.detail}</p>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
         )}
       </div>
 

@@ -4,11 +4,49 @@ export type AlertLevel = 'green' | 'yellow' | 'orange' | 'red';
 export const QUESTIONNAIRE_VERSION = '2026-11-standard-v1';
 export const QUESTIONNAIRE_ANSWER_ENCODING = 'option-index' as const;
 
+/** 反向计分表：题号 → (是否反向, 满分)。原始值按 满分 − 原始值 计入总分。 */
+const REVERSE_ITEMS: Record<string, { items: Set<string>; max: number }> = {
+  'PSS-10': { items: new Set(['4', '5', '7', '8']), max: 4 },
+  SAS: { items: new Set(['5', '9', '13', '17', '19']), max: 5 },
+};
+
+/**
+ * PSQI 七成分算法（Buysse 等 1989）。
+ * 题目编号：1 上床时间 / 2 入睡耗时(分钟) / 3 起床时间 / 4 实际睡眠(分钟) /
+ *          5~14 = Q5a~Q5j（0~3）/ 15 整体睡眠质量 / 16 服药 / 17 日间困倦 / 18 精力不足
+ * 返回 7 个成分分（各 0~3），总分 0~21，>7 提示睡眠质量差。
+ */
+export function psqiComponents(answers: Record<string, number>): number[] {
+  const q = (k: string) => answers[k] ?? 0;
+  const twoToThree = (v: number) => (v <= 0 ? 0 : v <= 2 ? 1 : v <= 4 ? 2 : 3);
+  const latency = q('2');
+  const latencyBand = latency <= 15 ? 0 : latency <= 30 ? 1 : latency <= 60 ? 2 : 3;
+  const c1 = q('15');
+  const c2 = twoToThree(latencyBand + q('5'));
+  const dur = q('4');
+  const c3 = dur > 420 ? 0 : dur > 360 ? 1 : dur > 300 ? 2 : 3;
+  const bed = q('1');
+  const wake = q('3');
+  const inBed = ((wake - bed) + 1440) % 1440 || 1;
+  const rate = Math.min(100, Math.round((dur / inBed) * 100));
+  const c4 = rate > 85 ? 0 : rate >= 75 ? 1 : rate >= 65 ? 2 : 3;
+  const disturbance = [6, 7, 8, 9, 10, 11, 12, 13, 14].reduce((s, id) => s + q(String(id)), 0);
+  const c5 = disturbance === 0 ? 0 : disturbance <= 9 ? 1 : disturbance <= 18 ? 2 : 3;
+  const c6 = q('16');
+  const c7 = twoToThree(q('17') + q('18'));
+  return [c1, c2, c3, c4, c5, c6, c7];
+}
+
 /** Local preview only; the server recomputes the result from original answers. */
 export function calculateQuestionnaireScore(id: string, answers: Record<string, number>): number {
-  const reversed = id === 'PSS-10' ? new Set(['4', '5', '7', '8']) : new Set<string>();
+  // PSQI 不是把 18 道题直接相加，先算七个成分再求和（详见 psqiComponents）
+  if (id === 'PSQI') return psqiComponents(answers).reduce((s, v) => s + v, 0);
+  const reverse = REVERSE_ITEMS[id];
+  if (!reverse) {
+    return Object.values(answers).reduce((sum, option) => sum + option, 0);
+  }
   return Object.entries(answers).reduce((sum, [question, option]) =>
-    sum + (reversed.has(question) ? 4 - option : option), 0);
+    sum + (reverse.items.has(question) ? reverse.max - option : option), 0);
 }
 
 export interface QuestionOption {
@@ -17,10 +55,28 @@ export interface QuestionOption {
   label: string;
 }
 
+/**
+ * 题型：
+ *   choice（默认）—— 选项按钮组
+ *   time           —— 时刻选择，答案存「当天第几分钟」（0~1439），如 23:30 → 1410
+ *   number         —— 数值输入（分钟数）或 0~3 量表按钮
+ * PSQI 的上床/起床时间与入睡耗时、睡眠时长依赖这些题型；
+ * 其余量表全是 choice，不受影响。
+ */
+export type QuestionKind = 'choice' | 'time' | 'number';
+
 export interface Question {
   id: number;
   text: string;
+  kind?: QuestionKind;
+  /** time / number 为空数组；choice 必填 */
   options: QuestionOption[];
+  /** time / number 的补充说明 */
+  hint?: string;
+  /** number 的取值下限/上限与单位（分钟） */
+  min?: number;
+  max?: number;
+  unit?: string;
 }
 
 export interface QuestionnaireDefinition {
@@ -37,6 +93,8 @@ export interface QuestionnaireDefinition {
     notice: string;
   };
   questions: Question[];
+  /** 满分：含 time/number 题的量表无法用“选项最大值×题数”推算，这里显式给出 */
+  maxScore?: number;
   scoring: (total: number) => {
     level: AlertLevel;
     label: string;
@@ -57,6 +115,45 @@ const frequency5: QuestionOption[] = [
   { value: 2, label: '有时' },
   { value: 3, label: '经常' },
   { value: 4, label: '总是' },
+];
+
+/** UCLA-3：1~3 分（总分 3~9，注意不是从 0 起） */
+const ucla3: QuestionOption[] = [
+  { value: 1, label: '很少' },
+  { value: 2, label: '有时' },
+  { value: 3, label: '经常' },
+];
+
+/** SAS：1~4 分（粗分 20~80，标准分 = 粗分 × 1.25） */
+const sas4: QuestionOption[] = [
+  { value: 1, label: '没有或很少时间' },
+  { value: 2, label: '小部分时间' },
+  { value: 3, label: '相当多时间' },
+  { value: 4, label: '绝大部分或全部时间' },
+];
+
+/** PSQI 频率题：0~3 */
+const psqi4: QuestionOption[] = [
+  { value: 0, label: '没有' },
+  { value: 1, label: '每周不到 1 次' },
+  { value: 2, label: '每周 1~2 次' },
+  { value: 3, label: '每周 3 次以上' },
+];
+
+/** PSQI 主观睡眠质量：0~3（0 最好） */
+const psqiQuality: QuestionOption[] = [
+  { value: 0, label: '很好' },
+  { value: 1, label: '较好' },
+  { value: 2, label: '较差' },
+  { value: 3, label: '很差' },
+];
+
+/** PSQI 日间精力不足：0~3（0 最好） */
+const psqiEnergy: QuestionOption[] = [
+  { value: 0, label: '没有' },
+  { value: 1, label: '偶尔有' },
+  { value: 2, label: '有时有' },
+  { value: 3, label: '经常有' },
 ];
 
 // PSS-10 item order and reverse scoring: Cohen laboratory, CMU.
@@ -196,5 +293,132 @@ export const questionnaires: QuestionnaireDefinition[] = [
       { id: 10, text: '感到困难的事情累积太多，以致无法克服？', options: frequency5 },
     ],
     scoring: () => ({ level: 'yellow', label: '压力自评分数', description: 'PSS-10 没有统一诊断分界值，请结合生活背景理解 0–40 分的连续结果。同版本复评可用于观察变化；不按总分判定疾病或危机。' }),
+  },
+  // ---------------- UCLA-3 孤独感（Hughes 等 2004）：3 题、每题 1~3、总分 3~9 ----------------
+  {
+    id: 'UCLA-3',
+    name: 'UCLA-3 孤独感量表',
+    description: '三项量表，快速了解近期的孤独感',
+    instructions: '请回想最近一段时间，选择最接近您感受的一项。',
+    introduction: {
+      summary: 'UCLA-3 是三项孤独感量表，用三个问题了解您感到缺少陪伴、被冷落、与他人隔绝的频率。它很短，适合随时做一次，用来看近期的变化。',
+      measures: ['缺少陪伴的感受', '被冷落的感受', '与他人隔绝的感受'],
+      suitableFor: '最近觉得没什么人说得上话，或想快速了解自己近期的人际感受时。',
+      recallPeriod: '请按最近一段时间的整体感受作答。',
+      scoreBands: [
+        { range: '3–5', label: '孤独感低' },
+        { range: '6–7', label: '需要关注' },
+        { range: '8–9', label: '孤独感偏高' },
+      ],
+      notice: '孤独感是常见的感受，不等于心理疾病。评分偏高时，优先考虑联系可信任的人或学校的心理支持资源。',
+    },
+    questions: [
+      { id: 1, text: '你多久感到缺少陪伴？', options: ucla3 },
+      { id: 2, text: '你多久感到被冷落？', options: ucla3 },
+      { id: 3, text: '你多久感到与他人隔绝？', options: ucla3 },
+    ],
+    scoring: (total) => {
+      if (total <= 5) return { level: 'green', label: '孤独感低', description: '本次结果提示近期孤独感较低，人际连结状况尚可。' };
+      if (total <= 7) return { level: 'yellow', label: '孤独感需要关注', description: '本次结果提示孤独感有所上升，建议留意最近的社交状态与情绪变化。' };
+      return { level: 'orange', label: '孤独感偏高', description: '本次结果提示孤独感偏高，建议主动联系可信任的人，必要时寻求学校心理支持。' };
+    },
+  },
+  // ---------------- SAS 焦虑自评量表（Zung）：20 题、1~4 计分、第 5/9/13/17/19 反向 ----------------
+  {
+    id: 'SAS',
+    name: 'SAS 焦虑自评量表',
+    description: '20 题自评，评估近一周的焦虑症状',
+    instructions: '请根据最近一周的实际感觉，选择最符合的一项。有些题目是正向描述，请照实作答。',
+    introduction: {
+      summary: 'SAS 是经典的焦虑自评量表，20 个题目覆盖紧张、害怕、心慌、躯体不适等焦虑相关体验。它与 GAD-7 互为补充：GAD-7 更短更快，SAS 覆盖的躯体症状更细。',
+      measures: ['紧张与着急', '害怕与失控感', '心慌、头晕、手脚发麻等躯体感受', '睡眠与消化相关困扰'],
+      suitableFor: '最近容易紧张、担心、心慌，或想从更细的躯体症状角度了解焦虑程度时。',
+      recallPeriod: '请按照最近一周的真实情况作答。',
+      scoreBands: [
+        { range: '标准分 <50', label: '无焦虑症状' },
+        { range: '标准分 50–59', label: '轻度焦虑' },
+        { range: '标准分 60–69', label: '中度焦虑' },
+        { range: '标准分 ≥70', label: '重度焦虑' },
+      ],
+      notice: 'SAS 用标准分（粗分 × 1.25 取整）判断程度，结果仅用于筛查参考，不等同于焦虑障碍的诊断。',
+    },
+    questions: [
+      { id: 1, text: '我觉得比平常容易紧张和着急', options: sas4 },
+      { id: 2, text: '我无缘无故地感到害怕', options: sas4 },
+      { id: 3, text: '我容易心里烦乱或觉得惊恐', options: sas4 },
+      { id: 4, text: '我觉得我可能将要发疯', options: sas4 },
+      { id: 5, text: '我觉得一切都很好，也不会发生什么不幸', options: sas4 },
+      { id: 6, text: '我手脚发抖打颤', options: sas4 },
+      { id: 7, text: '我因为头痛、颈痛和背痛而苦恼', options: sas4 },
+      { id: 8, text: '我感觉容易衰弱和疲乏', options: sas4 },
+      { id: 9, text: '我觉得心平气和，并且容易安静坐着', options: sas4 },
+      { id: 10, text: '我觉得心跳得很快', options: sas4 },
+      { id: 11, text: '我因为一阵阵头晕而苦恼', options: sas4 },
+      { id: 12, text: '我有过晕倒发作，或觉得要晕倒似的', options: sas4 },
+      { id: 13, text: '我呼气吸气都感到很容易', options: sas4 },
+      { id: 14, text: '我手脚麻木和刺痛', options: sas4 },
+      { id: 15, text: '我因为胃痛和消化不良而苦恼', options: sas4 },
+      { id: 16, text: '我常常要小便', options: sas4 },
+      { id: 17, text: '我的手常常是干燥温暖的', options: sas4 },
+      { id: 18, text: '我脸红发热', options: sas4 },
+      { id: 19, text: '我容易入睡并且一夜睡得很好', options: sas4 },
+      { id: 20, text: '我做恶梦', options: sas4 },
+    ],
+    scoring: (total) => {
+      // total 为粗分（20~80）；标准分 = 粗分 × 1.25 取整
+      const std = Math.round(total * 1.25);
+      if (std < 50) return { level: 'green', label: `无焦虑症状（标准分 ${std}）`, description: '本次结果未提示明显焦虑症状。' };
+      if (std < 60) return { level: 'yellow', label: `轻度焦虑（标准分 ${std}）`, description: '本次结果提示轻度焦虑，建议关注压力来源与休息状况。' };
+      if (std < 70) return { level: 'orange', label: `中度焦虑（标准分 ${std}）`, description: '本次结果提示中度焦虑，建议进一步专业评估。' };
+      return { level: 'red', label: `重度焦虑（标准分 ${std}）`, description: '本次结果提示重度焦虑，建议尽快联系专业人员进一步评估。' };
+    },
+  },
+  // ---------------- PSQI 匹兹堡睡眠质量指数（Buysse 等 1989）：18 题、七成分、总分 0~21 ----------------
+  {
+    id: 'PSQI',
+    name: 'PSQI 匹兹堡睡眠质量指数',
+    description: '评估近一个月的整体睡眠质量，比 ISI 更细',
+    instructions: '以下问题关于您最近一个月的睡眠习惯，请按多数情况填写。',
+    introduction: {
+      summary: 'PSQI 从七个成分评估睡眠：主观质量、入睡时间、睡眠时长、睡眠效率、睡眠障碍、催眠药物、日间功能。相比 ISI（失眠严重程度），PSQI 更全面地反映"睡得够不够、效率高不高"。',
+      measures: ['主观睡眠质量', '入睡所需时间', '实际睡眠时长与卧床时间之比', '夜间困扰（起夜、疼痛、做梦等）', '日间精力与困倦'],
+      suitableFor: '想了解整体睡眠质量，而不只是"失眠有多严重"时；可与 ISI 一起做，两者看的角度不同。',
+      recallPeriod: '请按照最近一个月的多数情况填写。',
+      scoreBands: [
+        { range: '0–4', label: '睡眠质量良好' },
+        { range: '5–7', label: '睡眠质量一般' },
+        { range: '8–14', label: '睡眠质量差' },
+        { range: '15–21', label: '睡眠质量很差' },
+      ],
+      notice: 'PSQI 总分 >7 通常提示睡眠质量差。结果用于筛查参考，不构成睡眠障碍诊断；长期睡眠问题建议就医。',
+    },
+    // 18 题：1 上床时间 / 2 入睡耗时 / 3 起床时间 / 4 实际睡眠 / 5~14 夜间困扰 / 15~18 质量与日间
+    maxScore: 21,
+    questions: [
+      { id: 1, text: '最近一个月，您通常几点上床睡觉？', kind: 'time', options: [], hint: '选择最接近的时刻即可' },
+      { id: 2, text: '上床后通常需要多久才能入睡？', kind: 'number', options: [], min: 0, max: 240, unit: '分钟' },
+      { id: 3, text: '最近一个月，您通常几点起床？', kind: 'time', options: [], hint: '选最接近的时刻即可' },
+      { id: 4, text: '最近一个月，您每晚实际睡了多少小时？', kind: 'number', options: [], min: 0, max: 720, unit: '分钟' },
+      { id: 5, text: '不能在 30 分钟内入睡', options: psqi4, hint: '近一个月，因下列情况影响睡眠的频率' },
+      { id: 6, text: '夜间或凌晨醒来', options: psqi4 },
+      { id: 7, text: '需要起床上厕所', options: psqi4 },
+      { id: 8, text: '呼吸不畅', options: psqi4 },
+      { id: 9, text: '咳嗽或打鼾', options: psqi4 },
+      { id: 10, text: '感觉冷', options: psqi4 },
+      { id: 11, text: '感觉热', options: psqi4 },
+      { id: 12, text: '做恶梦', options: psqi4 },
+      { id: 13, text: '疼痛不适', options: psqi4 },
+      { id: 14, text: '其他影响睡眠的事情', options: psqi4 },
+      { id: 15, text: '总体来说，您觉得自己的睡眠质量', options: psqiQuality },
+      { id: 16, text: '最近一个月，您用药物催眠的情况', options: psqi4 },
+      { id: 17, text: '最近一个月，您常感到困倦吗', options: psqi4 },
+      { id: 18, text: '最近一个月，您做事情的精力不足吗', options: psqiEnergy },
+    ],
+    scoring: (total) => {
+      if (total <= 4) return { level: 'green', label: `睡眠质量良好（${total}/21）`, description: '本次结果提示整体睡眠质量良好。' };
+      if (total <= 7) return { level: 'yellow', label: `睡眠质量一般（${total}/21）`, description: '本次结果提示睡眠质量一般，可以留意入睡时间与夜间醒来情况。' };
+      if (total <= 14) return { level: 'orange', label: `睡眠质量差（${total}/21）`, description: '本次结果提示睡眠质量偏差，建议结合 ISI 一起看，并考虑专业评估。' };
+      return { level: 'red', label: `睡眠质量很差（${total}/21）`, description: '本次结果提示睡眠质量很差，建议尽快寻求专业帮助。' };
+    },
   },
 ];

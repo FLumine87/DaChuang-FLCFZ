@@ -517,7 +517,8 @@ export async function submitScreening(data: {
       maxScore: data.maxScore,
     };
   }
-  return request.post('/api/personal/screenings', data);
+  /* 上传同意已在提交前的弹窗里确认过；后端仍会再校验一次 consent === true */
+  return request.post('/api/personal/screenings', { ...data, consent: true });
 }
 
 /** 采集分析报告里的一条命中记录（后端 /api/personal/supplements 返回）。 */
@@ -630,7 +631,8 @@ export async function saveUserSupplement(supplement: {
   }
   const data = await request.post<{ id: number; report?: CollectionAnalysis | null }>(
     '/api/personal/supplements',
-    supplement,
+    /* 上传同意在前端弹窗里问过了，到这里只可能带"同意"；后端仍会校验一次 */
+    { ...supplement, consent: true },
   );
   return data?.report ?? null;
 }
@@ -774,6 +776,25 @@ export async function changeMyPassword(input: {
   if (USE_MOCK) return false;
   await request.post<{ changed: boolean }>('/api/account/password', input);
   return true;
+}
+
+/** 训练数据同意状态：默认关闭，关闭时本人记录不进共享训练集 */
+export interface TrainingConsent {
+  enabled: boolean;
+  /** 开启时间（关闭后为空） */
+  sinceAt: string;
+  /** 后端给的说明文案，避免前后端两套说法 */
+  note: string;
+}
+
+export async function getTrainingConsent(): Promise<TrainingConsent | null> {
+  if (USE_MOCK) return { enabled: false, sinceAt: '', note: '' };
+  return request.get<TrainingConsent>('/api/account/training-consent');
+}
+
+export async function setTrainingConsent(enabled: boolean): Promise<TrainingConsent | null> {
+  if (USE_MOCK) return { enabled, sinceAt: '', note: '' };
+  return request.put<TrainingConsent>('/api/account/training-consent', { enabled });
 }
 
 /** 演示数据整包：demo 模式与"演示会话被真实后端拒绝"两种情况共用同一份 */

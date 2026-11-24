@@ -29,6 +29,11 @@ CREATE TABLE IF NOT EXISTS users (
     email         TEXT,
     avatar        TEXT,
     is_active     INTEGER DEFAULT 1,
+    -- 是否同意把本人筛查数据用于模型训练：默认不同意，个人端设置页可开启
+    training_consent    INTEGER DEFAULT 0,
+    training_consent_at DATETIME,
+    -- 提交时是否不再询问上传同意（关闭后每次提交都弹一次；开启则直接不提交）
+    consent_prompt_disabled INTEGER DEFAULT 0,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -346,6 +351,16 @@ def init_db_sync() -> None:
         user_columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
         if "avatar" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
+        # 训练数据同意（个人端设置页开关）：默认 0 = 不同意。
+        # 只有明确开启后，本人的筛查/记录才可能被审核发布进共享训练集；
+        # 判定点见 engines/hashing/engine.py::_collect_db_rows。
+        if "training_consent" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN training_consent INTEGER DEFAULT 0")
+        if "training_consent_at" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN training_consent_at DATETIME")
+        # 「提交时不再询问」：默认 0 = 每次都问（问完不同意就不提交）
+        if "consent_prompt_disabled" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN consent_prompt_disabled INTEGER DEFAULT 0")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_screenings_user_id ON screenings(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_cases_user_id ON cases(user_id)")
         # Agent 知识图谱迁移层（对应 worker/seed/002）：早期本地库缺这两列，

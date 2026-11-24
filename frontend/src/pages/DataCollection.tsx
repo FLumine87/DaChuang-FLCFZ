@@ -10,6 +10,7 @@ import {
   saveUserSupplement,
   type CollectionAnalysis,
 } from '../services/mockApi';
+import { requestConsent } from '../services/consent';
 import ScreeningWorkspace from './ScreeningWorkspace';
 import Retrieval from './Retrieval';
 import { RetainedView } from '../components/RetainedWorkspace';
@@ -19,6 +20,8 @@ interface PersistResult {
   ok: boolean;
   /** 后端同步跑哈希检索引擎生成的检索报告（分析失败为 null） */
   report: CollectionAnalysis | null;
+  /** 用户未同意上传（不是失败，不要报错） */
+  denied?: boolean;
 }
 
 /* 采集按用户独立保存，使用同次多模态检索生成筛查快照，不绑定量表。 */
@@ -26,6 +29,10 @@ async function persistCollection(
   kind: 'text' | 'audio' | 'image',
   payload: { text?: string; filename?: string; url?: string; description?: string },
 ): Promise<PersistResult> {
+  /* 上传前先问一次「是否同意上传」；不同意就不落库（文件已上传的不算，记录不保存） */
+  if (!(await requestConsent())) {
+    return { ok: false, denied: true, report: null };
+  }
   try {
     const report = await saveUserSupplement({ kind, ...payload, analysisMode: 'retrieval' });
     return { ok: true, report };
@@ -326,7 +333,9 @@ function AudioTab({ onReport, onInputChange }: CollectionInputProps) {
                   if (sequence !== revision.current) return;
                   const res = await persistCollection('audio', { filename: up.filename, url: up.url, description: up.analysis });
                   if (sequence !== revision.current) return;
-                  if (!res.ok) throw new Error('本次采集保存失败，请重试');
+                  /* 用户没同意上传：既不算失败，也不要提示出错，直接中止本次采集 */
+      if (res.denied) return;
+      if (!res.ok) throw new Error('本次采集保存失败，请重试');
                   if (res.report) onReport(res.report);
                 } catch (e) {
                   console.error('上传音频失败', e);
@@ -563,7 +572,9 @@ function ImageTab({ onReport, onInputChange }: CollectionInputProps) {
                       if (sequence !== revision.current) return;
                       const res = await persistCollection('image', { filename: up.filename, url: up.url, description: up.analysis });
                       if (sequence !== revision.current) return;
-                      if (!res.ok) throw new Error('本次采集保存失败，请重试');
+                      /* 用户没同意上传：既不算失败，也不要提示出错，直接中止本次采集 */
+      if (res.denied) return;
+      if (!res.ok) throw new Error('本次采集保存失败，请重试');
                       if (res.report) onReport(res.report);
                     } catch (e) {
                       console.error('上传图像失败', e);
@@ -680,6 +691,10 @@ function TextTab({ onReport, onInputChange }: CollectionInputProps) {
     try {
       const res = await persistCollection('text', { text: content });
       if (sequence !== revision.current) return;
+      if (res.denied) {
+        setError('未同意上传，本次记录没有保存。');
+        return;
+      }
       if (res.ok) {
         setSaved(true);
         setSavedSupplementId(res.report?.supplementId ?? null);

@@ -1101,6 +1101,24 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
             return []
         rows: List[Dict] = []
         scopes = {"approved": "public", "rejected": "rejected"}
+        # 训练数据同意闸门：没同意 users.training_consent 的用户，记录永远停在
+        # reviewing —— 仍然出现在「数据审核」待审队列里（管理员看得见、可以拒绝），
+        # 但不会被放行到 public（可训练）。
+        #
+        # 早期实现这里返回 "private"，结果重建索引后这些记录直接从审核队列里消失了，
+        # 管理员以为"没有新数据"。真正拦住训练的是两处：
+        #   1) 这里不给 public
+        #   2) review_service.review() 批准前再查一次同意状态，不同意的直接跳过
+        try:
+            consented = {int(r["id"]) for r in db.query(
+                "SELECT id FROM users WHERE COALESCE(training_consent, 0) = 1")}
+        except Exception:
+            consented = set()
+
+        def scope_for(review_status, user_id):
+            if user_id is not None and int(user_id) not in consented:
+                return "reviewing"
+            return scopes.get(review_status, "reviewing")
         try:
             for s in db.query("SELECT * FROM screenings"):
                 q = ""
@@ -1118,7 +1136,7 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                     date=_date_iso(s.get("created_at")),
                     deid_terms=[s.get("name")],
                 )
-                rows.append({**row, "scope": scopes.get(s.get("review_status"), "reviewing"),
+                rows.append({**row, "scope": scope_for(s.get("review_status"), s.get("user_id")),
                              "user_id": s.get("user_id")})
             for c in db.query("SELECT * FROM cases"):
                 summary = f"{c.get('name')}。{c.get('notes') or ''}".strip()
@@ -1139,7 +1157,7 @@ class DynamicCrossModalHashingEngine(HashingEngineInterface):
                 summary = item.get("text") or item.get("description") or item.get("filename") or ""
                 row = self._make_row(f"sup-{item['id']}", summary, F.extract_themes(summary),
                                      "green", kind, _date_iso(item.get("created_at")))
-                rows.append({**row, "scope": scopes.get(item.get("review_status"), "reviewing"),
+                rows.append({**row, "scope": scope_for(item.get("review_status"), item.get("user_id")),
                              "user_id": item.get("user_id"),
                              "media_path": resolve_index_media(item.get("url") or "", item.get("user_id"), kind)})
         except Exception:

@@ -18,7 +18,8 @@ CHINA = timezone(timedelta(hours=8))
 LABELS = {'unknown':'待评估', 'green':'现有记录未提示明显关注信号', 'yellow':'需要关注',
           'orange':'建议人工复核', 'red':'需及时安全复核'}
 ORDER = {'unknown':-1,'green':0,'yellow':1,'orange':2,'red':3}
-DOMAINS = {'PHQ-9':'抑郁相关症状','GAD-7':'焦虑相关症状','ISI':'睡眠','PSS-10':'压力'}
+DOMAINS = {'PHQ-9':'抑郁相关症状','GAD-7':'焦虑相关症状','ISI':'睡眠','PSQI':'睡眠质量',
+           'PSS-10':'压力','UCLA-3':'孤独感','SAS':'焦虑自评'}
 FEATURES = {'symptom','duration','frequency','functional_impact','safety'}
 CONSENT_TTL = 300  # A stopped/offline personal service cannot leave AI consent live forever.
 SCHEMA = [
@@ -191,11 +192,25 @@ async def summary(uid, *, now=None):
     cache=await db.query_a('SELECT * FROM risk_extractions WHERE user_id=? AND extractor_version=?',(uid,consent.get('extractor_version',''))) if consent.get('enabled') else []
     cache={(r['source_id'],r['source_hash']):r for r in cache}
     levels=[];reasons=[];flags=[];findings=[];dimensions=[];used=set();negative_days=set()
+    # 依据文案 → 条目，用于把重复命中的同一条依据归并成一行
+    reason_by_text={}
     incomplete=0;eligible=0;done=0;failed=0
 
     def raise_level(level,reason,source_id):
         if level in ORDER and level!='unknown':levels.append(level)
-        reasons.append({'text':reason,'source_ids':[source_id],'level':level})
+        # 同一条依据会被多个片段 / 多条记录反复命中（例如"多模态检索存在需要核实的
+        # 参考线索"对每个 yellow 的检索记录都会触发一次）。原先每次都 append 一条，
+        # 界面上就出现七八行一模一样的文字。这里按文案归并：只在首次出现时建条目，
+        # 后续命中把 source_id 追加进去，等级取其中最高的。
+        entry=reason_by_text.get(reason)
+        if entry is None:
+            entry={'text':reason,'source_ids':[],'level':level}
+            reason_by_text[reason]=entry
+            reasons.append(entry)
+        if source_id not in entry['source_ids']:
+            entry['source_ids'].append(source_id)
+        if ORDER.get(level,-1)>ORDER.get(entry['level'],-1):
+            entry['level']=level
         used.add(source_id)
 
     def add_flag(source,kind,urgent=False):

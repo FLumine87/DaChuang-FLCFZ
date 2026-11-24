@@ -15,7 +15,16 @@ QUESTIONNAIRE_VERSION = "2026-11-standard-v1"
 NEGATIVE_WINDOW_DAYS = max(1, int(os.getenv("SCREENING_NEGATIVE_WINDOW_DAYS", "14")))
 NEGATIVE_DAY_THRESHOLD = max(2, int(os.getenv("SCREENING_NEGATIVE_DAY_THRESHOLD", "3")))
 CHINA_TZ = timezone(timedelta(hours=8))
-SPECS = {"PHQ-9": (9, 3), "GAD-7": (7, 3), "ISI": (7, 4), "PSS-10": (10, 4)}
+SPECS = {"PHQ-9": (9, 3), "GAD-7": (7, 3), "ISI": (7, 4), "PSS-10": (10, 4),
+         "UCLA-3": (3, 3), "SAS": (20, 4),
+         # PSQI 特殊：18 道题先算 7 个成分，总分 = 成分和（0~21）。
+         # 这里用 (7, 3) 表示"7 个成分 × 每成分最高 3 分"，供分数范围校验使用；
+         # 题目级的校验在 _score_psqi 里单独做。
+         "PSQI": (7, 3)}
+# 反向计分题：这里只放"整表逐题反向"的量表；PSQI 走成分算法，不在此列。
+REVERSE_ITEMS = {"PSS-10": ((4, 5, 7, 8), 4), "SAS": ((5, 9, 13, 17, 19), 5)}
+# PSQI 题号 → 允许的最大值（1/3 为时刻 0~1439；2/4 为分钟数；5~18 为 0~3）
+PSQI_LIMITS = {"1": 1439, "2": 1440, "3": 1439, "4": 1440}
 
 # These rules identify an explicit statement, not a diagnosis or hidden affect.
 SIGNALS = {
@@ -101,8 +110,65 @@ def _json(value: Any) -> dict:
         return {}
 
 
+def _score_psqi(answers: dict, *, version: str | None, encoding: str | None) -> dict:
+    """PSQI 七成分计分（Buysse 等 1989）。
+
+    题目编码（全部为整数）：
+      1 上床时刻（当天第几分钟）  2 入睡耗时（分钟）
+      3 起床时刻（当天第几分钟）  4 实际睡眠（分钟）
+      5~14 = Q5a~Q5j（0~3）      15 整体睡眠质量  16 服药  17 日间困倦  18 精力不足
+    成分：
+      C1 主观质量 = 15
+      C2 入睡延迟 = band(2) + 5 → 0~6 压成 0~3
+      C3 睡眠时长 = band(4)
+      C4 睡眠效率 = 实际睡眠 / 卧床时长
+      C5 睡眠障碍 = 6~14 求和 0~27 → 0~3
+      C6 催眠药物 = 16
+      C7 日间功能 = 17 + 18 → 0~6 压成 0~3
+    """
+    if not isinstance(answers, dict) or set(answers) != {str(i) for i in range(1, 19)}:
+        raise HttpError(400, "问卷答案不完整")
+    for key, value in answers.items():
+        if type(value) is not int:
+            raise HttpError(400, "问卷答案无效")
+        if not 0 <= value <= PSQI_LIMITS.get(key, 3):
+            raise HttpError(400, "问卷答案无效")
+    if version and version != QUESTIONNAIRE_VERSION:
+        raise HttpError(400, "量表版本已更新，请刷新后重新作答")
+    if encoding not in (None, "option-index"):
+        raise HttpError(400, "作答必须上传原始选项序号")
+
+    def band2(value: int) -> int:
+        """0~6 的合计值压成 0~3（PSQI 官方的两题合并分档）。"""
+        return 0 if value <= 0 else 1 if value <= 2 else 2 if value <= 4 else 3
+
+    latency = answers["2"]
+    latency_band = 0 if latency <= 15 else 1 if latency <= 30 else 2 if latency <= 60 else 3
+    duration = answers["4"]
+    duration_band = 0 if duration > 420 else 1 if duration > 360 else 2 if duration > 300 else 3
+    # 卧床时长按跨零点处理（如 23:30 上床、07:00 起床 → 450 分钟）
+    in_bed = ((answers["3"] - answers["1"]) + 1440) % 1440 or 1
+    efficiency = min(100, round(duration / in_bed * 100))
+    efficiency_band = 0 if efficiency > 85 else 1 if efficiency >= 75 else 2 if efficiency >= 65 else 3
+    disturbance = sum(answers[str(i)] for i in range(6, 15))
+    disturbance_band = 0 if disturbance == 0 else 1 if disturbance <= 9 else 2 if disturbance <= 18 else 3
+
+    components = [answers["15"], band2(latency_band + answers["5"]), duration_band, efficiency_band,
+                  disturbance_band, answers["16"], band2(answers["17"] + answers["18"])]
+    score = sum(components)
+    level, severity = classify_scale_score("PSQI", score)
+    return {"code": "PSQI", "score": score, "maxScore": 21, "level": level,
+            "symptomSeverity": severity, "safetyStatus": "not_identified",
+            "requiresHumanReview": level == "orange", "version": QUESTIONNAIRE_VERSION,
+            "answerEncoding": "option-index",
+            # 保留成分分与睡眠效率，方便报告里解释"为什么是这个等级"
+            "components": components, "sleepEfficiency": efficiency}
+
+
 def score_questionnaire(code: str, answers: dict, *, version: str | None = None,
                         encoding: str | None = None) -> dict:
+    if code == "PSQI":
+        return _score_psqi(answers, version=version, encoding=encoding)
     if code not in SPECS:
         raise HttpError(400, "该量表暂不支持个人自助提交")
     count, option_max = SPECS[code]
@@ -116,7 +182,8 @@ def score_questionnaire(code: str, answers: dict, *, version: str | None = None,
         raise HttpError(400, "作答必须上传原始选项序号")
     if code == "PSS-10" and (version != QUESTIONNAIRE_VERSION or encoding != "option-index"):
         raise HttpError(400, "PSS-10题目和计分已更新，请刷新后按新版重新作答")
-    scores = {key: (4 - value if code == "PSS-10" and int(key) in (4, 5, 7, 8) else value)
+    reverse, reverse_max = REVERSE_ITEMS.get(code, ((), 0))
+    scores = {key: (reverse_max - value if int(key) in reverse else value)
               for key, value in answers.items()}
     score = sum(scores.values())
     level, severity = classify_scale_score(code, score)
@@ -140,6 +207,26 @@ def classify_scale_score(code: str, score: int) -> tuple[str, str]:
     elif code == "ISI":
         level = "green" if score <= 7 else "yellow" if score <= 14 else "orange"
         severity = next(name for limit, name in zip((7, 14, 21, 28), ("未达失眠阈值", "亚阈值失眠", "中等失眠症状", "重度失眠症状")) if score <= limit)
+    elif code == "SAS":
+        # SAS 用「标准分」分界：标准分 = 粗分 × 1.25 取整（粗分 20~80 → 标准分 25~100）。
+        # 分界：<50 无焦虑；50~59 轻度；60~69 中度；≥70 重度。
+        std = int(round(score * 1.25))
+        level = "green" if std < 50 else "yellow" if std < 60 else "orange" if std < 70 else "red"
+        severity = next(name for limit, name in zip(
+            (49, 59, 69, 100),
+            ("无焦虑症状（标准分<50）", "轻度焦虑（标准分50-59）",
+             "中度焦虑（标准分60-69）", "重度焦虑（标准分≥70）"))
+            if std <= limit)
+    elif code == "UCLA-3":
+        # UCLA 三项孤独感量表：每题 1~3 分，总分 3~9；≥6 提示孤独感偏高。
+        level = "green" if score <= 5 else "yellow" if score <= 7 else "orange"
+        severity = next(name for limit, name in zip((5, 7, 9), ("孤独感低", "孤独感需要关注", "孤独感偏高")) if score <= limit)
+    elif code == "PSQI":
+        # 七成分合计 0~21；>7 传统上提示睡眠质量差。
+        level = "green" if score <= 4 else "yellow" if score <= 7 else "orange" if score <= 14 else "red"
+        severity = next(name for limit, name in zip(
+            (4, 7, 14, 21), ("睡眠质量良好", "睡眠质量一般", "睡眠质量差", "睡眠质量很差"))
+            if score <= limit)
     else:
         level, severity = "yellow", "压力自评分数（无统一诊断界值）"
     return level, severity
@@ -174,7 +261,11 @@ def build_symptom_query(screening: dict, supplements: list[dict] | None = None) 
         values = _json(values.get("values")) if "values" in values else values
         item_labels = {"PHQ-9": {1: "兴趣下降", 2: "情绪低落", 3: "睡眠困难", 4: "精力下降", 5: "食欲改变", 6: "自我评价困扰", 7: "注意力困难", 8: "活动节奏改变"},
                        "GAD-7": {1: "紧张焦虑", 2: "担忧难控制", 3: "多方面担忧", 4: "难以放松", 5: "坐立不安", 6: "烦躁", 7: "恐惧不安"},
-                       "ISI": {1: "入睡困难", 2: "睡眠维持困难", 3: "早醒", 4: "睡眠不满意", 5: "睡眠影响日间活动", 6: "睡眠问题被注意", 7: "睡眠困扰"}}
+                       "ISI": {1: "入睡困难", 2: "睡眠维持困难", 3: "早醒", 4: "睡眠不满意", 5: "睡眠影响日间活动", 6: "睡眠问题被注意", 7: "睡眠困扰"},
+                       "UCLA-3": {1: "缺少陪伴", 2: "被冷落感", 3: "与他人隔绝"},
+                       # SAS 只标注前 4 题（症状条目）与 3 个反向题，避免把 20 条全铺进检索式
+                       "SAS": {1: "紧张着急", 2: "无端害怕", 3: "烦乱惊恐", 4: "担心失控",
+                               5: "认为一切尚好（反向题）", 9: "心平气和（反向题）", 19: "入睡良好（反向题）"}}
         labels.extend(label for number, label in item_labels.get(scale["code"], {}).items() if (values.get(str(number)) or 0) > 0)
     # Never include name, score, disease label or alert colour in the retrieval query.
     labels.extend(signals["known"].values())

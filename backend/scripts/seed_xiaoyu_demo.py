@@ -96,6 +96,26 @@ FREQ5 = [
     {"value": 3, "label": "经常"},
     {"value": 4, "label": "总是"},
 ]
+# UCLA-3：1~3 分（注意不是从 0 起，总分 3~9）
+UCLA3 = [
+    {"value": 1, "label": "很少"},
+    {"value": 2, "label": "有时"},
+    {"value": 3, "label": "经常"},
+]
+# SAS：1~4 分（粗分 20~80，标准分 = 粗分 × 1.25）
+SAS4 = [
+    {"value": 1, "label": "没有或很少时间"},
+    {"value": 2, "label": "小部分时间"},
+    {"value": 3, "label": "相当多时间"},
+    {"value": 4, "label": "绝大部分或全部时间"},
+]
+# PSQI 频率题：0~3
+PSQI4 = [
+    {"value": 0, "label": "没有"},
+    {"value": 1, "label": "每周不到 1 次"},
+    {"value": 2, "label": "每周 1~2 次"},
+    {"value": 3, "label": "每周 3 次以上"},
+]
 
 
 def _q(items, options):
@@ -192,6 +212,98 @@ QUESTIONNAIRES = [
             {"min": 34, "max": 40, "level": "red", "label": "压力很高"},
         ]},
     },
+    # ---- UCLA-3 三项孤独感量表（Hughes 等 2004）：每题 1~3，总分 3~9，≥6 提示孤独感偏高 ----
+    {
+        "code": "UCLA-3",
+        "name": "UCLA-3 孤独感量表",
+        "description": "三项量表，评估近期的孤独感；题量最小，适合随时做一次",
+        "max_score": 9,
+        "questions": _q([
+            "你多久感到缺少陪伴？",
+            "你多久感到被冷落？",
+            "你多久感到与他人隔绝？",
+        ], UCLA3),
+        "scoring_rules": {"type": "ucla3", "bands": [
+            {"min": 3, "max": 5, "level": "green", "label": "孤独感低"},
+            {"min": 6, "max": 7, "level": "yellow", "label": "孤独感需要关注"},
+            {"min": 8, "max": 9, "level": "orange", "label": "孤独感偏高"},
+        ]},
+    },
+    # ---- SAS 焦虑自评量表（Zung）：20 题，1~4 计分，第 5/9/13/17/19 题反向 ----
+    # 分界用标准分（粗分 × 1.25 取整）：<50 无焦虑，50~59 轻度，60~69 中度，≥70 重度。
+    {
+        "code": "SAS",
+        "name": "SAS 焦虑自评量表",
+        "description": "20 题自评，评估近一周的焦虑症状；与 GAD-7 互为补充",
+        "max_score": 80,
+        "questions": _q([
+            "我觉得比平常容易紧张和着急",
+            "我无缘无故地感到害怕",
+            "我容易心里烦乱或觉得惊恐",
+            "我觉得我可能将要发疯",
+            "我觉得一切都很好，也不会发生什么不幸",
+            "我手脚发抖打颤",
+            "我因为头痛、颈痛和背痛而苦恼",
+            "我感觉容易衰弱和疲乏",
+            "我觉得心平气和，并且容易安静坐着",
+            "我觉得心跳得很快",
+            "我因为一阵阵头晕而苦恼",
+            "我有过晕倒发作，或觉得要晕倒似的",
+            "我呼气吸气都感到很容易",
+            "我手脚麻木和刺痛",
+            "我因为胃痛和消化不良而苦恼",
+            "我常常要小便",
+            "我的手常常是干燥温暖的",
+            "我脸红发热",
+            "我容易入睡并且一夜睡得很好",
+            "我做恶梦",
+        ], SAS4),
+        "scoring_rules": {"type": "sas", "bands": [
+            {"min": 20, "max": 39, "level": "green", "label": "无焦虑症状（标准分<50）"},
+            {"min": 40, "max": 47, "level": "yellow", "label": "轻度焦虑（标准分50-59）"},
+            {"min": 48, "max": 55, "level": "orange", "label": "中度焦虑（标准分60-69）"},
+            {"min": 56, "max": 80, "level": "red", "label": "重度焦虑（标准分≥70）"},
+        ]},
+    },
+    # ---- PSQI 匹兹堡睡眠质量指数：18 题、七成分、总分 0~21 ----
+    # 1/3 为时刻（当天第几分钟），2/4 为分钟数，5~18 为 0~3；
+    # 计分走 screening_assessment._score_psqi 的成分算法，不是逐题相加。
+    {
+        "code": "PSQI",
+        "name": "PSQI 匹兹堡睡眠质量指数",
+        "description": "评估近一个月的整体睡眠质量，比 ISI 更细",
+        "max_score": 21,
+        "questions": [
+            {"id": 1, "text": "最近一个月，您通常几点上床睡觉？", "kind": "time", "options": []},
+            {"id": 2, "text": "上床后通常需要多久才能入睡？", "kind": "number", "options": [], "unit": "分钟", "min": 0, "max": 240},
+            {"id": 3, "text": "最近一个月，您通常几点起床？", "kind": "time", "options": []},
+            {"id": 4, "text": "最近一个月，您每晚实际睡了多少小时？", "kind": "number", "options": [], "unit": "分钟", "min": 0, "max": 720},
+            {"id": 5, "text": "不能在 30 分钟内入睡", "options": PSQI4},
+            {"id": 6, "text": "夜间或凌晨醒来", "options": PSQI4},
+            {"id": 7, "text": "需要起床上厕所", "options": PSQI4},
+            {"id": 8, "text": "呼吸不畅", "options": PSQI4},
+            {"id": 9, "text": "咳嗽或打鼾", "options": PSQI4},
+            {"id": 10, "text": "感觉冷", "options": PSQI4},
+            {"id": 11, "text": "感觉热", "options": PSQI4},
+            {"id": 12, "text": "做恶梦", "options": PSQI4},
+            {"id": 13, "text": "疼痛不适", "options": PSQI4},
+            {"id": 14, "text": "其他影响睡眠的事情", "options": PSQI4},
+            {"id": 15, "text": "总体来说，您觉得自己的睡眠质量", "options": [
+                {"value": 0, "label": "很好"}, {"value": 1, "label": "较好"},
+                {"value": 2, "label": "较差"}, {"value": 3, "label": "很差"}]},
+            {"id": 16, "text": "最近一个月，您用药物催眠的情况", "options": PSQI4},
+            {"id": 17, "text": "最近一个月，您常感到困倦吗", "options": PSQI4},
+            {"id": 18, "text": "最近一个月，您做事情的精力不足吗", "options": [
+                {"value": 0, "label": "没有"}, {"value": 1, "label": "偶尔有"},
+                {"value": 2, "label": "有时有"}, {"value": 3, "label": "经常有"}]},
+        ],
+        "scoring_rules": {"type": "psqi", "bands": [
+            {"min": 0, "max": 4, "level": "green", "label": "睡眠质量良好"},
+            {"min": 5, "max": 7, "level": "yellow", "label": "睡眠质量一般"},
+            {"min": 8, "max": 14, "level": "orange", "label": "睡眠质量差"},
+            {"min": 15, "max": 21, "level": "red", "label": "睡眠质量很差"},
+        ]},
+    },
 ]
 QUESTIONNAIRES_BY_CODE = {q["code"]: q["max_score"] for q in QUESTIONNAIRES}
 
@@ -201,6 +313,8 @@ SCALE_SPEC = {
     "GAD-7": (7, 3, (4, 9, 14)),
     "ISI": (7, 4, (7, 14, 21)),
     "PSS-10": (10, 4, (13, 26, 33)),
+    "UCLA-3": (3, 3, (5, 7)),
+    "SAS": (20, 4, (39, 47, 55)),
 }
 
 # ---------------------------------------------------------------------------
@@ -400,6 +514,13 @@ def seed(reset: bool = False, dry_run: bool = False) -> int:
             ("ISI", "ISI 轻度失眠", 8, 14, "yellow", 20),
             ("ISI", "ISI 中度失眠", 15, 21, "orange", 30),
             ("ISI", "ISI 重度失眠", 22, 28, "red", 40),
+            ("UCLA-3", "UCLA-3 孤独感低", 3, 5, "green", 10),
+            ("UCLA-3", "UCLA-3 孤独感需要关注", 6, 7, "yellow", 20),
+            ("UCLA-3", "UCLA-3 孤独感偏高", 8, 9, "orange", 30),
+            ("SAS", "SAS 无焦虑（标准分<50）", 20, 39, "green", 10),
+            ("SAS", "SAS 轻度焦虑（标准分50-59）", 40, 47, "yellow", 20),
+            ("SAS", "SAS 中度焦虑（标准分60-69）", 48, 55, "orange", 30),
+            ("SAS", "SAS 重度焦虑（标准分≥70）", 56, 80, "red", 40),
         ]
         for code, name, lo, hi, level, prio in rules:
             if code not in qid:
