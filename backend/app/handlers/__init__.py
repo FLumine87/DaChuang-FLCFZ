@@ -36,6 +36,8 @@ ROUTES = [
     ("GET", "/api/agent-workspace/cases/{case_id}", agent_workspace.case_detail, "admin"),
     ("PUT", "/api/agent-workspace/tasks/{task_id}", agent_workspace.update_task, "admin"),
     # ---- 认证（公开）----
+    # 登录验证码：四位字母，服务端生成与校验；演示账号会回传 demoCode 供前端自动填充
+    ("GET", "/api/auth/captcha", auth.captcha, None),
     ("POST", "/api/auth/login", auth.login, None),
     ("POST", "/api/auth/register", auth.register, None),
     ("POST", "/api/auth/logout", auth.logout, None),

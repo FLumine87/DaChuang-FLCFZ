@@ -330,7 +330,10 @@ function mockLoginResult(username: string, password: string): LoginResult {
 
 export async function apiLogin(
   username: string,
-  password: string
+  password: string,
+  /** 验证码（服务端生成、服务端校验）；离线演示流程不会用到 */
+  captchaId?: string,
+  captchaCode?: string
 ): Promise<LoginResult> {
   if (USE_MOCK) {
     await delay();
@@ -340,7 +343,11 @@ export async function apiLogin(
   try {
     const data = await request.post<{ token: string; role: string; name: string }>(
       '/api/auth/login',
-      { username, password },
+      {
+        username,
+        password,
+        ...(captchaId ? { captchaId, captchaCode: captchaCode ?? '' } : {}),
+      },
       { timeout: AUTH_TIMEOUT }
     );
     // 后端返回的role可能是'admin'或'counselor'，前端统一处理
