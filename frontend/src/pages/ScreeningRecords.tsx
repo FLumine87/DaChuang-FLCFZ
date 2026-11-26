@@ -143,12 +143,13 @@ function RecordEntry({
   const hasDetail = !!analysis;
   const hasNote = !!(item.note && item.note.trim());
 
-  /* 「用这条去检索」的目标地址：把这条记录的文字带过去（语音/照片取分析里的
-     query 或说明），再加上记录 id —— 检索页会直接填好并打开对应结论，
-     用户不用再手输一遍，也不会检索到别的内容。 */
-  const searchQuery = (
-    analysis?.query || item.text || item.description || item.filename || ''
-  ).trim();
+  /* 「用这条去检索」的目标地址：只把用户自己写的文字带过去，再加上记录 id ——
+     检索页会直接填好并打开对应结论，用户不用再手输一遍。
+     语音/照片的 description 是后端生成的特征提取说明（如「已完成 192 维…」），
+     不是可检索的文字，不能当 q 带过去，否则会在检索页输入框里多出一段说明，
+     还会把这次跳转变成一次文本检索。这类条目只带 id，由检索页按图/按语音
+     直接打开已保存的结论。 */
+  const searchQuery = (item.kind === 'text' ? item.text ?? '' : '').trim();
   const searchHref = `/personal/screening?tab=retrieval&assessmentSupplementId=${item.id}${
     searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''
   }`;
@@ -273,6 +274,31 @@ function RecordEntry({
           </div>
         </div>
 
+        {/* 删除确认：紧贴时间/删除图标下方，正文之前 */}
+        {confirmDel && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg bg-danger-50 px-3 py-2">
+            <span className="text-[12px] font-medium text-danger-700">
+              删除后这条记录与它的便签都会消失，确定？
+            </span>
+            <button
+              type="button"
+              onClick={() => void doDelete()}
+              disabled={deleting}
+              className="rounded bg-danger-600 px-2.5 py-1 text-[11.5px] font-medium text-white hover:bg-danger-700 disabled:opacity-60"
+            >
+              {deleting ? '删除中…' : '确定删除'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDel(false)}
+              disabled={deleting}
+              className="rounded px-2 py-1 text-[11.5px] text-slate-500 hover:bg-white disabled:opacity-50"
+            >
+              取消
+            </button>
+          </div>
+        )}
+
         {/* 正文与媒体左右并排：媒体只占右侧，不撑高记录卡片 */}
         <div className="mt-2 flex flex-wrap items-start gap-3">
           <div className="min-w-[200px] flex-1">
@@ -343,6 +369,9 @@ function RecordEntry({
         <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-2.5">
           <Link
             to={searchHref}
+            /* 把这条记录本身随路由带过去：检索页据此挂载文字 / 语音 / 图片，
+               不依赖列表缓存与 URL 上的文字，避免挂到别的记录上。 */
+            state={{ supplement: item }}
             title="带上这条记录的内容，去检索页重新比对并查看结论"
             className="inline-flex items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1 text-[11.5px] font-medium text-primary-600 transition-colors hover:bg-primary-100"
           >
@@ -428,30 +457,6 @@ function RecordEntry({
           </div>
         )}
 
-        {/* 删除确认 */}
-        {confirmDel && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg bg-danger-50 px-3 py-2">
-            <span className="text-[12px] font-medium text-danger-700">
-              删除后这条记录与它的便签都会消失，确定？
-            </span>
-            <button
-              type="button"
-              onClick={() => void doDelete()}
-              disabled={deleting}
-              className="rounded bg-danger-600 px-2.5 py-1 text-[11.5px] font-medium text-white hover:bg-danger-700 disabled:opacity-60"
-            >
-              {deleting ? '删除中…' : '确定删除'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmDel(false)}
-              disabled={deleting}
-              className="rounded px-2 py-1 text-[11.5px] text-slate-500 hover:bg-white disabled:opacity-50"
-            >
-              取消
-            </button>
-          </div>
-        )}
         {delMsg && <p className="mt-1.5 text-[11.5px] text-danger-600">{delMsg}</p>}
 
         {/* 展开内容：系统当时看到了什么（开关在上面那一行操作区里） */}

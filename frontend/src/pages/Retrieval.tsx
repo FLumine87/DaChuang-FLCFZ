@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { usePageActive } from '../services/pageActivity';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import {
   corpusRecords,
   MODALITY_META,
@@ -54,7 +54,7 @@ import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { toCorpusWavFile } from '../utils/audioRecorder';
 import { assessRetrieval, type RetrievalAnalysisReport as RagReport, type RetrievalAssessment } from '../services/screeningAssessment';
 import RetrievalAssessmentCard from '../components/RetrievalAssessmentCard';
-import type { CollectionAnalysis } from '../services/mockApi';
+import type { CollectionAnalysis, PersonalSupplement } from '../services/mockApi';
 import { readIncludeOriginalInput, readSaveToSystem } from '../services/retrievalPreferences';
 
 const modalityIcons = {
@@ -82,6 +82,13 @@ const SOURCE_LABELS: Record<string, string> = {
 
 type QueryModality = 'text' | 'image' | 'audio';
 
+/* 档案里的媒体是 /uploads/... 相对路径；跨域部署时补上 API 前缀 */
+const API_BASE = ((import.meta.env.VITE_API_BASE_URL as string | undefined) || '').replace(/\/$/, '');
+function assetUrl(url: string): string {
+  if (/^(https?:|blob:|data:)/.test(url)) return url;
+  return `${API_BASE}${url}`;
+}
+
 /** 读取本地文件为纯 base64（后端只接受不含 data URL 前缀的内容） */
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -101,6 +108,7 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
   const pageActiveRef = useRef(pageActive);
   useLayoutEffect(() => { pageActiveRef.current = pageActive; }, [pageActive]);
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<'all' | 'text' | 'audio' | 'image'>('all');
   /* 返回条数：滑条控制 1~20 条（后端另有 1~50 的兜底夹取）。
@@ -122,11 +130,15 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
         传的内容在这张列表里看不到（"只上传不挂靠"的另一面）。 */
   const [mine, setMine] = useState<typeof corpusRecords>([]);
   const savedReportsRef = useRef<Map<number, CollectionAnalysis>>(new Map());
+  /* 补充记录原文缓存：按 id 打开某条记录时直接取它自己的文字/媒体，
+     不用 URL 上的 q 或文件名 —— 那是上一条内容的残留，容易串。 */
+  const supplementsRef = useRef<PersonalSupplement[]>([]);
   useEffect(() => {
     if (collectionReport) return;
     let alive = true;
     getPersonalSupplements().then((sups) => {
       if (!alive) return;
+      supplementsRef.current = sups;
       sups.forEach((item) => { if (item.analysis) savedReportsRef.current.set(item.id, item.analysis); });
       setMine(sups.map((item) => ({ id: `SUP-${item.id}`, date: item.createdAt ?? '', themes: [],
         level: item.analysis?.level ?? 'unknown', severity: 0, context: '我的检索记录', supplementId: item.id,
@@ -377,7 +389,11 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
     }
   };
 
-  const openSavedAssessment = async (row: (typeof corpusRecords)[number], reportOverride?: CollectionAnalysis) => {
+  const openSavedAssessment = async (
+    row: (typeof corpusRecords)[number],
+    reportOverride?: CollectionAnalysis,
+    inputOverride?: { modality?: QueryModality; file?: File | null },
+  ) => {
     if (!row.supplementId) { setQuery(row.text); return; }
     const sequence = ++searchSeqRef.current;
     ++reportSeqRef.current;
@@ -392,7 +408,11 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
     setAssessmentLoading(true); setAssessmentError(null); setError(null);
     assessmentQueryRef.current = row.text;
     savedContextRef.current = { id: row.supplementId, query: row.text };
-    assessmentInputRef.current = { query: row.text, modality: saved?.modality ?? (row.text ? 'text' : row.audio ? 'audio' : 'image'), file: null };
+    assessmentInputRef.current = {
+      query: row.text,
+      modality: inputOverride?.modality ?? saved?.modality ?? (row.text ? 'text' : row.audio ? 'audio' : 'image'),
+      file: inputOverride?.file ?? null,
+    };
     setIndexInfo((saved?.index ?? null) as RetrievalIndexInfo | null);
     try {
       const current = await assessRetrieval({ query: row.text, supplementId: row.supplementId });
@@ -403,6 +423,67 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
     } catch (e) {
       if (sequence === searchSeqRef.current) setAssessmentError(e instanceof Error ? e.message : '历史评估读取失败');
     } finally { if (sequence === searchSeqRef.current) setAssessmentLoading(false); }
+  };
+
+  /* 「用这条去检索」：只认记录 id —— 文字、语音/图片都从这条记录自己身上取，
+     不读 URL 上的 q / 文件名，避免把上一条记录的内容串到这一条。
+       · 纯文字：文字进输入框，不挂媒体；
+       · 文字 + 语音/图片：文字进输入框，同时取回原文件挂到媒体线索；
+       · 纯语音/图片：输入框留空，只挂这条记录自己的媒体。
+     最后打开它已保存的检索结论（没有保存过就按 id 现取一次评估）。 */
+  const openSupplementRecord = async (supplementId: number, fallbackQuery = '') => {
+    const sequence = ++searchSeqRef.current;
+    /* 优先用「筛查记录」跳转时随路由带过来的这条记录本身；
+       刷新 / 其它入口没有携带时，再按 id 从档案里取，最后才退回 URL 上的文字。 */
+    const carried = (location.state as { supplement?: PersonalSupplement } | null)?.supplement ?? null;
+    let item: PersonalSupplement | null = carried && carried.id === supplementId ? carried : null;
+    if (!item) item = supplementsRef.current.find((s) => s.id === supplementId) ?? null;
+    if (!item) {
+      try {
+        const sups = await getPersonalSupplements();
+        supplementsRef.current = sups;
+        item = sups.find((s) => s.id === supplementId) ?? null;
+      } catch {
+        /* 取不到记录也继续按 id 打开结论，不影响用户查看已保存的分析 */
+      }
+    }
+    if (sequence !== searchSeqRef.current) return;
+
+    const modality: QueryModality = item?.kind === 'audio' || item?.kind === 'image' ? item.kind : 'text';
+    const text = (item?.text || item?.analysis?.query || fallbackQuery).trim();
+
+    /* 先清掉上一条记录留下的媒体，再挂这一条自己的 */
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+    setMediaFile(null);
+    setMediaPreview(null);
+    setQueryModality(modality);
+    setScope('all');
+    setQuery(text);
+    setError(null);
+
+    let media: File | null = null;
+    if (item && modality !== 'text' && item.url) {
+      try {
+        const resp = await fetch(assetUrl(item.url));
+        if (resp.ok) {
+          const blob = await resp.blob();
+          media = new File([blob], item.filename || `${modality}-${item.id}`, { type: blob.type || undefined });
+        }
+      } catch {
+        /* 原文件取不回来时只少一张缩略图 / 播放器，结论照常展示 */
+      }
+    }
+    if (sequence !== searchSeqRef.current) return;
+    if (media) {
+      setMediaFile(media);
+      setMediaPreview(URL.createObjectURL(media));
+    }
+
+    void openSavedAssessment({
+      id: `SUP-${supplementId}`, date: item?.createdAt ?? '', themes: [], level: item?.analysis?.level ?? 'unknown',
+      severity: 0, context: '我的记录', text, audio: '', image: '', supplementId,
+      screeningId: item?.screeningId,
+    }, item?.analysis, { modality, file: media });
   };
 
   const saveAssessmentInput = async () => {
@@ -591,10 +672,11 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
     const savedId = Number(searchParams.get('assessmentSupplementId'));
     if ((!autoQuery.trim() && !savedId) || autoRanRef.current === autoContext) return;
     autoRanRef.current = autoContext;
-    if (!autoQuery.trim() && Number.isInteger(savedId) && savedId > 0) {
-      void openSavedAssessment({ id: `SUP-${savedId}`, date: '', themes: [], level: 'unknown', severity: 0,
-        context: '我的记录', text: '', audio: '', image: '', supplementId: savedId,
-        screeningId: searchParams.get('screeningId') || undefined });
+    /* 带记录 id 时一律按这条记录自己的内容挂载（文字 / 语音 / 图片），
+       不再用 URL 上的 q 去跑一次文本检索 —— 否则纯图片条目会把生成的特征说明
+       当查询词，也容易串到上一条内容。 */
+    if (Number.isInteger(savedId) && savedId > 0) {
+      void openSupplementRecord(savedId, autoQuery);
       return;
     }
     setQuery(autoQuery);
