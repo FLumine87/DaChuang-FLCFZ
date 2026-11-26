@@ -18,7 +18,7 @@ function assessment(kind = 'positive', token = 'snapshot-all', supplementId?: nu
 type RagResponse = { report: RetrievalAnalysisReport | null; mock: boolean };
 async function setup(page: Page, history = false, ragResponse: (body: Record<string, unknown>) => Promise<RagResponse> = async () => ({ report: null, mock: true })) {
   const b64 = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
-  await page.addInitScript((token) => localStorage.setItem('psych_token_persistent', token), `${b64({alg:'none'})}.${b64({username:'test',role:'user',exp:9999999999})}.sig`);
+  await page.addInitScript((token) => localStorage.setItem('psych_token_persistent', token), `${b64({alg:'HS256'})}.${b64({username:'test',role:'user',exp:9999999999})}.sig`);
   const requests: {path: string; body: Record<string, unknown>}[] = [];
   let saved = 0;
   await page.route('**/api/**', async (route) => {
@@ -205,6 +205,82 @@ test('历史记录恢复保存的检索证据，不读取旧量表', async ({pag
   expect(calls.requests.some(r=>r.path==='/api/personal/search')).toBe(false);
   expect(calls.requests.some(r=>r.path==='/api/personal/screenings')).toBe(false);
   expect(calls.saved()).toBe(0);
+});
+
+test('筛查记录回填每条原始输入，删除确认紧邻该条记录的删除按钮', async ({page}) => {
+  const calls = await setup(page);
+  const items = [
+    {id:41, kind:'text', text:'本人原始文字'},
+    {id:42, kind:'image', filename:'saved-face.png', url:'/uploads/saved-face.png'},
+    {id:43, kind:'audio', filename:'saved-voice.wav', url:'/uploads/saved-voice.wav'},
+  ].map(item => ({...item, createdAt:'2026-11-07T12:00:00', description:'系统生成的特征说明',
+    analysis:{modality:item.kind, query:'旧分析说明', level:'green', hits:[]}}));
+  await page.route('**/api/personal/records', route => route.fulfill({json:{code:0, data:items.map(item => ({
+    id:`media:${item.id}`, kind:item.kind, at:item.createdAt, supplement:item,
+  }))}}));
+  await page.route('**/uploads/saved-*', route => route.fulfill({
+    contentType:route.request().url().endsWith('.png') ? 'image/png' : 'audio/wav',
+    body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX2sAAAAASUVORK5CYII=', 'base64'),
+  }));
+  for (const item of items) {
+    await page.goto('/#/personal/records');
+    const link = page.getByRole('link', {name:'用这条去检索'}).and(page.locator(`a[href*="assessmentSupplementId=${item.id}"]`));
+    if (item.kind === 'text') {
+      const entry = link.locator('xpath=ancestor::article');
+      await entry.getByRole('button', {name:'删除这条记录'}).click();
+      const confirm = entry.getByRole('button', {name:'确定删除', exact:true});
+      await expect(confirm).toBeVisible();
+      const deleteBox = await entry.getByRole('button', {name:'删除这条记录'}).boundingBox();
+      const confirmBox = await confirm.boundingBox();
+      expect(Math.abs(confirmBox!.y - deleteBox!.y)).toBeLessThan(70);
+      await entry.getByRole('button', {name:'取消', exact:true}).click();
+      await expect(confirm).toHaveCount(0);
+    }
+    await link.click();
+    await expect(page.getByTestId('retrieval-assessment').getByText(positive)).toBeVisible();
+    if (item.kind === 'text') {
+      await expect(page.getByPlaceholder(hint)).toHaveValue(item.text!);
+    } else {
+      await expect(page.getByPlaceholder(/可选：补充一句文字描述/)).toHaveValue('');
+      const label = item.kind === 'image' ? '图像线索' : '语音线索';
+      await expect(page.getByText(`${label}：${item.filename}`, {exact:true})).toBeVisible();
+    }
+    expect(calls.requests.filter(r => r.path === '/api/personal/retrieval-screening').at(-1)?.body.supplementId).toBe(item.id);
+  }
+  expect(calls.requests.some(r => r.path === '/api/personal/search')).toBe(false);
+  expect(calls.saved()).toBe(0);
+});
+
+test('检索未完成时打开一条历史记录，可以继续发起检索', async ({page}) => {
+  const calls = await setup(page, true);
+  let finish!: () => void;
+  const pending = new Promise<void>(resolve => { finish = resolve; });
+  await page.route('**/api/personal/search', async route => {
+    if (route.request().postDataJSON()?.query === '另一段输入') await pending;
+    await route.fallback();
+  });
+  try {
+    await page.getByPlaceholder(hint).fill('另一段输入');
+    const started = page.waitForRequest('**/api/personal/search');
+    await page.getByRole('button', {name:'开始检索'}).click();
+    await started;
+    await page.goto('/#/personal/screening?tab=retrieval&assessmentSupplementId=41');
+    await expect(page.getByPlaceholder(hint)).toHaveValue('开心');
+    await expect(page.getByTestId('retrieval-assessment').getByText(positive)).toBeVisible();
+    const searchButton = page.getByRole('button',{name:'开始检索'});
+    await expect(searchButton).toBeEnabled();
+    const oldResponse = page.waitForResponse(response => response.url().endsWith('/api/personal/search')
+      && response.request().postDataJSON()?.query === '另一段输入');
+    finish();
+    await oldResponse;
+    await expect(page.getByTestId('retrieval-assessment').getByText(positive)).toBeVisible();
+    expect(calls.saved()).toBe(0);
+
+    const nextSearch = page.waitForRequest(request => request.url().endsWith('/api/personal/search')
+      && request.postDataJSON()?.query === '开心');
+    await searchButton.click();
+    await nextSearch;
+  } finally { finish(); }
 });
 
 for (const modality of ['text', 'audio', 'image'] as const) {

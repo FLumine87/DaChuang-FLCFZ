@@ -394,7 +394,7 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
     reportOverride?: CollectionAnalysis,
     inputOverride?: { modality?: QueryModality; file?: File | null },
   ) => {
-    if (!row.supplementId) { setQuery(row.text); return; }
+    if (!row.supplementId) return;
     const sequence = ++searchSeqRef.current;
     ++reportSeqRef.current;
     const saved = reportOverride ?? savedReportsRef.current.get(row.supplementId);
@@ -404,6 +404,8 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
       summary: hit.summary || '', tags: hit.tags ?? [], date: hit.date || '',
       alertLevel: ['green', 'yellow', 'orange', 'red'].includes(hit.alertLevel) ? hit.alertLevel as 'green' | 'yellow' | 'orange' | 'red' : 'unknown',
     }));
+    setLoading(false);
+    setSaveState('idle'); setSaveMessage('');
     setQuery(row.text); setResults(previousHits); setReport(null); setReportPhase('idle'); setAssessment(null);
     setAssessmentLoading(true); setAssessmentError(null); setError(null);
     assessmentQueryRef.current = row.text;
@@ -433,6 +435,21 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
      最后打开它已保存的检索结论（没有保存过就按 id 现取一次评估）。 */
   const openSupplementRecord = async (supplementId: number, fallbackQuery = '') => {
     const sequence = ++searchSeqRef.current;
+    ++reportSeqRef.current;
+    setLoading(false);
+    setResults(null);
+    setIndexInfo(null);
+    setAssessment(null);
+    setAssessmentLoading(true);
+    setAssessmentError(null);
+    setReport(null);
+    setReportPhase('idle');
+    setSaveState('idle');
+    setSaveMessage('');
+    clearMedia();
+    setQuery('');
+    setError(null);
+
     /* 优先用「筛查记录」跳转时随路由带过来的这条记录本身；
        刷新 / 其它入口没有携带时，再按 id 从档案里取，最后才退回 URL 上的文字。 */
     const carried = (location.state as { supplement?: PersonalSupplement } | null)?.supplement ?? null;
@@ -450,16 +467,10 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
     if (sequence !== searchSeqRef.current) return;
 
     const modality: QueryModality = item?.kind === 'audio' || item?.kind === 'image' ? item.kind : 'text';
-    const text = (item?.text || item?.analysis?.query || fallbackQuery).trim();
+    const text = (item ? item.text ?? '' : fallbackQuery).trim();
 
-    /* 先清掉上一条记录留下的媒体，再挂这一条自己的 */
-    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
-    setMediaFile(null);
-    setMediaPreview(null);
     setQueryModality(modality);
-    setScope('all');
     setQuery(text);
-    setError(null);
 
     let media: File | null = null;
     if (item && modality !== 'text' && item.url) {
@@ -1355,7 +1366,10 @@ export default function Retrieval({ collectionReport }: { collectionReport?: Col
               <li>
                 <button
                   type="button"
-                  onClick={() => void openSavedAssessment(r)}
+                  onClick={() => {
+                    if (r.supplementId) void openSupplementRecord(r.supplementId, r.text);
+                    else { clearMedia(); setQuery(r.text); }
+                  }}
                   className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-primary-300 hover:bg-primary-50/40"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
