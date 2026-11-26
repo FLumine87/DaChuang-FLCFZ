@@ -5,6 +5,7 @@ export interface RetrievalAnalysisReport {
   riskLevel: string;
   sections: { title: string; content: string }[];
   recommendations: string[];
+  referenceIds?: string[];
   originalInput?: { enabled: boolean; used: boolean; modality: string; notice: string };
   generationMessage?: string;
   /** true 表示检索规则说明，未使用大模型生成。 */

@@ -136,7 +136,8 @@ class DeepSeekRAGEngine(RAGEngineInterface):
             if report:
                 if screening_data.get("screening_assessment"):
                     from app.services.screening_assessment import lock_report
-                    report = lock_report(report, screening_data["screening_assessment"])
+                    report = lock_report(report, screening_data["screening_assessment"],
+                                         reference_texts=screening_data.get("reference_texts"))
                 report["subject"] = screening_data.get("name", "被试")
                 report["date"] = datetime.now().strftime("%Y-%m-%d")
                 # 如实标记：这一段只有真正拿到大模型输出才会走到
@@ -158,7 +159,8 @@ class DeepSeekRAGEngine(RAGEngineInterface):
     def _build_prompt(self, screening_data: Dict, knowledge_text: str) -> str:
         if screening_data.get("screening_assessment"):
             from app.services.screening_assessment import assessment_prompt
-            prompt = assessment_prompt(screening_data["screening_assessment"], knowledge_text, screening_data.get("original_input"))
+            prompt = assessment_prompt(screening_data["screening_assessment"], knowledge_text, screening_data.get("original_input"),
+                                       reference_texts=screening_data.get("reference_texts"))
             if screening_data.get('personal_context'):
                 prompt += '\n【获准使用的个人档案，仅用于个性化解释与建议，不得改变本次筛查结论】\n' + screening_data['personal_context']
             return prompt

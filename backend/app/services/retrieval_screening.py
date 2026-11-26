@@ -13,10 +13,14 @@ import time
 
 from app.config import settings
 from app.core.exceptions import HttpError
+from app.engines.hashing.label_provenance import reference_labels
+from app.services.agent_ai import scrub_pii
 from app.services.screening_assessment import build_assessment, extract_signals
 
 VERSION = "retrieval-evidence-v1"
 MIN_SIMILARITY = .60  # engineering relevance gate, not a clinical threshold
+MAX_REFERENCE_TEXTS = 3
+REFERENCE_TEXT_LIMIT = 240
 POLARITY = {
     "happy": "positive", "positive": "positive", "高兴": "positive", "开心": "positive", "积极": "positive",
     "sad": "negative", "negative": "negative", "angry": "negative", "fear": "negative", "fearful": "negative",
@@ -49,6 +53,41 @@ def open_snapshot(token, user_id):
         return payload["data"]
     except (ValueError, KeyError, TypeError):
         raise HttpError(400, "本次检索依据已失效，请重新检索")
+
+
+def _public_dataset_unit(unit, record_id):
+    return (unit and unit.get("record_id") == record_id and unit.get("scope") == "public"
+            and unit.get("user_id") is None and unit.get("dataset"))
+
+
+def reference_texts(assessment, units):
+    """Resolve adopted references to short public text excerpts in the current index."""
+    refs = sorted(assessment["references"], key=lambda ref: ref["similarity"], reverse=True)
+    excerpts, seen = [], set()
+    for ref in refs:
+        record_id = ref["recordId"]
+        if ref["usage"] != "screening" or record_id in seen:
+            continue
+        unit = units.get(ref["id"])
+        if not _public_dataset_unit(unit, record_id) or unit.get("modality") != ref["modality"]:
+            continue
+        text_id = ref["id"]
+        if unit["modality"] == "audio" and reference_labels(unit)["pairing_type"] == "same_source_text_audio":
+            # Real corpus builders store the original transcript in the text view.
+            text_id = f"{record_id}-txt"
+        text_unit = units.get(text_id)
+        if (not _public_dataset_unit(text_unit, record_id) or text_unit.get("modality") != "text"
+                or text_unit["dataset"] != unit["dataset"]):
+            continue
+        text = scrub_pii(text_unit.get("content"), names=text_unit.get("deid_terms")).strip()[:REFERENCE_TEXT_LIMIT]
+        if not text:
+            continue
+        excerpts.append({"id": ref["id"], "textUnitId": text_id, "modality": ref["modality"],
+                         "dataset": unit["dataset"], "similarity": ref["similarity"], "text": text})
+        seen.add(record_id)
+        if len(excerpts) == MAX_REFERENCE_TEXTS:
+            break
+    return excerpts
 
 
 def build_retrieval_screening(query, hits, *, modality="text", supplement_id=None, observations=None):

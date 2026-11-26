@@ -116,7 +116,8 @@ class ZhipuRAGEngine(RAGEngineInterface):
 直接称呼用户时统一使用「您」，保留引用的用户原话。请直接返回JSON，不要包含其他文字。"""
         if screening_data.get("screening_assessment"):
             from app.services.screening_assessment import assessment_prompt
-            prompt = assessment_prompt(screening_data["screening_assessment"], knowledge_text, screening_data.get("original_input"))
+            prompt = assessment_prompt(screening_data["screening_assessment"], knowledge_text, screening_data.get("original_input"),
+                                       reference_texts=screening_data.get("reference_texts"))
             if screening_data.get('personal_context'):
                 prompt += '\n【获准使用的个人档案，仅用于个性化解释与建议，不得改变本次筛查结论】\n' + screening_data['personal_context']
         
@@ -137,7 +138,8 @@ class ZhipuRAGEngine(RAGEngineInterface):
             if report:
                 if screening_data.get("screening_assessment"):
                     from app.services.screening_assessment import lock_report
-                    report = lock_report(report, screening_data["screening_assessment"])
+                    report = lock_report(report, screening_data["screening_assessment"],
+                                         reference_texts=screening_data.get("reference_texts"))
                 report["subject"] = name
                 report["date"] = datetime.now().strftime("%Y-%m-%d")
                 report["mock"] = False

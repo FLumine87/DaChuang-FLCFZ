@@ -12,7 +12,7 @@ from app.core.security import get_password_hash, verify_password
 from app.db import database as db
 from app.services import screening_service, case_service, alert_service
 # 筛查结论由统一后端规则生成，RAG仅解释同一份证据。
-from app.engines import get_rag_engine
+from app.engines import get_hashing_engine, get_rag_engine
 from app.handlers.retrieval import perform_search, to_frontend_hit, viewer_of
 from app.handlers.upload import resolve_index_media
 from app.handlers.upload import resolve_upload_path as _resolve_upload_path
@@ -1026,9 +1026,17 @@ async def personal_rag_report(ctx: RequestContext):
         engine = get_rag_engine()
         await engine.initialize()
         from app.services.steward_context import personal_context
+        context = await personal_context(ctx.user['sub'])
+        reference_texts = []
+        if any(ref["usage"] == "screening" and ref["modality"] in ("text", "audio") for ref in assessment["references"]):
+            hashing = get_hashing_engine()
+            if hasattr(hashing, "units"):
+                await hashing._ensure_initialized()
+                reference_texts = retrieval_service.reference_texts(assessment, hashing.units)
         report = await engine.generate_report({"name": "多模态检索初筛", "screening_assessment": assessment,
-            "personal_context": await personal_context(ctx.user['sub']),
+             "personal_context": context,
             "original_input": {"enabled": include_original, "text": original_text, "modality": source["modality"]},
+             "reference_texts": reference_texts,
             "alert_level": assessment["level"] or "unknown"})
         if isinstance(report, dict) and "risk_level" in report:
             report["riskLevel"] = report.pop("risk_level")

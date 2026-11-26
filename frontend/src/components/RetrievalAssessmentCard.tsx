@@ -45,6 +45,7 @@ export default function RetrievalAssessmentCard({ assessment, loading = false, e
           <div className="rounded-lg bg-slate-50 p-4">
             <h4 className="text-sm font-semibold text-slate-800">2. 参考依据</h4>
             <p className="mt-2 text-sm leading-6 text-slate-600">{reference?.slice(0, 180) || '本次检索缺少足够相关的参考，暂不强行推断状态。'}</p>
+            {!!completed?.referenceIds?.length && <p className="mt-2 break-words text-xs text-slate-600">AI 引用的原文样本 {completed.referenceIds.join('、')}</p>}
             {!!adopted.length && <p className="mt-2 break-words text-xs text-primary-600">采用结果：{adopted.slice(0, 3).map((ref) => ref.id).join('、')}{adopted.length > 3 ? ` 等 ${adopted.length} 个单元，完整依据见下方展开项` : ''}</p>}
           </div>
           <div data-testid="psychological-advice">

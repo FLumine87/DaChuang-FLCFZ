@@ -90,6 +90,31 @@ class RetrievalEvidenceTests(unittest.TestCase):
             self.assertEqual(result['questions'], [])
             self.assertEqual(result['recommendedScales'], [])
 
+    def test_reference_excerpts_follow_adoption_visibility_and_same_source_pairing(self):
+        rows = [hit('EATD-1-aud', 'sad', .99, record='EATD-1', modality='audio'),
+                hit('EATD-1-txt', 'sad', .98, record='EATD-1'),
+                hit('private', 'sad', .97), hit('user-submission', 'sad', .96),
+                hit('candidate', 'sad', .50), hit('unpaired', 'sad', .95, modality='audio'),
+                hit('image', 'sad', .94, modality='image'),
+                hit('next', 'sad', .93), hit('third', 'sad', .92), hit('fourth', 'sad', .91)]
+        assessment = rs.build_retrieval_screening('', rows)
+        units = {row['id']: {'record_id': row['recordId'], 'modality': row['modality'],
+                             'dataset': 'EATD-Corpus' if row['recordId'] == 'EATD-1' else 'test',
+                             'scope': 'public', 'content': row['id']} for row in rows}
+        units['EATD-1-txt'].update(content='张同学的电话13800138000，邮箱student@example.test。睡不好。', deid_terms=['张同学'])
+        units['private']['scope'] = 'private'
+        units['user-submission']['user_id'] = 3
+        units['third']['content'] = '长' * 500
+        excerpts = rs.reference_texts(assessment, units)
+        self.assertEqual([item['id'] for item in excerpts], ['EATD-1-aud', 'next', 'third'])
+        self.assertEqual(excerpts[0]['textUnitId'], 'EATD-1-txt')
+        self.assertEqual(excerpts[0]['similarity'], .99)
+        self.assertIn('睡不好', excerpts[0]['text'])
+        self.assertNotRegex(excerpts[0]['text'], r'张同学|13800138000|student@example.test')
+        self.assertEqual(len(excerpts[-1]['text']), rs.REFERENCE_TEXT_LIMIT)
+        units['EATD-1-txt']['scope'] = 'rejected'
+        self.assertEqual([item['id'] for item in rs.reference_texts(assessment, units)], ['next', 'third', 'fourth'])
+
     def test_explicit_safety_signal_cannot_be_hidden_by_positive_matches(self):
         self.assertEqual(rs.build_retrieval_screening('我现在想伤害自己', [hit('a', 'happy')])['level'], 'red')
 
@@ -120,14 +145,24 @@ class RetrievalEndpointTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_rag_original_input_uses_owned_snapshot_and_can_be_disabled(self):
         token = rs.seal_snapshot(1, rs.snapshot('真正的本人自述', [hit('a', 'happy')], 'text'))
+        hashing = SimpleNamespace(_ensure_initialized=AsyncMock(), units={
+            'a': {'record_id': 'a', 'modality': 'text', 'scope': 'public',
+                  'dataset': 'test', 'content': '语料中的参考原文'},
+        })
         for enabled in (True, False):
             engine = AsyncMock()
             engine.generate_report.return_value = {'summary':'综合结论','sections':[], 'recommendations':[], 'mock':False}
-            with patch.object(personal, 'get_rag_engine', return_value=engine):
+            with patch.object(personal, 'get_rag_engine', return_value=engine), \
+                 patch.object(personal, 'get_hashing_engine', return_value=hashing), \
+                 patch('app.services.steward_context.personal_context', AsyncMock(return_value='')):
                 data = (await personal.personal_rag_report(self.ctx({'analysisMode':'retrieval','retrievalToken':token,
-                    'includeOriginalInput':enabled,'query':'不能替换快照的伪造输入'})))['data']
-            context = engine.generate_report.call_args.args[0]['original_input']
+                    'includeOriginalInput':enabled,'query':'不能替换快照的伪造输入',
+                    'hits':[{'id':'a', 'summary':'伪造的参考原文'}]})))['data']
+            args = engine.generate_report.call_args.args[0]
+            context = args['original_input']
             self.assertEqual(context['text'], '真正的本人自述' if enabled else '')
+            self.assertEqual([item['text'] for item in args['reference_texts']], ['语料中的参考原文'])
+            self.assertNotIn('reference_texts', args['screening_assessment'])
             self.assertEqual(data['report']['originalInput']['used'], enabled)
             self.assertEqual(data['report']['originalInput']['enabled'], enabled)
 
@@ -175,11 +210,13 @@ class RetrievalEndpointTests(unittest.IsolatedAsyncioTestCase):
         from app.engines.rag import zhipu_rag_engine as zhipu
         assessment = rs.build_retrieval_screening('MODEL-PRIVATE-TEXT', [hit('a', 'happy')])
         generated = {'summary':'综合本人文字后的分析结论','risk_level':'high',
-                     'sections':[{'title':'参考依据','content':'本次自述与已采用参考。'}], 'recommendations':['留意近期情绪变化。']}
+                     'sections':[{'title':'参考依据','content':'本次自述与已采用参考。'}], 'recommendations':['留意近期情绪变化。'],
+                     'referenceIds':['a','invented','a']}
         for provider in ('deepseek', 'zhipu'):
             for enabled in (True, False):
                 with self.subTest(provider=provider, enabled=enabled):
-                    data = {'screening_assessment':assessment,'original_input':{'enabled':enabled,'text':'MODEL-PRIVATE-TEXT'}}
+                    data = {'screening_assessment':assessment,'original_input':{'enabled':enabled,'text':'MODEL-PRIVATE-TEXT'},
+                            'reference_texts':[{'id':'a','text':'CORPUS-TEXT'}]}
                     if provider == 'deepseek':
                         engine = DeepSeekRAGEngine()
                         engine.retrieve = AsyncMock(return_value=[])
@@ -195,6 +232,8 @@ class RetrievalEndpointTests(unittest.IsolatedAsyncioTestCase):
                             report = await engine.generate_report(data)
                         prompt = engine._client.chat.completions.create.call_args.kwargs['messages'][0]['content']
                     self.assertEqual('MODEL-PRIVATE-TEXT' in prompt, enabled)
+                    self.assertIn('CORPUS-TEXT', prompt)
+                    self.assertEqual(report['referenceIds'], ['a'])
                     self.assertFalse(report['mock'])
                     self.assertEqual(report['summary'], generated['summary'])
                     self.assertEqual(report['recommendations'], generated['recommendations'])

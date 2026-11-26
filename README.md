@@ -129,7 +129,8 @@ backend\venv\Scripts\python.exe backend\scripts\build_real_corpus.py `
 | 真实语料 | `backend/data/hashing/real_corpus.db`（离线构建，不入库） | 真实中文语音 / 文本 / 人脸 / 面诊图的跨模态检索 |
 | 指标复现 | 同上，跑评测脚本 | 复现 mAP / 跨模态类别一致率 / 效率 |
 
-引擎启动时优先读 `real_corpus.db`，缺失则自动回退到 `corpus.db`。
+首次建立索引时，优先读取 `real_corpus.db`，缺失则回退到 `corpus.db`。已有 `index.db` 的环境会复用索引。
+若要把已使用合成语料的环境切换到真实语料，先停止该环境的业务后端，把离线构建的 `real_corpus.db` 放到其 `backend/data/hashing/` 目录，再进入 `backend`，用该环境的 Python 运行 `python scripts/switch_to_real_corpus.py`。脚本会备份旧索引，保留本环境的新增单元及审核状态。重启后可在检索页面核对「数据来源 真实数据集」。
 
 ## 技术栈
 
