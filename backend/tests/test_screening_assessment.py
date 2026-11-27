@@ -188,7 +188,8 @@ class PersistedFlowTests(unittest.IsolatedAsyncioTestCase):
             raw = {str(i): value for i, value in enumerate([2,2,2,1,1,1,1,2,0], 1)}
             with patch.object(screening_service, "_index_into_hashing", AsyncMock()):
                 submitted = (await personal.submit_personal_screening(self.ctx({"questionnaire": "PHQ-9", "answers": raw,
-                    "questionnaireVersion": service.QUESTIONNAIRE_VERSION, "answerEncoding": "option-index"})))["data"]
+                    "questionnaireVersion": service.QUESTIONNAIRE_VERSION, "answerEncoding": "option-index",
+                    "consent": True})))["data"]
             self.assertEqual(submitted["score"], 12)
             linked = (await personal.personal_retrieval_assessment(self.ctx({"supplementId": sup, "screeningId": submitted["id"]})))["data"]["assessment"]
             self.assertEqual(linked["scaleResult"]["score"], 12)

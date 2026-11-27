@@ -1,3 +1,5 @@
+import { questionnaires as scaleDefinitions } from './questionnaireData';
+
 export type AlertLevel = 'green' | 'yellow' | 'orange' | 'red';
 
 export interface UserProfile {
@@ -60,6 +62,8 @@ export interface PersonalScreeningRecord {
   status: 'completed' | 'pending';
   moodTag: string;
   date: string;
+  /** 精确到分钟的时间戳（合并视图按时间排序用；date 只到日） */
+  createdAt?: string;
   /** 逐题作答（题号 → 选项分值）。后端接口以前只回总分，所以是可选的 */
   answers?: Record<number, number>;
   questionnaireVersion?: string;
@@ -103,6 +107,8 @@ export interface WarningEvent {
   status: 'new' | 'tracking' | 'resolved';
   createdAt: string;
   updatedAt: string;
+  /** 该预警对应的筛查编号（公开 id）。合并视图据此把它标到那次筛查上 */
+  screeningId?: string | null;
 }
 
 // 检索结果的可解释信息（来自后端「动态跨模态哈希检索」引擎）
@@ -207,12 +213,24 @@ export const userProfile: UserProfile = {
   emergencyContact: '室友-陈悦',
 };
 
-export const questionnaireCatalog: QuestionnaireItem[] = [
-  { id: 'PHQ-9', name: 'PHQ-9 抑郁筛查', description: '评估过去两周抑郁症状程度', questions: 9, minutes: 3, target: '情绪低落、兴趣下降' },
-  { id: 'GAD-7', name: 'GAD-7 焦虑筛查', description: '评估焦虑水平与紧张程度', questions: 7, minutes: 2, target: '紧张、担忧、躯体焦虑' },
-  { id: 'ISI', name: 'ISI 失眠评估', description: '评估入睡、维持睡眠和早醒问题', questions: 7, minutes: 3, target: '睡眠质量下降' },
-  { id: 'PSS-10', name: 'PSS-10 压力量表', description: '评估近期主观压力感知', questions: 10, minutes: 4, target: '学习和生活压力' },
-];
+/**
+ * 「量表填写」页的卡片列表。
+ *
+ * 这里**不再手写数组** —— 原先写死 4 个（PHQ-9 / GAD-7 / ISI / PSS-10），
+ * 后来加了 UCLA-3 / SAS / PSQI，页面上却仍然只显示 4 个，
+ * 因为列表和真正的量表定义（data/questionnaireData.ts）是两份数据。
+ * 现在统一从 questionnaires 派生：加量表只需改 questionnaireData，
+ * 题数、预计时长、关注点都跟着算出来。
+ */
+export const questionnaireCatalog: QuestionnaireItem[] = scaleDefinitions.map((q) => ({
+  id: q.id,
+  name: q.name,
+  description: q.description,
+  questions: q.questions.length,
+  // 按每题约 20 秒估算，最少 2 分钟
+  minutes: Math.max(2, Math.round(q.questions.length * 0.33)),
+  target: q.introduction.measures.slice(0, 2).join('、'),
+}));
 
 export const screeningRecords: PersonalScreeningRecord[] = [
   { id: 'ME-SCR-0318', questionnaire: 'PHQ-9', score: 15, maxScore: 27, level: 'orange', status: 'completed', moodTag: '情绪低落', date: '2026-03-18' },

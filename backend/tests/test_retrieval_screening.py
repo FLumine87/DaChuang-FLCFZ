@@ -178,7 +178,7 @@ class RetrievalEndpointTests(unittest.IsolatedAsyncioTestCase):
                      patch.object(personal, '_resolve_upload_path', return_value='/local/actual-file'), \
                      patch.object(personal.assessment_service, 'owned_context', side_effect=AssertionError('must not read questionnaires')):
                     data = (await personal.save_personal_supplement(self.ctx({'kind':modality,'text':'开心' if modality == 'text' else '',
-                        'url':'/uploads/test','analysisMode':'retrieval'})))['data']
+                        'url':'/uploads/test','analysisMode':'retrieval','consent':True})))['data']
                 report = data['report']
                 self.assertEqual(report['assessment']['analysisMode'], 'retrieval')
                 self.assertEqual(report['assessment']['level'], 'green')
@@ -265,6 +265,6 @@ class RetrievalEndpointTests(unittest.IsolatedAsyncioTestCase):
         token = rs.seal_snapshot(1, rs.snapshot(query, [hit('a', 'happy')], 'text'))
         with patch.object(personal, '_analyze_collection', side_effect=AssertionError('old path must not run')), \
              patch.object(personal, '_index_supplement', AsyncMock()):
-            saved = (await personal.save_personal_supplement(self.ctx({'kind':'text','text':query,'retrievalToken':token})))['data']
+            saved = (await personal.save_personal_supplement(self.ctx({'kind':'text','text':query,'retrievalToken':token,'consent':True})))['data']
         self.assertEqual(saved['report']['assessment']['level'], 'green')
         self.assertEqual(saved['report']['assessment']['analysisMode'], 'retrieval')

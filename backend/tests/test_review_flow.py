@@ -118,8 +118,12 @@ class ReviewFlowTest(unittest.TestCase):
         self.assertFalse(any(h["id"] == "TEST-NEW-1" for h in theirs))
 
     def test_03_approve_goes_public_and_enqueues(self):
-        from app.services import review_service
-        result = asyncio.run(review_service.review(["TEST-NEW-1"], "approve", 1, "ok"))
+        with patch.object(review_service, "_consented_user_ids", AsyncMock(return_value=set())):
+            denied = asyncio.run(review_service.review(["TEST-NEW-1"], "approve", 1, "ok"))
+        self.assertEqual(denied["updated"], 0)
+        self.assertEqual(self.engine.units["TEST-NEW-1"]["scope"], "reviewing")
+        with patch.object(review_service, "_consented_user_ids", AsyncMock(return_value={9001})):
+            result = asyncio.run(review_service.review(["TEST-NEW-1"], "approve", 1, "ok"))
         self.assertEqual(result["updated"], 1)
         self.assertGreaterEqual(result["pending"], 1)
         self.assertEqual(self.engine.units["TEST-NEW-1"]["scope"], "public")
@@ -168,6 +172,7 @@ class ReviewTrainingRegressionTests(unittest.TestCase):
         self.addCleanup(self.engine._store.close)
         self.enterContext(patch.object(review_service, "get_hashing_engine", return_value=self.engine))
         self.enterContext(patch.object(review_service, "_sync_business_table", new_callable=AsyncMock))
+        self.enterContext(patch.object(review_service, "_consented_user_ids", AsyncMock(return_value={9001})))
 
     def add_text(self, key, text, scope="reviewing"):
         self.assertTrue(self.engine.index_case_sync(

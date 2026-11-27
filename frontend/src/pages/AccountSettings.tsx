@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import StewardPanel from '../components/StewardPanel';
 import {
   AtSign,
@@ -8,6 +9,7 @@ import {
   Check,
   Eye,
   EyeOff,
+  FileLock2,
   KeyRound,
   Loader2,
   Phone,
@@ -19,11 +21,14 @@ import {
 import {
   changeMyPassword,
   getMyAccount,
+  getTrainingConsent,
+  setTrainingConsent,
   updateMyAccount,
   updateMyAvatar,
   type MyAccount,
 } from '../services/mockApi';
 import { USE_MOCK } from '../services/http';
+import { loadConsentPrompt, saveConsentPrompt } from '../services/consent';
 import {
   loadModelSettings,
   saveModelSettings,
@@ -127,6 +132,17 @@ export default function AccountSettings() {
   const [savingPwd, setSavingPwd] = useState(false);
   const [pwdMsg, setPwdMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
+  // 数据与隐私：是否同意把本人筛查数据用于模型训练（存后端 users.training_consent）
+  const [trainingConsent, setTrainingConsentState] = useState(false);
+  const [consentSince, setConsentSince] = useState('');
+  const [consentNote, setConsentNote] = useState('');
+  const [consentBusy, setConsentBusy] = useState(false);
+  const [consentMsg, setConsentMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  // 「提交时不再询问」：默认关闭（每次提交都问；关掉询问 = 自动不提交）
+  const [promptDisabled, setPromptDisabled] = useState(false);
+  const [promptBusy, setPromptBusy] = useState(false);
+  const [promptMsg, setPromptMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
   // 检索与分析偏好（只存本机，改动即时生效）
   const [includeOriginalInput, setIncludeOriginalInput] = useState(readIncludeOriginalInput);
   const [saveToSystem, setSaveToSystem] = useState(readSaveToSystem);
@@ -209,6 +225,91 @@ export default function AccountSettings() {
       alive = false;
     };
   }, []);
+
+  /* 训练数据同意：单独一次请求，失败不影响页面其他部分（只是开关不可用） */
+  useEffect(() => {
+    let alive = true;
+    getTrainingConsent()
+      .then((c) => {
+        if (!alive || !c) return;
+        setTrainingConsentState(c.enabled);
+        setConsentSince(c.sinceAt || '');
+        setConsentNote(c.note || '');
+      })
+      .catch(() => {
+        /* 保持默认关闭，不打断页面 */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /* 「提交时不再询问」偏好：单独一次请求，读不到就按默认（仍然询问） */
+  useEffect(() => {
+    let alive = true;
+    loadConsentPrompt()
+      .then((pref) => {
+        if (alive) setPromptDisabled(pref.promptDisabled);
+      })
+      .catch(() => {
+        /* 读不到就按默认：仍然询问 */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const togglePromptDisabled = async (disabled: boolean) => {
+    if (promptBusy) return;
+    setPromptBusy(true);
+    setPromptMsg(null);
+    const prev = promptDisabled;
+    setPromptDisabled(disabled);
+    try {
+      const pref = await saveConsentPrompt(disabled);
+      setPromptDisabled(pref.promptDisabled);
+      setPromptMsg({
+        kind: 'ok',
+        text: disabled
+          ? '已关闭提交询问：之后提交时不再询问，也不会提交'
+          : '已恢复：每次提交前都会询问一次',
+      });
+    } catch (e) {
+      setPromptDisabled(prev);
+      setPromptMsg({ kind: 'err', text: e instanceof Error ? e.message : '保存失败，请稍后重试' });
+    } finally {
+      setPromptBusy(false);
+    }
+  };
+
+  const toggleTrainingConsent = async (enabled: boolean) => {
+    if (consentBusy) return;
+    setConsentBusy(true);
+    setConsentMsg(null);
+    // 先乐观更新，失败再回滚 —— 开关类控件等待网络会显得卡顿
+    const prev = trainingConsent;
+    setTrainingConsentState(enabled);
+    try {
+      const c = await setTrainingConsent(enabled);
+      if (c) {
+        setTrainingConsentState(c.enabled);
+        setConsentSince(c.sinceAt || '');
+        setConsentNote(c.note || '');
+      }
+      setConsentMsg({
+        kind: 'ok',
+        text: enabled ? '已同意，只有审核通过的内容才可能被用作训练样本' : '已关闭，你的记录不会进入训练集',
+      });
+    } catch (e) {
+      setTrainingConsentState(prev);
+      setConsentMsg({
+        kind: 'err',
+        text: e instanceof Error ? e.message : '保存失败，请稍后重试',
+      });
+    } finally {
+      setConsentBusy(false);
+    }
+  };
 
   const handleSaveProfile = async () => {
     setSavingProfile(true);
@@ -602,6 +703,92 @@ export default function AccountSettings() {
           </div>
         </div>
       </section>
+      {/* 数据与隐私：训练数据同意 + 隐私政策入口 */}
+      <section className="ui-card p-5 sm:p-6">
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-800">
+          <FileLock2 className="h-4 w-4 text-primary-600" />
+          数据与隐私
+        </h2>
+
+        <label className="mt-4 flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={trainingConsent}
+            disabled={consentBusy}
+            onChange={(e) => void toggleTrainingConsent(e.target.checked)}
+            className="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500 disabled:cursor-not-allowed"
+            aria-label="同意将我的筛查数据用于模型训练"
+          />
+          <span className="min-w-0">
+            <span className="block text-[13.5px] font-medium text-slate-700">
+              同意将我的筛查数据用于模型训练
+            </span>
+            <span className="mt-1 block text-[12px] leading-5 text-slate-400">
+              {consentNote ||
+                '关闭时，你的筛查与记录不会进入模型训练集；开启后，只有经管理端审核通过的内容才可能被用作训练样本。'}
+            </span>
+            <span className="mt-1 block text-[11.5px] leading-5 text-slate-400">
+              默认关闭，随时可以再次关闭；关闭后不影响你已经生成的档案与预警。
+              {consentSince && (
+                <span className="ml-1 text-slate-500">
+                  （本次同意时间 {consentSince.slice(0, 16)}）
+                </span>
+              )}
+            </span>
+            {consentMsg && (
+              <span
+                className={`mt-1 block text-[11.5px] ${
+                  consentMsg.kind === 'ok' ? 'text-success-600' : 'text-danger-600'
+                }`}
+              >
+                {consentMsg.text}
+              </span>
+            )}
+          </span>
+        </label>
+
+        <label className="mt-5 flex cursor-pointer items-start gap-3 border-t border-slate-100 pt-4">
+          <input
+            type="checkbox"
+            checked={promptDisabled}
+            disabled={promptBusy}
+            onChange={(e) => void togglePromptDisabled(e.target.checked)}
+            className="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500 disabled:cursor-not-allowed"
+            aria-label="提交时不再询问（自动不提交）"
+          />
+          <span className="min-w-0">
+            <span className="block text-[13.5px] font-medium text-slate-700">
+              提交时不再询问（自动不提交）
+            </span>
+            <span className="mt-1 block text-[12px] leading-5 text-slate-400">
+              默认关闭：每次提交量表、文字、语音或图片前都会问你一次「是否同意上传」，
+              点不同意就不提交。开启后会跳过询问，并直接不提交。
+            </span>
+            {promptMsg && (
+              <span
+                className={`mt-1 block text-[11.5px] ${
+                  promptMsg.kind === 'ok' ? 'text-success-600' : 'text-danger-600'
+                }`}
+              >
+                {promptMsg.text}
+              </span>
+            )}
+          </span>
+        </label>
+
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4">
+          <p className="text-[12px] leading-5 text-slate-400">
+            收集范围、可见范围与删除方式都写在隐私政策里。
+          </p>
+          <Link
+            to="/privacy"
+            className="text-[12.5px] font-medium text-primary-600 hover:text-primary-700"
+          >
+            查看隐私政策 →
+          </Link>
+        </div>
+      </section>
+
       {/* 检索与分析偏好：原在「心理筛查 · 检索与分析」页，统一收到设置页 */}
       <section className="ui-card p-5 sm:p-6">
         <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-800">

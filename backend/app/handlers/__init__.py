@@ -36,6 +36,8 @@ ROUTES = [
     ("GET", "/api/agent-workspace/cases/{case_id}", agent_workspace.case_detail, "admin"),
     ("PUT", "/api/agent-workspace/tasks/{task_id}", agent_workspace.update_task, "admin"),
     # ---- 认证（公开）----
+    # 登录验证码：四位字母，服务端生成与校验；演示账号会回传 demoCode 供前端自动填充
+    ("GET", "/api/auth/captcha", auth.captcha, None),
     ("POST", "/api/auth/login", auth.login, None),
     ("POST", "/api/auth/register", auth.register, None),
     ("POST", "/api/auth/logout", auth.logout, None),
@@ -78,6 +80,14 @@ ROUTES = [
     ("PUT", "/api/account", personal.update_my_account, "user"),
     ("PUT", "/api/account/avatar", personal.update_my_avatar, "user"),
     ("POST", "/api/account/password", personal.change_my_password, "user"),
+    # 训练数据同意开关（个人端设置页）：关闭时本人记录不进入共享训练集
+    ("GET", "/api/account/training-consent", personal.get_training_consent, "user"),
+    ("PUT", "/api/account/training-consent", personal.set_training_consent, "user"),
+    # 「提交时不再询问」偏好：默认关闭 = 每次都问；开启后不询问也不再提交
+    ("GET", "/api/account/consent-prompt", personal.get_consent_prompt, "user"),
+    ("PUT", "/api/account/consent-prompt", personal.set_consent_prompt, "user"),
+    # 档案关系图谱：「我的心理档案」页右侧画布的数据源（此前 404，画布因此空白）
+    ("GET", "/api/v1/steward/graph", personal.get_steward_graph, "user"),
 
     # 心理日记：每条记录的便签（写 / 改 / 清空）与删除记录本身
     ("PUT", "/api/personal/supplements/{supplement_id}/note", personal.save_supplement_note, "user"),

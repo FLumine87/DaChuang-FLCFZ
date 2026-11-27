@@ -161,8 +161,17 @@ export default function KgPage({ stewardGraph = false }: { stewardGraph?: boolea
     const local = stewardGraph ? { user_id:userId,nodes:[],links:[],neo4j_connected:false } : localGraph(userId);
     setLocalCount(Math.max(0, local.nodes.length - 1));
     try {
-      const server = stewardGraph ? await personalRequest<GraphData>('/api/v1/steward/graph') : await api.getGraph(userId);
-      setServerNodes(Math.max(0, server.nodes.length - 1));
+      /* 个人端的图谱接口返回的是 {code,message,data:{nodes,links,...}} 信封，
+         而 personalRequest 只做 resp.json()、不拆信封 —— 直接当 GraphData 用会
+         在 server.nodes.length 处抛错，页面就只剩星空（"档案关系暂时无法读取"）。
+         这里两种形状都接受：有 data 就取 data，没有就当作已经是 GraphData。 */
+      const raw = stewardGraph
+        ? await personalRequest<GraphData | { data: GraphData }>('/api/v1/steward/graph')
+        : null;
+      const server: GraphData = raw
+        ? ((raw as { data?: GraphData }).data ?? (raw as GraphData))
+        : await api.getGraph(userId);
+      setServerNodes(Math.max(0, (server.nodes ?? []).length - 1));
       setData(stewardGraph ? server : mergeGraphs(server, local));
       if (stewardGraph) { setGraphConnected(Boolean(server.neo4j_connected)); setServerNotice('来自您的心理档案，可查看记录、记忆、近期观察与建议之间的依据关联。'); return; }
       /* 说明文案只按**真实连接状态**给：连上了就什么都不说；

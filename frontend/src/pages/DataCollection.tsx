@@ -10,6 +10,7 @@ import {
   saveUserSupplement,
   type CollectionAnalysis,
 } from '../services/mockApi';
+import { requestConsent } from '../services/consent';
 import ScreeningWorkspace from './ScreeningWorkspace';
 import Retrieval from './Retrieval';
 import { RetainedView } from '../components/RetainedWorkspace';
@@ -318,6 +319,8 @@ function AudioTab({ onReport, onInputChange }: CollectionInputProps) {
             onClick={async () => {
               const sequence = revision.current;
               setUploadError('');
+              const agreed = await requestConsent();
+              if (!agreed || sequence !== revision.current) return;
               const failed: string[] = [];
               for (const entry of audioList) {
                 if (!entry.file) continue;
@@ -555,6 +558,8 @@ function ImageTab({ onReport, onInputChange }: CollectionInputProps) {
                 onClick={async () => {
                   const sequence = revision.current;
                   setUploadError('');
+                  const agreed = await requestConsent();
+                  if (!agreed || sequence !== revision.current) return;
                   const failed: string[] = [];
                   for (const img of images) {
                     if (!img.file) continue;
@@ -678,6 +683,12 @@ function TextTab({ onReport, onInputChange }: CollectionInputProps) {
     setSaving(true);
     setError('');
     try {
+      const agreed = await requestConsent();
+      if (sequence !== revision.current) return;
+      if (!agreed) {
+        setError('未同意上传，本次记录没有保存。');
+        return;
+      }
       const res = await persistCollection('text', { text: content });
       if (sequence !== revision.current) return;
       if (res.ok) {

@@ -53,6 +53,11 @@ export default function Alerts() {
     [warningEvents, filterLevel, filterStatus],
   );
 
+  /* 未处置的一直铺在外面；已处置的收进一个折叠块，
+     否则历史越积越多，真正要处理的几条会被淹掉。 */
+  const activeList = useMemo(() => filtered.filter((a) => a.status !== 'resolved'), [filtered]);
+  const resolvedList = useMemo(() => filtered.filter((a) => a.status === 'resolved'), [filtered]);
+
   /* 默认选中第一条：右侧首屏就有内容，“点卡片 → 右侧变化”这层关系才看得见。
      筛选后如果当前选中的已经不在列表里，就顺延到新列表的第一条。 */
   useEffect(() => {
@@ -64,9 +69,9 @@ export default function Alerts() {
     /* 用户刚点 × 关掉详情：保持关闭，不要马上又默认选中第一条 */
     if (userClosed.current) return;
     if (!filtered.some((a) => a.id === selectedAlert)) {
-      setSelectedAlert(filtered[0].id);
+      setSelectedAlert((activeList[0] ?? filtered[0]).id);
     }
-  }, [loading, filtered, selectedAlert]);
+  }, [loading, filtered, activeList, selectedAlert]);
 
   const selected = warningEvents.find((a) => a.id === selectedAlert);
 
@@ -103,6 +108,49 @@ export default function Alerts() {
   ];
 
   const filterSelect = 'cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white py-2 pr-8 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500';
+
+  /* 单条预警卡片：未处置列表和"已处置"折叠块共用，避免两份一样的 JSX 走偏 */
+  const renderAlert = (alert: WarningEvent) => {
+    const isSelected = selectedAlert === alert.id;
+    return (
+          <button
+            type="button"
+            onClick={() => {
+              userClosed.current = false;
+              setSelectedAlert(alert.id);
+              setStatusNotice(null);
+            }}
+            aria-pressed={isSelected}
+            className={`group w-full cursor-pointer rounded-2xl border bg-white p-4 text-left shadow-sm transition ${
+              isSelected
+                ? 'border-primary-500 ring-1 ring-primary-200'
+                : 'border-slate-200 hover:border-primary-300 hover:shadow'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <AlertBadge level={alert.level} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-800">{alert.title}</p>
+                  <p className="mt-0.5 text-xs text-slate-400">{alert.id}</p>
+                </div>
+              </div>
+              <StatusBadge status={alert.status} />
+            </div>
+            <p className="mt-2.5 line-clamp-2 text-sm leading-6 text-slate-600">{alert.reason}</p>
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1 text-slate-400">
+                <Clock className="h-3 w-3" /> {alert.createdAt}
+              </span>
+              {/* 明确写出“可以点开” —— 评审说不知道右边会有内容，问题就出在这 */}
+              <span className="inline-flex items-center gap-0.5 font-medium text-primary-600">
+                {isSelected ? '正在查看' : '查看详情'}
+                <ChevronRight className="h-3.5 w-3.5" />
+              </span>
+            </div>
+          </button>
+    );
+  };
 
   return (
     <div className="space-y-5">
@@ -176,49 +224,23 @@ export default function Alerts() {
                 ))}
               </div>
             )}
-            {!loading &&
-              filtered.map((alert) => {
-                const isSelected = selectedAlert === alert.id;
-                return (
-                  <button
-                    type="button"
-                    key={alert.id}
-                    onClick={() => {
-                      userClosed.current = false;
-                      setSelectedAlert(alert.id);
-                      setStatusNotice(null);
-                    }}
-                    aria-pressed={isSelected}
-                    className={`group w-full cursor-pointer rounded-2xl border bg-white p-4 text-left shadow-sm transition ${
-                      isSelected
-                        ? 'border-primary-500 ring-1 ring-primary-200'
-                        : 'border-slate-200 hover:border-primary-300 hover:shadow'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <AlertBadge level={alert.level} />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-slate-800">{alert.title}</p>
-                          <p className="mt-0.5 text-xs text-slate-400">{alert.id}</p>
-                        </div>
-                      </div>
-                      <StatusBadge status={alert.status} />
-                    </div>
-                    <p className="mt-2.5 line-clamp-2 text-sm leading-6 text-slate-600">{alert.reason}</p>
-                    <div className="mt-2 flex items-center justify-between text-xs">
-                      <span className="flex items-center gap-1 text-slate-400">
-                        <Clock className="h-3 w-3" /> {alert.createdAt}
-                      </span>
-                      {/* 明确写出“可以点开” —— 评审说不知道右边会有内容，问题就出在这 */}
-                      <span className="inline-flex items-center gap-0.5 font-medium text-primary-600">
-                        {isSelected ? '正在查看' : '查看详情'}
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+            {!loading && activeList.map((alert) => renderAlert(alert))}
+
+            {!loading && resolvedList.length > 0 && filterStatus !== 'resolved' && (
+              <details className="group mt-1">
+                <summary className="flex cursor-pointer list-none items-center justify-between rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-2.5 text-xs text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-600">
+                  <span className="inline-flex items-center gap-1.5">
+                    <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
+                    已处置的预警（{resolvedList.length}）
+                  </span>
+                  <span className="text-slate-400">默认收起，点开查看历史</span>
+                </summary>
+                <div className="mt-3 space-y-3">
+                  {resolvedList.map((alert) => renderAlert(alert))}
+                </div>
+              </details>
+            )}
+
             {!loading && filtered.length === 0 && (
               <div className="ui-card px-6 py-12 text-center">
                 <ShieldAlert className="mx-auto h-8 w-8 text-slate-200" />

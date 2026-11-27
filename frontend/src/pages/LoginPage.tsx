@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { navigateWithTransition } from "../utils/viewTransition";
 import { readDemoPreset } from "../demoPreset";
@@ -16,8 +16,10 @@ import {
 } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
 import Aurora from "../components/Aurora";
+import CaptchaField from "../components/CaptchaField";
 import { apiLogin, apiRegister } from "../services/mockApi";
 import { isOfflineDemo } from "../services/http";
+import { captchaImageSrc, fetchCaptcha, isDemoLoginName } from "../services/captcha";
 import { adminDemo } from "../auth/demoCredentials";
 import { saveDisplayName, saveSessionToken } from "../auth/session";
 import { resolveEntryPath } from "../auth/entryPath";
@@ -58,6 +60,37 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  /* ---- 登录验证码（四位字母，服务端生成与校验）----
+     演示账号（xiaoyu / adminer）由服务端回传答案，这里自动填好，
+     演示时不用手抄；普通账号必须自己看图输入。 */
+  const [captchaId, setCaptchaId] = useState("");
+  const [captchaSvg, setCaptchaSvg] = useState("");
+  const [captchaCode, setCaptchaCode] = useState("");
+  const [captchaLoading, setCaptchaLoading] = useState(false);
+  const [captchaError, setCaptchaError] = useState("");
+  /* 连不上后端时（离线演示）没有服务端可发验证码，此时不拦登录 */
+  const [captchaUnavailable, setCaptchaUnavailable] = useState(false);
+
+  const loadCaptcha = useCallback(async (name: string) => {
+    setCaptchaLoading(true);
+    setCaptchaError("");
+    try {
+      const payload = await fetchCaptcha(name);
+      setCaptchaId(payload.id);
+      setCaptchaSvg(payload.svg);
+      /* 演示账号自动填充；普通账号清空，让用户自己看 */
+      setCaptchaCode(payload.demoCode ?? "");
+      setCaptchaUnavailable(false);
+    } catch {
+      setCaptchaId("");
+      setCaptchaSvg("");
+      setCaptchaError("验证码加载失败，点击重试");
+      setCaptchaUnavailable(true);
+    } finally {
+      setCaptchaLoading(false);
+    }
+  }, []);
+
 
   /* 这里刻意**不做**"已登录就直接放行"：打开登录页永远当作没登录过，
      输入框留空、正常走一次登录。否则点顶栏「登录」会被瞬间送进系统，
@@ -79,6 +112,17 @@ export default function LoginPage() {
     }
   }, [theme]);
 
+
+  const needCaptcha = panel === "admin" || tab === "login";
+  const demoAccount = isDemoLoginName(username);
+
+  /* 挂载、切换身份、切换标签、账号在「演示↔普通」之间变化时，换一张新验证码。
+     普通账号之间改用户名不刷新 —— 否则用户正抄着验证码就被换掉了。 */
+  useEffect(() => {
+    if (!needCaptcha) return;
+    void loadCaptcha(username);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panel, tab, needCaptcha, demoAccount]);
 
   const toggleTheme = () => {
     const root = document.documentElement;
@@ -139,11 +183,29 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     resetTips();
+    /* 验证码：服务端不可用（离线演示）时不拦，交给 apiLogin 走本机演示数据 */
+    if (needCaptcha && !captchaUnavailable) {
+      if (!captchaId) {
+        setError("验证码已失效，请点右侧「换一张」后重试");
+        return;
+      }
+      if (!captchaCode.trim()) {
+        setError("请输入验证码");
+        return;
+      }
+    }
     setLoading(true);
     try {
-      const result = await apiLogin(username, password);
+      const result = await apiLogin(
+        username,
+        password,
+        captchaId || undefined,
+        captchaCode || undefined,
+      );
       if (!result.ok || !result.token) {
         setError(result.message || "登录失败");
+        /* 验证码是一次性的：失败后必须换一张，否则再点登录必然还是同一张 */
+        if (needCaptcha) void loadCaptcha(username);
         return;
       }
       saveSessionToken(result.token, rememberMe);
@@ -414,6 +476,18 @@ export default function LoginPage() {
                     </button>
                   </div>
                 </div>
+
+                {needCaptcha && (
+                  <CaptchaField
+                    imageSrc={captchaSvg ? captchaImageSrc(captchaSvg) : null}
+                    code={captchaCode}
+                    onCodeChange={setCaptchaCode}
+                    onRefresh={() => void loadCaptcha(username)}
+                    loading={captchaLoading}
+                    error={captchaError}
+                    autoFilled={demoAccount && !!captchaCode && !captchaError}
+                  />
+                )}
 
                 {!isAdmin && tab === "register" && (
                   <>

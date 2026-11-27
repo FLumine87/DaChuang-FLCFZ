@@ -24,6 +24,7 @@ import {
   Rss,
   Search,
   Settings,
+  FileLock2,
   ShieldCheck,
   Sun,
   TriangleAlert,
@@ -537,6 +538,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
           <span className="sidebar-label">
             心理健康 · {isAdmin ? "管理工作空间" : "个人健康空间"}
           </span>
+
           {/* 只在收起态出现：展开态收起侧栏交给右缘的悬浮把手，
               页脚因此只剩左侧那句居中的版权文字 */}
           <button
@@ -732,6 +734,15 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
                     >
                       <Settings className="h-4 w-4" />
                       账号设置
+                    </Link>
+                    {/* 隐私政策：从侧栏页脚挪到本人的头像菜单里，和账号设置放一起 */}
+                    <Link
+                      to="/privacy"
+                      onClick={closeNavigation}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+                    >
+                      <FileLock2 className="h-4 w-4" />
+                      隐私政策
                     </Link>
                     <button
                       disabled={signingOut}

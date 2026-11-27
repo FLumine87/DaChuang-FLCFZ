@@ -96,8 +96,9 @@ async def create_screening(data: dict) -> dict:
     max_score = q["max_score"] if q else data.get("max_score", 100)
     row_id = await db.execute_a(
         "INSERT INTO screenings (screening_id, user_id, name, age, gender, department, phone, "
-        "questionnaire_id, score, max_score, answers, status, alert_level, counselor_id, notes, screening_date) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "questionnaire_id, score, max_score, answers, status, alert_level, counselor_id, notes, "
+        "screening_date, consent_status) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             screening_id, data.get("user_id"), data.get("name", "匿名用户"), data.get("age"), data.get("gender"),
             data.get("department"), data.get("phone"), data.get("questionnaire_id"),
@@ -105,6 +106,8 @@ async def create_screening(data: dict) -> dict:
             data.get("status", "pending"), data.get("alert_level", "green"),
             data.get("counselor_id"), data.get("notes"),
             data.get("screening_date") or datetime.now(),
+            # 只有个人端在用户点了「同意上传」后才会传 agreed；其余路径保持 unknown
+            data.get("consent_status") or "unknown",
         ),
     )
     row = await db.query_one_a("SELECT * FROM screenings WHERE id = ?", (row_id,))

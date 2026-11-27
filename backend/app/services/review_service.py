@@ -26,6 +26,22 @@ def _supports_review(engine) -> bool:
     return all(hasattr(engine, attr) for attr in ("_store", "units", "records"))
 
 
+async def _consented_user_ids(user_ids) -> set:
+    """返回其中**明确同意**用于训练的用户 id 集合（training_consent = 1）。
+
+    未同意或未设置的用户不在集合里 —— 审核通过时会被拦下，不写进公共池。
+    """
+    ids = sorted({int(u) for u in user_ids if u is not None})
+    if not ids:
+        return set()
+    placeholders = ",".join("?" * len(ids))
+    rows = await db.query_a(
+        f"SELECT id FROM users WHERE id IN ({placeholders}) "
+        "AND COALESCE(training_consent, 0) = 1",
+        ids)
+    return {int(r["id"]) for r in rows}
+
+
 def _units_by_record(engine) -> Dict[str, List[Dict]]:
     """一次遍历把单元按 record_id 分组，避免逐条扫描全库。"""
     by_rec: Dict[str, List[Dict]] = {}
@@ -171,6 +187,24 @@ async def review(record_ids: List[str], action: str, reviewer_id: Optional[int] 
     scope = "public" if action == "approve" else "rejected"
     status = "approved" if action == "approve" else "rejected"
     done, skipped = [], []
+
+    # 训练同意闸门：本人没同意「把筛查数据用于训练」时，即使管理员点通过，
+    # 也不能把这条记录放进公共池（= 可被训练）。拒绝操作不受影响。
+    if action == "approve":
+        owners = {rid: engine.records.get(rid, {}).get("user_id")
+                  for rid in dict.fromkeys(record_ids)}
+        consented = await _consented_user_ids(set(owners.values()))
+        allowed: List[str] = []
+        for rid, uid in owners.items():
+            if rid not in engine.records:
+                skipped.append({"record_id": rid, "reason": "记录不在索引中"})
+                continue
+            if uid is None or int(uid) in consented:
+                allowed.append(rid)
+            else:
+                skipped.append({"record_id": rid,
+                                "reason": "本人未同意将数据用于训练，不能加入公共池"})
+        record_ids = allowed
 
     for rid in dict.fromkeys(record_ids):
         try:

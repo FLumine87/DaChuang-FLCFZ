@@ -32,6 +32,8 @@ def _warning_dict(a: dict) -> dict:
         "status": status,
         "createdAt": format_dt(a.get("created_at"), "%Y-%m-%d %H:%M"),
         "updatedAt": format_dt(a.get("updated_at"), "%Y-%m-%d %H:%M"),
+        # 该预警对应的筛查（公开编号）。合并视图据此把"这次筛查产生了预警"标在同一条上。
+        "screeningId": a.get("linked_screening_id") or None,
     }
 
 
@@ -95,6 +97,8 @@ def _screening_item(s: dict, qn: str) -> dict:
         "status": s.get("status"),
         "moodTag": s.get("notes") or "已完成",
         "date": format_dt(s.get("screening_date") or s.get("created_at")),
+        # 合并视图（筛查 / 检索 / 预警并集）要按时间排序，只到日期分不出先后
+        "createdAt": format_dt(s.get("screening_date") or s.get("created_at"), "%Y-%m-%d %H:%M"),
     }
 
 
@@ -185,6 +189,9 @@ async def save_screening_supplement(ctx: RequestContext, screening_id):
     kind = data.get("kind")
     if kind not in ("text", "audio", "image"):
         raise HttpError(400, "补充类型必须是 text / audio / image")
+    # 上传同意闸门：前端问过「是否同意上传」并点了同意才会带 consent=true
+    if data.get("consent") is not True:
+        raise HttpError(400, "未同意上传，本次记录未保存")
     user_id = int(ctx.user["sub"])
     row = await db.query_one_a(
         "SELECT * FROM screenings WHERE screening_id = ? AND user_id = ?",
@@ -216,6 +223,9 @@ async def save_personal_supplement(ctx: RequestContext):
     kind = data.get("kind")
     if kind not in ("text", "audio", "image"):
         raise HttpError(400, "补充类型必须是 text / audio / image")
+    # 上传同意闸门：前端问过「是否同意上传」并点了同意才会带 consent=true
+    if data.get("consent") is not True:
+        raise HttpError(400, "未同意上传，本次记录未保存")
     user_id = int(ctx.user["sub"])
     retrieval_source = retrieval_service.open_snapshot(data["retrievalToken"], user_id) if data.get("retrievalToken") else None
     if retrieval_source and (retrieval_source["modality"] != kind or (kind == "text" and retrieval_source["query"].strip() != str(data.get("text") or "").strip())):
@@ -607,6 +617,10 @@ async def delete_personal_supplement(ctx: RequestContext, supplement_id: str):
 async def submit_personal_screening(ctx: RequestContext):
     data = ctx.body
     user_id = int(ctx.user["sub"])
+    # 上传同意闸门：前端在提交前询问「是否同意上传本次作答与记录」，
+    # 不同意就根本不会调用到这里；这里再兜一次，避免绕过前端直接调接口。
+    if data.get("consent") is not True:
+        raise HttpError(400, "未同意上传，本次作答未保存")
     user = await db.query_one_a("SELECT name FROM users WHERE id = ?", (user_id,))
     q = await db.query_one_a("SELECT * FROM questionnaires WHERE code = ?", (data.get("questionnaire", ""),))
     if not q:
@@ -630,6 +644,8 @@ async def submit_personal_screening(ctx: RequestContext):
         "status": "completed",
         "alert_level": alert_level,
         "screening_date": datetime.now(),
+        # 同意了才写 agreed：AGENT_FOUNDATION.md 要求「只有真实完成同意流程的记录」才可被授权后台升级为 approved
+        "consent_status": "agreed",
     })
     await case_service.sync_personal_case(user_id, row)
     if alert_level in ("orange", "red"):
@@ -863,7 +879,7 @@ async def update_personal_warning(ctx: RequestContext, alert_id: str):
 async def get_personal_profile(ctx: RequestContext):
     user_id = int(ctx.user["sub"])
     screenings = await db.query_a(
-        "SELECT * FROM screenings WHERE user_id = ? ORDER BY screening_date DESC, id DESC LIMIT 10",
+        "SELECT * FROM screenings WHERE user_id = ? ORDER BY screening_date DESC, id DESC LIMIT 40",
         (user_id,))
     screening_records = []
     for s in screenings:
@@ -872,8 +888,9 @@ async def get_personal_profile(ctx: RequestContext):
     await _attach_supplements(screening_records)
 
     alerts = await db.query_a(
-        "SELECT a.* FROM alerts a LEFT JOIN screenings s ON a.screening_id = s.id "
-        "WHERE (s.user_id = ? OR a.user_id = ?) ORDER BY a.created_at DESC, a.id DESC LIMIT 10",
+        "SELECT a.*, s.screening_id AS linked_screening_id FROM alerts a "
+        "LEFT JOIN screenings s ON a.screening_id = s.id "
+        "WHERE (s.user_id = ? OR a.user_id = ?) ORDER BY a.created_at DESC, a.id DESC LIMIT 40",
         (user_id, user_id))
     warning_events = [_warning_dict(a) for a in alerts]
 
@@ -1471,6 +1488,76 @@ async def update_my_avatar(ctx: RequestContext):
     return success_response(data={"account": _account_dict(u) if u else None})
 
 
+# ---------------------------------------------------------------- 训练数据同意
+#
+# 个人端设置页的开关：是否同意把本人的筛查/记录用于模型训练。
+# 默认关闭；关闭时该用户的记录一律不进入共享训练集
+# （判定点在 engines/hashing/engine.py::_collect_db_rows → scope_for）。
+_TRAINING_CONSENT_NOTE = (
+    "关闭时，你的筛查与记录不会进入模型训练集；"
+    "开启后，只有经管理端审核通过的内容才可能被用作训练样本，且随时可以再次关闭。"
+)
+
+
+async def get_training_consent(ctx: RequestContext):
+    user_id = int(ctx.user["sub"])
+    u = await db.query_one_a(
+        "SELECT COALESCE(training_consent, 0) AS enabled, training_consent_at AS since_at "
+        "FROM users WHERE id = ?", (user_id,))
+    if not u:
+        raise HttpError(404, "账号不存在")
+    return success_response(data={
+        "enabled": bool(u["enabled"]),
+        "sinceAt": u["since_at"] or "",
+        "note": _TRAINING_CONSENT_NOTE,
+    })
+
+
+async def set_training_consent(ctx: RequestContext):
+    """开启 / 关闭训练数据同意。只改同意状态，不追溯已发布的历史样本。"""
+    user_id = int(ctx.user["sub"])
+    data = ctx.body or {}
+    if "enabled" not in data:
+        raise HttpError(400, "缺少 enabled 参数")
+    enabled = 1 if data.get("enabled") else 0
+    await db.execute_a(
+        "UPDATE users SET training_consent = ?, "
+        "training_consent_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END, "
+        "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (enabled, enabled, user_id))
+    return await get_training_consent(ctx)
+
+
+# ---------------------------------------------------------------- 提交时的上传同意
+#
+# 默认每次提交（量表 / 文字 / 语音 / 图片）都问一次「是否同意上传」，
+# 不同意就不提交。用户可以在设置页把这个询问关掉 —— 关掉后不再问，
+# 也就等于"自动不提交"（不询问 ≠ 默认同意）。
+async def get_consent_prompt(ctx: RequestContext):
+    user_id = int(ctx.user["sub"])
+    u = await db.query_one_a(
+        "SELECT COALESCE(consent_prompt_disabled, 0) AS disabled FROM users WHERE id = ?",
+        (user_id,))
+    if not u:
+        raise HttpError(404, "账号不存在")
+    return success_response(data={
+        "promptDisabled": bool(u["disabled"]),
+        "note": "默认关闭（每次提交都会询问）。开启后提交时不再询问，也不会提交。",
+    })
+
+
+async def set_consent_prompt(ctx: RequestContext):
+    user_id = int(ctx.user["sub"])
+    data = ctx.body or {}
+    if "promptDisabled" not in data:
+        raise HttpError(400, "缺少 promptDisabled 参数")
+    disabled = 1 if data.get("promptDisabled") else 0
+    await db.execute_a(
+        "UPDATE users SET consent_prompt_disabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (disabled, user_id))
+    return await get_consent_prompt(ctx)
+
+
 async def change_my_password(ctx: RequestContext):
     """改密码。必须验证旧密码 —— 否则任何拿到 token 的人都能改掉别人密码。"""
     user_id = int(ctx.user["sub"])
@@ -1498,3 +1585,75 @@ async def change_my_password(ctx: RequestContext):
         "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (get_password_hash(new), user_id))
     return success_response(data={"changed": True})
+
+
+# ---------------------------------------------------------------- 档案关系图谱
+#
+# 「我的心理档案」页右侧的画布读的是 /api/v1/steward/graph，但这个接口此前
+# 并不存在 —— 前端请求 404、data 为 null，画布上只剩星空背景，看起来就是一块
+# 大片空白（用户反馈第 7 项）。这里用真实数据把图补出来：
+#   用户 → 本人记录（量表/采集）→ 个人记忆（便签）→ AI近期观察（预警）→ 行动建议（计划）
+# 节点字段与前端 services/api.ts 的 GraphData 一致，SVG 直接可渲染。
+_GRAPH_NODE_LIMIT = 12
+
+
+async def get_steward_graph(ctx: RequestContext):
+    user_id = int(ctx.user["sub"])
+    user = await db.query_one_a("SELECT name FROM users WHERE id = ?", (user_id,))
+    if not user:
+        raise HttpError(404, "账号不存在")
+
+    nodes: list = []
+    links: list = []
+
+    def add(node_id: str, name: str, label: str, relation: str) -> None:
+        nodes.append({"id": node_id, "name": name, "label": label, "category": None})
+        if relation:
+            links.append({"source": f"u-{user_id}", "target": node_id, "relation": relation, "category": None})
+
+    root = f"u-{user_id}"
+    nodes.append({"id": root, "name": user["name"] or "我", "label": "User", "category": None})
+
+    # 本人记录：量表筛查（带分数）与文字/语音/图片采集各取最近若干条
+    scales = await db.query_a(
+        "SELECT s.screening_id, s.score, s.max_score, s.alert_level, s.created_at, q.code "
+        "FROM screenings s LEFT JOIN questionnaires q ON s.questionnaire_id = q.id "
+        "WHERE s.user_id = ? ORDER BY s.created_at DESC LIMIT ?",
+        (user_id, _GRAPH_NODE_LIMIT))
+    for s in scales:
+        code = s["code"] or "量表"
+        max_score = s["max_score"] or 0
+        add(f"scr-{s['screening_id']}", f"{code} {s['score']}/{max_score}", "Evidence", "完成筛查")
+
+    sups = await db.query_a(
+        "SELECT id, kind, text, filename, created_at FROM screening_supplements "
+        "WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+        (user_id, _GRAPH_NODE_LIMIT))
+    for item in sups:
+        raw = (item["text"] or item["filename"] or "").strip()
+        name = (raw[:16] + "…") if len(raw) > 16 else (raw or "一条记录")
+        add(f"sup-{item['id']}", name, "Memory", "记录近况")
+
+    # AI 近期观察：预警
+    alerts = await db.query_a(
+        "SELECT alert_id, name, level, status, created_at FROM alerts "
+        "WHERE user_id = ? OR screening_id IN (SELECT id FROM screenings WHERE user_id = ?) "
+        "ORDER BY created_at DESC LIMIT ?",
+        (user_id, user_id, _GRAPH_NODE_LIMIT))
+    for a in alerts:
+        add(f"alt-{a['alert_id']}", (a["name"] or "预警")[:16], "Observation", "触发提醒")
+
+    # 行动建议：待进行的计划
+    plans = await db.query_a(
+        "SELECT id, title, status FROM action_plans WHERE user_id = ? AND status = 'pending' "
+        "ORDER BY created_at DESC LIMIT ?",
+        (user_id, 6))
+    for p in plans:
+        add(f"plan-{p['id']}", (p["title"] or "计划")[:16], "Suggestion", "建议行动")
+
+    return success_response(data={
+        "user_id": str(user_id),
+        "nodes": nodes,
+        "links": links,
+        "neo4j_connected": False,
+    })

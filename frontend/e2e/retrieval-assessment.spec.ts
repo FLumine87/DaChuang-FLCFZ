@@ -36,6 +36,7 @@ async function setup(page: Page, history = false, ragResponse: (body: Record<str
       const token = String(body.retrievalToken || 'snapshot-history');
       data = { assessment: assessment(token.includes('text-text') ? 'negative' : 'positive', token, body.supplementId as number | undefined) };
     } else if (path === '/api/personal/rag-report') data = await ragResponse(body);
+    else if (path === '/api/account/consent-prompt') data = {promptDisabled:false};
     else if (path === '/api/personal/supplements' && history) data = [{ id:41,kind:'text',text:'开心',analysis:{level:'green',hits:[],assessment:assessment('positive','snapshot-history',41)}}];
     await route.fulfill({ json:{ code:0,data } });
   });
@@ -293,7 +294,6 @@ for (const modality of ['text', 'audio', 'image'] as const) {
     await page.reload();
     const card = page.getByTestId('retrieval-assessment');
     await expect(card).toHaveCount(0);
-    await expect(page.getByRole('checkbox',{name:'结合本次原始输入分析',exact:true})).toHaveCount(0);
     expect(calls.requests.some(r=>r.path==='/api/personal/rag-report')).toBe(false);
     expect(calls.requests.some(r=>r.path==='/api/personal/retrieval-screening')).toBe(false);
     const submissions: Record<string,unknown>[] = [];
@@ -304,34 +304,57 @@ for (const modality of ['text', 'audio', 'image'] as const) {
         await route.fulfill({json:{code:0,data:{id:41,report}}});
       } else await route.fulfill({json:{code:0,data:[]}});
     });
-    await page.route('**/api/upload', route => route.fulfill({json:{code:0,data:{file_path:'/uploads/current-file',file_name:'current-file',file_id:'current-file',analysis:''}}}));
+    let uploads = 0;
+    await page.route('**/api/upload', route => {
+      uploads++;
+      return route.fulfill({json:{code:0,data:{file_path:'/uploads/current-file',file_name:'current-file',file_id:'current-file',analysis:''}}});
+    });
     if (modality === 'text') {
       await page.getByLabel('文本采集内容').fill('本次新输入');
-      await expect(card).toHaveCount(0);
-      await page.getByRole('button',{name:'保存到我的档案',exact:true}).click();
     } else {
       await page.locator(`input[type=file][accept^="${modality}/"]`).setInputFiles({name:modality === 'image' ? 'current.png' : 'current.wav',mimeType:modality === 'image' ? 'image/png' : 'audio/wav',buffer:Buffer.from('test-file')});
-      await expect(card).toHaveCount(0);
-      await page.getByRole('button',{name:'送入动态哈希引擎',exact:true}).click();
     }
+    await expect(card).toHaveCount(0);
+    const submit = page.getByRole('button',{name:modality === 'text' ? '保存到我的档案' : '送入动态哈希引擎',exact:true});
+    await submit.click();
+    const consent = page.getByRole('dialog');
+    await expect(consent).toBeVisible();
+    expect(uploads).toBe(0);
+    await consent.getByRole('button',{name:'不同意，不提交',exact:true}).click();
+    await expect(consent).toHaveCount(0);
+    await expect(card).toHaveCount(0);
+    expect(submissions).toHaveLength(0);
+    await submit.click();
+    await consent.getByRole('button',{name:'同意并提交',exact:true}).click();
     await expect(card.getByRole('heading',{name:'多模态心理筛查结论',exact:true})).toBeVisible();
     await expect(card.getByText('采集记录的大模型综合结论',{exact:true})).toBeVisible();
     await expect(card.getByTestId('psychological-advice')).toContainText('记录情绪变化并安排适当休息。');
     await expect(page.getByText('本次采集的参考素材',{exact:true})).toBeVisible();
     await expect(page.getByRole('heading',{name:/检索参考/})).toBeVisible();
-    await expect(page.getByRole('checkbox',{name:'结合本次原始输入分析',exact:true})).toBeVisible();
+    expect(calls.requests.filter(r=>r.path==='/api/personal/rag-report').map(r=>r.body)).toMatchObject([
+      {supplementId:41,includeOriginalInput:true,query:modality === 'text' ? '本次新输入' : ''},
+    ]);
     if (modality === 'audio') await expect(page.getByAltText('语音梅尔频谱')).toBeVisible();
     if (modality === 'image') await expect(page.getByAltText('面部图像')).toBeVisible();
     expect(calls.requests.some(r=>r.path==='/api/personal/search')).toBe(false);
     expect(calls.requests.some(r=>r.path==='/api/personal/screenings')).toBe(false);
     expect(submissions).toHaveLength(1);
-    expect(submissions[0]).toMatchObject({kind:modality,analysisMode:'retrieval'});
-    if (modality === 'text') await page.getByLabel('文本采集内容').clear();
-    if (modality === 'image') await page.getByRole('button',{name:'移除这张图片'}).click();
-    if (modality === 'audio') await page.getByRole('button',{name:'文本采集',exact:true}).click();
-    await expect(card).toHaveCount(0);
-    await page.getByRole('button',{name:modality === 'audio' ? '语音采集' : '量表填写',exact:true}).click();
-    await page.getByRole('button',{name:modality === 'audio' ? '文本采集' : modality === 'image' ? '图像采集' : '文本采集',exact:true}).click();
+    expect(uploads).toBe(modality === 'text' ? 0 : 1);
+    expect(submissions[0]).toMatchObject({kind:modality,analysisMode:'retrieval',consent:true});
+    await page.getByRole('button',{name:modality === 'text' ? '语音采集' : '文本采集',exact:true}).click();
+    await expect(card).not.toBeVisible();
+    const tabName = {text:'文本采集',audio:'语音采集',image:'图像采集'}[modality];
+    await page.getByRole('button',{name:tabName,exact:true}).click();
+    await expect(card).toBeVisible();
+    if (modality === 'text') {
+      await page.getByLabel('文本采集内容').clear();
+    } else {
+      await page.locator(`input[type=file][accept^="${modality}/"]`).setInputFiles({
+        name:modality === 'image' ? 'replacement.png' : 'replacement.wav',
+        mimeType:modality === 'image' ? 'image/png' : 'audio/wav',
+        buffer:Buffer.from('replacement-file'),
+      });
+    }
     await expect(card).toHaveCount(0);
     await page.reload();
     await expect(card).toHaveCount(0);
@@ -350,9 +373,10 @@ test('文本采集保存后原地生成同款结果，不绑定量表或重复�
   await page.goto('/#/personal/screening?tab=text');
   await page.getByPlaceholder('今天感觉……最近睡眠……人际上……').fill('今天开心');
   await page.getByRole('button',{name:'保存到我的档案',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'同意并提交',exact:true}).click();
   await expect(page.getByTestId('retrieval-assessment').getByText('新采集的大模型综合结论',{exact:true})).toBeVisible();
   await expect(page.getByText('新采集参考',{exact:true})).toBeVisible();
-  expect(savedBodies).toEqual([{kind:'text',text:'今天开心',analysisMode:'retrieval'}]);
+  expect(savedBodies).toEqual([{kind:'text',text:'今天开心',analysisMode:'retrieval',consent:true}]);
   await expect(page).toHaveURL(/tab=text/);
 });
 
@@ -373,6 +397,7 @@ test('提交尚未完成时清空文字，迟到的保存响应不能显示旧�
     const input = page.getByLabel('文本采集内容');
     await input.fill('旧输入');
     await page.getByRole('button',{name:'保存到我的档案',exact:true}).click();
+    await page.getByRole('dialog').getByRole('button',{name:'同意并提交',exact:true}).click();
     await expect.poll(()=>started).toBe(true);
     await input.clear();
     release();

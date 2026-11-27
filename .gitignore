@@ -74,6 +74,10 @@ offline/datasets/*
 # 约 28 GB，代码不读取它（引擎读的是 offline/datasets），纯粹是本地参考。
 # 不进库：体积远超 GitHub 单文件/仓库限制，且数据集本身带使用条款。
 data/
+# 例外：frontend/src/data/ 是**前端源码**（量表定义、mock 数据、文案语料），不是数据集。
+# 上面这条 data/ 会把它一起忽略，导致新增文件在提交时被静默漏掉
+# （encouragements.ts 就差点没进库）。只解禁这一处，根目录 data/ 仍然忽略。
+!frontend/src/data/
 
 # ---- 环境变量（保留 .env.example / .env.production 示例）----
 .env
