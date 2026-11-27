@@ -1,7 +1,6 @@
 @import "tailwindcss";
 
-/* 深色模式采用 class 策略：由 AppShell 在 <html> 上切换 .dark，
-   用户的显式选择优先于系统偏好，刷新后保持不变。 */
+/* ThemeProvider 在 <html> 上切换 .dark，供全站共用深色主题。 */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* TailAdmin Free design tokens. See THIRD_PARTY_NOTICES.md. */

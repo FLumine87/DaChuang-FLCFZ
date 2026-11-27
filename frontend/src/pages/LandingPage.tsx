@@ -15,19 +15,13 @@ import {
 } from "./introSections";
 import { navItems, screens } from "./introContent";
 import BackToTop from '../components/BackToTop';
-
-type Theme = "light" | "dark";
-
-const THEME_KEY = "psych_theme";
-
-const readStoredTheme = (): Theme =>
-  window.localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
+import { useTheme } from "../hooks/useTheme";
 
 /* 主页：平台简介 + 四个章节（共 5 屏），整屏吸附翻页。
    登录已剥离为独立页面（/login），主页左上角保留一个「登录」入口。 */
 export default function LandingPage() {
   const navigate = useNavigate();
-  const [theme, setTheme] = useState<Theme>(readStoredTheme);
+  const { theme, toggleTheme } = useTheme();
   const [active, setActive] = useState("top");
     /* 供观察器读取当前屏（观察器只建一次，不随 active 重建） */
     const activeRef = useRef(active);
@@ -42,21 +36,6 @@ export default function LandingPage() {
      两个元素分工：一个表示"我在哪"，一个表示"我要去哪"，都比单项变色更有动感 */
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
   const [pill, setPill] = useState({ left: 0, width: 0, visible: false });
-
-
-  useEffect(() => {
-    const dark = theme === "dark";
-    document.documentElement.classList.toggle("dark", dark);
-    document.documentElement.style.colorScheme = dark ? "dark" : "light";
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", dark ? "#0b1120" : "#465fff");
-    try {
-      window.localStorage.setItem(THEME_KEY, theme);
-    } catch {
-      /* 隐私模式下 localStorage 不可写时忽略 */
-    }
-  }, [theme]);
 
 
   /* 把指示条移到某个导航项下方（宽度取文字宽度，两端各留 10px 呼吸感） */
@@ -600,13 +579,6 @@ export default function LandingPage() {
     if (glideRef.current) glideRef.current(target);
     else el.scrollIntoView({ behavior: "smooth", block: "start" });
     setActive(id);
-  };
-
-  const toggleTheme = () => {
-    const root = document.documentElement;
-    root.classList.add("theme-switching");
-    window.setTimeout(() => root.classList.remove("theme-switching"), 260);
-    setTheme(theme === "dark" ? "light" : "dark");
   };
 
   return (

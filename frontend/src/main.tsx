@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import './index.css'
 import App from './App'
+import ThemeProvider from './components/ThemeProvider'
 import { applyDemoRoute } from './demoPreset'
 
 /* 演示包预设：单文件打包时会注入 window.__DEMO_PRESET__ 决定从哪一页起步
@@ -13,9 +14,11 @@ applyDemoRoute()
 // 深层路由不再返回 404（避免 SPA 路由 404 状态码问题）。
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <HashRouter>
-      <App />
-    </HashRouter>
+    <ThemeProvider>
+      <HashRouter>
+        <App />
+      </HashRouter>
+    </ThemeProvider>
   </StrictMode>,
 )
 

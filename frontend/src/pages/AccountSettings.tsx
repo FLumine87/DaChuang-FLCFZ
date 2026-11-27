@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import StewardPanel from '../components/StewardPanel';
+import { useTheme } from '../hooks/useTheme';
 import {
   AtSign,
   BrainCircuit,
@@ -12,6 +13,7 @@ import {
   FileLock2,
   KeyRound,
   Loader2,
+  Palette,
   Phone,
   Settings,
   ShieldCheck,
@@ -105,6 +107,7 @@ function readAvatarDataUrl(file: File): Promise<string> {
 }
 
 export default function AccountSettings() {
+  const { followSystem, setFollowSystem } = useTheme();
   const edited=useRef(new Set<string>());
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<MyAccount | null>(null);
@@ -396,6 +399,28 @@ export default function AccountSettings() {
           改这里的信息只会影响您自己的账号，不会动到筛查记录与预警。
         </p>
       </div>
+
+      <section className="ui-card p-5 sm:p-6">
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-800">
+          <Palette className="h-4 w-4 text-primary-600" />
+          外观
+        </h2>
+        <label className="mt-4 flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={followSystem}
+            onChange={(event) => setFollowSystem(event.target.checked)}
+            className="mt-0.5 h-4 w-4 cursor-pointer accent-primary-500"
+            aria-label="跟随系统主题"
+          />
+          <span>
+            <span className="block text-[13.5px] font-medium text-slate-700">跟随系统主题</span>
+            <span className="mt-1 block text-[12px] leading-5 text-slate-400">
+              随设备切换浅色和深色。用右上角按钮手动切换时，会关闭跟随系统。
+            </span>
+          </span>
+        </label>
+      </section>
 
       {loadError && (
         <div className="ui-card border-danger-200 bg-danger-50 p-5 text-sm text-danger-700">

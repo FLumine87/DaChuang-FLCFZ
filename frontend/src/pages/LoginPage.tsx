@@ -23,15 +23,10 @@ import { captchaImageSrc, fetchCaptcha, isDemoLoginName } from "../services/capt
 import { adminDemo } from "../auth/demoCredentials";
 import { saveDisplayName, saveSessionToken } from "../auth/session";
 import { resolveEntryPath } from "../auth/entryPath";
+import { useTheme } from "../hooks/useTheme";
 
 type AuthTab = "login" | "register";
-type Theme = "light" | "dark";
 type Panel = "user" | "admin";
-
-const THEME_KEY = "psych_theme";
-
-const readStoredTheme = (): Theme =>
-  window.localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
 
 /* HashRouter 下查询参数在 hash 里（#/login?panel=admin），
    必须用 router 的 location.search 读取，window.location.search 取不到。 */
@@ -46,7 +41,7 @@ export default function LoginPage() {
   const initialPanel = readPanel(search);
   const [tab, setTab] = useState<AuthTab>("login");
   const [panel, setPanel] = useState<Panel>(initialPanel);
-  const [theme, setTheme] = useState<Theme>(readStoredTheme);
+  const { theme, toggleTheme } = useTheme();
   /* 演示包（手机版）会预填演示账号：手机上打两遍账号密码很烦，
      而演示现场常是"把手机递给别人看"。没有预设时初值仍是空串。 */
   const preset = readDemoPreset().prefill ?? {};
@@ -98,21 +93,6 @@ export default function LoginPage() {
      "记住我"仍然保留：勾了之后 token 存在 localStorage，直接访问工作台地址
      依旧是登录状态，不用重新输。 */
 
-  useEffect(() => {
-    const dark = theme === "dark";
-    document.documentElement.classList.toggle("dark", dark);
-    document.documentElement.style.colorScheme = dark ? "dark" : "light";
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", dark ? "#0b1120" : "#465fff");
-    try {
-      window.localStorage.setItem(THEME_KEY, theme);
-    } catch {
-      /* 隐私模式下 localStorage 不可写时忽略 */
-    }
-  }, [theme]);
-
-
   const needCaptcha = panel === "admin" || tab === "login";
   const demoAccount = isDemoLoginName(username);
 
@@ -123,13 +103,6 @@ export default function LoginPage() {
     void loadCaptcha(username);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel, tab, needCaptcha, demoAccount]);
-
-  const toggleTheme = () => {
-    const root = document.documentElement;
-    root.classList.add("theme-switching");
-    window.setTimeout(() => root.classList.remove("theme-switching"), 260);
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
 
   const getPasswordStrength = (
     value: string,

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Check, Moon, Sun } from "lucide-react";
 import Aurora from "../../components/Aurora";
 import BrandLogo from "../../components/BrandLogo";
-import { useFirstRunTheme } from "./useFirstRunTheme";
+import { useTheme } from "../../hooks/useTheme";
 import { stepLabel, type FirstRunStep } from "./firstRunSteps";
 
 /**
@@ -56,7 +56,7 @@ export default function FirstRunShell({
       撑满 + 底部按钮吸底之后，切 tab 时卡片外框完全不动。 */
   stretch?: boolean;
 }) {
-  const { theme, toggleTheme } = useFirstRunTheme();
+  const { theme, toggleTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   /* 02–04 的标题统一收一档：正式流程里右侧题目/卡片才是主角，
      60px 大标题在「多一条线索，由你决定分享多少。」这种长句上还会折出孤字。

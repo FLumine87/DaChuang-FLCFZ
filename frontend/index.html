@@ -9,19 +9,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#465fff" />
     <script>
-      // 首屏渲染前应用主题，避免刷新时闪白。
-      // 默认浅色：只有显式存过 "dark" 才用深色；键名与 AppShell.tsx 中的 THEME_KEY 一致。
+      // 首屏渲染前应用主题，存储键与 ThemeProvider 一致。
       (function () {
-        var stored = null;
+        var mode = null;
         try {
-          stored = localStorage.getItem("psych_theme");
-        } catch (error) {
-          /* localStorage 不可用时按默认浅色处理 */
+          mode = localStorage.getItem("psych_theme_mode");
+        } catch {
+          /* 无法读取设置时跟随系统。 */
         }
-        document.documentElement.style.colorScheme =
-          stored === "dark" ? "dark" : "light";
-        if (stored === "dark") {
-          document.documentElement.classList.add("dark");
+        var dark = mode === "dark" ||
+          (mode !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        var root = document.documentElement;
+        root.classList.toggle("dark", dark);
+        root.style.colorScheme = dark ? "dark" : "light";
+        if (dark) {
           var meta = document.querySelector('meta[name="theme-color"]');
           if (meta) meta.setAttribute("content", "#0b1120");
         }

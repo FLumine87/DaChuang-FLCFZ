@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import RetainedWorkspace from './RetainedWorkspace';
+import { useTheme } from '../hooks/useTheme';
 import { usePageActive } from '../services/pageActivity';
 import {
   ArrowUpRight,
@@ -53,17 +54,6 @@ const subscribeToViewport = (callback: () => void) => {
   return () => media.removeEventListener("change", callback);
 };
 const getMobileSnapshot = () => window.matchMedia(mobileQuery).matches;
-
-type Theme = "light" | "dark";
-
-/** 深色模式偏好存储键；index.html 的首屏脚本读取同一个键以避免闪白。 */
-const THEME_KEY = "psych_theme";
-
-/** 默认浅色：只有用户显式切到深色（存入 "dark"）时才用深色，
- *  换浏览器 / 新窗口 / 清过站点数据后一律回到浅色。 */
-const readStoredTheme = (): Theme =>
-  window.localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
-
 
 /* 悬停预取：鼠标移到侧栏项上就把对应页面的 chunk 拉下来。
    不预取的话，点下去才开始下载 —— 那一下就是"卡一下"。
@@ -134,7 +124,7 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
   const searchResultsRef = useRef<HTMLDivElement>(null);
   const menuRect = useAnchorRect(profileOpen && pageActive, profileRef);
   const searchRect = useAnchorRect(searchOpen && pageActive, searchContainerRef);
-  const [theme, setTheme] = useState<Theme>(readStoredTheme);
+  const { theme, toggleTheme } = useTheme();
   const [avatar, setAvatar] = useState("");
   /* 头像只在设置页修改；这里取一次并监听设置页发出的更新事件，
      避免每次切换页面都重新请求账号信息。 */
@@ -343,21 +333,6 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  // 切换 <html> 上的 .dark：index.css 里覆盖的主题变量据此整体翻转
-  useEffect(() => {
-    const dark = theme === "dark";
-    document.documentElement.classList.toggle("dark", dark);
-    document.documentElement.style.colorScheme = dark ? "dark" : "light";
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", dark ? "#0b1120" : "#465fff");
-    try {
-      window.localStorage.setItem(THEME_KEY, theme);
-    } catch {
-      /* 隐私模式下 localStorage 不可写时忽略，本次会话内仍然生效 */
-    }
-  }, [theme]);
-
   useEffect(() => {
     if (!isMobile || !mobileOpen || !pageActive) return;
     const previousOverflow = document.body.style.overflow;
@@ -417,14 +392,6 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
       navigate("/auth", { replace: true });
     }
   };
-  const toggleTheme = () => {
-    /* 切换的 ~260ms 内加过渡类：整页颜色渐变而非硬切（大面积浅↔深硬切会看着像闪一下） */
-    const root = document.documentElement;
-    root.classList.add("theme-switching");
-    window.setTimeout(() => root.classList.remove("theme-switching"), 260);
-    setTheme(isDark ? "light" : "dark");
-  };
-
   return (
     <div
       className="app-shell min-h-screen bg-page text-slate-800"
